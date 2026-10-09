@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__1c_naparnic",
+      "mcp__bsl_ls",
+      "mcp__1c_platform",
+      "mcp__code_index"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/bsl_nudge.py\""
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/route_to_orchestrator.py\""
+          }
+        ]
+      }
+    ]
+  }
+}

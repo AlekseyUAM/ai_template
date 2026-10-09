@@ -1,0 +1,24 @@
+/tmp
+# Вендоренные зависимости игнорируем целиком, кроме cfe-расширений MCP,
+# которые являются частью проекта (отдаются кнопкой «Скачать cfe»).
+/deps/*
+!/deps/mcp_tools_cfe/
+/deps/mcp_tools_cfe/*
+!/deps/mcp_tools_cfe/*.cfe
+__pycache__/
+*.pyc
+/.ai1c.env
+/.venv
+/.ai1c/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+logs/
+*.log

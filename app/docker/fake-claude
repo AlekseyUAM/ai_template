@@ -1,0 +1,93 @@
+#!/usr/bin/env python3
+"""fake-claude — заглушка Claude Code для прогона agent-monitor без токенов.
+
+Ведёт себя как интерактивная сессия: создаёт ~/.claude/projects/<encoded>/<id>.jsonl,
+на каждый ввод дописывает assistant-строку с моделью, токенами и (по кругу) фазой-сабагентом,
+печатает ответ в терминал. Сессия живёт, пока открыт tmux-пейн.
+"""
+import json
+import os
+import re
+import sys
+import time
+import uuid
+
+MODEL = "claude-opus-4-8"
+PHASES = ["explorer", "analyst", "architect", "developer-code", "tester", "reviewer"]
+
+
+def encode_project_path(path: str) -> str:
+    return re.sub(r"[/_.]", "-", path)
+
+
+def session_file():
+    cwd = os.getcwd()
+    projects = os.path.expanduser("~/.claude/projects")
+    d = os.path.join(projects, encode_project_path(cwd))
+    os.makedirs(d, exist_ok=True)
+    return os.path.join(d, f"{uuid.uuid4()}.jsonl"), cwd
+
+
+def append(path, obj):
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(obj) + "\n")
+    now = time.time()
+    os.utime(path, (now, now))
+
+
+def assistant_line(turn, phase=None):
+    content = [{"type": "text", "text": f"(fake) обрабатываю запрос #{turn}"}]
+    if phase:
+        content.append({"type": "tool_use", "name": "Task",
+                        "input": {"subagent_type": phase, "description": f"phase {phase}"}})
+    return {
+        "type": "assistant",
+        "message": {
+            "model": MODEL,
+            "usage": {
+                "input_tokens": 800 + turn * 120,
+                "output_tokens": 300 + turn * 60,
+                "cache_read_input_tokens": 200 * turn,
+                "cache_creation_input_tokens": 150 if turn == 1 else 0,
+            },
+            "content": content,
+        },
+    }
+
+
+def main():
+    path, cwd = session_file()
+    sid = os.path.basename(path)[:-6]
+    append(path, {"type": "system", "sessionId": sid})
+    print(f"fake-claude: сессия {sid[:8]} в {cwd}")
+    print("Готов. Введите задачу/сообщение и Enter (Ctrl-C для выхода).")
+    # Приветственная активность, чтобы дашборд сразу показал модель/токены.
+    append(path, assistant_line(0))
+
+    turn = 0
+    try:
+        for line in sys.stdin:
+            text = line.strip()
+            if not text:
+                continue
+            turn += 1
+            phase = PHASES[(turn - 1) % len(PHASES)]
+            print(f"\n[turn {turn}] получено: {text!r}")
+            print(f"[фаза: {phase}] думаю…", flush=True)
+            # Записываем реплику пользователя (для чат-транскрипта).
+            append(path, {"type": "user",
+                          "message": {"role": "user",
+                                      "content": [{"type": "text", "text": text}]}})
+            # Имитируем работу: файл свежий -> статус 'generating'.
+            append(path, assistant_line(turn, phase))
+            time.sleep(2)
+            print(f"[turn {turn}] готово (фаза {phase}).", flush=True)
+    except KeyboardInterrupt:
+        pass
+    # Если stdin закрылся — держим процесс, чтобы tmux-сессия не умерла.
+    while True:
+        time.sleep(3600)
+
+
+if __name__ == "__main__":
+    main()

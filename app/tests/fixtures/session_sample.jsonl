@@ -1,0 +1,5 @@
+{"type":"system","sessionId":"sess-1"}
+{"type":"assistant","message":{"model":"claude-opus-4-8","usage":{"input_tokens":100,"output_tokens":50,"cache_read_input_tokens":10,"cache_creation_input_tokens":20},"content":[{"type":"text","text":"hi"}]}}
+{"type":"assistant","message":{"model":"claude-opus-4-8","usage":{"input_tokens":200,"output_tokens":80,"cache_read_input_tokens":5,"cache_creation_input_tokens":0},"content":[{"type":"tool_use","name":"Task","input":{"subagent_type":"analyst","description":"spec"}}]}}
+broken line that is not json
+{"type":"assistant","message":{"model":"claude-opus-4-8","usage":{"input_tokens":30,"output_tokens":10,"cache_read_input_tokens":0,"cache_creation_input_tokens":0},"content":[{"type":"tool_use","name":"Task","input":{"subagent_type":"architect"}}]}}

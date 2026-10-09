@@ -1,0 +1,39 @@
+services:
+  agentmon:
+    build: .
+    image: agentmon-debian
+    container_name: agentmon
+    ports:
+      - "8765:8765"
+    environment:
+      # Слушать на всех интерфейсах, чтобы порт был доступен с хоста.
+      AGENTMON_HOST: "0.0.0.0"
+      AGENTMON_PORT: "8765"
+      # По умолчанию — прогон без токенов через заглушку.
+      # Для боевого прогона поменяй на: "claude --dangerously-skip-permissions ."
+      # AGENTMON_CLAUDE_CMD: "claude-fake --dangerously-skip-permissions ."
+      AGENTMON_CLAUDE_CMD: "claude --dangerously-skip-permissions ."
+      # Разрешает --dangerously-skip-permissions под root в контейнере
+      # (иначе реальный claude откажется запускаться).
+      IS_SANDBOX: "1"
+      # SQLite очереди — в персистентном каталоге.
+      AGENTMON_DB: "/data/agentmon.db"
+    volumes:
+      # Живой код (правки с хоста сразу видны в контейнере).
+      - ./:/app
+      # Изолированный ~/.claude контейнера (не трогает хостовый), переживает перезапуск.
+      - agentmon_claude:/root/.claude
+      # Каталоги проектов, которые ты создашь внутри.
+      - agentmon_projects:/root/projects
+      # БД очереди.
+      - agentmon_data:/data
+    working_dir: /app
+    # Контейнер сам поднимает сервер (в браузере хоста: http://127.0.0.1:8765).
+    # Заходить внутрь для авторизации/создания проектов: docker compose exec agentmon bash
+    command: ["python", "-m", "agentmon"]
+    restart: unless-stopped
+
+volumes:
+  agentmon_claude:
+  agentmon_projects:
+  agentmon_data:

@@ -1,0 +1,12 @@
+{
+  "$schema": "https://1c-syntax.github.io/bsl-language-server/configuration/schema.json",
+  "language": "ru",
+  "diagnostics": {
+    "minimumLSPDiagnosticLevel": "Information",
+    "parameters": {
+      "LineLength": {
+        "maxLineLength": 160
+      }
+    }
+  }
+}

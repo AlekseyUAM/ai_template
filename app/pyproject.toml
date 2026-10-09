@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agentmon"
+version = "0.1.0"
+description = "Web monitor/orchestrator for Claude Code sessions on a remote server"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "paramiko",
+    "psycopg[binary]",
+    "pywinpty; sys_platform == 'win32'",
+]
+
+[project.optional-dependencies]
+# Тестовые зависимости: pip install -e ".[dev]"
+dev = [
+    "pytest",
+    "httpx",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]

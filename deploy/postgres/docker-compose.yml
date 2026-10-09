@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: ai1c-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ai1c
+      POSTGRES_PASSWORD: ai1c
+      POSTGRES_DB: ai1c
+    ports:
+      - "127.0.0.1:${AI1C_PG_PORT:-5432}:5432"
+    volumes:
+      - ai1c_pg:/var/lib/postgresql/data
+volumes:
+  ai1c_pg:

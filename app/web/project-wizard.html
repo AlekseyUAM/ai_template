@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Создать проект</title>
+  <link rel="stylesheet" href="/static/github-dark.css">
+  <style>
+    body { max-width: 900px; }
+    .wizard-container {
+      background-color: var(--bg-subtle);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+    .section {
+      margin-bottom: 1rem;
+    }
+    .section[hidden] { display: none; }
+    .section h2 {
+      margin-top: 0;
+      font-size: 1.25rem;
+      padding-bottom: 0.75rem;
+      margin-bottom: 1rem;
+    }
+    .req { color: var(--danger); }
+    .field-group {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 4px;
+    }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    label { display: flex; flex-direction: column; gap: 4px; margin-bottom: 0; }
+    label span.label-text { font-size: 0.875rem; color: var(--fg-muted); }
+    .error { color: var(--danger); font-size: 0.875rem; margin-top: 4px; }
+    .success { color: var(--success); font-size: 0.875rem; margin-top: 4px; }
+    .log-output {
+      background-color: var(--bg-inset);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px;
+      margin-top: 12px;
+      font-family: monospace;
+      font-size: 0.8125rem;
+      max-height: 200px;
+      overflow-y: auto;
+      color: var(--fg-muted);
+    }
+    .controls {
+      display: flex;
+      gap: 8px;
+      margin-top: 20px;
+      justify-content: flex-start;
+    }
+    button { margin-right: 0; margin-bottom: 0; }
+    button.primary {
+      background-color: var(--accent);
+      color: var(--bg);
+      border-color: var(--accent);
+    }
+    button.primary:hover { background-color: var(--accent-hover); }
+    .checkbox-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .checkbox-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .checkbox-item input[type="checkbox"] {
+      margin: 0;
+      width: auto;
+    }
+    .checkbox-item label {
+      margin-bottom: 0;
+      flex-direction: row;
+      align-items: center;
+    }
+    /* MCP add-from-list */
+    .mcp-list {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px;
+      margin-bottom: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-height: 44px;
+    }
+    .mcp-list-empty {
+      color: var(--fg-muted);
+      font-size: 0.875rem;
+      padding: 6px 4px;
+    }
+    .mcp-pick { width: 100%; margin-top: 8px; }
+    .mcp-selected-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background-color: var(--bg-subtle);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 0.875rem;
+    }
+    .mcp-selected-item button {
+      background: none;
+      border: none;
+      color: var(--danger);
+      cursor: pointer;
+      padding: 0 4px;
+      font-size: 1rem;
+      line-height: 1;
+    }
+    .mcp-hint { font-size: 0.8125rem; color: var(--fg-muted); margin-top: 4px; }
+    /* Agent cards */
+    .agents-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 16px;
+    }
+    .agent-card {
+      background-color: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 16px;
+    }
+    .agent-card h3 {
+      margin: 0 0 12px;
+      font-size: 1rem;
+    }
+    .agent-card label {
+      margin-bottom: 8px;
+    }
+    .agent-card input {
+      margin-bottom: 0;
+    }
+  </style>
+</head>
+<body>
+  <h1>Создать проект</h1>
+
+  <div class="wizard-container">
+
+    <!-- Проект -->
+    <div class="section">
+      <h2>Проект</h2>
+      <div class="field-group">
+        <label>
+          <span class="label-text">Имя проекта <span class="req">*</span></span>
+          <input id="name" type="text" placeholder="demo" required>
+        </label>
+        <div id="nameError"></div>
+        <label>
+          <span class="label-text">Каталог проекта <span class="req">*</span></span>
+          <input id="path" type="text" placeholder="/root/projects/demo или C:\work\demo" required>
+        </label>
+        <label>
+          <span class="label-text">Web-публикация</span>
+          <input id="webPublication" type="text" placeholder="https://example.com">
+        </label>
+      </div>
+    </div>
+
+    <!-- Разработчик -->
+    <div class="section">
+      <h2>Разработчик</h2>
+      <div class="field-group grid2">
+        <label>
+          <span class="label-text">Идентификатор <span class="req">*</span></span>
+          <input id="identifier" type="text" placeholder="dev123" required>
+        </label>
+        <label>
+          <span class="label-text">Email <span class="req">*</span></span>
+          <input id="email" type="text" placeholder="dev@example.com" required>
+        </label>
+      </div>
+    </div>
+
+    <!-- Платформа -->
+    <div class="section">
+      <h2>Платформа</h2>
+      <div class="field-group grid2">
+        <label>
+          <span class="label-text">Путь к платформе 1С <span class="req">*</span></span>
+          <input id="platformDir" type="text" placeholder="/opt/1cv8 или C:\Program Files\1c\1cv8.exe" required>
+        </label>
+        <label>
+          <span class="label-text">Версия платформы <span class="req">*</span></span>
+          <input id="platformVersion" type="text" placeholder="8.3.25" required>
+        </label>
+      </div>
+    </div>
+
+    <!-- База -->
+    <div class="section">
+      <h2>База</h2>
+      <div class="field-group">
+        <label>
+          <span class="label-text">Строка подключения <span class="req">*</span></span>
+          <input id="dbConnection" type="text" placeholder="File=/data/base или Srvr=host;Ref=base" required>
+        </label>
+        <div class="grid2">
+          <label>
+            <span class="label-text">Пользователь</span>
+            <input id="dbUser" type="text" placeholder="admin"
+                   autocomplete="off" name="ai1c_db_user">
+          </label>
+          <label>
+            <span class="label-text">Пароль</span>
+            <input id="dbPassword" type="password" placeholder="password"
+                   autocomplete="new-password" name="ai1c_db_password">
+          </label>
+        </div>
+      </div>
+      <div style="margin-top:12px;">
+        <button type="button" id="checkDbBtn" onclick="checkDb()">Проверить доступ к базе</button>
+      </div>
+      <div id="dbLog"></div>
+    </div>
+
+    <!-- MCP -->
+    <div class="section">
+      <h2>MCP-серверы</h2>
+      <button type="button" id="mcpAddBtn" onclick="showMcpPicker()">+ Добавить</button>
+      <select id="mcpPick" class="mcp-pick" style="display:none" onchange="addMcpFromPicker()"></select>
+      <div id="mcpSelected" class="mcp-list"></div>
+      <div id="mcpHint" class="mcp-hint" style="display:none;">
+        Справочник MCP пуст — добавьте на странице «MCP-серверы»
+      </div>
+    </div>
+
+    <!-- Модели агентов -->
+    <div class="section">
+      <h2>Модели агентов</h2>
+      <div id="agentsGrid" class="agents-grid"></div>
+    </div>
+
+    <!-- Юнит-тесты -->
+    <div class="section">
+      <h2>Юнит-тесты</h2>
+      <p class="mcp-hint" style="display:block;margin-bottom:10px;">
+        Расширение <code>ЮнитТесты.cfe</code> прогоняет юнит-тесты в тестовой базе.
+        Скачайте его и загрузите в тестовую базу (как расширение). Пример теста
+        уже есть в проекте: <code>src/cfe/ЮнитТестыПример</code>.
+      </p>
+      <button type="button" onclick="downloadTestExtension()">Скачать расширение для тестов (cfe)</button>
+    </div>
+
+    <!-- Действия -->
+    <div class="section">
+      <h2>Действия</h2>
+      <div id="requirements" style="margin-bottom:16px;"></div>
+      <div class="checkbox-group">
+        <div class="checkbox-item" id="dumpCfItem">
+          <input id="dumpCf" type="checkbox">
+          <label for="dumpCf">Выгрузить конфигурацию (cf)</label>
+        </div>
+        <div class="checkbox-item" id="dumpCfeItem">
+          <input id="dumpCfe" type="checkbox">
+          <label for="dumpCfe">Выгрузить расширения (cfe)</label>
+        </div>
+        <div class="checkbox-item">
+          <input id="installTools" type="checkbox" checked>
+          <label for="installTools">Установить инструменты</label>
+        </div>
+        <div class="checkbox-item" id="gitInitItem">
+          <input id="gitInit" type="checkbox" checked>
+          <label for="gitInit">Инициализировать git в каталоге проекта</label>
+        </div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button type="button" id="createBtn" class="primary" onclick="createProject()">Создать</button>
+    </div>
+
+    <div id="createLog"></div>
+  </div>
+
+  <script src="/static/esc.js"></script>
+  <script src="/static/project-wizard.js"></script>
+  <script src="/static/header.js"></script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<ConfigDumpInfo xmlns="http://v8.1c.ru/8.3/xcf/dumpinfo" xmlns:xen="http://v8.1c.ru/8.3/xcf/enums" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" format="Hierarchical" version="2.20">
+	<ConfigVersions>
+		<Metadata name="CommonModule.ЮТ1_ТестыПример" id="a1a015c6-dc29-4d9f-96e7-06cbeb913f84" configVersion="7a097e30dfc68c3c8410e591eec0692be79f195c"/>
+		<Metadata name="CommonModule.ЮТ1_ТестыПример.Module" id="a1a015c6-dc29-4d9f-96e7-06cbeb913f84.0" configVersion="200748940b7be088dc082cffa03f6968eb41006c"/>
+		<Metadata name="Configuration.ЮнитТестыПример" id="b7e0d342-e512-4bcb-afb0-210e711f0c01" configVersion="8bfa5c2edcea52fd379ff3e5b3aa6ecd42b13bf9"/>
+		<Metadata name="Language.Русский" id="a6c21e2f-d3a3-49fd-85a1-1b59abb7593d" configVersion="85f1c67ea620d2fd439169674a86134b10acddf2"/>
+		<Metadata name="Role.ЮТ1_ОсновнаяРоль" id="56fdd69a-4c7d-4072-b47f-f170a4385b67" configVersion="6e1555b6e9805a37bed89f5c414ee053ab719529"/>
+	</ConfigVersions>
+</ConfigDumpInfo>

@@ -1,0 +1,5 @@
+/tmp
+/logs
+/src/cf/.code-index
+__pycache__/
+*.pyc
