@@ -1,0 +1,7 @@
+# Runtime-зависимости для прод-образа (Dockerfile ставит именно их).
+# Тестовые зависимости (pytest, httpx) — в pyproject.toml [project.optional-dependencies].dev
+fastapi
+uvicorn[standard]
+paramiko
+psycopg[binary]
+pywinpty; sys_platform == "win32"

@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>Agent Monitor</title>
+  <link rel="stylesheet" href="/static/github-dark.css" />
+  <style>
+    :root {
+      --bg:#0d1117; --panel:#161b22; --panel2:#21262d; --border:#30363d;
+      --txt:#c9d1d9; --muted:#8b949e; --accent:#58a6ff; --accent2:#1f2937;
+      --green:#3fb950; --yellow:#d29922; --red:#f85149;
+    }
+    * { box-sizing:border-box; }
+    html, body {
+      height:100%; margin:0; padding:0; max-width:none;
+      font-family: system-ui, sans-serif; background:var(--bg); color:var(--txt);
+    }
+    body { display:flex; flex-direction:column; height:100vh; overflow:hidden; }
+
+    #content {
+      display:flex; flex:1; gap:16px; padding:16px;
+      overflow:hidden; min-height:0;
+    }
+
+    .panel {
+      flex:1; background:var(--panel); border:1px solid var(--border);
+      border-radius:8px; display:flex; flex-direction:column; overflow:hidden;
+    }
+    .panel-title {
+      padding:10px 14px; font-size:12px; font-weight:600; text-transform:uppercase;
+      letter-spacing:.05em; color:var(--muted); border-bottom:1px solid var(--border);
+      background:#0d1117;
+    }
+    .panel-body { flex:1; overflow-y:auto; padding:12px 14px; }
+
+    /* Кнопки создания */
+    .action-row { display:flex; gap:8px; margin-bottom:14px; }
+    .btn {
+      padding:7px 14px; border-radius:6px; font:inherit; font-size:13px;
+      cursor:pointer; border:1px solid var(--border); background:var(--panel2);
+      color:var(--txt); text-decoration:none; display:inline-flex; align-items:center;
+      gap:6px; transition:background 0.15s;
+    }
+    .btn:hover { background:#2d333b; }
+    .btn.primary { background:#238636; border-color:#2ea043; color:#fff; }
+    .btn.primary:hover { background:#2ea043; }
+
+    /* Дерево */
+    .tree-project {
+      margin-bottom:12px; border:1px solid var(--border); border-radius:6px;
+      overflow:hidden;
+    }
+    .tree-project-header {
+      display:flex; align-items:center; gap:8px; padding:8px 10px;
+      background:var(--panel2); font-size:13px; font-weight:600;
+    }
+    .tree-project-header .proj-name { flex:1; }
+    .tree-project-header .proj-path { font-size:11px; color:var(--muted); font-weight:400; }
+    .tree-tasks { padding:0; }
+    .tree-task {
+      display:flex; align-items:center; gap:8px; padding:6px 12px;
+      border-top:1px solid var(--border); font-size:12px;
+    }
+    .tree-task:hover { background:#161b22; }
+    .task-del {
+      color:var(--muted); cursor:pointer; font-size:12px; width:18px; text-align:center;
+      border:none; background:none; padding:0; line-height:1; flex-shrink:0;
+    }
+    .task-del:hover { color:var(--red); }
+    .task-name { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .task-path { font-size:11px; color:var(--muted); min-width:0; overflow:hidden;
+                 text-overflow:ellipsis; white-space:nowrap; max-width:180px; }
+    .task-status { font-size:11px; min-width:90px; }
+    .task-elapsed { font-size:11px; color:var(--muted); min-width:50px; text-align:right; }
+    .status-running { color:var(--green); }
+    .status-failed  { color:var(--red); }
+    .status-done    { color:var(--muted); }
+    .no-tasks { padding:8px 12px; font-size:12px; color:var(--muted); }
+
+    /* Дерево пустое */
+    .tree-empty { color:var(--muted); font-size:13px; padding:8px 0; }
+
+    /* Заглушка */
+    .placeholder {
+      color:var(--muted); font-size:13px; padding:12px 0; line-height:1.6;
+    }
+
+    /* Стеки */
+    .stacks-container { display:flex; gap:12px; height:100%; overflow-x:auto; }
+    .stack-column {
+      flex:0 0 280px; background:var(--panel2); border:1px solid var(--border);
+      border-radius:6px; display:flex; flex-direction:column; overflow:hidden;
+    }
+    .stack-header {
+      padding:10px 12px; border-bottom:1px solid var(--border); background:#0d1117;
+      display:flex; align-items:center; gap:8px;
+    }
+    .stack-name { flex:1; font-size:13px; font-weight:600; }
+    .stack-status { font-size:11px; color:var(--muted); }
+    .stack-controls { display:flex; gap:4px; }
+    .stack-btn {
+      padding:3px 6px; border:none; background:none; color:var(--muted);
+      cursor:pointer; font-size:13px; border-radius:3px;
+      transition:background 0.15s, color 0.15s;
+    }
+    .stack-btn:hover { background:#21262d; color:var(--txt); }
+    .stack-btn.delete:hover { color:var(--red); }
+    .stack-items {
+      flex:1; overflow-y:auto; padding:8px; display:flex; flex-direction:column; gap:6px;
+    }
+    .stack-item {
+      padding:8px; background:var(--panel); border:1px solid var(--border);
+      border-radius:4px; font-size:12px; cursor:move;
+      user-select:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+      transition:background 0.15s, border-color 0.15s;
+    }
+    .stack-item:hover { background:#161b22; border-color:#444c56; }
+    .stack-item.drag-over { background:#238636; opacity:0.7; }
+    .stack-item-empty { color:var(--muted); font-size:11px; padding:12px 8px; text-align:center; }
+
+    /* Draggable tree tasks */
+    .tree-task { cursor:grab; }
+    .tree-task:active { cursor:grabbing; }
+    .tree-task.drag-from { opacity:0.5; }
+
+    /* Stack empty drop area */
+    .stack-drop-hint {
+      padding:12px 8px; background:rgba(88,166,255,0.1); border:2px dashed var(--accent);
+      border-radius:4px; text-align:center; font-size:11px; color:var(--accent);
+      display:none;
+    }
+    .stack-drop-hint.active { display:block; }
+    .stack-drop-hint.over { background:rgba(88,166,255,0.2); }
+  </style>
+</head>
+<body>
+  <div id="content">
+    <!-- Панель «Проекты и задачи» -->
+    <div class="panel">
+      <div class="panel-title">Проекты и задачи</div>
+      <div class="panel-body">
+        <div class="action-row">
+          <a href="/project-wizard" class="btn primary">+ Создать проект</a>
+          <a href="/task-wizard" class="btn">+ Создать задачу</a>
+        </div>
+        <div id="tree"><span class="tree-empty">Загрузка…</span></div>
+      </div>
+    </div>
+
+    <!-- Панель «Выполнение» -->
+    <div class="panel">
+      <div class="panel-title">Выполнение</div>
+      <div class="panel-body">
+        <div class="action-row">
+          <button class="btn primary" id="btn-create-stack">+ Создать стек</button>
+          <button class="btn" id="btn-create-test-task">+ Тестовая задача</button>
+        </div>
+        <div id="stacks-container" class="stacks-container">
+          <div class="placeholder">Загрузка стеков…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/esc.js"></script>
+  <script src="/static/start.js?v=1"></script>
+  <script src="/static/header.js"></script>
+</body>
+</html>

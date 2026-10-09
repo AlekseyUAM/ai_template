@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>MCP-серверы</title>
+  <link rel="stylesheet" href="/static/github-dark.css">
+  <style>
+    body { max-width: 900px; }
+    .mcp-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .mcp-header h1 {
+      margin-bottom: 0;
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+    .mcp-header-buttons {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+      margin-bottom: 24px;
+    }
+    th {
+      background-color: var(--bg-subtle);
+      color: var(--fg);
+      font-weight: 600;
+      padding: 12px 16px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.875rem;
+    }
+    td {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    tbody tr {
+      cursor: pointer;
+      transition: background-color 0.15s ease;
+    }
+    tbody tr:hover {
+      background-color: var(--bg-subtle);
+    }
+    tbody tr:last-child td {
+      border-bottom: none;
+    }
+    .empty-state {
+      background-color: var(--bg-subtle);
+      border: 1px dashed var(--border);
+      border-radius: 6px;
+      padding: 32px;
+      text-align: center;
+      color: var(--fg-muted);
+    }
+    .empty-state h2 {
+      margin-top: 0;
+      color: var(--fg);
+    }
+    .mcp-card-panel {
+      background-color: var(--bg-subtle);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+    .card-header h2 {
+      margin: 0;
+      color: var(--fg);
+      font-size: 1.25rem;
+    }
+    .back-link {
+      cursor: pointer;
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 500;
+    }
+    .back-link:hover {
+      text-decoration: underline;
+    }
+    .card-field {
+      margin-bottom: 16px;
+    }
+    .card-label {
+      color: var(--fg-muted);
+      font-size: 0.875rem;
+      margin-bottom: 4px;
+      display: block;
+    }
+    .card-value {
+      color: var(--fg);
+      word-break: break-all;
+    }
+    .card-value.monospace {
+      font-family: monospace;
+      font-size: 0.8125rem;
+      white-space: pre-wrap;   /* сохраняем переносы строк (напр. Подключение) */
+    }
+    .card-controls {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-top: 16px;
+    }
+    .control-group {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    input[type="number"],
+    input[type="password"] {
+      width: 100px;
+    }
+    #addBtn {
+      display: inline-flex;
+    }
+    #add-form {
+      display: none;
+      margin-top: 20px;
+      padding: 16px;
+      background-color: var(--bg-subtle);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+    }
+    #add-form h3 {
+      margin-top: 0;
+      margin-bottom: 16px;
+    }
+    .form-group {
+      margin-bottom: 16px;
+    }
+    .form-group label {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--fg-muted);
+      font-size: 0.875rem;
+    }
+    .required::after { content: " *"; color: var(--danger); }
+    .form-group input[type="text"],
+    .form-group input[type="number"],
+    .form-group input[type="password"],
+    .form-group select,
+    .form-group textarea {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 8px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background-color: var(--bg);
+      color: var(--fg);
+      font-size: 0.875rem;
+    }
+    .form-group textarea {
+      min-height: 80px;
+      font-family: monospace;
+    }
+    .form-group textarea.purpose-field {
+      min-height: 70px;
+      font-family: inherit;
+    }
+    .form-buttons {
+      display: flex;
+      gap: 8px;
+      margin-top: 16px;
+    }
+    #log-output {
+      display: none;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="mcp-header">
+    <h1>MCP-серверы</h1>
+    <div class="mcp-header-buttons">
+      <button id="addBtn">+ Добавить</button>
+    </div>
+  </div>
+
+  <div id="tableView">
+    <table>
+      <thead>
+        <tr>
+          <th>Наименование</th>
+          <th>Назначение</th>
+        </tr>
+      </thead>
+      <tbody id="mcpTable">
+      </tbody>
+    </table>
+  </div>
+
+  <div id="cardPanel" style="display: none;"></div>
+
+  <form id="add-form" style="display:none">
+    <h3>Добавить MCP</h3>
+
+    <div class="form-group">
+      <label for="mcp-kind">Вид MCP</label>
+      <select id="mcp-kind" required></select>
+    </div>
+
+    <div id="type-fields"></div>
+
+    <div class="form-buttons">
+      <button type="submit">Сохранить</button>
+      <span id="type-action"></span>
+      <button type="button" onclick="hideAddForm()">Отмена</button>
+    </div>
+  </form>
+
+  <div id="log-output">
+    <h3>Лог</h3>
+    <pre id="log-text"></pre>
+  </div>
+
+  <script src="/static/esc.js"></script>
+  <script src="/static/mcp.js"></script>
+  <script src="/static/header.js"></script>
+</body>
+</html>

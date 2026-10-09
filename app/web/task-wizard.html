@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Создать задачу</title>
+  <link rel="stylesheet" href="/static/github-dark.css">
+  <style>
+    body { max-width: 1000px; margin: 0 auto; padding: 20px; }
+    h1 { margin-bottom: 30px; }
+    .form-container {
+      background-color: var(--bg-subtle);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 24px;
+    }
+    .form-section {
+      margin-bottom: 24px;
+    }
+    .form-section h3 {
+      font-size: 0.875rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--fg-muted);
+      margin-bottom: 12px;
+      margin-top: 0;
+    }
+    .form-group {
+      margin-bottom: 16px;
+    }
+    .form-group label {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 0.875rem;
+      font-weight: 500;
+    }
+    .required::after { content: " *"; color: var(--danger); }
+    input[type="text"],
+    input[type="email"],
+    input[type="number"],
+    select,
+    textarea {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background-color: var(--bg-inset);
+      color: var(--fg);
+      font-family: inherit;
+      font-size: 0.875rem;
+    }
+    .checkbox-label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      font-weight: 500;
+    }
+    .checkbox-label input[type="checkbox"] {
+      width: auto;
+      margin: 0;
+      cursor: pointer;
+    }
+    .hint {
+      color: var(--fg-muted);
+      font-size: 0.8rem;
+      margin-top: 4px;
+    }
+    textarea {
+      resize: vertical;
+      min-height: 80px;
+    }
+    input[type="text"]:focus,
+    input[type="email"]:focus,
+    input[type="number"]:focus,
+    select:focus,
+    textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+      background-color: var(--bg-inset);
+    }
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    .stages-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 12px;
+    }
+    .stages-table thead {
+      background-color: var(--bg-inset);
+      border: 1px solid var(--border);
+    }
+    .stages-table th {
+      padding: 10px 12px;
+      text-align: left;
+      font-weight: 600;
+      font-size: 0.875rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .stages-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .stages-table .stage-name {
+      font-weight: 500;
+    }
+    .stages-table input[type="checkbox"] {
+      margin: 0;
+      width: auto;
+      cursor: pointer;
+    }
+    .button-group {
+      display: flex;
+      gap: 8px;
+      margin-top: 20px;
+    }
+    button {
+      padding: 8px 16px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background-color: var(--btn-bg);
+      color: var(--fg);
+      cursor: pointer;
+      font-size: 0.875rem;
+      font-weight: 500;
+    }
+    button:hover {
+      background-color: var(--btn-hover-bg);
+    }
+    button.primary {
+      background-color: var(--accent);
+      color: var(--bg);
+      border-color: var(--accent);
+    }
+    button.primary:hover {
+      background-color: var(--accent-hover);
+    }
+    .error {
+      color: var(--danger);
+      font-size: 0.875rem;
+      margin-top: 4px;
+    }
+    .success {
+      color: var(--success);
+      font-size: 0.875rem;
+      margin-top: 4px;
+    }
+    #result {
+      margin-top: 20px;
+      padding: 12px;
+      border-radius: 6px;
+      display: none;
+    }
+    #result.success {
+      background-color: rgba(108, 194, 106, 0.1);
+      border: 1px solid var(--success);
+      color: var(--success);
+    }
+    #result.error {
+      background-color: rgba(224, 108, 117, 0.1);
+      border: 1px solid var(--danger);
+      color: var(--danger);
+    }
+    .toggle-buttons {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Создать задачу</h1>
+  <div class="form-container">
+    <form id="taskForm">
+      <!-- Owner / Project -->
+      <div class="form-section">
+        <h3>Проект</h3>
+        <div class="form-group">
+          <label for="owner">Владелец <span class="required"></span></label>
+          <select id="owner" name="owner" required>
+            <option value="">— выберите проект —</option>
+          </select>
+          <div id="ownerError" class="error"></div>
+        </div>
+      </div>
+
+      <!-- Task Details -->
+      <div class="form-section">
+        <h3>Детали задачи</h3>
+        <div class="form-group">
+          <label for="name">Название <span class="required"></span></label>
+          <input type="text" id="name" name="name" placeholder="Название задачи" required>
+          <div id="nameError" class="error"></div>
+        </div>
+        <div class="form-group">
+          <label for="identifier">Идентификатор <span class="required"></span></label>
+          <input type="text" id="identifier" name="identifier" placeholder="Идентификатор задачи (#123)" required>
+          <div id="identifierError" class="error"></div>
+        </div>
+        <div class="form-group">
+          <label for="goal">Цель <span class="required"></span></label>
+          <textarea id="goal" name="goal" placeholder="Цель выполнения" required></textarea>
+          <div id="goalError" class="error"></div>
+        </div>
+        <div class="form-group">
+          <label for="plan">План <span class="required"></span></label>
+          <textarea id="plan" name="plan" placeholder="План выполнения" required></textarea>
+          <div id="planError" class="error"></div>
+        </div>
+        <div class="form-group">
+          <label for="constraints">Ограничения <span class="required"></span></label>
+          <textarea id="constraints" name="constraints" placeholder="Ограничения" required></textarea>
+          <div id="constraintsError" class="error"></div>
+        </div>
+        <div class="form-group">
+          <label for="tests">Тесты</label>
+          <textarea id="tests" name="tests" placeholder="Описание тестов, которые необходимо создать (требуется если включен этап 'Написание тестов')"></textarea>
+          <div id="testsError" class="error"></div>
+        </div>
+      </div>
+
+      <!-- Execution parameters -->
+      <div class="form-section">
+        <h3>Параметры выполнения</h3>
+        <div class="form-group">
+          <label class="checkbox-label" for="update_db">
+            <input type="checkbox" id="update_db" name="update_db">
+            Обновлять базу данных и расширения
+          </label>
+        </div>
+        <div class="form-group">
+          <label class="checkbox-label" for="mark_changes">
+            <input type="checkbox" id="mark_changes" name="mark_changes">
+            Выделять изменения в коде идентификаторами
+          </label>
+          <div class="hint">Разработчик обрамит написанный код комментариями-маркерами с идентификатором разработчика и задачи</div>
+        </div>
+        <div class="form-group">
+          <label class="checkbox-label" for="interactive">
+            <input type="checkbox" id="interactive" name="interactive">
+            Интерактивный режим
+          </label>
+          <div class="hint">Такую задачу нельзя добавить в стек — выполняется вручную</div>
+        </div>
+        <div class="form-group">
+          <label for="max_minutes">Максимальная длительность выполнения, мин</label>
+          <input type="number" id="max_minutes" name="max_minutes" min="1" value="60">
+          <div id="max_minutesError" class="error"></div>
+        </div>
+      </div>
+
+      <!-- Stages -->
+      <div class="form-section">
+        <h3>Этапы</h3>
+        <div class="toggle-buttons">
+          <button type="button" id="toggleAllStages">Все галочки</button>
+          <button type="button" id="toggleNoneStages">Снять все</button>
+        </div>
+        <table class="stages-table">
+          <thead>
+            <tr>
+              <th style="width: 30%;">Этап</th>
+              <th style="width: 35%; text-align: center;">Включено</th>
+              <th style="width: 35%; text-align: center;">Гейт</th>
+            </tr>
+          </thead>
+          <tbody id="stagesBody">
+          </tbody>
+        </table>
+        <div id="stagesError" class="error"></div>
+      </div>
+
+      <!-- Submit -->
+      <div class="button-group">
+        <button type="submit" class="primary">Создать</button>
+      </div>
+    </form>
+    <div id="result"></div>
+  </div>
+
+  <script src="/static/esc.js"></script>
+  <script src="/static/task-wizard.js"></script>
+  <script src="/static/header.js"></script>
+</body>
+</html>

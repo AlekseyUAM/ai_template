@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Задачи</title>
+  <link rel="stylesheet" href="/static/github-dark.css">
+  <style>
+    body { max-width: 900px; }
+    .tasks-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+    }
+    .tasks-header h1 {
+      margin-bottom: 0;
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+      margin-bottom: 24px;
+    }
+    th {
+      background-color: var(--bg-subtle);
+      color: var(--fg);
+      font-weight: 600;
+      padding: 12px 16px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.875rem;
+    }
+    td {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    tbody tr {
+      cursor: pointer;
+      transition: background-color 0.15s ease;
+    }
+    tbody tr:hover {
+      background-color: var(--bg-subtle);
+    }
+    tbody tr:last-child td {
+      border-bottom: none;
+    }
+    .empty-state {
+      background-color: var(--bg-subtle);
+      border: 1px dashed var(--border);
+      border-radius: 6px;
+      padding: 32px;
+      text-align: center;
+      color: var(--fg-muted);
+    }
+    .empty-state h2 {
+      margin-top: 0;
+      color: var(--fg);
+    }
+    .task-card-panel {
+      background-color: var(--bg-subtle);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+    .card-header h2 {
+      margin: 0;
+      color: var(--fg);
+      font-size: 1.25rem;
+    }
+    .back-link {
+      cursor: pointer;
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 500;
+    }
+    .back-link:hover {
+      text-decoration: underline;
+    }
+    .card-field {
+      margin-bottom: 16px;
+    }
+    .card-label {
+      color: var(--fg-muted);
+      font-size: 0.875rem;
+      margin-bottom: 4px;
+      display: block;
+    }
+    .card-value {
+      color: var(--fg);
+      word-break: break-all;
+    }
+    .card-value.monospace {
+      font-family: monospace;
+      font-size: 0.8125rem;
+    }
+    .stages-list {
+      margin-top: 12px;
+      border-left: 2px solid var(--border);
+      padding-left: 12px;
+    }
+    .stage-item {
+      margin-bottom: 8px;
+      font-size: 0.875rem;
+    }
+    .stage-status {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 0.75rem;
+      font-weight: 500;
+      margin-left: 6px;
+    }
+    .stage-status.planned {
+      background-color: rgba(139, 148, 158, 0.3);
+      color: var(--fg-muted);
+    }
+    .stage-status.running {
+      background-color: rgba(63, 185, 80, 0.3);
+      color: rgb(63, 185, 80);
+    }
+    .stage-status.done {
+      background-color: rgba(63, 185, 80, 0.3);
+      color: rgb(63, 185, 80);
+    }
+    .stage-status.failed {
+      background-color: rgba(248, 81, 73, 0.3);
+      color: rgb(248, 81, 73);
+    }
+  </style>
+</head>
+<body>
+  <div class="tasks-header">
+    <h1>Задачи</h1>
+    <a href="/task-wizard" style="display: inline-flex; align-items: center; justify-content: center; gap: 4px; cursor: pointer; background-color: var(--btn-bg); color: var(--fg); border: 1px solid var(--btn-border); border-radius: 6px; padding: 5px 16px; font-size: 0.875rem; font-family: inherit; font-weight: 500; line-height: 1.5; text-decoration: none; transition: background-color 0.15s ease, border-color 0.15s ease; margin-right: 8px; margin-top: 4px; margin-bottom: 0;">+ Создать задачу</a>
+  </div>
+
+  <div id="tableView">
+    <table>
+      <thead>
+        <tr>
+          <th>Название</th>
+          <th>Проект</th>
+          <th>Статус</th>
+        </tr>
+      </thead>
+      <tbody id="tasksTable">
+      </tbody>
+    </table>
+  </div>
+
+  <div id="cardPanel" style="display: none;"></div>
+
+  <script src="/static/esc.js"></script>
+  <script src="/static/tasks.js"></script>
+  <script src="/static/header.js"></script>
+</body>
+</html>
