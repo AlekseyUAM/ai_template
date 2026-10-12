@@ -363,6 +363,141 @@ def test_sequence_boundary_outside_posting_not_flagged():
     assert "sequence-boundary-in-posting" not in codes(text)
 
 
+# ── query-execute-in-loop ─────────────────────────────────────
+
+def test_query_execute_in_loop_flagged():
+    text = (
+        "Для Каждого Стр Из Товары Цикл\n"
+        "    Результат = Запрос.Выполнить();\n"
+        "КонецЦикла;\n"
+    )
+    assert "query-execute-in-loop" in codes(text)
+
+
+def test_query_execute_batch_in_loop_flagged():
+    text = (
+        "Пока Выборка.Следующий() Цикл\n"
+        "    Пакет = Запрос.ВыполнитьПакет();\n"
+        "КонецЦикла;\n"
+    )
+    assert "query-execute-in-loop" in codes(text)
+
+
+def test_query_execute_outside_loop_not_flagged():
+    text = (
+        "Запрос = Новый Запрос;\n"
+        "Запрос.Текст = \"ВЫБРАТЬ 1\";\n"
+        "Результат = Запрос.Выполнить();\n"
+    )
+    assert "query-execute-in-loop" not in codes(text)
+
+
+def test_global_execute_operator_not_flagged():
+    # Глобальный оператор Выполнить("код") — без точки перед ним, не метод Запроса.
+    text = (
+        "Пока Усл Цикл\n"
+        "    Выполнить(\"А = 1\");\n"
+        "КонецЦикла;\n"
+    )
+    assert "query-execute-in-loop" not in codes(text)
+
+
+# ── query-new-in-loop ─────────────────────────────────────────
+
+def test_query_new_in_loop_flagged():
+    text = (
+        "Для Н = 1 По 10 Цикл\n"
+        "    Запрос = Новый Запрос;\n"
+        "КонецЦикла;\n"
+    )
+    assert "query-new-in-loop" in codes(text)
+
+
+def test_query_new_outside_loop_not_flagged():
+    text = (
+        "Запрос = Новый Запрос;\n"
+        "Для Н = 1 По 10 Цикл\n"
+        "    Запрос.УстановитьПараметр(\"Н\", Н);\n"
+        "КонецЦикла;\n"
+    )
+    assert "query-new-in-loop" not in codes(text)
+
+
+# ── query-execute-in-loop-via-call (глубина 1, в рамках модуля) ─
+
+def test_query_execute_in_loop_via_call_flagged():
+    text = (
+        "Процедура ОбработкаПроведения(Отказ, Режим)\n"
+        "    Для Каждого Стр Из Товары Цикл\n"
+        "        СформироватьДвижения(Стр);\n"
+        "    КонецЦикла;\n"
+        "КонецПроцедуры\n"
+        "\n"
+        "Процедура СформироватьДвижения(Стр)\n"
+        "    Результат = Запрос.Выполнить();\n"
+        "КонецПроцедуры\n"
+    )
+    assert "query-execute-in-loop-via-call" in codes(text)
+
+
+def test_query_call_not_in_loop_not_flagged():
+    text = (
+        "Процедура Главная()\n"
+        "    СформироватьДвижения(Стр);\n"
+        "КонецПроцедуры\n"
+        "\n"
+        "Процедура СформироватьДвижения(Стр)\n"
+        "    Результат = Запрос.Выполнить();\n"
+        "КонецПроцедуры\n"
+    )
+    assert "query-execute-in-loop-via-call" not in codes(text)
+
+
+def test_query_call_to_method_without_query_not_flagged():
+    text = (
+        "Процедура Главная()\n"
+        "    Для Н = 1 По 3 Цикл\n"
+        "        ПростойРасчёт(Н);\n"
+        "    КонецЦикла;\n"
+        "КонецПроцедуры\n"
+        "\n"
+        "Процедура ПростойРасчёт(Н)\n"
+        "    А = Н * 2;\n"
+        "КонецПроцедуры\n"
+    )
+    assert "query-execute-in-loop-via-call" not in codes(text)
+
+
+def test_qualified_call_in_loop_not_flagged_via_call():
+    # Объект.Метод( в цикле — квалифицированный вызов, не локальный метод модуля.
+    text = (
+        "Процедура Главная()\n"
+        "    Для Н = 1 По 3 Цикл\n"
+        "        Объект.Выполнить(Н);\n"
+        "    КонецЦикла;\n"
+        "КонецПроцедуры\n"
+    )
+    assert "query-execute-in-loop-via-call" not in codes(text)
+
+
+# ── query-new-in-loop-via-call (глубина 1, в рамках модуля) ────
+
+def test_query_new_in_loop_via_call_flagged():
+    text = (
+        "Процедура Главная()\n"
+        "    Для Каждого Стр Из Товары Цикл\n"
+        "        ПодготовитьЗапрос(Стр);\n"
+        "    КонецЦикла;\n"
+        "КонецПроцедуры\n"
+        "\n"
+        "Функция ПодготовитьЗапрос(Стр)\n"
+        "    Запрос = Новый Запрос;\n"
+        "    Возврат Запрос;\n"
+        "КонецФункции\n"
+    )
+    assert "query-new-in-loop-via-call" in codes(text)
+
+
 # ── общая проверка серьёзности и позиции ──────────────────────
 
 def test_finding_has_line():

@@ -759,3 +759,194 @@ def check_record_manager_in_loop(ctx):
                     ),
                 ))
     return out
+
+
+# ── Запросы в цикле ──────────────────────────────────────────
+
+# Методы объекта Запрос, обращающиеся к СУБД. Требуем предшествующую «.», поэтому
+# глобальный оператор Выполнить("строка кода") сюда не попадает.
+_QUERY_EXEC_NAMES = {"ВЫПОЛНИТЬ", "ВЫПОЛНИТЬПАКЕТ", "EXECUTE", "EXECUTEBATCH"}
+_NEW_KW = {"НОВЫЙ", "NEW"}
+_QUERY_TYPE = {"ЗАПРОС", "QUERY"}
+_METHOD_KW = {"ПРОЦЕДУРА", "PROCEDURE", "ФУНКЦИЯ", "FUNCTION"}
+
+
+def _query_execute_lines(model):
+    """Строки с вызовом `<объект>.Выполнить(` / `.ВыполнитьПакет(` (метод Запрос)."""
+    lines = []
+    toks = model.tokens
+    for k in range(len(toks) - 2):
+        t0, t1, t2 = toks[k], toks[k + 1], toks[k + 2]
+        if (t0.kind == "op" and t0.value == "."
+                and t1.kind == "ident" and t1.value.upper() in _QUERY_EXEC_NAMES
+                and t2.kind == "op" and t2.value == "("):
+            lines.append(t1.line)
+    return lines
+
+
+def _new_query_lines(model):
+    """Строки с конструктором `Новый Запрос`."""
+    lines = []
+    toks = model.tokens
+    for k in range(len(toks) - 1):
+        t0, t1 = toks[k], toks[k + 1]
+        if (t0.kind == "ident" and t0.value.upper() in _NEW_KW
+                and t1.kind == "ident" and t1.value.upper() in _QUERY_TYPE):
+            lines.append(t1.line)
+    return lines
+
+
+def _methods_covering_lines(model, lines):
+    """Множество ИМЁН методов (upper), в чьё тело попадает хотя бы одна строка lines."""
+    names = set()
+    if not lines:
+        return names
+    for m in model.methods:
+        if not m.name:
+            continue
+        for ln in lines:
+            if m.header_line <= ln <= m.end_line:
+                names.add(m.name.upper())
+                break
+    return names
+
+
+def _local_call_sites_in_loops(model, method_names):
+    """Вызовы локальных методов из method_names в теле циклов.
+
+    Локальный вызов — `Имя(` без предшествующей точки (квалифицированные вызовы
+    `Объект.Метод(` и `ОбщийМодуль.Метод(` разрешаются вне модуля — не наш случай,
+    глубина 1 работает только в рамках модуля). Заголовок объявления самого метода
+    исключается. Возвращает список (строка, имя-как-в-коде)."""
+    out = []
+    if not method_names:
+        return out
+    toks = model.tokens
+    n = len(toks)
+    for k in range(n - 1):
+        t = toks[k]
+        if t.kind != "ident" or t.value.upper() not in method_names:
+            continue
+        nxt = toks[k + 1]
+        if not (nxt.kind == "op" and nxt.value == "("):
+            continue
+        prev = toks[k - 1] if k > 0 else None
+        if prev is not None and prev.kind == "op" and prev.value == ".":
+            continue  # Объект.Метод( — не локальный вызов
+        if prev is not None and prev.kind == "ident" and prev.value.upper() in _METHOD_KW:
+            continue  # заголовок объявления метода
+        if model.is_in_loop(t.line):
+            out.append((t.line, t.value))
+    return out
+
+
+@rule(code="query-execute-in-loop", severity="warning",
+      title="Запрос.Выполнить() в цикле — вынесите запрос из цикла")
+def check_query_execute_in_loop(ctx):
+    """Флагует выполнение запроса (`.Выполнить()`/`.ВыполнитьПакет()`) в теле цикла.
+
+    «Следует стремиться к минимизации количества запросов к СУБД». Запрос на каждой
+    итерации цикла — типовой анти-паттерн: как правило, его можно вынести из цикла и
+    выполнить один раз, выбрав все нужные данные по списку (условие В (&Список)).
+    Допустимые исключения (порционная обработка, виртуальные таблицы с датой среза) —
+    проверяются вручную (query-review); при обоснованном исключении рядом должен быть
+    комментарий.
+    """
+    out = []
+    model = ctx.model
+    for ln in _query_execute_lines(model):
+        if model.is_in_loop(ln):
+            out.append(Finding(
+                code="query-execute-in-loop",
+                severity="warning",
+                line=ln,
+                message=(
+                    "Выполнение запроса (.Выполнить()) в цикле: запрос к СУБД на каждой "
+                    "итерации. Вынесите запрос из цикла — выберите все данные одним запросом "
+                    "(условие В (&Список)). Исключения (порционная обработка, ВТ с датой среза) "
+                    "обоснуйте комментарием."
+                ),
+            ))
+    return out
+
+
+@rule(code="query-new-in-loop", severity="info",
+      title="Новый Запрос в цикле — создавайте объект запроса до цикла")
+def check_query_new_in_loop(ctx):
+    """Флагует создание объекта `Новый Запрос` в теле цикла.
+
+    Пересоздание объекта запроса на каждой итерации — маркёр запроса в цикле. Объект
+    Запрос следует создавать один раз до цикла (при необходимости менять только
+    параметры через УстановитьПараметр), а лучше — выполнить один запрос по списку.
+    """
+    out = []
+    model = ctx.model
+    for ln in _new_query_lines(model):
+        if model.is_in_loop(ln):
+            out.append(Finding(
+                code="query-new-in-loop",
+                severity="info",
+                line=ln,
+                message=(
+                    "Новый Запрос в цикле: объект запроса пересоздаётся на каждой итерации. "
+                    "Создайте запрос один раз до цикла (меняйте только параметры), а лучше "
+                    "выберите все данные одним запросом по списку."
+                ),
+            ))
+    return out
+
+
+@rule(code="query-execute-in-loop-via-call", severity="info",
+      title="Вызов в цикле метода, выполняющего запрос (глубина 1)")
+def check_query_execute_in_loop_via_call(ctx):
+    """Флагует вызов в цикле локального метода модуля, который выполняет запрос.
+
+    Неявный запрос в цикле: в теле цикла вызывается метод того же модуля, внутри
+    которого есть `.Выполнить()`. Анализ межпроцедурный, глубина 1 и только в рамках
+    модуля (вызовы в общие модули не раскрываются). severity=info — метод может быть
+    спроектирован для пакетной работы; при подозрении на большую глубину проверьте
+    граф вызовов через code-index.
+    """
+    out = []
+    model = ctx.model
+    q_methods = _methods_covering_lines(model, _query_execute_lines(model))
+    for ln, name in _local_call_sites_in_loops(model, q_methods):
+        out.append(Finding(
+            code="query-execute-in-loop-via-call",
+            severity="info",
+            line=ln,
+            message=(
+                f"Вызов метода «{name}()» в цикле — внутри него выполняется запрос "
+                f"(.Выполнить()): скрытый запрос к СУБД на каждой итерации. Вынесите запрос "
+                f"из цикла или выберите данные по списку одним запросом. (глубина 1, в рамках "
+                f"модуля; глубже — проверьте граф вызовов через code-index)"
+            ),
+        ))
+    return out
+
+
+@rule(code="query-new-in-loop-via-call", severity="info",
+      title="Вызов в цикле метода, создающего Новый Запрос (глубина 1)")
+def check_query_new_in_loop_via_call(ctx):
+    """Флагует вызов в цикле локального метода модуля, который создаёт `Новый Запрос`.
+
+    Неявный запрос в цикле: в теле цикла вызывается метод того же модуля, внутри
+    которого есть `Новый Запрос`. Межпроцедурно, глубина 1, только в рамках модуля.
+    severity=info; для большей глубины — анализ графа вызовов через code-index.
+    """
+    out = []
+    model = ctx.model
+    q_methods = _methods_covering_lines(model, _new_query_lines(model))
+    for ln, name in _local_call_sites_in_loops(model, q_methods):
+        out.append(Finding(
+            code="query-new-in-loop-via-call",
+            severity="info",
+            line=ln,
+            message=(
+                f"Вызов метода «{name}()» в цикле — внутри него создаётся Новый Запрос: "
+                f"вероятен скрытый запрос на каждой итерации. Проверьте, нельзя ли вынести "
+                f"запрос из цикла или выбрать данные по списку. (глубина 1, в рамках модуля; "
+                f"глубже — проверьте граф вызовов через code-index)"
+            ),
+        ))
+    return out

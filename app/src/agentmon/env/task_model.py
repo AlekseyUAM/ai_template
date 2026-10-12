@@ -11,7 +11,7 @@
 DEFAULT_STAGES = [
     {"name": "analyze", "subagent": "analyst", "artifact": "ANALYZE.md"},
     {"name": "plan", "subagent": "architect", "artifact": "ARCHITECT.md"},
-    {"name": "tests", "subagent": "developer", "artifact": "TESTS.md"},
+    {"name": "tests", "subagent": "developer-tests", "artifact": "TESTS.md"},
     {"name": "develop", "subagent": "developer", "artifact": "DEVELOP.md"},
     {"name": "testing", "subagent": "tester", "artifact": "TESTING.md"},
     {"name": "review", "subagent": "reviewer", "artifact": "REVIEW.md"},
