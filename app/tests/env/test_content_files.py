@@ -1,7 +1,7 @@
 from pathlib import Path
 
 CONTENT = Path(__file__).resolve().parents[3] / "template" / ".claude"
-AGENTS = {"analyst", "architect", "developer", "tester", "reviewer"}
+AGENTS = {"analyst", "architect", "developer-tests", "developer", "tester", "reviewer"}
 SKILLS = {"mcp-usage", "bsl-coding-standards", "sdd-tdd-workflow", "task-orchestration",
           "query-analyze", "query-review"}
 RULES = {"search-before-write", "verify-with-syntax-checker", "task-artifacts",
@@ -19,7 +19,7 @@ def _frontmatter(text: str) -> dict:
     return fm
 
 
-def test_exactly_five_agents():
+def test_exactly_six_agents():
     files = {p.stem for p in (CONTENT / "agents").glob("*.md")}
     assert files == AGENTS
 

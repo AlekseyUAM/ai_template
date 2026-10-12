@@ -3,7 +3,7 @@ A = Path(__file__).resolve().parents[3] / "template" / ".claude" / "agents"
 MCP = ["bsl_ls", "1c_platform", "1c_naparnic", "code_index"]
 
 def test_each_agent_lists_mcp_and_skills():
-    for name in ("analyst","architect","developer","tester","reviewer"):
+    for name in ("analyst","architect","developer-tests","developer","tester","reviewer"):
         t = (A / f"{name}.md").read_text(encoding="utf-8")
         assert "Возможности окружения" in t, name
         for m in MCP:

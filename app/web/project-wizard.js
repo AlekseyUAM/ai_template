@@ -3,20 +3,23 @@ let mcpData = [];
 // Выбранные MCP ids (порядок сохраняется)
 let mcpSelectedIds = [];
 
-const agentRoles = ["analyst", "architect", "developer", "tester", "reviewer"];
+const agentRoles = ["analyst", "architect", "developer-tests", "developer", "tester", "reviewer"];
 const agentLabels = {
   analyst: "Аналитик",
   architect: "Архитектор",
+  "developer-tests": "Разработчик тестов",
   developer: "Разработчик",
   tester: "Тестировщик",
   reviewer: "Ревьюер",
 };
 
 // Модели/усилие по умолчанию для каждого агента.
-// Короткий алиас (haiku/sonnet/opus) → используется последняя модель уровня.
+// Короткий алиас (haiku/sonnet/opus) → используется последняя модель уровня;
+// можно указать и полный id (например, более старую версию: claude-sonnet-4-5).
 const agentDefaults = {
   analyst: { model: "opus", effort: "high" },
   architect: { model: "opus", effort: "high" },
+  "developer-tests": { model: "claude-sonnet-4-5", effort: "high" },
   developer: { model: "sonnet", effort: "high" },
   tester: { model: "haiku", effort: "high" },
   reviewer: { model: "sonnet", effort: "medium" },
