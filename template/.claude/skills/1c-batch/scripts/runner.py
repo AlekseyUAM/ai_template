@@ -1,6 +1,7 @@
 """Запуск процессов 1cv8 — интерактивный и пакетный режимы."""
 
 import shlex
+import signal
 import subprocess
 import sys
 from datetime import datetime
@@ -9,6 +10,30 @@ from pathlib import Path
 import click
 
 from .config import Config
+
+
+def _pdeathsig_preexec() -> None:
+    """Linux: прибить дочерний 1cv8, если родитель (обёртка) погибнет.
+
+    Защита от «осиротевших» процессов конфигуратора: если обёртку снимет
+    таймаут/сигнал, незавершённая реструктуризация в осиротевшем 1cv8 может
+    оставить ИБ в состоянии «Infobase structure error». PR_SET_PDEATHSIG=1
+    заставляет ядро послать потомку SIGKILL при смерти родителя.
+    """
+    try:
+        import ctypes
+
+        libc = ctypes.CDLL("libc.so.6", use_errno=True)
+        libc.prctl(1, signal.SIGKILL)  # PR_SET_PDEATHSIG = 1
+    except Exception:
+        pass
+
+
+def _run_kwargs() -> dict:
+    """Параметры subprocess.run: привязать жизнь 1cv8 к обёртке (только Linux)."""
+    if sys.platform.startswith("linux"):
+        return {"preexec_fn": _pdeathsig_preexec}
+    return {}
 
 
 def build_connection_args(cfg: Config) -> list[str]:
@@ -72,10 +97,14 @@ def _echo_command(cmd: list[str]) -> None:
     click.echo(f"Запуск: {shlex.join(cmd)}")
 
 
-def run_interactive(cfg: Config, mode: str, extra_args: list[str] | None = None) -> None:
-    """Запуск 1С в интерактивном режиме (без ожидания завершения).
+def run_interactive(cfg: Config, mode: str, extra_args: list[str] | None = None,
+                    wait: bool = False) -> int:
+    """Запуск 1С в режиме предприятия/конфигуратора.
 
     mode: "ENTERPRISE" или "DESIGNER"
+    wait=False — не ждать завершения (интерактивный запуск приложения).
+    wait=True  — дождаться завершения сеанса (автоматический прогон: /C, /Execute).
+                 Возвращает код возврата процесса.
     """
     errors = cfg.validate()
     if errors:
@@ -88,7 +117,12 @@ def run_interactive(cfg: Config, mode: str, extra_args: list[str] | None = None)
         cmd.extend(extra_args)
 
     _echo_command(cmd)
+    if wait:
+        # Ждём завершения сеанса, чтобы вызывающий знал, что прогон закончился,
+        # и не стартовал следующий этап параллельно с живым сеансом.
+        return subprocess.run(cmd, **_run_kwargs()).returncode
     subprocess.Popen(cmd)
+    return 0
 
 
 def run_batch(cfg: Config, command_name: str, extra_args: list[str]) -> int:
@@ -111,7 +145,9 @@ def run_batch(cfg: Config, command_name: str, extra_args: list[str]) -> int:
     cmd.extend(extra_args)
 
     _echo_command(cmd)
-    result = subprocess.run(cmd)
+    # Без таймаута: обновление конфигурации БД может идти часами. От осиротевания
+    # при гибели обёртки защищает _run_kwargs() (PR_SET_PDEATHSIG на Linux).
+    result = subprocess.run(cmd, **_run_kwargs())
 
     # Чтение и вывод содержимого лога
     log_content = read_log(log_path)

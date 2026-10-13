@@ -60,8 +60,11 @@ def run_tests(config_arg: str) -> int:
     print(f'Команда: 1c-batch run-enterprise -C "{c_value}"')
 
     try:
+        # --wait: дождаться завершения сеанса (обработчик тестов сам его закрывает
+        # через ПрекратитьРаботуСистемы), чтобы следующий этап не стартовал, пока
+        # сеанс ещё держит базу. Без таймаута — прогон может быть долгим.
         result = subprocess.run(
-            batch_cmd() + ["run-enterprise", "-C", c_value],
+            batch_cmd() + ["run-enterprise", "--wait", "-C", c_value],
             cwd=project_root,
         )
     except FileNotFoundError:
@@ -71,7 +74,7 @@ def run_tests(config_arg: str) -> int:
 
     print()
     if result.returncode == 0:
-        print("✅ Предприятие запущено (прогон тестов идёт в сеансе 1С).")
+        print("✅ Прогон тестов завершён (сеанс 1С закрыт).")
         print("   Результаты смотри там, куда их пишет обработчик тестов в конфигурации.")
     else:
         print("❌ Ошибка запуска предприятия")
