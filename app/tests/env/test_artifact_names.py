@@ -11,6 +11,10 @@ def test_tester_names_both_stages():
     text = (TPL / "agents" / "tester.md").read_text(encoding="utf-8")
     assert "TESTS.md" in text and "TESTING.md" in text and "TEST.md" not in text
 
-def test_developer_names_docs():
+def test_developer_names_develop():
     text = (TPL / "agents" / "developer.md").read_text(encoding="utf-8")
-    assert "DEVELOP.md" in text and "DOCS.md" in text
+    assert "DEVELOP.md" in text
+
+def test_technical_writer_names_docs():
+    text = (TPL / "agents" / "technical-writer.md").read_text(encoding="utf-8")
+    assert "DOCS.md" in text

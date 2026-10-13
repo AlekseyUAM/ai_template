@@ -15,7 +15,7 @@ DEFAULT_STAGES = [
     {"name": "develop", "subagent": "developer", "artifact": "DEVELOP.md"},
     {"name": "testing", "subagent": "tester", "artifact": "TESTING.md"},
     {"name": "review", "subagent": "reviewer", "artifact": "REVIEW.md"},
-    {"name": "docs", "subagent": "developer", "artifact": "DOCS.md"},
+    {"name": "docs", "subagent": "technical-writer", "artifact": "DOCS.md"},
 ]
 
 # Имена стадий для удобства
