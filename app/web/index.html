@@ -56,6 +56,17 @@
     }
     .tree-project-header .proj-name { flex:1; }
     .tree-project-header .proj-path { font-size:11px; color:var(--muted); font-weight:400; }
+    .proj-actions { display:flex; gap:4px; flex-shrink:0; }
+    .proj-btn {
+      display:inline-flex; align-items:center; justify-content:center;
+      width:26px; height:24px; padding:0; border:1px solid var(--border);
+      background:var(--panel); color:var(--muted); border-radius:4px; cursor:pointer;
+      transition:background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .proj-btn:hover { background:#21262d; color:var(--txt); border-color:#444c56; }
+    .proj-btn svg { width:15px; height:15px; display:block; }
+    .proj-btn.spin svg { animation:proj-spin 0.6s linear infinite; }
+    @keyframes proj-spin { to { transform:rotate(360deg); } }
     .tree-tasks { padding:0; }
     .tree-task {
       display:flex; align-items:center; gap:8px; padding:6px 12px;
@@ -69,7 +80,8 @@
     .task-del:hover { color:var(--red); }
     .task-name { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .task-path { font-size:11px; color:var(--muted); min-width:0; overflow:hidden;
-                 text-overflow:ellipsis; white-space:nowrap; max-width:180px; }
+                 text-overflow:ellipsis; white-space:nowrap;
+                 flex:0 1 360px; max-width:420px; }
     .task-status { font-size:11px; min-width:90px; }
     .task-elapsed { font-size:11px; color:var(--muted); min-width:50px; text-align:right; }
     .status-running { color:var(--green); }
@@ -163,7 +175,7 @@
   </div>
 
   <script src="/static/esc.js"></script>
-  <script src="/static/start.js?v=1"></script>
+  <script src="/static/start.js?v=3"></script>
   <script src="/static/header.js"></script>
 </body>
 </html>
