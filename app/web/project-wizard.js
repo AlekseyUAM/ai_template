@@ -17,12 +17,12 @@ const agentLabels = {
 // Короткий алиас (haiku/sonnet/opus) → используется последняя модель уровня;
 // можно указать и полный id (например, более старую версию: claude-sonnet-4-5).
 const agentDefaults = {
-  analyst: { model: "opus", effort: "high" },
+  analyst: { model: "claude-opus-4-7", effort: "high" },
   architect: { model: "opus", effort: "high" },
   "developer-tests": { model: "claude-sonnet-4-5", effort: "high" },
   developer: { model: "sonnet", effort: "high" },
   tester: { model: "haiku", effort: "high" },
-  reviewer: { model: "sonnet", effort: "medium" },
+  reviewer: { model: "claude-opus-4-7", effort: "high" },
 };
 
 // Режим обновления окружения (?id=PID): при сабмите вызываем update-env.

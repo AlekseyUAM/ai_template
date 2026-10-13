@@ -63,6 +63,26 @@ def test_statements_ignores_empty_trailing():
     assert ctx.statements[0][0] == 1
 
 
+# ── query-not-parseable ───────────────────────────────
+
+@pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
+def test_not_parseable_flagged():
+    # Заведомо битый синтаксис: ВЫБРАТЬ … ИЗ без источника.
+    assert "query-not-parseable" in _codes("ВЫБРАТЬ Код ИЗ")
+
+
+@pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
+def test_parseable_not_flagged():
+    assert "query-not-parseable" not in _codes("ВЫБРАТЬ Т.Код КАК Код ИЗ Справочник.Товары КАК Т")
+
+
+@pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
+def test_not_parseable_severity_warning():
+    ctx = rules.QueryContext("ВЫБРАТЬ Код ИЗ")
+    findings = [f for f in rules.run_all(ctx) if f.code == "query-not-parseable"]
+    assert findings and findings[0].severity == "warning"
+
+
 # ── keyword-lowercase ─────────────────────────────────
 
 def test_keyword_lowercase_flagged():
