@@ -155,6 +155,26 @@ def test_create_stack(tmp_path):
     assert "id" in stack
 
 
+def test_create_stack_auto_identifier(tmp_path):
+    """POST /api/env/stacks без name → имя-идентификатор вида «001», «002»."""
+    client, store, mon = make_client(tmp_path)
+    r1 = client.post("/api/env/stacks", json={})
+    assert r1.status_code == 200
+    assert r1.json()["stack"]["name"] == "001"
+
+    r2 = client.post("/api/env/stacks", json={})
+    assert r2.status_code == 200
+    assert r2.json()["stack"]["name"] == "002"
+
+
+def test_create_stack_auto_identifier_no_body(tmp_path):
+    """POST /api/env/stacks вовсе без тела → всё равно присваивается «001»."""
+    client, store, mon = make_client(tmp_path)
+    r = client.post("/api/env/stacks")
+    assert r.status_code == 200
+    assert r.json()["stack"]["name"] == "001"
+
+
 # ─── DELETE /api/env/stacks/{id} ─────────────────────────────────────────────
 
 def test_delete_stack(tmp_path):

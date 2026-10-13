@@ -75,6 +75,14 @@ function statusClass(status) {
   return "";
 }
 
+// Русское название статуса стека для отображения (сырые значения: idle/running/stopped)
+function stackStatusLabel(status) {
+  if (status === "running") return "выполняется";
+  if (status === "stopped") return "остановлен";
+  if (status === "idle") return "ожидает";
+  return status;
+}
+
 /* ── построить дерево ────────────────────────────────────────────────── */
 async function renderTree() {
   const container = document.getElementById("tree");
@@ -180,11 +188,11 @@ async function renderStacks() {
         <div class="stack-column" data-stack-id="${stack.id}" data-stack-status="${stack.status}">
           <div class="stack-header">
             <span class="stack-name">${escHtml(stack.name)}</span>
-            <span class="stack-status">${escHtml(stack.status)}</span>
+            <span class="stack-status">${escHtml(stackStatusLabel(stack.status))}</span>
             <div class="stack-controls">
               <button class="stack-btn start-btn" title="Запустить" onclick="startStack(${Number(stack.id)})">▶</button>
               <button class="stack-btn stop-btn" title="Остановить" onclick="stopStack(${Number(stack.id)})" ${!isRunning ? 'style="opacity:0.4"' : ''}>⏸</button>
-              <button class="stack-btn delete-btn delete" title="Удалить" onclick="deleteStack(${Number(stack.id)})">✕</button>
+              <button class="stack-btn delete-btn" title="Удалить" onclick="deleteStack(${Number(stack.id)})">✕</button>
             </div>
           </div>
           <div class="stack-items" ondrop="handleDropOnStack(event, ${Number(stack.id)})" ondragover="handleDragOverStack(event)" ondragleave="handleDragLeaveStack(event)">
@@ -209,14 +217,12 @@ async function renderStacks() {
 }
 
 async function createStack() {
-  const name = prompt("Название стека:");
-  if (!name) return;
-
+  // Имя не запрашиваем — бэкенд сам присвоит идентификатор вида «001».
   try {
     const r = await fetch("/api/env/stacks", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({}),
     });
     if (!r.ok) {
       alert("Ошибка создания стека");
@@ -225,36 +231,6 @@ async function createStack() {
     await renderStacks();
   } catch (e) {
     console.error("create stack error", e);
-    alert("Ошибка соединения");
-  }
-}
-
-async function createTestTask() {
-  // Используем первый проект из дерева, или запрашиваем
-  if (!_treeData || !_treeData.projects || _treeData.projects.length === 0) {
-    alert("Нет проектов. Создайте проект сначала.");
-    return;
-  }
-
-  const projectId = _treeData.projects[0].id;
-  const name = prompt("Название тестовой задачи:", "Тест");
-  if (name === null) return;
-
-  try {
-    const r = await fetch("/api/env/tasks/test", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ project_id: projectId, name: name || "Тест" }),
-    });
-    if (!r.ok) {
-      alert("Ошибка создания тестовой задачи");
-      return;
-    }
-    // Обновляем дерево и стеки
-    await renderTree();
-    await renderStacks();
-  } catch (e) {
-    console.error("create test task error", e);
     alert("Ошибка соединения");
   }
 }
@@ -472,10 +448,5 @@ document.addEventListener("DOMContentLoaded", () => {
   const btnCreateStack = document.getElementById("btn-create-stack");
   if (btnCreateStack) {
     btnCreateStack.addEventListener("click", createStack);
-  }
-
-  const btnCreateTestTask = document.getElementById("btn-create-test-task");
-  if (btnCreateTestTask) {
-    btnCreateTestTask.addEventListener("click", createTestTask);
   }
 });

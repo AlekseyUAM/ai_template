@@ -96,12 +96,13 @@ def build_stack_router(store, monitor) -> APIRouter:
     # ── POST /api/env/stacks ──────────────────────────────────────────────────
 
     @router.post("/api/env/stacks")
-    def create_stack(body: dict):
+    def create_stack(body: dict = None):
         _require_store()
+        sr = StackRepo(store)
         name = (body or {}).get("name") or ""
         if not name:
-            raise HTTPException(status_code=400, detail="поле name обязательно")
-        sr = StackRepo(store)
+            # имя не задано — генерируем идентификатор вида «001»
+            name = sr.next_identifier()
         stack_id = sr.add(name=name)
         stack = sr.get(stack_id)
         return {"stack": {"id": stack["id"], "name": stack["name"], "status": stack["status"]}}
