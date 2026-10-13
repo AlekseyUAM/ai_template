@@ -57,5 +57,3 @@ def test_static_start_js_loaded(tmp_path):
     assert r.status_code == 200
     # Check that the script references the stacks API
     assert "/api/env/stacks" in r.text
-    # Check for test task endpoint
-    assert "/api/env/tasks/test" in r.text

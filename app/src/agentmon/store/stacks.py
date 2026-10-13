@@ -17,6 +17,19 @@ class StackRepo:
             "stacks", ["name", "created_at"], [name, now]
         )
 
+    def next_identifier(self) -> str:
+        """Возвращает следующий числовой идентификатор стека вида «001».
+
+        Берёт максимальное числовое имя среди существующих стеков и прибавляет 1,
+        чтобы удаление промежуточного стека не приводило к конфликту имён.
+        """
+        max_n = 0
+        for row in self._db.query("SELECT name FROM stacks"):
+            name = (row["name"] or "").strip()
+            if name.isdigit():
+                max_n = max(max_n, int(name))
+        return f"{max_n + 1:03d}"
+
     def get(self, id) -> dict | None:
         """Возвращает стек по первичному ключу или None."""
         return self._db.one("SELECT * FROM stacks WHERE id=?", [id])
