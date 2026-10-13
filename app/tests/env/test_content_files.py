@@ -5,7 +5,8 @@ AGENTS = {"analyst", "architect", "developer-tests", "developer", "tester", "rev
 SKILLS = {"mcp-usage", "bsl-coding-standards", "sdd-tdd-workflow", "task-orchestration",
           "query-analyze", "query-review"}
 RULES = {"search-before-write", "verify-with-syntax-checker", "task-artifacts",
-         "task-lifecycle", "cyclic-review-workflow", "optimized-config-loading"}
+         "task-lifecycle", "cyclic-review-workflow", "optimized-config-loading",
+         "run-unit-tests"}
 
 
 def _frontmatter(text: str) -> dict:

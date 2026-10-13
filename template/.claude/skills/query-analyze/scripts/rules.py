@@ -83,6 +83,10 @@ class QueryContext:
         self._model = None
         self._model_parsed = False
         self.model_error = None
+        # Заполняется только когда парсер отработал и вернул синтаксическую ошибку
+        # ({"error": …}) — в отличие от инфраструктурного пропуска (нет node/бандла).
+        self.parse_error = None
+        self.parse_line = None
 
     @property
     def lines(self):
@@ -160,7 +164,10 @@ class QueryContext:
             self.model_error = f"некорректный JSON от парсера: {e}"
             return None
         if isinstance(data, dict) and "error" in data:
-            self.model_error = f"ошибка разбора запроса: {data['error']}"
+            self.parse_error = str(data["error"])
+            m = re.search(r"разбора\s+(\d+):", self.parse_error)
+            self.parse_line = int(m.group(1)) if m else None
+            self.model_error = f"ошибка разбора запроса: {self.parse_error}"
             return None
         self._model = data
         return data
@@ -188,6 +195,34 @@ def run_all(ctx):
     for r in RULES:
         findings.extend(r.fn(ctx))
     return findings
+
+
+# ── Разбираемость текста запроса ─────────────────────
+
+@rule(code="query-not-parseable", severity="warning",
+      title="Текст запроса не разбирается парсером — не откроется конструктором")
+def check_query_not_parseable(ctx):
+    """Если SDBL-парсер вернул синтаксическую ошибку — текст запроса не откроется
+    конструктором запросов (и, как правило, некорректен).
+
+    Это ОТДЕЛЬНАЯ ситуация от инфраструктурного пропуска слоя (нет node/бандла):
+    там модель недоступна по внешней причине, здесь же парсер отработал и сообщил,
+    что текст синтаксически неверен. Поэтому фиксируется как находка, а не как
+    «проверки пропущены». ctx.parse_error заполняется только при ответе парсера
+    вида `{"error": …}`.
+    """
+    _ = ctx.model  # гарантируем, что парсер отработал и parse_error зафиксирован
+    if not ctx.parse_error:
+        return []
+    return [Finding(
+        code="query-not-parseable",
+        severity="warning",
+        line=ctx.parse_line or 1,
+        message=(
+            f"Текст запроса не разбирается парсером языка запросов и не откроется "
+            f"конструктором: {ctx.parse_error}"
+        ),
+    )]
 
 
 # ── Вспомогательные константы ────────────────────────────────

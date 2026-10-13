@@ -557,3 +557,34 @@ def test_posting_and_loop_query_rules_are_warning():
         "КонецФункции\n"
     )
     assert _severity(new_via_call, "query-new-in-loop-via-call") == "warning"
+
+
+# ── user-message-via-constructor ─────────────────────────────
+
+def test_user_message_via_constructor_flagged():
+    text = (
+        "Сообщение = Новый СообщениеПользователю;\n"
+        "Сообщение.Текст = \"Нет остатка\";\n"
+        "Сообщение.Сообщить();\n"
+    )
+    assert "user-message-via-constructor" in codes(text)
+
+
+def test_user_message_via_constructor_with_parens_flagged():
+    assert "user-message-via-constructor" in codes("М = Новый СообщениеПользователю();\n")
+
+
+def test_user_message_via_constructor_severity_info():
+    fs = [f for f in findings("М = Новый СообщениеПользователю;\n")
+          if f.code == "user-message-via-constructor"]
+    assert fs and fs[0].severity == "info"
+
+
+def test_osn_message_not_flagged():
+    # Вызов БСП-функции — не велосипед, не флагуем.
+    text = "ОбщегоНазначения.СообщитьПользователю(\"Нет остатка\");\n"
+    assert "user-message-via-constructor" not in codes(text)
+
+
+def test_new_other_type_not_flagged():
+    assert "user-message-via-constructor" not in codes("М = Новый Массив;\n")
