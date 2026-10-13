@@ -17,13 +17,15 @@ _REQUIRED_FIELDS = ("name", "path", "identifier", "email",
 _PRESENT_FIELDS = ("db_connection",)
 
 
-def build_project_router(store, registry, monitor=None, run=subprocess.run) -> APIRouter:
+def build_project_router(store, registry, monitor=None, run=subprocess.run,
+                         popen=subprocess.Popen) -> APIRouter:
     """Строит APIRouter для /api/env/projects/* и /api/env/version.
 
     store — объект Db (P1.1) или None.
     Если store is None, все операции с БД возвращают 503.
     registry — ProjectRegistry (для регистрации при создании).
     run — функция запуска подпроцессов (замена в тестах).
+    popen — неблокирующий запуск подпроцесса (для открытия VS Code; замена в тестах).
     """
     router = APIRouter()
 
@@ -372,5 +374,74 @@ def build_project_router(store, registry, monitor=None, run=subprocess.run) -> A
                    else "\n✗ Обновление завершилось с ошибкой\n")
 
         return StreamingResponse(gen(), media_type="text/plain; charset=utf-8")
+
+    # ── refresh: синхронизировать статусы задач из их task.json ───────────────
+
+    @router.post("/api/env/projects/{pid}/refresh")
+    def refresh_project(pid: int):
+        """Читает task.json каждой задачи проекта и переносит в БД актуальные
+        status / stage / started_at / finished_at.
+
+        Закрывает разрыв «файл → БД»: оркестратор правит task.json, но дерево
+        монитора читает БД. Статусы `queued`/`stopped` — состояния стека, в файле
+        их нет, поэтому `status` для них не перезаписываем (чтобы не выбить задачу
+        из очереди); stage и отметки времени синхронизируем всегда.
+        """
+        import json
+        from pathlib import Path
+        from agentmon.store.tasks import TaskRepo
+        from .task_schema import task_folder_name
+
+        project_repo, _ = get_repos()
+        project = project_repo.get(pid)
+        if project is None:
+            raise HTTPException(status_code=404, detail=f"нет проекта с id={pid}")
+
+        task_repo = TaskRepo(store)
+        protected = {"queued", "stopped"}
+        updated = 0
+        for task in task_repo.list(project_id=pid):
+            folder = task_folder_name(task["id"], task.get("identifier"))
+            tj = Path(project["path"]) / "tasks" / folder / "task.json"
+            if not tj.exists():
+                continue
+            try:
+                data = json.loads(tj.read_text(encoding="utf-8"))
+            except (ValueError, OSError):
+                continue
+
+            fields = {}
+            for key in ("stage", "started_at", "finished_at"):
+                if key in data:
+                    fields[key] = data.get(key)
+            file_status = data.get("status")
+            if file_status and task.get("status") not in protected:
+                fields["status"] = file_status
+            if fields:
+                task_repo.update(task["id"], **fields)
+                updated += 1
+
+        return {"ok": True, "updated": updated}
+
+    # ── open-vscode: открыть каталог проекта в VS Code ────────────────────────
+
+    @router.post("/api/env/projects/{pid}/open-vscode")
+    def open_vscode(pid: int):
+        """Открывает каталог проекта в VS Code (`code <path>`) на хосте монитора."""
+        project_repo, _ = get_repos()
+        project = project_repo.get(pid)
+        if project is None:
+            raise HTTPException(status_code=404, detail=f"нет проекта с id={pid}")
+        try:
+            popen(["code", project["path"]])
+        except FileNotFoundError:
+            raise HTTPException(
+                status_code=500,
+                detail="команда 'code' не найдена в PATH — установите VS Code CLI")
+        except Exception as exc:                           # noqa: BLE001
+            raise HTTPException(
+                status_code=500,
+                detail=f"не удалось открыть VS Code: {exc}")
+        return {"ok": True}
 
     return router

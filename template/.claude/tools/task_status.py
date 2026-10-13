@@ -7,6 +7,7 @@
 """
 import argparse
 import json
+import time
 from pathlib import Path
 
 VALID = ("pending", "running", "done", "failed", "skipped", "approve")
@@ -44,6 +45,27 @@ def _gate_block(data: dict, target_stage: str):
     return None
 
 
+def _overall_status(stages) -> str:
+    """Общий статус задачи по статусам этапов. Зеркало task_model.overall_status
+    (приоритет: failed → awaiting_user → done → running → planned), но с
+    толерантным разбором булевых полей (`enabled`/`gate`/`approved`)."""
+    enabled = [s for s in stages if _truthy(s.get("enabled"))]
+    if not enabled:
+        return "done"
+    if any(s.get("status") == "failed" for s in enabled):
+        return "failed"
+    for i, s in enumerate(enabled):
+        if _truthy(s.get("gate")) and s.get("status") == "done" \
+                and not _truthy(s.get("approved")):
+            if any(later.get("status") == "pending" for later in enabled[i + 1:]):
+                return "awaiting_user"
+    if all(s.get("status") == "done" for s in enabled):
+        return "done"
+    if any(s.get("status") == "running" for s in enabled):
+        return "running"
+    return "planned"
+
+
 def update(task_dir: str, stage: str, status: str, files) -> None:
     path = Path(task_dir) / "task.json"
     data = json.loads(path.read_text(encoding="utf-8"))
@@ -57,10 +79,27 @@ def update(task_dir: str, stage: str, status: str, files) -> None:
                     if msg:
                         raise SystemExit("ОШИБКА (гейт): " + msg)
                 s["status"] = status
+                data["stage"] = stage
                 changed = s.setdefault("changed_files", [])
                 for f in (files or []):
                     if f not in changed:
                         changed.append(f)
+            # Пересчитать верхнеуровневый статус задачи по этапам (как на DB-пути
+            # в task_api2.update_stage), иначе он застрянет на начальном значении.
+            overall = _overall_status(data.get("stages", []))
+            data["status"] = overall
+            # Отметки времени — epoch-секунды, как в БД (queue.py): started_at при
+            # первом переходе задачи в running (ставим один раз), finished_at при
+            # достижении терминального статуса (done/failed). При возврате в
+            # нетерминальный статус (например, цикл review→develop) снимаем
+            # устаревший finished_at.
+            now = time.time()
+            if overall == "running" and not data.get("started_at"):
+                data["started_at"] = now
+            if overall in ("done", "failed"):
+                data["finished_at"] = now
+            elif data.get("finished_at"):
+                data["finished_at"] = None
             path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n",
                             encoding="utf-8")
             return
