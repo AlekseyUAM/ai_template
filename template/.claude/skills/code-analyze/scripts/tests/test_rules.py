@@ -507,3 +507,53 @@ def test_finding_has_line():
     )
     fs = [f for f in findings(text) if f.code == "var-name-starts-with-underscore"]
     assert fs and fs[0].line == 2
+
+
+# ── severity ключевых правил (блокирующие: important=warning) ──
+
+def _severity(text, code):
+    return next(f.severity for f in findings(text) if f.code == code)
+
+
+def test_posting_and_loop_query_rules_are_warning():
+    # Эти правила блокируют приёмку (важная=warning), а не минорная=info.
+    write_text = (
+        "Процедура ОбработкаПроведения(Отказ, РежимПроведения)\n"
+        "    Движения.Остатки.Записать();\n"
+        "КонецПроцедуры\n"
+    )
+    assert _severity(write_text, "explicit-write-in-posting") == "warning"
+
+    new_in_loop = (
+        "Для Н = 1 По 10 Цикл\n"
+        "    Запрос = Новый Запрос;\n"
+        "КонецЦикла;\n"
+    )
+    assert _severity(new_in_loop, "query-new-in-loop") == "warning"
+
+    exec_via_call = (
+        "Процедура ОбработкаПроведения(Отказ, Режим)\n"
+        "    Для Каждого Стр Из Товары Цикл\n"
+        "        СформироватьДвижения(Стр);\n"
+        "    КонецЦикла;\n"
+        "КонецПроцедуры\n"
+        "\n"
+        "Процедура СформироватьДвижения(Стр)\n"
+        "    Результат = Запрос.Выполнить();\n"
+        "КонецПроцедуры\n"
+    )
+    assert _severity(exec_via_call, "query-execute-in-loop-via-call") == "warning"
+
+    new_via_call = (
+        "Процедура Главная()\n"
+        "    Для Каждого Стр Из Товары Цикл\n"
+        "        ПодготовитьЗапрос(Стр);\n"
+        "    КонецЦикла;\n"
+        "КонецПроцедуры\n"
+        "\n"
+        "Функция ПодготовитьЗапрос(Стр)\n"
+        "    Запрос = Новый Запрос;\n"
+        "    Возврат Запрос;\n"
+        "КонецФункции\n"
+    )
+    assert _severity(new_via_call, "query-new-in-loop-via-call") == "warning"

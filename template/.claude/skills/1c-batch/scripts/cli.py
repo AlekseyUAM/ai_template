@@ -35,8 +35,11 @@ def cli(ctx: click.Context) -> None:
 @click.argument("epf", required=False)
 @click.option("-C", "--c", "c_param", default=None,
               help="Параметр запуска /C — строка, передаётся в конфигурацию (ПараметрЗапуска)")
+@click.option("--wait", is_flag=True,
+              help="Дождаться завершения сеанса (для автоматического прогона: /C, /Execute)")
 @click.pass_context
-def run_enterprise(ctx: click.Context, epf: str | None, c_param: str | None) -> None:
+def run_enterprise(ctx: click.Context, epf: str | None, c_param: str | None,
+                   wait: bool) -> None:
     """Запуск в режиме предприятия."""
     cfg = ctx.obj["config"]
     extra: list[str] = []
@@ -45,7 +48,7 @@ def run_enterprise(ctx: click.Context, epf: str | None, c_param: str | None) -> 
     if c_param:
         extra.extend(_arg("/C", c_param))
     extra.extend(["/DisableStartupDialogs", "/DisableStartupMessages"])
-    run_interactive(cfg, "ENTERPRISE", extra)
+    sys.exit(run_interactive(cfg, "ENTERPRISE", extra, wait=wait))
 
 
 @cli.command()

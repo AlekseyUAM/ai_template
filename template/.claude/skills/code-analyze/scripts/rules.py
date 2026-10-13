@@ -689,7 +689,7 @@ def check_sequence_boundary_in_posting(ctx):
 
 # ── Порядок записи движений документов ───────────────────────
 
-@rule(code="explicit-write-in-posting", severity="info",
+@rule(code="explicit-write-in-posting", severity="warning",
       title="Явная .Записать() в ОбработкаПроведения — запись должна быть неявной")
 def check_explicit_write_in_posting(ctx):
     """Флагует явный вызов `.Записать()` в обработчике ОбработкаПроведения.
@@ -719,7 +719,7 @@ def check_explicit_write_in_posting(ctx):
                 if m.header_line <= line <= m.end_line:
                     out.append(Finding(
                         code="explicit-write-in-posting",
-                        severity="info",
+                        severity="warning",
                         line=line,
                         message=(
                             "Явная .Записать() в ОбработкаПроведения: запись наборов записей "
@@ -870,7 +870,7 @@ def check_query_execute_in_loop(ctx):
     return out
 
 
-@rule(code="query-new-in-loop", severity="info",
+@rule(code="query-new-in-loop", severity="warning",
       title="Новый Запрос в цикле — создавайте объект запроса до цикла")
 def check_query_new_in_loop(ctx):
     """Флагует создание объекта `Новый Запрос` в теле цикла.
@@ -885,7 +885,7 @@ def check_query_new_in_loop(ctx):
         if model.is_in_loop(ln):
             out.append(Finding(
                 code="query-new-in-loop",
-                severity="info",
+                severity="warning",
                 line=ln,
                 message=(
                     "Новый Запрос в цикле: объект запроса пересоздаётся на каждой итерации. "
@@ -896,7 +896,7 @@ def check_query_new_in_loop(ctx):
     return out
 
 
-@rule(code="query-execute-in-loop-via-call", severity="info",
+@rule(code="query-execute-in-loop-via-call", severity="warning",
       title="Вызов в цикле метода, выполняющего запрос (глубина 1)")
 def check_query_execute_in_loop_via_call(ctx):
     """Флагует вызов в цикле локального метода модуля, который выполняет запрос.
@@ -913,7 +913,7 @@ def check_query_execute_in_loop_via_call(ctx):
     for ln, name in _local_call_sites_in_loops(model, q_methods):
         out.append(Finding(
             code="query-execute-in-loop-via-call",
-            severity="info",
+            severity="warning",
             line=ln,
             message=(
                 f"Вызов метода «{name}()» в цикле — внутри него выполняется запрос "
@@ -925,7 +925,7 @@ def check_query_execute_in_loop_via_call(ctx):
     return out
 
 
-@rule(code="query-new-in-loop-via-call", severity="info",
+@rule(code="query-new-in-loop-via-call", severity="warning",
       title="Вызов в цикле метода, создающего Новый Запрос (глубина 1)")
 def check_query_new_in_loop_via_call(ctx):
     """Флагует вызов в цикле локального метода модуля, который создаёт `Новый Запрос`.
@@ -940,7 +940,7 @@ def check_query_new_in_loop_via_call(ctx):
     for ln, name in _local_call_sites_in_loops(model, q_methods):
         out.append(Finding(
             code="query-new-in-loop-via-call",
-            severity="info",
+            severity="warning",
             line=ln,
             message=(
                 f"Вызов метода «{name}()» в цикле — внутри него создаётся Новый Запрос: "

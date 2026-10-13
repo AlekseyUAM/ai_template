@@ -27,42 +27,91 @@ def batch_cmd() -> List[str]:
     wrapper = get_project_root() / ".claude/skills/1c-batch/scripts/1c-batch.py"
     return [sys.executable, str(wrapper)]
 
+def _object_root(rel: str) -> str:
+    """Свести путь файла внутри src/cf к корневому файлу объекта метаданных.
+
+    Платформа в -listFile принимает только корневые файлы объектов
+    (<Вид>/<Имя>.xml), а не подфайлы (модули, формы, макеты). Любой изменённый
+    подфайл сводим к корню объекта.
+
+        Configuration.xml                           -> Configuration.xml
+        Catalogs/Номенклатура.xml                   -> Catalogs/Номенклатура.xml
+        Catalogs/Номенклатура/Ext/ObjectModule.bsl  -> Catalogs/Номенклатура.xml
+        Catalogs/Номенклатура/Forms/Ф.xml           -> Catalogs/Номенклатура.xml
+    """
+    rel = rel.replace("\\", "/")
+    parts = rel.split("/")
+    if len(parts) <= 1:
+        # Файл верхнего уровня (Configuration.xml и т.п.)
+        return rel
+    kind, name = parts[0], parts[1]
+    if name.endswith(".xml"):
+        name = name[:-4]
+    return f"{kind}/{name}.xml"
+
+
 def get_changed_files() -> List[str]:
-    """Получи список изменённых файлов конфигурации из git"""
+    """Список корневых файлов изменённых объектов конфигурации из git.
+
+    Учитывает и отслеживаемые изменения (git diff), и новые untracked-файлы
+    (git ls-files --others). Каждый изменённый подфайл объекта сводится к
+    корневому файлу объекта. Пути — относительно src/cf.
+
+    ConfigDumpInfo.xml исключается: это не объект метаданных, через -listFile он
+    даёт ошибку «URL ... не может быть преобразован в полное имя объекта
+    метаданных»; платформа обновит его сама по флагу -updateConfigDumpInfo.
+    """
     project_root = get_project_root()
     os.chdir(project_root)
 
+    # core.quotePath=false — чтобы кириллические имена не экранировались в \nnn
+    raw: List[str] = []
     try:
-        # Попробуй получить файлы из git diff HEAD
-        result = subprocess.run(
-            ["git", "diff", "--name-only", "HEAD", "--", "src/cf/"],
-            capture_output=True,
-            text=True,
-            check=False
+        diff = subprocess.run(
+            ["git", "-c", "core.quotePath=false", "diff", "--name-only", "HEAD",
+             "--", "src/cf/"],
+            capture_output=True, text=True, check=False,
         )
-
-        if result.returncode != 0:
-            # Если HEAD не существует, попробуй просто git diff
-            result = subprocess.run(
-                ["git", "diff", "--name-only", "--", "src/cf/"],
-                capture_output=True,
-                text=True,
-                check=False
+        if diff.returncode != 0:
+            # HEAD может не существовать (пустой репозиторий)
+            diff = subprocess.run(
+                ["git", "-c", "core.quotePath=false", "diff", "--name-only",
+                 "--", "src/cf/"],
+                capture_output=True, text=True, check=False,
             )
+        raw.extend(diff.stdout.splitlines())
 
-        files = result.stdout.strip().split('\n')
-
-        # Преобразуй пути: src/cf/... → ...
-        files = [f.replace("src/cf/", "", 1) for f in files if f]
-
-        # Удали пустые строки
-        files = [f for f in files if f.strip()]
-
-        return files
-
+        others = subprocess.run(
+            ["git", "-c", "core.quotePath=false", "ls-files", "--others",
+             "--exclude-standard", "--", "src/cf/"],
+            capture_output=True, text=True, check=False,
+        )
+        raw.extend(others.stdout.splitlines())
     except Exception as e:
         print(f"❌ Ошибка при получении списка файлов: {e}", file=sys.stderr)
         return []
+
+    cf_dir = project_root / "src" / "cf"
+    seen = set()
+    result: List[str] = []
+    for f in raw:
+        f = f.strip()
+        if not f:
+            continue
+        rel = f.replace("src/cf/", "", 1)
+        if rel == "ConfigDumpInfo.xml":
+            continue
+        root = _object_root(rel)
+        if root in seen:
+            continue
+        # Грузим только существующие файлы; удалённые объекты подхватятся через
+        # изменённый Configuration.xml, который остаётся в списке.
+        if root != "Configuration.xml" and not (cf_dir / root).exists():
+            continue
+        seen.add(root)
+        result.append(root)
+
+    return result
 
 def run_full_load() -> int:
     """Выполни полную загрузку конфигурации"""
