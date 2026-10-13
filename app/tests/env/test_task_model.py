@@ -84,6 +84,8 @@ class TestBuildStages:
         assert stage_dict["tests"]["subagent"] == "developer-tests"
         assert stage_dict["develop"]["subagent"] == "developer"
         assert stage_dict["testing"]["subagent"] == "tester"
+        assert stage_dict["review"]["subagent"] == "reviewer"
+        assert stage_dict["docs"]["subagent"] == "technical-writer"
 
 
 class TestOverallStatus:

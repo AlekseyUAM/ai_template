@@ -3,7 +3,7 @@ let mcpData = [];
 // Выбранные MCP ids (порядок сохраняется)
 let mcpSelectedIds = [];
 
-const agentRoles = ["analyst", "architect", "developer-tests", "developer", "tester", "reviewer"];
+const agentRoles = ["analyst", "architect", "developer-tests", "developer", "tester", "reviewer", "technical-writer"];
 const agentLabels = {
   analyst: "Аналитик",
   architect: "Архитектор",
@@ -11,6 +11,7 @@ const agentLabels = {
   developer: "Разработчик",
   tester: "Тестировщик",
   reviewer: "Ревьюер",
+  "technical-writer": "Технический писатель",
 };
 
 // Модели/усилие по умолчанию для каждого агента.
@@ -23,6 +24,7 @@ const agentDefaults = {
   developer: { model: "sonnet", effort: "high" },
   tester: { model: "haiku", effort: "high" },
   reviewer: { model: "claude-opus-4-7", effort: "high" },
+  "technical-writer": { model: "claude-sonnet-4-5", effort: "medium" },
 };
 
 // Режим обновления окружения (?id=PID): при сабмите вызываем update-env.
