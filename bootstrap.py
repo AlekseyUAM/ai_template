@@ -124,18 +124,36 @@ def compose(args: list[str], env: dict[str, str], **kwargs) -> subprocess.Comple
     return subprocess.run(cmd, env=env, **kwargs)
 
 
+def pg_container_port() -> int | None:
+    """Опубликованный host-порт запущенного контейнера ai1c-postgres, иначе None."""
+    r = subprocess.run(
+        ["docker", "inspect", "-f",
+         '{{if .State.Running}}'
+         '{{(index (index .NetworkSettings.Ports "5432/tcp") 0).HostPort}}{{end}}',
+         "ai1c-postgres"],
+        capture_output=True, text=True,
+    )
+    out = r.stdout.strip()
+    return int(out) if r.returncode == 0 and out.isdigit() else None
+
+
 def setup_database() -> str:
     if not docker_available():
         warn("Docker недоступен — использую локальный SQLite (без Postgres)")
         return str(ROOT / "app" / "agentmon.db")
 
-    port = free_port()
-    env = {**os.environ, "AI1C_PG_PORT": str(port)}
-    say(f"поднимаю PostgreSQL в Docker (deploy/postgres) на порту {port}")
-    # убрать полустартовавший контейнер (volume с данными сохраняется)
-    compose(["down", "--remove-orphans"], env=env,
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    compose(["up", "-d"], env=env, check=True)
+    # Уже запущен и здоров — переиспользуем как есть, без рестарта и смены порта.
+    port = pg_container_port()
+    if port is not None:
+        say(f"PostgreSQL уже запущен (ai1c-postgres, порт {port}) — переиспользую")
+    else:
+        # Контейнера нет/поднялся частично: убрать остатки (volume с данными
+        # сохраняется) и поднять заново. free_port() после down → порт стабилен.
+        compose(["down", "--remove-orphans"], env={**os.environ},
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        port = free_port()
+        say(f"поднимаю PostgreSQL в Docker (deploy/postgres) на порту {port}")
+        compose(["up", "-d"], env={**os.environ, "AI1C_PG_PORT": str(port)}, check=True)
 
     say("устанавливаю драйвер psycopg")
     run([str(venv_python()), "-m", "pip", "install", "psycopg[binary]"],
