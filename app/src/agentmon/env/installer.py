@@ -14,7 +14,7 @@ from .tools_install import install_tools as install_tools_fn
 @dataclass
 class ProgressEvent:
     step: str
-    status: str                 # "start" | "ok" | "error"
+    status: str                 # "start" | "ok" | "warn" | "error"
     detail: str = ""
 
 
@@ -33,11 +33,16 @@ def install_environment(
     def step(name, fn):
         yield ProgressEvent(name, "start")
         try:
-            fn()
+            result = fn()
         except Exception as exc:                       # noqa: BLE001
             yield ProgressEvent(name, "error", str(exc))
             raise
-        yield ProgressEvent(name, "ok")
+        # Шаг может вернуть текст предупреждения (напр. provision_venv при сбое
+        # pip): установку не прерываем, но и "ok" не показываем.
+        if isinstance(result, str) and result:
+            yield ProgressEvent(name, "warn", result)
+        else:
+            yield ProgressEvent(name, "ok")
 
     def _prepare_src():
         write_devbase(config, user=db_user, password=db_password)

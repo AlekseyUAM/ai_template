@@ -139,11 +139,13 @@ def _rewrite_python_invocations(claude_dir: Path, py_cmd: str) -> None:
             path.write_text(new, encoding="utf-8")
 
 
-def provision_venv(config, *, update: bool, run=subprocess.run) -> None:
+def provision_venv(config, *, update: bool, run=subprocess.run) -> str | None:
     """Создаёт .venv проекта и ставит туда рантайм-зависимости навыков.
 
     venv строится интерпретатором самого agentmon (sys.executable) — он гарантирован.
-    Ошибки venv/pip НЕ валят создание проекта: предупреждаем, venv доустановим позже.
+    Ошибки venv/pip НЕ валят создание проекта. Возвращает None при успехе либо текст
+    предупреждения (его шаг установки покажет статусом "warn"), чтобы сбой не остался
+    незамеченным до рантайма навыка.
     """
     project = Path(config.project_dir)
     venv_dir = project / ".venv"
@@ -155,11 +157,11 @@ def provision_venv(config, *, update: bool, run=subprocess.run) -> None:
         if req.is_file():
             run([str(py), "-m", "pip", "install", "-r", str(req)], check=True)
     except (subprocess.CalledProcessError, OSError) as exc:
-        print(
-            f"[venv] не удалось подготовить .venv ({exc}). Скиллам нужны пакеты из "
-            f"{req.name}; доустановите вручную: {py} -m pip install -r {req}",
-            file=sys.stderr,
+        return (
+            f"не удалось подготовить .venv ({exc}); зависимости навыков "
+            f"(lxml/psutil/click) не установлены. Доустановите: python setup-venv.py"
         )
+    return None
 
 
 def _project_readme(project_name: str) -> str:

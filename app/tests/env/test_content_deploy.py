@@ -193,7 +193,8 @@ def test_provision_venv_builds_and_installs(tmp_path):
             returncode = 0
         return R()
 
-    content.provision_venv(cfg(tmp_path, []), update=False, run=fake_run)
+    result = content.provision_venv(cfg(tmp_path, []), update=False, run=fake_run)
+    assert result is None                               # успех → без предупреждения
     # 1) создание venv интерпретатором agentmon, 2) pip install -r requirements.txt
     assert calls[0][1:3] == ["-m", "venv"]
     assert str(tmp_path / ".venv") in calls[0]
@@ -201,7 +202,7 @@ def test_provision_venv_builds_and_installs(tmp_path):
     assert calls[1][-1].endswith("requirements.txt")
 
 
-def test_provision_venv_warns_on_pip_failure(tmp_path, capsys):
+def test_provision_venv_warns_on_pip_failure(tmp_path):
     import subprocess
 
     def fake_run(cmd, **kwargs):
@@ -211,7 +212,6 @@ def test_provision_venv_warns_on_pip_failure(tmp_path, capsys):
             returncode = 0
         return R()
 
-    # не должно бросать — создание проекта не блокируется сбоем pip
-    content.provision_venv(cfg(tmp_path, []), update=False, run=fake_run)
-    err = capsys.readouterr().err
-    assert "venv" in err and "requirements.txt" in err
+    # не бросает (создание проекта не блокируется), а возвращает текст предупреждения
+    msg = content.provision_venv(cfg(tmp_path, []), update=False, run=fake_run)
+    assert msg and "setup-venv.py" in msg

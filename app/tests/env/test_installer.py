@@ -40,6 +40,33 @@ def test_install_writes_config_and_registers(tmp_path):
     assert any(e.step == "prepare-src" and e.status == "ok" for e in events)
 
 
+def test_venv_step_warns_on_pip_failure(tmp_path):
+    """Сбой pip при подъёме .venv даёт статус "warn", но не валит установку."""
+    import subprocess
+
+    def run(args, **kw):
+        if "pip" in args:
+            raise subprocess.CalledProcessError(1, args)
+        return ok_run(args)
+
+    events = list(installer.install_environment(
+        cfg(tmp_path), update=False, register=lambda c: None,
+        dump_cf=False, dump_cfe=False, run=run))
+    venv = [e for e in events if e.step == "venv"]
+    assert any(e.status == "warn" and "setup-venv.py" in e.detail for e in venv)
+    # предупреждение не прерывает установку — register всё равно ok
+    assert events[-1].status == "ok"
+    assert any(e.step == "register" and e.status == "ok" for e in events)
+
+
+def test_venv_step_ok_on_success(tmp_path):
+    """Успешный подъём .venv → шаг venv со статусом "ok"."""
+    events = list(installer.install_environment(
+        cfg(tmp_path), update=False, register=lambda c: None,
+        dump_cf=False, dump_cfe=False, run=ok_run))
+    assert any(e.step == "venv" and e.status == "ok" for e in events)
+
+
 def test_install_runs_dumps_when_requested(tmp_path):
     calls = []
     def run(args, **kw):
