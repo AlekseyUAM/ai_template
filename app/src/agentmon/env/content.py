@@ -1,3 +1,7 @@
+import os
+import re
+import subprocess
+import sys
 from pathlib import Path
 
 from .scaffold import write_preserving
@@ -10,6 +14,14 @@ TEMPLATE_DIR = Path(__file__).resolve().parents[4] / "template"
 CONTENT_DIR = TEMPLATE_DIR / ".claude"
 _DEFAULT_MODEL = "claude-sonnet-4-6"
 _DEFAULT_EFFORT = "medium"
+
+# Команда-токен вызова интерпретатора в хуках/доках навыков. Все вызовы имеют вид
+# `python "<путь>"` / `python .claude/...` / `python -m ...`; в прозе `python `
+# не встречается. При деплое токен заменяется на абсолютный путь интерпретатора
+# .venv проекта — чтобы хуки/скиллы не зависели от того, что окажется в PATH.
+# В settings.json кавычка экранирована (`python \"$...`), поэтому в класс
+# символов-ограничителей входит и backslash.
+_PY_INVOKE = re.compile(r"\bpython (?=[\"'.$\\-])")
 
 
 # Сборочные/тестовые артефакты, которые не должны попадать в развёрнутый проект.
@@ -92,6 +104,75 @@ def _apply_mcp_names(claude_dir: Path, overrides: dict) -> None:
             path.write_text(new, encoding="utf-8")
 
 
+def venv_python(project: Path) -> Path:
+    """Путь к интерпретатору .venv проекта (ветка по ОС, как в bootstrap.py)."""
+    if os.name == "nt":
+        return project / ".venv" / "Scripts" / "python.exe"
+    return project / ".venv" / "bin" / "python"
+
+
+def _py_cmd(project: Path) -> str:
+    """Токен для вставки в команды: абсолютный путь venv в кавычках, forward-slash.
+
+    as_posix() даёт прямые слэши даже на Windows (`C:/.../python.exe`) — так путь
+    корректно отрабатывает и в git-bash, которым агент исполняет команды.
+    """
+    return '"' + venv_python(project).as_posix() + '"'
+
+
+def _rewrite_python_invocations(claude_dir: Path, py_cmd: str) -> None:
+    """Заменяет токен `python ` на путь venv во всех `*.md` развёрнутого .claude.
+
+    Трогает только md-доки навыков/правил/агентов; шебанги `.py` и внутренние
+    `sys.executable`-вызовы не затрагиваются (дочерние процессы и так наследуют
+    интерпретатор родителя). settings.json переписывается отдельно (см. deploy).
+    """
+    for path in sorted(claude_dir.rglob("*.md")):
+        if "__pycache__" in path.parts:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue
+        new = _PY_INVOKE.sub(lambda m: py_cmd + " ", text)
+        if new != text:
+            path.write_text(new, encoding="utf-8")
+
+
+def provision_venv(config, *, update: bool, run=subprocess.run) -> None:
+    """Создаёт .venv проекта и ставит туда рантайм-зависимости навыков.
+
+    venv строится интерпретатором самого agentmon (sys.executable) — он гарантирован.
+    Ошибки venv/pip НЕ валят создание проекта: предупреждаем, venv доустановим позже.
+    """
+    project = Path(config.project_dir)
+    venv_dir = project / ".venv"
+    py = venv_python(project)
+    req = TEMPLATE_DIR / "requirements.txt"
+    try:
+        if not venv_dir.exists():
+            run([sys.executable, "-m", "venv", str(venv_dir)], check=True)
+        if req.is_file():
+            run([str(py), "-m", "pip", "install", "-r", str(req)], check=True)
+    except (subprocess.CalledProcessError, OSError) as exc:
+        print(
+            f"[venv] не удалось подготовить .venv ({exc}). Скиллам нужны пакеты из "
+            f"{req.name}; доустановите вручную: {py} -m pip install -r {req}",
+            file=sys.stderr,
+        )
+
+
+def _project_readme(project_name: str) -> str:
+    """README проекта: заголовок-имя + как переподнять .venv на свежем клоне."""
+    return (
+        f"## {project_name}\n\n"
+        "### Окружение разработки\n\n"
+        "Python-зависимости навыков живут в изолированном `.venv` (он в `.gitignore`).\n"
+        "На свежем клоне подними его одной командой:\n\n"
+        "    python setup-venv.py\n"
+    )
+
+
 def deploy_content(config, *, update: bool) -> None:
     project = Path(config.project_dir)
     claude = project / ".claude"
@@ -100,13 +181,22 @@ def deploy_content(config, *, update: bool) -> None:
     # разворачиваются отдельно ниже.
     _copy_tree(TEMPLATE_DIR, project, skip=_is_special)
     _render_agents(config, claude / "agents")
-    write_preserving(claude / "settings.json", _render_settings(), update=update)
+    # Вызовы интерпретатора указываем на .venv проекта (абсолютный путь), чтобы
+    # хуки/скиллы не зависели от PATH. Путь детерминирован из project_dir, сам
+    # .venv создаётся отдельным шагом (provision_venv) в пайплайне установки.
+    py_cmd = _py_cmd(project)
+    # В settings.json вызов живёт внутри JSON-строки, поэтому кавычки пути должны
+    # быть экранированы (\"...\"), иначе ломается JSON. В .md — обычные кавычки.
+    py_json = '\\"' + venv_python(project).as_posix() + '\\"'
+    settings = _PY_INVOKE.sub(lambda m: py_json + " ", _render_settings())
+    write_preserving(claude / "settings.json", settings, update=update)
+    _rewrite_python_invocations(claude, py_cmd)
     # README проекта — пустой с заголовком-именем (шаблонный template/README.md
     # при установке заменяется на этот). При обновлении версии окружения README
     # не трогаем — он уже принадлежит проекту.
     if not update:
         write_preserving(project / "README.md",
-                         f"## {config.project_name}\n", update=update)
+                         _project_readme(config.project_name), update=update)
         # Подстановка актуальных имён выбранных MCP вместо плейсхолдеров шаблона —
         # только при создании (на обновлении окружения имена не трогаем).
         overrides = mcp_name_overrides(config.mcp)

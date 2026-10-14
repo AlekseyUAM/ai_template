@@ -1,6 +1,7 @@
 /tmp
 /logs
 /src/cf/.code-index
+/.venv
 __pycache__/
 *.pyc
 build/

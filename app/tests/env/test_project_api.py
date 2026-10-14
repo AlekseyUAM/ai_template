@@ -79,8 +79,9 @@ def test_requirements(tmp_path):
     assert r.status_code == 200
     reqs = r.json()["requirements"]
     names = {req["name"] for req in reqs}
-    assert {"python3", "git", "claude"} <= names
+    assert {"git", "claude", "node"} <= names
     assert "docker" not in names
+    assert "python3" not in names   # python в PATH цели не требуется — скиллам .venv
     assert all({"name", "ok", "detail"} <= set(req) for req in reqs)
 
 

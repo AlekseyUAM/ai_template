@@ -1,0 +1,7 @@
+# Рантайм-зависимости Python-скриптов навыков (.claude/skills).
+# Ставятся в изолированный .venv проекта при его создании (agentmon).
+# onec_batch сюда не входит — это локальные скрипты навыка 1c-batch,
+# саморегистрируемые в sys.modules, установка не требуется.
+lxml          # ядро работы с XML 1С: meta/cf/form/mxl/skd/role/xdto/subsystem
+psutil        # веб-навыки: web-publish/web-unpublish/web-info/web-stop
+click>=8.0    # CLI навыка 1c-batch

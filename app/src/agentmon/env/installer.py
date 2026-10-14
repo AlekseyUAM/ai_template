@@ -6,7 +6,7 @@ from typing import Callable, Iterator
 from .config_schema import EnvConfig
 from .scaffold import scaffold_layout, write_env_files
 from .platform_dump import dump
-from .content import deploy_content
+from .content import deploy_content, provision_venv
 from .devbase import git_commit_all, git_init_project, write_devbase
 from .tools_install import install_tools as install_tools_fn
 
@@ -50,6 +50,9 @@ def install_environment(
     steps = [
         ("layout", lambda: scaffold_layout(base)),
         ("content", lambda: deploy_content(config, update=update)),
+        # Изолированный .venv проекта с рантайм-зависимостями навыков (lxml/psutil/
+        # click). Путь к интерпретатору уже впечатан в хуки/доки шагом content.
+        ("venv", lambda: provision_venv(config, update=update, run=run)),
     ]
     if not update:
         steps.append(("mcp", lambda: write_env_files(config, update=update)))
