@@ -112,13 +112,13 @@ allowed-tools:
 
 ## Команда
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/cfe-patch-method.py" -ExtensionPath src\cfe\extname -ConfigPath src\cf -ModulePath "Catalog.Контрагенты.ObjectModule" -MethodName "ПриЗаписи" -InterceptorType Before
 ```
 
 ## Примеры
 
-```powershell
+```bash
 # Код перед записью
 ... -ExtensionPath src\cfe\extname -ConfigPath src\cf -ModulePath "Catalog.Контрагенты.ObjectModule" -MethodName "ПриЗаписи" -InterceptorType Before
 

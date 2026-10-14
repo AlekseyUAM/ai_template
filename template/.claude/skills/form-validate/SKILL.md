@@ -22,7 +22,7 @@ allowed-tools:
 
 ## Команда
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/form-validate.py" -FormPath "Catalogs/Номенклатура/Forms/ФормаЭлемента"
 python "${CLAUDE_SKILL_DIR}/scripts/form-validate.py" -FormPath "src/МояОбработка/Forms/Форма/Ext/Form.xml"
 ```

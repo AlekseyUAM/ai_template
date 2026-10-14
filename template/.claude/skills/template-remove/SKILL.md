@@ -30,8 +30,8 @@ allowed-tools:
 
 ## Команда
 
-```powershell
-python "${CLAUDE_SKILL_DIR}/scripts/remove-template.py" -ObjectName "<ObjectName>" -TemplateName "<TemplateName>" [-SrcDir "<SrcDir>"]
+```bash
+python "${CLAUDE_SKILL_DIR}/scripts/template-remove.py" -ObjectName "<ObjectName>" -TemplateName "<TemplateName>" [-SrcDir "<SrcDir>"]
 ```
 
 ## Что удаляется

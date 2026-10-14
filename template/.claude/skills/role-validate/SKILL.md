@@ -22,7 +22,7 @@ allowed-tools:
 
 ## Команда
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/role-validate.py" -RightsPath "Roles/МояРоль"
 ```
 

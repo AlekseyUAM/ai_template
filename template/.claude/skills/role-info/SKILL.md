@@ -21,7 +21,7 @@ allowed-tools:
 
 ## Запуск скрипта
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/role-info.py" -RightsPath <path> -OutFile <output.txt>
 ```
 
@@ -38,7 +38,7 @@ python "${CLAUDE_SKILL_DIR}/scripts/role-info.py" -RightsPath <path> -OutFile <o
 **Важно:** Всегда используй `-OutFile` и читай результат через Read tool. Прямой вывод в консоль через bash ломает кириллицу.
 
 Для большой роли при усечении вывода:
-```powershell
+```bash
 ... -Offset 150            # пагинация: пропустить первые 150 строк
 ```
 

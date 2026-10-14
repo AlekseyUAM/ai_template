@@ -7,7 +7,7 @@
 
 Формат: `ИмяТЧ: Реквизит1: Тип1, Реквизит2: Тип2, ...`
 
-```powershell
+```bash
 -Operation add-ts -Value "Товары: Ном: CatalogRef.Ном | req, Кол: Число(15,3), Цена: Число(15,2), Сумма: Число(15,2)"
 ```
 
@@ -15,7 +15,7 @@
 
 Операции над реквизитами **внутри существующей ТЧ**. Формат: `ИмяТЧ.ОпределениеРеквизита` (dot-нотация).
 
-```powershell
+```bash
 # Добавить реквизит в ТЧ
 -Operation add-ts-attribute -Value "Товары.СтавкаНДС: EnumRef.СтавкиНДС"
 -Operation add-ts-attribute -Value "Товары.Скидка: Число(15,2) ;; Товары.Бонус: Число(15,2)"
@@ -34,7 +34,7 @@
 Batch через `;;` — можно указать разные ТЧ: `"Товары.А: Строка(50) ;; Услуги.Б: Число(10)"`.
 
 Составной тип реквизита ТЧ:
-```powershell
+```bash
 -Operation modify-ts-attribute -Value "Данные.Значение: type=Строка + Число(15,2) + Дата"
 ```
 
@@ -42,7 +42,7 @@ Batch через `;;` — можно указать разные ТЧ: `"Тов�
 
 Изменение свойств **самой табличной части** (Synonym, FillChecking, Use и др.):
 
-```powershell
+```bash
 -Operation modify-ts -Value "Товары: synonym=Товарный состав"
 -Operation modify-ts -Value "Товары: fillChecking=ShowError"
 ```
@@ -51,6 +51,6 @@ Batch через `;;` — можно указать разные ТЧ: `"Тов�
 
 ## remove-ts
 
-```powershell
+```bash
 -Operation remove-ts -Value "УстаревшаяТЧ"
 ```

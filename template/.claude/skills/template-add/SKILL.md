@@ -33,16 +33,16 @@ allowed-tools:
 
 ## Команда
 
-```powershell
-python "${CLAUDE_SKILL_DIR}/scripts/add-template.py" -ObjectName "<ObjectName>" -TemplateName "<TemplateName>" -TemplateType "<TemplateType>" [-Synonym "<Synonym>"] [-Lang "<Lang>"] [-SrcDir "<SrcDir>"] [-SetMainSKD]
+```bash
+python "${CLAUDE_SKILL_DIR}/scripts/template-add.py" -ObjectName "<ObjectName>" -TemplateName "<TemplateName>" -TemplateType "<TemplateType>" [-Synonym "<Synonym>"] [-Lang "<Lang>"] [-SrcDir "<SrcDir>"] [-SetMainSKD]
 ```
 
 ## Пример
 
 Добавить основную СКД к отчёту в расширении:
 
-```powershell
-python "${CLAUDE_SKILL_DIR}/scripts/add-template.py" -ObjectName "ОтчётПродажи" -TemplateName "ОсновнаяСхемаКомпоновкиДанных" -TemplateType "DataCompositionSchema" -SrcDir "src/cfe/МоёРасширение/Reports"
+```bash
+python "${CLAUDE_SKILL_DIR}/scripts/template-add.py" -ObjectName "ОтчётПродажи" -TemplateName "ОсновнаяСхемаКомпоновкиДанных" -TemplateType "DataCompositionSchema" -SrcDir "src/cfe/МоёРасширение/Reports"
 ```
 
 ## Маппинг типов

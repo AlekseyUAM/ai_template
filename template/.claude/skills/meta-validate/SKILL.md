@@ -23,7 +23,7 @@ allowed-tools:
 
 ## Команда
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/meta-validate.py" -ObjectPath "Catalogs/Номенклатура/Номенклатура.xml"
 python "${CLAUDE_SKILL_DIR}/scripts/meta-validate.py" -ObjectPath "Catalogs/Банки|Documents/Заказ"
 ```

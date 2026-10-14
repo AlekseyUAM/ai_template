@@ -2,7 +2,7 @@
 
 ## create — создать хранилище
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/db-repo.py" -Command create -InfoBasePath "C:\Bases\MyDB" -RepositoryPath "C:\Repo\MyApp" -RepositoryUser "Admin" -RepositoryPassword "…"
 ```
 
@@ -21,7 +21,7 @@ python "${CLAUDE_SKILL_DIR}/scripts/db-repo.py" -Command create -InfoBasePath "C
 
 ## add-user — создать пользователя
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/db-repo.py" -Command add-user -InfoBasePath "C:\Bases\MyDB" -NewUser "Ivanov" -NewUserPassword "…" -Rights LockObjects
 ```
 
@@ -37,7 +37,7 @@ python "${CLAUDE_SKILL_DIR}/scripts/db-repo.py" -Command add-user -InfoBasePath 
 
 ## copy-users — скопировать пользователей из другого хранилища
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/db-repo.py" -Command copy-users -InfoBasePath "C:\Bases\MyDB" -SourcePath "\\srv01\repo\Other" -SourceUser "Admin" -SourcePassword "…"
 ```
 

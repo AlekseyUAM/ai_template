@@ -10,10 +10,10 @@ import sys
 
 from lxml import etree
 
-# Регистронезависимый ввод — паритет с PS1: в PowerShell имена параметров и [ValidateSet]
-# регистр не различают, в argparse совпадение точное.
+# Регистронезависимый ввод: имена параметров и значения choices принимаются
+# в любом регистре (в argparse по умолчанию совпадение точное).
 def ci_parse_args(parser, argv=None):
-    """parse_args по правилам PS: имена параметров и значения choices регистронезависимы."""
+    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
@@ -143,7 +143,7 @@ def main():
                     parent.text = ""
             parent.remove(node)
             # Опустевший контейнер: text="" сериализуется парой <ChildObjects></ChildObjects>,
-            # а нужен <ChildObjects/> — PS-порт через DOM даёт именно его.
+            # а нужен <ChildObjects/> — через DOM получается именно он.
             if len(parent) == 0 and not (parent.text or "").strip():
                 parent.text = None
             break

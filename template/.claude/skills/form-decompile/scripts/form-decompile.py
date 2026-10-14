@@ -3,8 +3,8 @@
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 # ВНИМАНИЕ: раундтрип не гарантируется. Навык исключён из авто-использования моделью.
 #
-# Зеркало form-decompile.ps1 (канон). Структура 1:1 — те же имена функций, порядок,
-# комментарии. Изменения вносить сначала в .ps1, затем переносить сюда строка-в-строку.
+# Канон декомпиляции форм: единая точка истины формата Form.xml 1С — порядок полей,
+# инварианты и комментарии ориентированы на точный раунд-трип с компилятором.
 import argparse
 import os
 import re
@@ -13,10 +13,10 @@ import xml.etree.ElementTree as ET
 from collections import OrderedDict
 from decimal import Decimal
 
-# Регистронезависимый ввод — паритет с PS1: в PowerShell имена параметров и [ValidateSet]
-# регистр не различают, в argparse совпадение точное.
+# Регистронезависимый ввод: имена параметров и значения choices принимаются
+# в любом регистре (в argparse по умолчанию совпадение точное).
 def ci_parse_args(parser, argv=None):
-    """parse_args по правилам PS: имена параметров и значения choices регистронезависимы."""
+    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
@@ -591,7 +591,7 @@ def get_local_xsi_type(node):
     return t
 
 
-# Зеркало булевой коэрции PowerShell `if ($x)`: одноэлементный массив коэрсится в truthiness
+# Булева коэрция: одноэлементный массив коэрсится в truthiness
 # СВОЕГО элемента (а не «непустой список → true», как в Python). Нужно там, где канон пишет
 # `if ($arr)` на результате билдера: напр. вырожденный FunctionalOptions @("") → falsy → дроп.
 def _ps_truthy(v):
@@ -614,7 +614,7 @@ def _ps_truthy(v):
     return True
 
 
-# Зеркало PowerShell "$v" (строковая интерполяция): bool→True/False, float без хвостового .0,
+# Строковое представление значения: bool→True/False, float без хвостового .0,
 # $null→'', иначе str(). Используется везде, где канон делает "$value".
 def _ps_str(v):
     if isinstance(v, bool):
@@ -878,7 +878,7 @@ def build_filter_item(item_node, loc):
             obj['userSettingPresentation'] = get_pres_text(user_pres_node)
         return obj
 
-    s = field if field is not None else ''   # $null + строка в PS → '' (избегаем TypeError)
+    s = field if field is not None else ''   # None + строка → '' (избегаем TypeError)
     if op in no_value_ops:
         s += ' ' + op
     else:
@@ -1375,7 +1375,7 @@ def build_border_value(b):
     return o
 
 
-# Порядок ключей цвета = .NET Hashtable enumeration (захвачено из PS 5.1), НЕ порядок литерала.
+# Порядок ключей цвета фиксирован эталоном, НЕ порядок литерала.
 COLOR_MAP = [
     ('BackColor', 'backColor'),
     ('TitleBackColor', 'titleBackColor'),
@@ -1681,7 +1681,7 @@ def build_dl_parameter(p_node):
         # чтение схлопывает whitespace-only в '' — и компилятор подставил бы авто-вывод.
         t = get_lang_text_ws(title_node)
         if t is not None:
-            # Сравнение байт в байт (в ps1 — [string]::Equals(..., Ordinal)): эталон — компилятор,
+            # Сравнение байт в байт (ординальное): эталон — компилятор,
             # он пишет заголовок как есть. Регистронезависимое сравнение теряло заголовок,
             # отличающийся от авто-вывода только регистром («Организации ВетИС» при авто
             # «Организации ВЕТИС»).
@@ -1734,7 +1734,7 @@ def build_dl_parameter(p_node):
     if ip_node is not None:
         ip = build_dl_input_parameters(ip_node)
         if len(ip) > 0:
-            o['inputParameters'] = ip[0] if len(ip) == 1 else ip   # PS unwrap @() одноэлементного → объект
+            o['inputParameters'] = ip[0] if len(ip) == 1 else ip   # одноэлементный список → объект
     if get_child(p_node, 'denyIncompleteValues') == 'true':
         o['denyIncompleteValues'] = True
     use = get_child(p_node, 'use')
@@ -3330,7 +3330,7 @@ def main():
                 t = get_lang_text_ws(t_node)
                 if t is not None:
                     # Заголовок опускаем только при ТОЧНОМ, побайтовом совпадении с авто-выводом
-                    # (в ps1 — [string]::Equals(..., Ordinal)): компилятор восстановит его как есть,
+                    # (ординальное сравнение): компилятор восстановит его как есть,
                     # значим и регистр, и мягкий перенос, и форма нормализации.
                     if is_main or not isinstance(t, str) or t != title_from_name(ao['name']):
                         ao['title'] = t
@@ -3492,7 +3492,7 @@ def main():
                         if fip_node is not None:
                             fip = build_dl_input_parameters(fip_node)
                             if len(fip) > 0:
-                                fo['inputParameters'] = fip[0] if len(fip) == 1 else fip   # PS unwrap
+                                fo['inputParameters'] = fip[0] if len(fip) == 1 else fip   # одноэлементный список → объект
                         fields.append(fo)
                     so['fields'] = fields
                 calc_nodes = set_node.findall('lf:CalculatedField', NS)

@@ -23,7 +23,7 @@ allowed-tools:
 | `Parent` | Путь к XML родительской подсистемы (для вложенных) |
 | `NoValidate` | Пропустить авто-валидацию |
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/subsystem-compile.py" -Value '<json>' -OutputDir '<ConfigDir>'
 ```
 
@@ -46,7 +46,7 @@ python "${CLAUDE_SKILL_DIR}/scripts/subsystem-compile.py" -Value '<json>' -Outpu
 
 ## Примеры
 
-```powershell
+```bash
 # Минимальная подсистема
 ... -Value '{"name":"Тест"}' -OutputDir config/
 

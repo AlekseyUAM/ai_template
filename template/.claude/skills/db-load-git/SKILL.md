@@ -41,7 +41,7 @@ allowed-tools:
 
 ## Команда
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/db-load-git.py" <параметры>
 ```
 
@@ -74,7 +74,7 @@ python "${CLAUDE_SKILL_DIR}/scripts/db-load-git.py" <параметры>
 
 ## Примеры
 
-```powershell
+```bash
 # Все незафиксированные изменения
 python "${CLAUDE_SKILL_DIR}/scripts/db-load-git.py" -V8Path "C:\Program Files\1cv8\8.3.25.1257\bin" -InfoBasePath "C:\Bases\MyDB" -ConfigDir "C:\WS\cfsrc" -Source All -UpdateDB
 

@@ -31,7 +31,7 @@ allowed-tools:
 
 ## Команда
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/meta-remove.py" -ConfigDir "<путь>" -Object "Catalog.Товары"
 ```
 
@@ -41,7 +41,7 @@ Catalog, Document, Enum, Constant, InformationRegister, AccumulationRegister, Ac
 
 ## Примеры
 
-```powershell
+```bash
 # Проверка ссылок + dry run
 ... -ConfigDir C:\WS\tasks\cfsrc\acc_8.3.24 -Object "Catalog.Устаревший" -DryRun
 

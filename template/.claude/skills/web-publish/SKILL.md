@@ -40,7 +40,7 @@ allowed-tools:
 
 ## Команда
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/web-publish.py" <параметры>
 ```
 
@@ -90,7 +90,7 @@ python "${CLAUDE_SKILL_DIR}/scripts/web-publish.py" <параметры>
 
 ## Примеры
 
-```powershell
+```bash
 # Файловая база
 python "${CLAUDE_SKILL_DIR}/scripts/web-publish.py" -InfoBasePath "C:\Bases\MyDB" -UserName "Admin"
 

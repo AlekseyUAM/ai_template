@@ -2,7 +2,7 @@
 
 ## report — отчёт по версиям
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/db-repo.py" -Command report -InfoBasePath "C:\Bases\MyDB" -OutputFile "C:\tmp\repo.txt"
 ```
 
@@ -24,7 +24,7 @@ python "${CLAUDE_SKILL_DIR}/scripts/db-repo.py" -Command report -InfoBasePath "C
 
 ## dump-cfg — выгрузить версию в CF
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/db-repo.py" -Command dump-cfg -InfoBasePath "C:\Bases\MyDB" -OutputFile "C:\tmp\v120.cf" -Version 120
 ```
 

@@ -28,7 +28,7 @@ allowed-tools:
 
 ## Команда
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/form-edit.py" -FormPath "<путь>" -JsonPath "<путь>"
 ```
 

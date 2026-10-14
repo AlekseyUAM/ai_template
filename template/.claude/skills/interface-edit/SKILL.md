@@ -28,13 +28,13 @@ allowed-tools:
 
 ### Inline mode
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/interface-edit.py" -CIPath '<path>' -Operation hide -Value '<cmd>'
 ```
 
 ### JSON mode
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/interface-edit.py" -CIPath '<path>' -DefinitionFile '<json>'
 ```
 
@@ -51,7 +51,7 @@ python "${CLAUDE_SKILL_DIR}/scripts/interface-edit.py" -CIPath '<path>' -Definit
 
 ## Примеры
 
-```powershell
+```bash
 # Скрыть команду
 ... -CIPath Subsystems/Продажи/Ext/CommandInterface.xml -Operation hide -Value "Catalog.Товары.StandardCommand.OpenList"
 

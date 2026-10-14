@@ -21,7 +21,7 @@ allowed-tools:
 | `Value` | JSON-строка с определением СКД (взаимоисключающий с DefinitionFile) |
 | `OutputPath` | Путь к выходному Template.xml |
 
-```powershell
+```bash
 # Из файла
 python "${CLAUDE_SKILL_DIR}/scripts/skd-compile.py" -DefinitionFile "<json>" -OutputPath "<Template.xml>"
 

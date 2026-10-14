@@ -12,9 +12,17 @@ _DEFAULT_MODEL = "claude-sonnet-4-6"
 _DEFAULT_EFFORT = "medium"
 
 
+# Сборочные/тестовые артефакты, которые не должны попадать в развёрнутый проект.
+_CRUFT_DIRS = {"__pycache__", "build", ".pytest_cache"}
+
+
+def _is_cruft(item: Path) -> bool:
+    return any(p in _CRUFT_DIRS or p.endswith(".egg-info") for p in item.parts)
+
+
 def _copy_tree(src: Path, dst: Path, *, skip=None) -> None:
     for item in sorted(src.rglob("*")):
-        if "__pycache__" in item.parts:
+        if _is_cruft(item):
             continue
         rel = item.relative_to(src)
         if skip is not None and skip(rel):

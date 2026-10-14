@@ -23,7 +23,7 @@ allowed-tools:
 | `Value` | Значение для операции |
 | `NoValidate` | Пропустить авто-валидацию |
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/subsystem-edit.py" -SubsystemPath '<path>' -Operation add-content -Value 'Catalog.Товары'
 ```
 
@@ -39,7 +39,7 @@ python "${CLAUDE_SKILL_DIR}/scripts/subsystem-edit.py" -SubsystemPath '<path>' -
 
 ## Примеры
 
-```powershell
+```bash
 # Добавить объект в состав
 ... -SubsystemPath Subsystems/Продажи.xml -Operation add-content -Value "Document.Заказ"
 

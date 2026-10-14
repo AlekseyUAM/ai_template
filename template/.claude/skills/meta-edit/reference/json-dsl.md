@@ -2,7 +2,7 @@
 
 Для сложных и комбинированных операций используйте JSON-файл вместо inline-режима.
 
-```powershell
+```bash
 python ${CLAUDE_SKILL_DIR}/scripts/meta-edit.py -DefinitionFile "<json>" -ObjectPath "<path>"
 ```
 

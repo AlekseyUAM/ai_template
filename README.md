@@ -8,21 +8,15 @@ MCP-серверов с разворачиванием в Docker.
 
 ## Быстрый старт
 
-### Linux
+Кроссплатформенно (Linux / macOS / Windows), нужен Python 3.10+:
 ```bash
-./setup.sh      # venv, установка приложения, PostgreSQL в Docker (или SQLite), конфиг
-./run.sh        # Web UI  →  http://127.0.0.1:8765
+python bootstrap.py   # venv, установка приложения, PostgreSQL в Docker (или SQLite), конфиг
+python run.py         # Web UI  →  http://127.0.0.1:8765
 ```
 
-### Windows (PowerShell)
-```powershell
-powershell -ExecutionPolicy Bypass -File .\setup.ps1
-powershell -ExecutionPolicy Bypass -File .\run.ps1
-```
-
-`setup` создаёт `.venv`, ставит приложение (`app`, editable) и зависимости, поднимает
+`bootstrap.py` создаёт `.venv`, ставит приложение (`app`, editable) и зависимости, поднимает
 PostgreSQL в Docker (если докер доступен; иначе использует локальный SQLite) и пишет
-`.ai1c.env` с `AGENTMON_DSN`. `run` поднимает Web UI на `http://127.0.0.1:8765`.
+`.ai1c.env` с `AGENTMON_DSN`. `run.py` поднимает Web UI на `http://127.0.0.1:8765`.
 
 Подробности и переменные окружения — в [docs/running-web-ui.md](docs/running-web-ui.md).
 Фазы развития — в [docs/PHASES.md](docs/PHASES.md).

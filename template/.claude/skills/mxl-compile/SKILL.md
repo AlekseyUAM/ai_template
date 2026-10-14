@@ -28,7 +28,7 @@ allowed-tools:
 
 ## Команда
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/mxl-compile.py" -JsonPath "<путь>.json" -OutputPath "<путь>/Template.xml"
 ```
 

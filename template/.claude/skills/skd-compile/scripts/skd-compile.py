@@ -10,8 +10,8 @@ import uuid
 
 from lxml import etree
 
-# Регистронезависимый ввод — паритет с PS1: в PowerShell имена параметров и [ValidateSet]
-# регистр не различают, в argparse совпадение точное.
+# Регистронезависимый ввод: имена параметров и значения choices принимаются
+# в любом регистре (в argparse по умолчанию совпадение точное).
 
 def parse_json_input(text, source, expected=None, inline=False):
     """Разбор пользовательского JSON: одна строка в stderr вместо traceback (issue #80).
@@ -112,7 +112,7 @@ def ci_json(obj):
     return obj
 
 def ci_parse_args(parser, argv=None):
-    """parse_args по правилам PS: имена параметров и значения choices регистронезависимы."""
+    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
@@ -317,7 +317,7 @@ def esc_xml_text(s):
     return s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
 
 def fmt_dec(v):
-    """Format decimal: 30.0 → '30', 16.625 → '16.625' (match PS1 output)."""
+    """Format decimal: 30.0 → '30', 16.625 → '16.625' (инвариантный формат)."""
     return str(int(v)) if v == int(v) else str(v)
 
 
@@ -1334,7 +1334,7 @@ def emit_calc_fields(lines, defn):
         if restrict_obj or restrict_tokens:
             lines.append('\t\t<useRestriction>')
             if restrict_obj:
-                # Как -eq $true в PS-мастере: true, 1 и строка "true" в любом регистре
+                # Истинность: true, 1 и строка "true" в любом регистре
                 flag_names = [xml_name for xml_name, flag in restrict_obj.items()
                               if flag is True or (not isinstance(flag, bool) and isinstance(flag, (int, float)) and flag == 1)
                               or (isinstance(flag, str) and flag.lower() == 'true')]

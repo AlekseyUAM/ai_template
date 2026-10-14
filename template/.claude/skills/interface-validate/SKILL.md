@@ -23,7 +23,7 @@ allowed-tools:
 
 ## Команда
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/interface-validate.py" -CIPath "Subsystems/Продажи"
 python "${CLAUDE_SKILL_DIR}/scripts/interface-validate.py" -CIPath "Subsystems/Продажи/Ext/CommandInterface.xml"
 ```

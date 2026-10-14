@@ -30,7 +30,7 @@ allowed-tools:
 | `TemplatePath` | Путь к Template.xml (обязательный) |
 | `OutputPath` | Путь к выходному JSON. Если не задан — JSON в stdout |
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/skd-decompile.py" -TemplatePath "<Template.xml>" -OutputPath "<out.json>"
 ```
 

@@ -11,8 +11,8 @@ import uuid
 import xml.etree.ElementTree as ET
 from lxml import etree
 
-# Регистронезависимый ввод — паритет с PS1: в PowerShell имена параметров и [ValidateSet]
-# регистр не различают, в argparse совпадение точное.
+# Регистронезависимый ввод: имена параметров и значения choices принимаются
+# в любом регистре (в argparse по умолчанию совпадение точное).
 
 def parse_json_input(text, source, expected=None, inline=False):
     """Разбор пользовательского JSON: одна строка в stderr вместо traceback (issue #80).
@@ -113,7 +113,7 @@ def ci_json(obj):
     return obj
 
 def ci_parse_args(parser, argv=None):
-    """parse_args по правилам PS: имена параметров и значения choices регистронезависимы."""
+    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
@@ -534,7 +534,7 @@ def register_in_childobjects(parent_xml_path, parent_tag, child_tag, child_name)
         else:
             # Отступ вставки берём у закрывающего тега +1 уровень: подстановка
             # по голому '</ChildObjects>' удваивала бы уже присутствующий отступ
-            # строки (получалось 5 табов вместо 3 — PS-порт через DOM даёт 3).
+            # строки (получалось 5 табов вместо 3; через DOM — 3).
             cm = re.search(r'([ \t]*)</ChildObjects>', raw_text)
             if cm is None:
                 return 'no-childobj'

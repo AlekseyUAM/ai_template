@@ -25,7 +25,7 @@ allowed-tools:
 
 ## Команда
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/web-stop.py" <параметры>
 ```
 
@@ -43,7 +43,7 @@ python "${CLAUDE_SKILL_DIR}/scripts/web-stop.py" <параметры>
 
 ## Примеры
 
-```powershell
+```bash
 # Остановить Apache
 python "${CLAUDE_SKILL_DIR}/scripts/web-stop.py"
 

@@ -1,4 +1,4 @@
 {
   "ИмяМодуля": "ЮТ_ТестыПример",
-  "ИмяФайлаЛог": "logs/test_example_result.json"
+  "ИмяФайлаЛог": "/абсолютный/путь/к/проекту/logs/test_example_result.json"
 }

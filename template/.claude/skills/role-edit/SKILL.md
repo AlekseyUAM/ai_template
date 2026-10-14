@@ -24,7 +24,7 @@ allowed-tools:
 | `DefinitionFile` | JSON-массив операций (альтернатива `Operation`) — так задают несколько разных операций |
 | `NoValidate` | Не запускать `role-validate` после правки |
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/role-edit.py" -RolePath "<роль>" -Operation <op> -Value "<значение>"
 ```
 
@@ -49,7 +49,7 @@ python "${CLAUDE_SKILL_DIR}/scripts/role-edit.py" -RolePath "<роль>" -Operat
 
 ## Быстрые примеры
 
-```powershell
+```bash
 # Добавить права нового регистра, ничего не потеряв
 ... -RolePath "src/Roles/Менеджер" -Operation add-rights -Value "InformationRegister.Цены: Read, Update"
 
@@ -72,7 +72,7 @@ python "${CLAUDE_SKILL_DIR}/scripts/role-edit.py" -RolePath "<роль>" -Operat
 ]
 ```
 
-```powershell
+```bash
 ... -RolePath "src/Roles/Менеджер" -DefinitionFile "операции.json"
 ```
 
@@ -95,7 +95,7 @@ python "${CLAUDE_SKILL_DIR}/scripts/role-edit.py" -RolePath "<роль>" -Operat
 Типовой приём: закрыть данные целиком, но оставить поля представления ссылки открытыми, иначе
 ссылки на объект превратятся в «объект не найден»:
 
-```powershell
+```bash
 ... -Operation set-rls -Value "Catalog.Товары.Read: ГДЕ ЛОЖЬ"
 ... -Operation set-rls -Value "Catalog.Товары.Read[Ссылка, Код, Наименование]: "
 ```
@@ -111,7 +111,7 @@ python "${CLAUDE_SKILL_DIR}/scripts/role-edit.py" -RolePath "<роль>" -Operat
 файла. Относительный путь ищется рядом с `DefinitionFile`, затем в текущем каталоге. Разделитель
 `;;` внутри файла остаётся обычным текстом.
 
-```powershell
+```bash
 ... -Operation set-rls -Value "Catalog.Товары.Read: @условие.txt"
 ... -Operation add-template -Value "ПоОрганизации(Мод): @условие.txt"
 ... -Operation set-comment -Value "@комментарий.txt"

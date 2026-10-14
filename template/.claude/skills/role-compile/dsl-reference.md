@@ -28,8 +28,8 @@
 | `SessionParameter` | Get, Set |
 | `ExternalDataSource` | Use, Administration, StandardAuthenticationChange, SessionStandardAuthenticationChange, SessionOSAuthenticationChange |
 
-Полные списки прав по каждому типу — в коде навыка (`scripts/role-compile.ps1`,
-таблица `$knownRights`); навык проверяет каждое имя права и отвергает несуществующее.
+Полные списки прав по каждому типу — в коде навыка (`scripts/role-compile.py`,
+таблица известных прав); навык проверяет каждое имя права и отвергает несуществующее.
 
 ### Вложенные объекты
 

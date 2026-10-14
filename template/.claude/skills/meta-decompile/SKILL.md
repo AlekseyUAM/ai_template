@@ -37,7 +37,7 @@ allowed-tools:
 | `ObjectPath` | Путь к XML объекта (`Catalogs/Имя.xml`), обязательный |
 | `OutputPath` | Путь к выходному JSON. Если не задан — JSON в stdout |
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/meta-decompile.py" -ObjectPath "<Объект.xml>" -OutputPath "<out.json>"
 ```
 

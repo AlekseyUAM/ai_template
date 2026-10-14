@@ -16,14 +16,14 @@
 измерения); `mainFilter` — основной отбор (только измерения).
 
 **Позиционная вставка**: `>> after ИмяЭлемента` или `<< before ИмяЭлемента`:
-```powershell
+```bash
 -Operation add-attribute -Value "Склад: CatalogRef.Склады >> after Организация"
 ```
 
 ## Составные типы
 
 Разделитель `+`:
-```powershell
+```bash
 -Operation add-attribute -Value "Значение: Строка + Число(15,2) + Дата + CatalogRef.Контрагенты"
 -Operation add-attribute -Value "Значение: Строка + Число(15,2) | req"
 ```
@@ -35,7 +35,7 @@
 
 ## add-attribute / add-dimension / add-resource / add-column
 
-```powershell
+```bash
 -Operation add-attribute -Value "Комментарий: Строка(200)"
 -Operation add-attribute -Value "Сумма: Число(15,2) | req, index"
 -Operation add-attribute -Value "Ном: CatalogRef.Номенклатура | req ;; Кол: Число(15,3)"
@@ -47,7 +47,7 @@
 ## remove-*
 
 Имя элемента (или несколько через `;;`):
-```powershell
+```bash
 -Operation remove-attribute -Value "СтарыйРеквизит ;; ЕщёОдин"
 -Operation remove-enumValue -Value "НеиспользуемоеЗначение"
 ```
@@ -62,7 +62,7 @@
 `Use`, `FullTextSearch`, `DataHistory`, `PasswordMode`, `MultiLine`, `Mask`, `CreateOnInput`, `QuickChoice` и др.
 Свойство можно задать, даже если у реквизита оно ещё не выставлено.
 
-```powershell
+```bash
 -Operation modify-attribute -Value "СтароеИмя: name=НовоеИмя, type=Строка(500)"
 -Operation modify-attribute -Value "Комментарий: Indexing=Index, FullTextSearch=Use"
 -Operation modify-enumValue -Value "СтароеЗначение: name=НовоеЗначение"

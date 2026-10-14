@@ -1,7 +1,7 @@
 ---
 name: epf-init
 description: Создать пустую внешнюю обработку 1С (scaffold XML-исходников). Используй когда нужно создать новую внешнюю обработку с нуля
-argument-hint: <Name> [Synonym]
+argument-hint: -Name <Name> [-Synonym <Synonym>] [-SrcDir <SrcDir>] [-FormatVersion <версия>]
 allowed-tools:
   - Bash
   - Read
@@ -36,8 +36,8 @@ allowed-tools:
 
 ## Команда
 
-```powershell
-python "${CLAUDE_SKILL_DIR}/scripts/init.py" -Name "<Name>" [-Synonym "<Synonym>"] [-SrcDir "<SrcDir>"] [-FormatVersion "<версия>"]
+```bash
+python "${CLAUDE_SKILL_DIR}/scripts/epf-init.py" -Name "<Name>" [-Synonym "<Synonym>"] [-SrcDir "<SrcDir>"] [-FormatVersion "<версия>"]
 ```
 
 ## Дальнейшие шаги
@@ -45,4 +45,4 @@ python "${CLAUDE_SKILL_DIR}/scripts/init.py" -Name "<Name>" [-Synonym "<Synonym>
 - Добавить форму: `/form-add`
 - Добавить макет: `/template-add`
 - Добавить справку: `/help-add`
-- Собрать EPF: `/epf-build`
+- Собрать EPF: навык `1c-batch`, команда `build-epf`

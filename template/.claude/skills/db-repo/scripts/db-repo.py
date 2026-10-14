@@ -59,7 +59,7 @@ REPO_KNOWN_KEYS = [k for k in V8_OWNED_KEYS if k.startswith("/ConfigurationRepos
 
 
 def ci_parse_args(parser, argv=None):
-    """parse_args по правилам PS: имена параметров и значения choices регистронезависимы."""
+    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
@@ -242,7 +242,7 @@ def resolve_v8path(v8path, args):
                 + glob.glob(r"C:\Program Files (x86)\1cv8\*\bin\1cv8.exe")
             )
         else:
-            # PY-only: PS-порт на *nix не исполняется, поэтому *nix-раскладки нет в .ps1.
+            # *nix-раскладка путей установки платформы 1С.
             candidates = glob.glob("/opt/1cv8/*/1cv8")
         if candidates:
             v8path = max(candidates, key=_version_key)

@@ -11,8 +11,8 @@ import sys
 import uuid
 from lxml import etree
 
-# Регистронезависимый ввод — паритет с PS1: в PowerShell имена параметров и [ValidateSet]
-# регистр не различают, в argparse совпадение точное.
+# Регистронезависимый ввод: имена параметров и значения choices принимаются
+# в любом регистре (в argparse по умолчанию совпадение точное).
 
 def parse_json_input(text, source, expected=None, inline=False):
     """Разбор пользовательского JSON: одна строка в stderr вместо traceback (issue #80).
@@ -113,7 +113,7 @@ def ci_json(obj):
     return obj
 
 def ci_parse_args(parser, argv=None):
-    """parse_args по правилам PS: имена параметров и значения choices регистронезависимы."""
+    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
@@ -946,7 +946,7 @@ def main():
 
     for op in operations:
         op_name = op.get("operation", args.Operation or "")
-        # PS сравнивает имя операции через switch, а он регистронезависим.
+        # Имя операции сравниваем регистронезависимо.
         op_key = str(op_name).lower()
         op_value = op.get("value", args.Value or "")
 

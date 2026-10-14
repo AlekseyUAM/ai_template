@@ -29,8 +29,8 @@ allowed-tools:
 
 ## Команда
 
-```powershell
-python "${CLAUDE_SKILL_DIR}/scripts/add-help.py" -ObjectName "<ObjectName>" [-Lang "<Lang>"] [-SrcDir "<SrcDir>"]
+```bash
+python "${CLAUDE_SKILL_DIR}/scripts/help-add.py" -ObjectName "<ObjectName>" [-Lang "<Lang>"] [-SrcDir "<SrcDir>"]
 ```
 
 ## Что делает скрипт

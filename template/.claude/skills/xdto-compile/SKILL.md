@@ -27,12 +27,12 @@ allowed-tools:
 | `Comment` | нет | Комментарий. По умолчанию — из `xs:appinfo` |
 | `Force` | нет | Перезаписать существующий пакет. Без него навык откажется затирать уже собранный пакет |
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/xdto-compile.py" -XsdPath "<схема.xsd>" -OutputDir "<каталог-исходников>"
 ```
 
 Примеры:
-```powershell
+```bash
 ... -XsdPath bank.xsd -OutputDir src -Name ОбменСБанком -Synonym "Обмен с банком"
 ... -XsdPath fss.xsd  -OutputDir src -Force
 ```

@@ -34,7 +34,7 @@ allowed-tools:
 
 ## Команда
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/web-unpublish.py" <параметры>
 ```
 
@@ -50,7 +50,7 @@ python "${CLAUDE_SKILL_DIR}/scripts/web-unpublish.py" <параметры>
 
 ## Примеры
 
-```powershell
+```bash
 # Удалить одну публикацию
 python "${CLAUDE_SKILL_DIR}/scripts/web-unpublish.py" -AppName "bpdemo"
 

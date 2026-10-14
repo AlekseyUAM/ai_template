@@ -14,7 +14,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/bsl_nudge.py\""
+            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/bsl_nudge.py\""
           }
         ]
       }
@@ -24,7 +24,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/route_to_orchestrator.py\""
+            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/route_to_orchestrator.py\""
           }
         ]
       }

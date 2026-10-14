@@ -9,10 +9,10 @@ from lxml import etree
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
-# Регистронезависимый ввод — паритет с PS1: в PowerShell имена параметров и [ValidateSet]
-# регистр не различают, в argparse совпадение точное.
+# Регистронезависимый ввод: имена параметров и значения choices принимаются
+# в любом регистре (в argparse по умолчанию совпадение точное).
 def ci_parse_args(parser, argv=None):
-    """parse_args по правилам PS: имена параметров и значения choices регистронезависимы."""
+    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
@@ -1062,7 +1062,7 @@ def _xsd_build_schema(vdir, tmp):
 
     # Сначала замыкание СКД, затем остальные схемы каталога: значения в выгрузке ссылаются через
     # xsi:type на типы, которые схема СКД не импортирует (data/enterprise: LinkedValueChangeMode,
-    # FoldersAndItemsUse …) — как и в PS-мастере, где в набор кладутся все схемы.
+    # FoldersAndItemsUse …) — в набор кладутся все схемы.
     visit(XSD_DCS_NS)
     for ns in idx:
         visit(ns)
@@ -1128,7 +1128,7 @@ def _xsd_error_element(err):
 # Текст валидатора про порядок («недопустимый дочерний X, ожидается A, B») читается как «добавь A»,
 # а означает «X стоит слишком поздно». Поэтому для нарушений порядка строим свою подсказку: тип
 # родителя и порядок его детей берём из XSD, сравниваем с соседями нарушителя в документе. Обход
-# схемы — свой, по XSD-документам, как в PS-мастере: так подсказки портов совпадают.
+# схемы — свой, по XSD-документам: по одному на каждый XSD-документ.
 
 def xsd_model(vdir):
     m = {"types": {}, "elems": {}, "orders": {}}
@@ -1327,7 +1327,7 @@ def xsd_check():
     try:
         try:
             schema = _xsd_build_schema(os.path.join(xsd_root, use_ver), tmp)
-            # Модель — после компиляции, как в PS-мастере: битый .xsd даёт предупреждение, а не трейсбэк
+            # Модель — после компиляции: битый .xsd даёт предупреждение, а не трейсбэк
             model = xsd_model(os.path.join(xsd_root, use_ver))
         except Exception as ex:
             report_warn(f"XSD: schemas in '{os.path.join(xsd_root, use_ver)}' do not compile — not checked: {ex}")

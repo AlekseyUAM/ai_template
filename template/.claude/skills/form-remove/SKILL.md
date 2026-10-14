@@ -31,8 +31,8 @@ allowed-tools:
 
 ## Команда
 
-```powershell
-python "${CLAUDE_SKILL_DIR}/scripts/remove-form.py" -ObjectName "<ObjectName>" -FormName "<FormName>" [-SrcDir "<SrcDir>"] [-Force]
+```bash
+python "${CLAUDE_SKILL_DIR}/scripts/form-remove.py" -ObjectName "<ObjectName>" -FormName "<FormName>" [-SrcDir "<SrcDir>"] [-Force]
 ```
 
 ## Что удаляется

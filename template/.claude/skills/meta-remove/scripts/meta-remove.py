@@ -10,10 +10,10 @@ import sys
 import shutil
 from lxml import etree
 
-# Регистронезависимый ввод — паритет с PS1: в PowerShell имена параметров и [ValidateSet]
-# регистр не различают, в argparse совпадение точное.
+# Регистронезависимый ввод: имена параметров и значения choices принимаются
+# в любом регистре (в argparse по умолчанию совпадение точное).
 def ci_parse_args(parser, argv=None):
-    """parse_args по правилам PS: имена параметров и значения choices регистронезависимы."""
+    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
@@ -300,7 +300,7 @@ def remove_node_with_indent(node):
     parent = node.getparent()
     if parent is None:
         return
-    # В DOM (PS) whitespace — отдельные узлы: удаляются предшествующий и сам элемент, а
+    # В DOM whitespace — отдельные узлы: удаляются предшествующий и сам элемент, а
     # whitespace ПОСЛЕ элемента остаётся. В lxml он лежит в node.tail и ушёл бы вместе с
     # узлом, поэтому его надо передать предшественнику.
     prev = node.getprevious()
@@ -525,7 +525,7 @@ def main():
     search_extensions = (".xml", ".bsl")
 
     # Один проход вместо двух: раньше конфигурация обходилась дважды и каждый файл читался
-    # по два раза. Зеркало EnumerateFiles-прохода в PS.
+    # по два раза. Один проход по файлам.
     type_name_ref = f"{obj_type}.{obj_name}"
     for root_path, dirs, files in os.walk(config_dir):
         for fname in files:
@@ -634,7 +634,7 @@ def main():
                 if localname(child) == obj_type and (child.text or "").strip() == obj_name:
                     found = True
                     if not args.DryRun:
-                        # Общий помощник — зеркало DOM-поведения PS. Прежняя ветка теряла
+                        # Общий помощник DOM-удаления. Прежняя ветка теряла
                         # отступ следующего элемента, если удалялся ПЕРВЫЙ ребёнок.
                         remove_node_with_indent(child)
                     print(f"[OK]    Removed <{obj_type}>{obj_name}</{obj_type}> from ChildObjects")
@@ -750,7 +750,7 @@ def main():
                 val = (el.text or "").strip()
                 if not val:
                     continue
-                # Сравнение регистронезависимое — как у платформы (в PS -eq регистр не различает).
+                # Сравнение регистронезависимое — как у платформы.
                 if val.lower() != common_form_ref.lower() and not val.lower().startswith(slot_prefix.lower()):
                     continue
 

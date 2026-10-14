@@ -22,7 +22,7 @@ allowed-tools:
 | `Limit` / `Offset` | Пагинация (по умолчанию 150 строк) |
 | `OutFile` | Записать результат в файл (UTF-8 BOM) |
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/subsystem-info.py" -SubsystemPath "<путь>"
 ```
 
@@ -38,7 +38,7 @@ python "${CLAUDE_SKILL_DIR}/scripts/subsystem-info.py" -SubsystemPath "<путь
 
 ## Примеры
 
-```powershell
+```bash
 # Обзор подсистемы
 ... -SubsystemPath Subsystems/Продажи.xml
 

@@ -14,7 +14,7 @@ allowed-tools:
 
 ## Команда
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/form-info.py" -FormPath "<путь к Form.xml>"
 ```
 

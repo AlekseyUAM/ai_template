@@ -41,7 +41,7 @@ def _gate_block(data: dict, target_stage: str):
             return (
                 f"гейт не пройден: этап '{s['name']}' требует подтверждения перед "
                 f"запуском '{target_stage}'. Подтвердите командой:\n"
-                f"  python3 .claude/tools/task_status.py <task_dir> {s['name']} approve")
+                f"  python .claude/tools/task_status.py <task_dir> {s['name']} approve")
     return None
 
 

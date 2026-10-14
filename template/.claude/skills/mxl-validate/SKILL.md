@@ -22,7 +22,7 @@ allowed-tools:
 
 ## Команда
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/mxl-validate.py" -TemplatePath "Catalogs/Номенклатура/Templates/Макет"
 python "${CLAUDE_SKILL_DIR}/scripts/mxl-validate.py" -TemplatePath "src/МояОбработка/Templates/ПечатнаяФорма"
 ```
