@@ -1,4 +1,5 @@
 # app/tests/env/test_content_deploy.py
+import json
 from pathlib import Path
 from agentmon.env.config_schema import EnvConfig, AgentModel, SCHEMA_VERSION, McpSelection
 from agentmon.env import content
@@ -168,6 +169,23 @@ def test_skill_docs_use_venv_python(tmp_path):
         text = md.read_text(encoding="utf-8")
         # ни одного голого вызова python не осталось (кроме как в составе пути venv)
         assert not bare.search(text.replace(py, "")), f"голый python остался в {md}"
+
+
+def test_deploy_pins_vscode_interpreter(tmp_path):
+    # VS Code получает коммитнутый интерпретатор .venv — иначе авто-детект при первом
+    # открытии даёт «Invalid python interpreter».
+    content.deploy_content(cfg(tmp_path, []), update=False)
+    settings = tmp_path / ".vscode" / "settings.json"
+    data = json.loads(settings.read_text(encoding="utf-8"))
+    assert data["python.defaultInterpreterPath"] == content.venv_python(tmp_path).as_posix()
+
+
+def test_vscode_settings_preserved_on_update(tmp_path):
+    content.deploy_content(cfg(tmp_path, []), update=False)
+    vs = tmp_path / ".vscode" / "settings.json"
+    vs.write_text('{"python.defaultInterpreterPath": "/custom/python"}\n', encoding="utf-8")
+    content.deploy_content(cfg(tmp_path, []), update=True)
+    assert (tmp_path / ".vscode" / "settings.json.bak").exists()
 
 
 def test_deploy_does_not_create_venv(tmp_path):

@@ -1,3 +1,4 @@
+import json
 import os
 import re
 import subprocess
@@ -111,6 +112,24 @@ def venv_python(project: Path) -> Path:
     return project / ".venv" / "bin" / "python"
 
 
+def _deploy_vscode(project: Path, *, update: bool) -> None:
+    """Пин интерпретатора .venv для VS Code (расширение Python).
+
+    Без этого файла расширение при первом открытии проекта полагается на авто-детект
+    и успевает выбрать глобальный интерпретатор (ошибка «Invalid python interpreter»),
+    пока асинхронно не разрешится .venv. Пишем абсолютный путь из того же источника
+    (venv_python), что и вызовы в хуках/доках, — тулинг не зависит от PATH/детекта.
+    Через write_preserving: на обновлении окружения пользовательские правки сохраняются
+    в .bak, а не затираются молча.
+    """
+    vscode = project / ".vscode"
+    vscode.mkdir(parents=True, exist_ok=True)
+    content = json.dumps(
+        {"python.defaultInterpreterPath": venv_python(project).as_posix()},
+        ensure_ascii=False, indent=2) + "\n"
+    write_preserving(vscode / "settings.json", content, update=update)
+
+
 def _py_cmd(project: Path) -> str:
     """Токен для вставки в команды: абсолютный путь venv в кавычках, forward-slash.
 
@@ -193,6 +212,9 @@ def deploy_content(config, *, update: bool) -> None:
     settings = _PY_INVOKE.sub(lambda m: py_json + " ", _render_settings())
     write_preserving(claude / "settings.json", settings, update=update)
     _rewrite_python_invocations(claude, py_cmd)
+    # VS Code: пин интерпретатора .venv, чтобы при открытии проекта не всплывала
+    # ошибка «Invalid python interpreter» из-за авто-детекта глобального python.
+    _deploy_vscode(project, update=update)
     # README проекта — пустой с заголовком-именем (шаблонный template/README.md
     # при установке заменяется на этот). При обновлении версии окружения README
     # не трогаем — он уже принадлежит проекту.
