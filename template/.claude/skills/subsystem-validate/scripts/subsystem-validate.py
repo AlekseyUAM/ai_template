@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 # subsystem-validate v1.6 — Validate 1C subsystem XML structure
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 """Validates subsystem XML file structure, properties, content items, child objects."""

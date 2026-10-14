@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 # cf-validate v1.12 — Validate 1C configuration XML structure
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 """Validates Configuration.xml: root structure, InternalInfo, properties, ChildObjects, languages."""

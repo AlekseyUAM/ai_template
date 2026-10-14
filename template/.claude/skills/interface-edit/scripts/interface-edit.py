@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 # interface-edit v1.22 — Edit 1C CommandInterface.xml (+русские алиасы типов: формы с ё и без)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 

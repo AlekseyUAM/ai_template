@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 # role-validate v1.7 — Validate 1C role Rights.xml structure
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 """Validates role Rights.xml: root element, global flags, objects, rights, RLS, templates."""

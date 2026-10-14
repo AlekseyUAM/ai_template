@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 # support-edit v1.2 — Toggle 1C configuration support state (Ext/ParentConfigurations.bin)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 

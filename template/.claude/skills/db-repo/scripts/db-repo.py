@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 # db-repo v1.18 — 1C configuration repository operations
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 # NB: движок только 1cv8 — ibcmd работу с хранилищем не поддерживает (нет такого режима).

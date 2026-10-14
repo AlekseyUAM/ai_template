@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 # web-publish v1.12 — Publish 1C infobase via Apache (+_version_dir/_version_key: общий эталон db-семейства)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """
 load-config-optimized.py
 Кроссплатформенная загрузка конфигурации 1С: грузит в ИБ только изменённые файлы

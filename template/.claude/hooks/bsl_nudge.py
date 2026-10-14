@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """PostToolUse-хук: напоминает прогнать статанализ после правки *.bsl."""
 import json
 import sys

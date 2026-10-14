@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 # cf-info v1.9 — Compact summary of 1C configuration root
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 

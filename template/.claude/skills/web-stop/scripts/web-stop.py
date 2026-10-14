@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 # web-stop v1.3 — Stop Apache HTTP Server
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 
