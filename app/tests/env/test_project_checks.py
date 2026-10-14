@@ -33,8 +33,10 @@ def test_validate_name():
 def test_requirements_structure():
     reqs = pc.requirements()
     names = {r["name"] for r in reqs}
-    assert {"python3", "git", "claude", "node"} <= names
+    assert {"git", "claude", "node"} <= names
     assert "docker" not in names   # docker не нужен при установке проекта
+    # python в PATH цели не требуется: скиллам разворачивается изолированный .venv
+    assert "python3" not in names and "python" not in names
     assert all(set(r) >= {"name", "ok", "detail"} for r in reqs)
 
 

@@ -36,7 +36,8 @@ def test_deploy_copies_whole_template_tree(tmp_path):
 def test_deploy_writes_project_readme(tmp_path):
     content.deploy_content(cfg(tmp_path, []), update=False)
     readme = (tmp_path / "README.md").read_text(encoding="utf-8")
-    assert readme.strip() == "## demo"
+    assert readme.startswith("## demo")
+    assert "setup-venv.py" in readme   # как переподнять .venv на свежем клоне
 
 
 def test_agent_model_effort_rendered(tmp_path):
@@ -141,3 +142,76 @@ def test_deploy_no_overrides_when_default_name(tmp_path):
     content.deploy_content(config, update=False)
     dev = (tmp_path / ".claude" / "agents" / "developer.md").read_text(encoding="utf-8")
     assert "mcp__bsl_ls__" in dev
+
+
+# --- интерпретатор .venv впечатывается в вызовы (фикс кроссплатформенности #2) ---
+
+def test_hook_command_points_to_project_venv(tmp_path):
+    import json
+    content.deploy_content(cfg(tmp_path, []), update=False)
+    # settings.json остаётся валидным JSON, а команда хука зовёт интерпретатор .venv
+    data = json.loads((tmp_path / ".claude" / "settings.json").read_text(encoding="utf-8"))
+    py = content.venv_python(tmp_path).as_posix()
+    for evt in ("PostToolUse", "UserPromptSubmit"):
+        cmd = data["hooks"][evt][0]["hooks"][0]["command"]
+        assert cmd.startswith(f'"{py}" ')          # абсолютный путь, не голый python
+        assert "python" not in cmd.replace(py, "")  # кроме как в составе пути venv
+
+
+def test_skill_docs_use_venv_python(tmp_path):
+    content.deploy_content(cfg(tmp_path, []), update=False)
+    py = content.venv_python(tmp_path).as_posix()
+    skills = tmp_path / ".claude" / "skills"
+    import re
+    bare = re.compile(r"\bpython (?=[\"'.$\\-])")
+    for md in skills.rglob("SKILL.md"):
+        text = md.read_text(encoding="utf-8")
+        # ни одного голого вызова python не осталось (кроме как в составе пути venv)
+        assert not bare.search(text.replace(py, "")), f"голый python остался в {md}"
+
+
+def test_deploy_does_not_create_venv(tmp_path):
+    # Сам деплой — только текст; .venv поднимается отдельным шагом provision_venv.
+    content.deploy_content(cfg(tmp_path, []), update=False)
+    assert not (tmp_path / ".venv").exists()
+
+
+def test_deploy_ships_venv_entrypoint(tmp_path):
+    # На свежем клоне .venv переподнимается setup-venv.py + requirements.txt.
+    content.deploy_content(cfg(tmp_path, []), update=False)
+    assert (tmp_path / "setup-venv.py").exists()
+    assert (tmp_path / "requirements.txt").exists()
+    assert ".venv" in (tmp_path / ".gitignore").read_text(encoding="utf-8")
+
+
+def test_provision_venv_builds_and_installs(tmp_path):
+    calls = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(cmd)
+        class R:
+            returncode = 0
+        return R()
+
+    content.provision_venv(cfg(tmp_path, []), update=False, run=fake_run)
+    # 1) создание venv интерпретатором agentmon, 2) pip install -r requirements.txt
+    assert calls[0][1:3] == ["-m", "venv"]
+    assert str(tmp_path / ".venv") in calls[0]
+    assert calls[1][1:5] == ["-m", "pip", "install", "-r"]
+    assert calls[1][-1].endswith("requirements.txt")
+
+
+def test_provision_venv_warns_on_pip_failure(tmp_path, capsys):
+    import subprocess
+
+    def fake_run(cmd, **kwargs):
+        if "pip" in cmd:
+            raise subprocess.CalledProcessError(1, cmd)
+        class R:
+            returncode = 0
+        return R()
+
+    # не должно бросать — создание проекта не блокируется сбоем pip
+    content.provision_venv(cfg(tmp_path, []), update=False, run=fake_run)
+    err = capsys.readouterr().err
+    assert "venv" in err and "requirements.txt" in err

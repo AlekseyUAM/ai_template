@@ -49,17 +49,19 @@ def is_empty_dir(path: str) -> bool:
 
 def requirements(run=subprocess.run) -> list[dict]:
     """
-    Проверяет наличие требуемых инструментов: python3, git, claude, node.
+    Проверяет наличие требуемых инструментов: git, claude, node.
     На Windows дополнительно проверяет наличие git bash (bash) — он нужен для
     bash-скриптов навыков.
     (docker не требуется при установке проекта — он нужен лишь для подъёма MCP.)
 
+    Python в PATH цели НЕ требуется: скиллам разворачивается изолированный .venv
+    (строится интерпретатором agentmon), а его путь впечатывается в хуки/доки.
     node требуется нескольким навыкам (query-analyze, web-test и др.).
 
     :param run: Функция для запуска подпроцессов (по умолчанию subprocess.run)
     :return: Список словарей с ключами name, ok, detail
     """
-    required_tools = ["python3", "git", "claude", "node"]
+    required_tools = ["git", "claude", "node"]
     result = []
 
     for tool in required_tools:
