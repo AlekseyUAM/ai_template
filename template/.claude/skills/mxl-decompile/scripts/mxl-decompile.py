@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+﻿#!/usr/bin/env python
 # mxl-decompile v1.31 — Decompile 1C spreadsheet to JSON
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 

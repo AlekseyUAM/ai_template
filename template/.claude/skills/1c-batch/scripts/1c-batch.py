@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """Запуск ЛОКАЛЬНОЙ (проектной) копии 1c-batch из .claude/skills.
 
 В отличие от глобальной консольной команды `1c-batch` (editable-install, общий

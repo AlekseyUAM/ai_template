@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 # form-add v1.29 — Add managed form to 1C config object (Python port)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 

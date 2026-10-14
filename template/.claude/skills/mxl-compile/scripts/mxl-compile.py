@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+﻿#!/usr/bin/env python
 # mxl-compile v1.56 — Compile 1C spreadsheet from JSON
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse

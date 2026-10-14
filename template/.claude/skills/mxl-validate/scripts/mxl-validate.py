@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+﻿#!/usr/bin/env python
 # mxl-validate v1.8 — Validate 1C spreadsheet document Template.xml
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 """Validates spreadsheet Template.xml: height, palette refs, column/row indices, areas, merges."""

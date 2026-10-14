@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 # cfe-diff v1.7 — Analyze and compare 1C configuration extension (CFE)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 

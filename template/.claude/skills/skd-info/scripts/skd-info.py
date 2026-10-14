@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 # skd-info v1.12 — Analyze 1C DCS structure
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 
