@@ -15,10 +15,10 @@ from lxml import etree
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
-# Регистронезависимый ввод — паритет с PS1: в PowerShell имена параметров и [ValidateSet]
-# регистр не различают, в argparse совпадение точное.
+# Регистронезависимый ввод: имена параметров и значения choices принимаются
+# в любом регистре (в argparse по умолчанию совпадение точное).
 def ci_parse_args(parser, argv=None):
-    """parse_args по правилам PS: имена параметров и значения choices регистронезависимы."""
+    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
@@ -327,13 +327,13 @@ def invoke_sibling(script, argv, what):
 
 def save_xml(doc, path):
     raw = etree.tostring(doc, xml_declaration=True, encoding="UTF-8")
-    # lxml пишет декларацию в ОДИНАРНЫХ кавычках, платформа и PS-порт — в двойных.
+    # lxml пишет декларацию в ОДИНАРНЫХ кавычках, платформа — в двойных.
     raw = raw.replace(b"<?xml version='1.0' encoding='UTF-8'?>",
                       b'<?xml version="1.0" encoding="UTF-8"?>')
     # Парсер XML по спецификации схлопывает CRLF в LF, поэтому tostring отдаёт
     # LF-документ. Возвращаем EOL файла-назначения: правка существующего файла
     # сохраняет его стиль (#44/#46/#47), новый получает канон CRLF. Правило то же,
-    # что у _detect_xml_style и у $targetEol в PS-порту: есть CRLF → CRLF.
+    # что у _detect_xml_style: есть CRLF → CRLF.
     src_eol = b"\r\n"
     try:
         with open(path, "rb") as f:

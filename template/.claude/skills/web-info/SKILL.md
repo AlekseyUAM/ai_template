@@ -25,7 +25,7 @@ allowed-tools:
 
 ## Команда
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/web-info.py" <параметры>
 ```
 
@@ -60,7 +60,7 @@ Apache, но не публикаций. Убедиться в конкретно
 
 ## Примеры
 
-```powershell
+```bash
 # Статус по умолчанию
 python "${CLAUDE_SKILL_DIR}/scripts/web-info.py"
 

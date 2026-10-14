@@ -22,7 +22,7 @@ allowed-tools:
 
 ## Команда
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/cfe-diff.py" -ExtensionPath src\cfe\extname -ConfigPath src\cf -Mode A
 ```
 
@@ -48,7 +48,7 @@ python "${CLAUDE_SKILL_DIR}/scripts/cfe-diff.py" -ExtensionPath src\cfe\extname 
 
 ## Примеры
 
-```powershell
+```bash
 # Обзор — что изменено в расширении
 ... -ExtensionPath src\cfe\extname -ConfigPath src\cf -Mode A
 

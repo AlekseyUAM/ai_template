@@ -11,10 +11,10 @@ import uuid
 
 from lxml import etree
 
-# Регистронезависимый ввод — паритет с PS1: в PowerShell имена параметров и [ValidateSet]
-# регистр не различают, в argparse совпадение точное.
+# Регистронезависимый ввод: имена параметров и значения choices принимаются
+# в любом регистре (в argparse по умолчанию совпадение точное).
 def ci_parse_args(parser, argv=None):
-    """parse_args по правилам PS: имена параметров и значения choices регистронезависимы."""
+    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
@@ -526,10 +526,10 @@ def main():
 
         # Файл страницы НИКОГДА не перезаписываем: в нём может лежать текст макета.
         # Ошибка — только когда добавлять нечего: язык уже в дескрипторе И страница на диске.
-        # Сравнение без учёта регистра — зеркало -contains в PS, который регистр не различает.
+        # Сравнение без учёта регистра.
         lang_known = lang.lower() in [x.lower() for x in langs]
         # Существование страницы — тоже без учёта регистра: os.path.exists на Linux различает
-        # регистр, а PS -contains и Test-Path на Windows — нет, и порты разошлись бы на -Lang RU.
+        # регистр, поэтому сверяем имена принудительно без учёта регистра.
         page_exists = False
         if os.path.isdir(page_dir):
             want = f"{lang}.html".lower()

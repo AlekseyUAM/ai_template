@@ -7,8 +7,8 @@ import re
 import sys
 import xml.etree.ElementTree as ET
 
-# Регистронезависимый ввод — паритет с PS1: в PowerShell имена параметров и [ValidateSet]
-# регистр не различают, в argparse совпадение точное.
+# Регистронезависимый ввод: имена параметров и значения choices принимаются
+# в любом регистре (в argparse по умолчанию совпадение точное).
 
 def parse_json_input(text, source, expected=None, inline=False):
     """Разбор пользовательского JSON: одна строка в stderr вместо traceback (issue #80).
@@ -72,7 +72,7 @@ def read_json_file(path):
 
 
 def ci_parse_args(parser, argv=None):
-    """parse_args по правилам PS: имена параметров и значения choices регистронезависимы."""
+    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
@@ -151,7 +151,7 @@ class XNode:
 
     @property
     def inner_text(self):
-        # Concatenate all text content (mirror PS InnerText)
+        # Concatenate all text content (like InnerText)
         return _inner_text(self.el)
 
     @property
@@ -242,7 +242,7 @@ def parse_xml(path):
     return root
 
 
-# XPath translator: parse PS-style XPath like "r:name", "dcsset:item", "dcsset:item[@xsi:type='dcsset:TableRow']"
+# XPath translator: parse XPath like "r:name", "dcsset:item", "dcsset:item[@xsi:type='dcsset:TableRow']"
 # Returns list of (axis, pred) tokens. axis = ('child', uri, local) or ('descendant', uri, local).
 def _xpath_steps(xpath):
     # Split by '/' but not inside [] — predicates here don't include /.
@@ -458,8 +458,8 @@ def _fmt_number(v):
     if isinstance(v, float):
         # Invariant culture: '.' decimal sep
         if v == int(v):
-            # Preserve float-ness: PS [double] 5.0 → "5"
-            # Match PS ToString invariant: 5.0 → "5"
+            # Preserve float-ness: 5.0 → "5"
+            # Строковое представление по инвариантной культуре: 5.0 → "5"
             return str(int(v))
         return repr(v)
     return str(v)
@@ -1824,7 +1824,7 @@ def build_filter_item(item_node, loc):
         value = arr
         value_is_array_flag = True
         uniq_types = sorted(set(t for t in raw_types if t))
-        # PS does Sort-Object -Unique, preserves None as well; we filtered. Replicate "all same":
+        # Unique + preserve None; we filtered. Handle "all same":
         uniq_all = sorted(set(raw_types))
         if len(uniq_all) == 1 and uniq_all[0]:
             t0 = uniq_all[0]

@@ -20,12 +20,12 @@ allowed-tools:
 | `PackagePath` | да | Каталог пакета, путь к `Ext/Package.bin` или к `<Имя>.xml` объекта метаданных. Псевдоним — `-Path` |
 | `OutFile` | нет | Записать схему в файл (UTF-8 с BOM). Без него — вывод в stdout |
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/xdto-decompile.py" -PackagePath "<путь>"
 ```
 
 Примеры:
-```powershell
+```bash
 ... -PackagePath src/XDTOPackages/ОбменСБанком
 ... -PackagePath src/XDTOPackages/ОбменСБанком -OutFile bank.xsd
 ```

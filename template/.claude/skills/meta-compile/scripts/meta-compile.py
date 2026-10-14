@@ -17,10 +17,10 @@ sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
 # ============================================================
-# Регистронезависимый ввод — паритет с PS1. В PowerShell регистр не значим нигде, куда
-# смотрит пользовательский ввод: свойства объекта из ConvertFrom-Json, ключи Hashtable,
-# -eq/-contains, имена параметров, ValidateSet. В Python совпадение точное, поэтому порт
-# молча терял свойства DSL, написанные в другом регистре. Обёртки ниже выравнивают поведение.
+# Регистронезависимый ввод: свойства объекта из JSON, ключи словарей, имена
+# параметров и значения choices принимаются в любом регистре. В argparse по
+# умолчанию совпадение точное, поэтому нормализацию делаем сами: иначе разбор
+# молча терял бы свойства DSL, написанные в другом регистре. Обёртки ниже выравнивают поведение.
 # ============================================================
 
 
@@ -123,7 +123,7 @@ def ci_json(obj):
     return obj
 
 def ci_parse_args(parser, argv=None):
-    """parse_args по правилам PS: имена параметров и значения choices регистронезависимы."""
+    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
@@ -533,7 +533,7 @@ enum_value_aliases = {
     'ИндексироватьСДопУпорядочиванием': 'IndexWithAdditionalOrder',
 }
 
-# Словари, по которым ищут ПОЛЬЗОВАТЕЛЬСКИЙ ввод, — регистронезависимы, как хеш-таблицы PS1.
+# Словари, по которым ищут ПОЛЬЗОВАТЕЛЬСКИЙ ввод, — регистронезависимы.
 object_type_synonyms = CIDict(object_type_synonyms)
 enum_value_aliases = CIDict(enum_value_aliases)
 
@@ -701,7 +701,7 @@ valid_types = [
     'SessionParameter', 'CommonCommand', 'CommandGroup', 'CommonAttribute', 'FunctionalOptionsParameter', 'WSReference',
     'CommonPicture', 'CommonTemplate', 'ExternalDataSource',
 ]
-# Регистр имени вида — как в PS (-contains регистронезависим): приводим к канону списка
+# Регистр имени вида не важен: приводим к канону списка
 obj_type = next((t for t in valid_types if t.lower() == obj_type.lower()), obj_type)
 if obj_type not in valid_types:
     print(f"Unsupported type: {obj_type}. Valid: {', '.join(valid_types)}", file=sys.stderr)
@@ -921,8 +921,7 @@ def emit_type_content(indent, type_str):
         qual_blocks = {}
         for part in parts:
             # X добавляет в список lines, поэтому «перехват» — это срез и откат хвоста.
-            # В PS-порту X пишет в StringBuilder и тот же алгоритм выражен через
-            # Length/Remove — различие рантаймов, не логики.
+            # Тот же алгоритм; срез и откат хвоста списка — различие рантаймов, не логики.
             before = len(lines)
             emit_type_content(indent, part)
             chunk = lines[before:]
@@ -1396,7 +1395,7 @@ def parse_attribute_shorthand(val):
         'synonym': val['synonym'] if val.get('synonym') is not None else split_camel_case(name),
         'tooltip': val.get('tooltip'),
         'comment': str(val['comment']) if val.get('comment') else '',
-        # Лоуэркейз как в строковом пути (стр.809): проверки флагов регистронезависимы (зеркало PS -contains).
+        # Лоуэркейз как в строковом пути (стр.809): проверки флагов регистронезависимы.
         'flags': [str(f).strip().lower() for f in val.get('flags', [])],
         # Значения перечислений — через список допустимых, как свойства объекта: иначе значение из DSL
         # (ShowWarning, «Ошибка») уходило в XML как есть, и конфигурация не загружалась.
@@ -1658,7 +1657,7 @@ standard_attributes_by_type = {
     'DocumentJournal': ['Type', 'Ref', 'Date', 'Posted', 'DeletionMark', 'Number'],
 }
 
-# Профиль материализованного блока StandardAttributes (см. коммент в .ps1). Пока только Catalog.
+# Профиль материализованного блока StandardAttributes (см. эмиттер ниже). Пока только Catalog.
 std_attr_profile = {
     'Catalog': {
         'Owner': {'FillChecking': 'ShowError', 'FillFromFillingValue': 'true'},
@@ -1770,14 +1769,14 @@ def emit_standard_attribute(indent, attr_name, ov=None):
     emit_choice_parameters(f'{indent}\t', ov.get('ChoiceParameters'), 'xr:ChoiceParameters')
     X(f'{indent}</xr:StandardAttribute>')
 
-# Единый эмиттер блока StandardAttributes — поведение правят ДАННЫЕ, не форк кода (см. коммент в .ps1).
+# Единый эмиттер блока StandardAttributes — поведение правят ДАННЫЕ, не форк кода.
 # std_attr_conditional_types: типы, где блок только при кастомизации (DSL-ключ standardAttributes).
 # Прочие типы → блок всегда (текущее поведение). Миграция типа = +строчка в оба справочника + снэпшоты.
 std_attr_conditional_types = {'Catalog', 'ExchangePlan', 'ChartOfCharacteristicTypes', 'ChartOfAccounts', 'ChartOfCalculationTypes', 'Document'}
 
 # Условные члены списка типа: позиция берётся из standard_attributes_by_type, а присутствие —
 # из свойств самого объекта, как у платформы. Предикат принимает определение параметром
-# (зеркало .ps1, где scriptblock не видит $def вызывающей функции).
+# (предикат принимается параметром, чтобы не зависеть от области видимости вызывающей функции).
 def _period_adjustment_used(d):
     v = d.get('periodAdjustmentLength')
     return v is not None and int(str(v)) > 0
@@ -4711,7 +4710,7 @@ def build_eds_table_xml(src_name, table_name, entry, fields_xml, char_xml, defau
     какой это навык.
     Возвращает строку: X пишет в общий список строк,
     поэтому «перехват» — запомнить длину, отдать эмиттерам, срезать добавленное
-    (в ps1-порте тот же приём выражен через StringBuilder — различие рантаймов, не логики)."""
+    (тот же приём; различие рантаймов, не логики)."""
     before = len(lines)
 
     X('<?xml version="1.0" encoding="UTF-8"?>')

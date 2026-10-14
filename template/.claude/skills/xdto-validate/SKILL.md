@@ -23,7 +23,7 @@ allowed-tools:
 | `MaxErrors` | нет | Остановиться после N ошибок. По умолчанию 20 |
 | `OutFile` | нет | Записать отчёт в файл |
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/xdto-validate.py" -PackagePath "<путь>"
 ```
 

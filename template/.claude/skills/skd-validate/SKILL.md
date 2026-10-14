@@ -24,7 +24,7 @@ allowed-tools:
 
 ## Команда
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/skd-validate.py" -TemplatePath "src/МойОтчёт/Templates/ОсновнаяСхема"
 python "${CLAUDE_SKILL_DIR}/scripts/skd-validate.py" -TemplatePath "Catalogs/Номенклатура/Templates/СКД/Ext/Template.xml"
 ```

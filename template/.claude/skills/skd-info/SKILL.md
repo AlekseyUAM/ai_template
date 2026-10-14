@@ -24,12 +24,12 @@ allowed-tools:
 | `Limit` / `Offset` | Пагинация (по умолчанию 150 строк; `-Raw` не усекается) |
 | `OutFile` | Записать результат в файл (UTF-8 BOM) |
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/skd-info.py" -TemplatePath "<путь>"
 ```
 
 С указанием режима:
-```powershell
+```bash
 ... -Mode query -Name НоменклатураСЦенами
 ... -Mode query -Name ДанныеТ13 -Batch 3
 ... -Mode query -Name ДанныеТ13 -Raw -OutFile query.sql

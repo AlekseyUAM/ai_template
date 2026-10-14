@@ -10,10 +10,10 @@ import sys
 
 from lxml import etree
 
-# Регистронезависимый ввод — паритет с PS1: в PowerShell имена параметров и [ValidateSet]
-# регистр не различают, в argparse совпадение точное.
+# Регистронезависимый ввод: имена параметров и значения choices принимаются
+# в любом регистре (в argparse по умолчанию совпадение точное).
 def ci_parse_args(parser, argv=None):
-    """parse_args по правилам PS: имена параметров и значения choices регистронезависимы."""
+    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
@@ -84,8 +84,8 @@ def save_xml_with_bom(tree, path):
 
 
 def long_path(path):
-    """Полный путь в длинной форме. Зеркало Get-LongPath в PS: там Resolve-Path оставляет
-    короткое имя 8.3 (NSHIRO~1), а перечисление отдаёт длинное — сравнение молча не совпадало."""
+    """Полный путь в длинной форме: короткое имя 8.3 (NSHIRO~1) разворачиваем в длинное,
+    иначе сравнение путей молча не совпадало."""
     if not os.path.exists(path):
         return ""
     return os.path.realpath(path)
@@ -93,11 +93,11 @@ def long_path(path):
 
 def remove_node_with_indent(node):
     """Удалить элемент вместе с предшествующим whitespace; опустевший контейнер сделать
-    самозакрывающимся. Зеркало Remove-NodeWithIndent в PS."""
+    самозакрывающимся. Удаляет узел вместе с его отступом."""
     parent = node.getparent()
     if parent is None:
         return
-    # В DOM (PS) whitespace — отдельные узлы: удаляются предшествующий и сам элемент, а
+    # В DOM whitespace — отдельные узлы: удаляются предшествующий и сам элемент, а
     # whitespace ПОСЛЕ элемента остаётся. В lxml он лежит в node.tail и ушёл бы вместе с
     # узлом, поэтому его надо передать предшественнику — иначе `</Attributes></Form>`.
     prev = node.getprevious()
@@ -107,7 +107,7 @@ def remove_node_with_indent(node):
         parent.text = node.tail
     parent.remove(node)
     # Опустевший контейнер: text="" сериализуется парой <ChildObjects></ChildObjects>,
-    # а нужен <ChildObjects/> — PS-порт через DOM даёт именно его.
+    # а нужен <ChildObjects/> — через DOM получается именно он.
     if len(parent) == 0 and not (parent.text or "").strip():
         parent.text = None
 
@@ -116,7 +116,7 @@ def clear_form_refs(tree, ref):
     """Очистить ссылки на форму. Каноничное «не задано» зависит от файла: в корневом XML
     объекта и в Configuration.xml пустой слот штатен (164 508 пустых на корпус), а внутри
     Ext/Form.xml пустых <ChoiceForm/> и <SettingsStorage/> нет ни одного — там свойство
-    просто отсутствует. Зеркало Clear-FormRefs в PS."""
+    просто отсутствует. Чистит ссылки на формы."""
     root = tree.getroot()
     is_form_file = etree.QName(root).localname == "Form"
     touched = []
@@ -126,7 +126,7 @@ def clear_form_refs(tree, ref):
             continue
         if len(el) > 0:                                    # только листья
             continue
-        # Сравнение регистронезависимое — как у платформы (в PS -eq регистр не различает).
+        # Сравнение регистронезависимое — как у платформы.
         if (el.text or "").strip().lower() != ref_lc:
             continue
 

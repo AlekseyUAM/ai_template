@@ -2,7 +2,7 @@
 
 ## connect — подключить
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/db-repo.py" -Command connect -InfoBasePath "C:\Bases\MyDB" -RepositoryPath "\\srv01\repo\MyApp" -RepositoryUser "Ivanov" -RepositoryPassword "…"
 ```
 
@@ -22,7 +22,7 @@ python "${CLAUDE_SKILL_DIR}/scripts/db-repo.py" -Command connect -InfoBasePath "
 
 ## disconnect — отключить
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/db-repo.py" -Command disconnect -InfoBasePath "C:\Bases\MyDB"
 ```
 

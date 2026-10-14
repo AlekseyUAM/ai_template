@@ -38,13 +38,13 @@ allowed-tools:
 появившиеся позже. Выше целевой платформы — нельзя: такая конфигурация загрузится, но работать на ней
 не будет.
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/cf-init.py" -Name "МояКонфигурация"
 ```
 
 ## Примеры
 
-```powershell
+```bash
 # Базовая конфигурация
 ... -Name МояКонфигурация -Synonym "Моя конфигурация" -OutputDir test-tmp/cf
 

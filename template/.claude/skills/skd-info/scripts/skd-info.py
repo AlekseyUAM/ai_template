@@ -9,10 +9,10 @@ import sys
 from collections import OrderedDict
 from lxml import etree
 
-# Регистронезависимый ввод — паритет с PS1: в PowerShell имена параметров и [ValidateSet]
-# регистр не различают, в argparse совпадение точное.
+# Регистронезависимый ввод: имена параметров и значения choices принимаются
+# в любом регистре (в argparse по умолчанию совпадение точное).
 def ci_parse_args(parser, argv=None):
-    """parse_args по правилам PS: имена параметров и значения choices регистронезависимы."""
+    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
@@ -1824,7 +1824,7 @@ def main():
         if not os.path.isabs(out_path):
             out_path = os.path.join(os.getcwd(), out_path)
         with open(out_path, "w", encoding="utf-8-sig") as fh:
-            # Хвостовой перевод строки — как у PS-порта (WriteAllLines его добавляет).
+            # Хвостовой перевод строки добавляем явно.
             # Это текстовый отчёт, а не XML метаданных: канон Конфигуратора сюда не
             # относится, важен лишь паритет портов.
             fh.write("\n".join(result) + "\n")

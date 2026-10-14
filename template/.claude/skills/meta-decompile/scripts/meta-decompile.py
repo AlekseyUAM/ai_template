@@ -2,9 +2,8 @@
 # meta-decompile v0.69 — XML объекта метаданных 1С → JSON-черновик формата meta-compile
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 #
-# Зеркало meta-decompile.ps1 (КАНОН). Структура 1:1 — те же имена функций, порядок, комментарии.
-# Изменения вносить СНАЧАЛА в .ps1, затем переносить сюда. lxml.etree — для полного XPath 1.0
-# (SelectSingleNode/union/предикаты), как XmlNamespaceManager в .ps1.
+# Канон декомпиляции метаданных. lxml.etree — для полного XPath 1.0
+# (выбор узлов, объединения, предикаты через менеджер пространств имён).
 #
 # Поддержаны: Catalog, ExchangePlan, ChartOfCharacteristicTypes, ChartOfAccounts, ChartOfCalculationTypes, Document,
 # InformationRegister, AccumulationRegister, AccountingRegister, CalculationRegister, BusinessProcess, Task, Enum, ...
@@ -20,10 +19,10 @@ from lxml import etree
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
-# Регистронезависимый ввод — паритет с PS1: в PowerShell имена параметров и [ValidateSet]
-# регистр не различают, в argparse совпадение точное.
+# Регистронезависимый ввод: имена параметров и значения choices принимаются
+# в любом регистре (в argparse по умолчанию совпадение точное).
 def ci_parse_args(parser, argv=None):
-    """parse_args по правилам PS: имена параметров и значения choices регистронезависимы."""
+    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
@@ -50,7 +49,7 @@ NS_XSI = "http://www.w3.org/2001/XMLSchema-instance"
 NS_APP = "http://v8.1c.ru/8.2/managed-application/core"
 NS = {'md': NS_MD, 'v8': NS_V8, 'xr': NS_XR, 'xsi': NS_XSI, 'app': NS_APP}
 
-# Скрипт-скоуп состояние (зеркало $script:* / module-level $props/$dsl/$objType канона). Ставятся в main().
+# Модульное состояние разбора (props / dsl / objType). Инициализируется в main().
 props = None
 obj_node = None
 obj_type = None
@@ -81,7 +80,7 @@ def _text(node):
 
 
 def _ns_of_prefix(node, prefix):
-    """URI по префиксу — зеркало GetNamespaceOfPrefix из PS. lxml отдаёт nsmap с учётом
+    """URI по префиксу. lxml отдаёт nsmap с учётом
     унаследованных объявлений, поэтому локальный xmlns:dNpM на самом теге тоже виден."""
     if node is None:
         return None
@@ -172,9 +171,9 @@ def quote_json(s):
     return ''.join(sb)
 
 
-# --- Сравнение регистров (зеркало PS -ne / -cne) ---
+# --- Сравнение строк с учётом регистра ---
 def ne_cs(a, b):
-    """PS -cne на строках (регистрочувствительно). True когда различаются с учётом регистра.
+    """Сравнение строк с учётом регистра. True когда различаются с учётом регистра.
     Зеркало компилятора: авто-синоним/описание опускаем только при ТОЧНОМ совпадении со split_camel_words."""
     return (a if a is not None else '') != (b if b is not None else '')
 
@@ -406,7 +405,7 @@ def parse_choice_parameter_links(parent, tag):
             arr.append("%s=%s" % (l_name, l_dp))
         else:
             arr.append({'name': l_name, 'dataPath': l_dp, 'valueChange': vcv})
-    # PS-трап: `return $arr` БЕЗ унарной запятой → одноэлементный ArrayList разворачивается в скаляр
+    # Исторический трап: одноэлементный список мог развернуться в скаляр — держим список явно
     # (в отличие от Get-ChoiceParamValue с `,$arr`). Зеркалим: len==1 → голый элемент.
     return arr[0] if len(arr) == 1 else arr
 
@@ -430,7 +429,7 @@ def parse_choice_parameters(parent, tag):
             o = {'name': p_name}
             o['value'] = get_choice_param_value(val_n)
             arr.append(o)
-    # PS-трап (как выше): одноэлементный ArrayList разворачивается в скаляр при `return $arr`.
+    # Тот же трап: одноэлементный список не разворачиваем в скаляр.
     return arr[0] if len(arr) == 1 else arr
 
 
@@ -890,7 +889,7 @@ def predef_calc_type_to_dsl(item_el):
 
 
 def build_dsl():
-    """Линейный поток сборки DSL — зеркало script-body .ps1 (стр.392–1459)."""
+    """Линейный поток сборки DSL — единый проход."""
     global dsl
 
     # === Сборка DSL ===

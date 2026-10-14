@@ -17,13 +17,13 @@ allowed-tools:
 
 ### Inline mode (простые операции)
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/meta-edit.py" -ObjectPath "<path>" -Operation <op> -Value "<val>"
 ```
 
 ### JSON mode (сложные/комбинированные)
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/meta-edit.py" -DefinitionFile "<json>" -ObjectPath "<path>"
 ```
 
@@ -60,7 +60,7 @@ Batch через `;;` во всех операциях.
 
 ## Быстрые примеры
 
-```powershell
+```bash
 # Добавить реквизиты
 -Operation add-attribute -Value "Комментарий: Строка(200) ;; Сумма: Число(15,2) | index"
 

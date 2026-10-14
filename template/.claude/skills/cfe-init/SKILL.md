@@ -43,13 +43,13 @@ allowed-tools:
 
 ## Команда
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/cfe-init.py" -Name "МоёРасширение" -OutputDir "src\cfe\МоёРасширение" -ConfigPath "src\cf"
 ```
 
 ## Примеры
 
-```powershell
+```bash
 # Расширение для ERP с авто-определением совместимости из базовой конфигурации
 ... -Name Расш1 -ConfigPath src\cf -OutputDir src\cfe\Расш1
 

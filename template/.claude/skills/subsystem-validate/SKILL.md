@@ -23,7 +23,7 @@ allowed-tools:
 
 ## Команда
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/subsystem-validate.py" -SubsystemPath "Subsystems/Продажи"
 python "${CLAUDE_SKILL_DIR}/scripts/subsystem-validate.py" -SubsystemPath "Subsystems/Продажи.xml"
 ```

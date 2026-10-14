@@ -28,7 +28,7 @@ allowed-tools:
 | `Limit` / `Offset` | нет | Пагинация. По умолчанию 150 строк |
 | `OutFile` | нет | Записать результат в файл (UTF-8 BOM) |
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/xdto-info.py" -PackagePath "<путь>"
 ```
 
@@ -50,7 +50,7 @@ python "${CLAUDE_SKILL_DIR}/scripts/xdto-info.py" -PackagePath "<путь>"
 Так бывает чаще всего: namespace и имя типа видны в коде или в образце XML,
 а как называется пакет — нет. Вызов повторяет строку, от которой отталкиваешься:
 
-```powershell
+```bash
 # ФабрикаXDTO.Тип("urn:1C.ru:ClientBankExchange", "ПлатежныйДокумент")
 ... -PackagePath src -Namespace "urn:1C.ru:ClientBankExchange" -Name ПлатежныйДокумент
 ```

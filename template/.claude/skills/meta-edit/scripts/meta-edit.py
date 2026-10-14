@@ -11,8 +11,8 @@ import sys
 import uuid
 from lxml import etree
 
-# Регистронезависимый ввод — паритет с PS1: в PowerShell имена параметров и [ValidateSet]
-# регистр не различают, в argparse совпадение точное.
+# Регистронезависимый ввод: имена параметров и значения choices принимаются
+# в любом регистре (в argparse по умолчанию совпадение точное).
 
 def parse_json_input(text, source, expected=None, inline=False):
     """Разбор пользовательского JSON: одна строка в stderr вместо traceback (issue #80).
@@ -113,7 +113,7 @@ def ci_json(obj):
     return obj
 
 def ci_parse_args(parser, argv=None):
-    """parse_args по правилам PS: имена параметров и значения choices регистронезависимы."""
+    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
@@ -430,7 +430,7 @@ enum_value_aliases = {
     'ИндексироватьСДопУпорядочиванием': 'IndexWithAdditionalOrder',
 }
 
-# Словарь ищет ПОЛЬЗОВАТЕЛЬСКИЙ ввод — поиск регистронезависим, как хеш-таблица PS1.
+# Словарь ищет ПОЛЬЗОВАТЕЛЬСКИЙ ввод — поиск регистронезависим.
 enum_value_aliases = CIDict(enum_value_aliases)
 
 valid_enum_values = {
@@ -1978,7 +1978,7 @@ def build_eds_table_xml(src_name, table_name, entry, fields_xml, char_xml, defau
     какой это навык.
     Возвращает строку: X пишет в общий список строк,
     поэтому «перехват» — запомнить длину, отдать эмиттерам, срезать добавленное
-    (в ps1-порте тот же приём выражен через StringBuilder — различие рантаймов, не логики)."""
+    (тот же приём; различие рантаймов, не логики)."""
     before = len(lines)
 
     X('<?xml version="1.0" encoding="UTF-8"?>')
@@ -2777,7 +2777,7 @@ def modify_child_elements(modify_def, child_type):
                                 for gc in item_el:
                                     if localname(gc) == "content":
                                         current_syn = (gc.text or "").strip()
-                        # Без учёта регистра: авто-синоним «ИНН» против разбивки «Инн» (так в PS-мастере)
+                        # Без учёта регистра: авто-синоним «ИНН» против разбивки «Инн»
                         if current_syn.lower() == old_synonym.lower() or not current_syn:
                             new_synonym = split_camel_case(new_name)
                             syn_indent = get_child_indent(props_el)
@@ -3864,7 +3864,7 @@ def add_predefined_items(items):
                f'xsi:type="{xsi_type}" version="{version}">\r\n')
         text = hdr + items_xml + '</PredefinedData>'
     # Без перевода строки в конце — канон #57. Срезаем в ОБЕИХ ветках: файл, созданный
-    # прежней версией навыка, мог унести хвост, а PS-порт срезает безусловно.
+    # прежней версией навыка, мог унести хвост; срезаем безусловно.
     pending_writes[path] = text.rstrip('\r\n')
     info(f"Added {len(item_list)} predefined item(s) -> {path}")
     add_count += len(item_list)

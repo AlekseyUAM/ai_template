@@ -8,10 +8,10 @@ import sys
 from collections import OrderedDict
 from lxml import etree
 
-# Регистронезависимый ввод — паритет с PS1: в PowerShell имена параметров и [ValidateSet]
-# регистр не различают, в argparse совпадение точное.
+# Регистронезависимый ввод: имена параметров и значения choices принимаются
+# в любом регистре (в argparse по умолчанию совпадение точное).
 def ci_parse_args(parser, argv=None):
-    """parse_args по правилам PS: имена параметров и значения choices регистронезависимы."""
+    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
@@ -58,7 +58,7 @@ def text_of(node):
 
 def to_font_size(raw):
     """Размер шрифта бывает дробным (8.3, 11.3 — в корпусе ERP это треть макетов).
-    int() на таком падал, а ps1 ТИХО округлял. Целое держим целым, иначе "10" → "10.0"."""
+    int() на таком падал — дробный размер округляем. Целое держим целым, иначе "10" → "10.0"."""
     s = str(raw).strip() if raw is not None else ''
     if not s:
         return 0
@@ -251,8 +251,8 @@ def _fmt_number(v):
     if isinstance(v, float):
         # Invariant culture: '.' decimal sep
         if v == int(v):
-            # Preserve float-ness: PS [double] 5.0 → "5"
-            # Match PS ToString invariant: 5.0 → "5"
+            # Preserve float-ness: 5.0 → "5"
+            # Строковое представление по инвариантной культуре: 5.0 → "5"
             return str(int(v))
         return repr(v)
     return str(v)
@@ -404,8 +404,8 @@ def main():
             if tag == "valueType":
                 fmt["Props"][tag] = value_type_to_dsl(child)
                 continue
-            # Вложенный элемент скаляром не является: .text дал бы пустоту, а ps1-порт брал
-            # InnerText и получал склейку поддерева — отсюда расхождение портов.
+            # Вложенный элемент скаляром не является: .text дал бы пустоту, поэтому собираем
+            # весь текст поддерева (склейку), иначе потеряли бы содержимое.
             if len(child):
                 continue
             val = (child.text or "").strip()
@@ -672,7 +672,7 @@ def main():
 
         named_areas.append({
             # Порядок в исходнике — явный ключ сортировки: sorted тут стабилен, а
-            # Sort-Object в ps1 нет, и без него порты расходились.
+            # Сортируем явно, иначе порядок был бы нестабильным.
             "Ord": len(named_areas),
             "Name": text_of(find(ni_node, "d:name")) or "",
             "Type": text_of(find(area_node, "d:type")) or "",

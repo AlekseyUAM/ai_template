@@ -13,8 +13,8 @@ from collections import OrderedDict
 
 from lxml import etree
 
-# Регистронезависимый ввод — паритет с PS1: в PowerShell имена параметров и [ValidateSet]
-# регистр не различают, в argparse совпадение точное.
+# Регистронезависимый ввод: имена параметров и значения choices принимаются
+# в любом регистре (в argparse по умолчанию совпадение точное).
 
 def parse_json_input(text, source, expected=None, inline=False):
     """Разбор пользовательского JSON: одна строка в stderr вместо traceback (issue #80).
@@ -115,7 +115,7 @@ def ci_json(obj):
     return obj
 
 def ci_parse_args(parser, argv=None):
-    """parse_args по правилам PS: имена параметров и значения choices регистронезависимы."""
+    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
@@ -1569,7 +1569,7 @@ def di_attr(el):
 
 # Базовая директория для @file-ссылок в query динсписка (устанавливается в main)
 # Без -JsonPath (режим по метаданным объекта) запросов во входе нет, но база пути должна
-# оставаться валидной — как и в PS-порте, где в этой ветке берётся текущий каталог.
+# оставаться валидной — в этой ветке берётся текущий каталог.
 QUERY_BASE_DIR = os.getcwd()
 
 
@@ -1654,7 +1654,7 @@ COMPARISON_TYPES = {
     'подобно': 'Like', 'неподобно': 'NotLike',  # рус. синоним
     'filled': 'Filled', 'notFilled': 'NotFilled',
 }
-# Регистронезависимый лукап (зеркало PS-хэша): Like/LIKE/ПОДОБНО → канон
+# Регистронезависимый лукап: Like/LIKE/ПОДОБНО → канон
 _COMPARISON_TYPES_CI = {k.lower(): v for k, v in COMPARISON_TYPES.items()}
 
 _REF_TYPE_RE = re.compile(
@@ -1784,7 +1784,7 @@ def emit_filter_item(lines, item, indent):
     if item.get('use') is False:
         lines.append(f'{indent}\t<dcsset:use>false</dcsset:use>')
     lines.append(f'{indent}\t<dcsset:left xsi:type="dcscor:Field">{esc_xml_text(str(item.get("field", "")))}</dcsset:left>')
-    # Регистронезависимый лукап (зеркало PS): Like/LIKE/ПОДОБНО → канон; иначе — как есть
+    # Регистронезависимый лукап: Like/LIKE/ПОДОБНО → канон; иначе — как есть
     comp_type = _COMPARISON_TYPES_CI.get(str(item.get('op')).lower())
     if not comp_type:
         comp_type = str(item.get('op'))
@@ -2902,7 +2902,7 @@ def emit_events(lines, el, element_name, indent, type_key):
 
 
 # Детектор «настоящей» inline-разметки (1С: <link>/<b>/<color>/… и </>). Должен быть
-# идентичен form-decompile/form-compile.ps1, иначе гибрид-раундтрип поедет.
+# идентичен детектору в form-decompile, иначе гибрид-раундтрип поедет.
 _FMT_MARKUP_RE = re.compile(r'</>|<\s*(?:link|b|i|u|s|color|colorStyle|bgColor|bgColorStyle|font|fontSize|fontStyle|img)(?:\s|>)', re.I)
 
 
@@ -2944,7 +2944,7 @@ def emit_companion(lines, tag, name, indent, content=None):
         lines.append(f'{indent}<{tag} name="{name}" id="{cid}"/>')
         return
     inner = f'{indent}\t'
-    # DI-Attr от собственного объекта компаньона (не от владельца) — зеркало ps1
+    # DI-Attr от собственного объекта компаньона (не от владельца)
     lines.append(f'{indent}<{tag} name="{name}" id="{cid}"{di_attr(content if isinstance(content, dict) else None)}>')
     if isinstance(content, dict) and any(k in content for k in COMPANION_STRUCT_KEYS):
         # own-content ПЕРЕД Title (в корпусе layout-first 582 vs 10).
@@ -3221,7 +3221,7 @@ def emit_command_picture(lines, pic, elem_lt, indent):
     lines.append(f'{indent}</Picture>')
 
 
-# --- Оформление элемента: цвета / шрифты / граница (зеркало form-compile.ps1 Emit-Appearance) ---
+# --- Оформление элемента: цвета / шрифты / граница ---
 # Прямые свойства элемента (<TextColor>/<Font>/<Border> + header/footer у полей). Ключи англ.
 # camelCase 1:1 с тегами + приём рус. синонимов. Цвет — verbatim-строка (style:/web:/win:/#RRGGBB);
 # шрифт — строка-ref/объект-атрибуты; граница — строка-ref/
@@ -3309,7 +3309,7 @@ def emit_border_tag(lines, val, indent):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Planner design-time <Settings xsi:type="pl:Planner"> — зеркало Emit-PlannerSettings (ps1).
+# Planner design-time <Settings xsi:type="pl:Planner"> — настройки планировщика.
 PLANNER_NS = 'http://v8.1c.ru/8.3/data/planner'
 CHART_NS = 'http://v8.1c.ru/8.2/data/chart'
 
@@ -3535,7 +3535,7 @@ def emit_planner_settings(lines, pl, ind):
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Chart design-time <Settings xsi:type="d4p1:Chart"> — генерик-эмиттер (зеркало
-# Build-ChartNode декомпилятора + Emit-ChartNode ps1).
+# Build-ChartNode декомпилятора + эмиттер узла диаграммы).
 CHART_ML_FIELDS = {'title', 'lbFormat', 'lbpFormat', 'vsFormat', 'dtFormat', 'dataSourceDescription', 'labelFormat', 'text'}
 CHART_ATTR_FIELDS = {'gaugeQualityBands'}
 CHART_FONT_KEYS = ('ref', 'faceName', 'height', 'bold', 'italic', 'underline', 'strikeout', 'kind', 'scale')
@@ -5237,7 +5237,7 @@ def emit_attr_column(lines, col, indent):
 
 
 # --- Schema-параметры динамического списка (DataCompositionSchemaParameter) ---
-# Зеркало form-compile.ps1 (Emit-DLParameters). Та же сущность, что параметры СКД, но в
+# Параметры компоновки данных формы. Та же сущность, что параметры СКД, но в
 # форме: обёртка <Parameter> + дети dcssch:. DSL переиспользует грамматику параметров СКД.
 # Контекстные дефолты: useRestriction эмитим ВСЕГДА, дефолт true (в СКД false); title — авто
 # из имени; пустое value — всегда xsi:nil (даже при известном типе). Канон. порядок детей
@@ -5847,7 +5847,7 @@ def emit_attributes(lines, attrs, indent, conditional_appearance=None):
                 for ac in attr['additionalColumns']:
                     # Пустой список колонок задаётся ЯВНО (`"columns": []`) — это законная форма,
                     # платформа так пишет таблицу, у которой доп. колонок нет. А вот отсутствие ключа
-                    # — недосказанность автора: «доп. колонки есть», а какие, не указано. PS-порт на
+                    # — недосказанность автора: «доп. колонки есть», а какие, не указано. Старая реализация на
                     # этом падал с «Не удается индексировать в массив NULL» (@($null).Count = 1).
                     if ac.get('columns') is None:
                         print(f"additionalColumns group for table '{ac['table']}': key 'columns' is missing "
@@ -6827,7 +6827,7 @@ def main():
                 if '</ChildObjects>' in raw_text:
                     # Отступ вставки берём у закрывающего тега +1 уровень: подстановка
                     # по голому '</ChildObjects>' удваивала бы уже присутствующий отступ
-                    # строки (получалось 5 табов вместо 3 — PS-порт через DOM даёт 3).
+                    # строки (получалось 5 табов вместо 3; через DOM — 3).
                     raw_text = re.sub(r'([ \t]*)</ChildObjects>',
                                       lambda m: m.group(1) + '\t' + f'<Form>{form_name}</Form>' + eol + m.group(1) + '</ChildObjects>',
                                       raw_text, count=1)

@@ -24,7 +24,7 @@ allowed-tools:
 | `Variant` | (опц.) Имя варианта настроек (умолч. первый) |
 | `NoSelection` | (опц.) Не добавлять поле в selection варианта |
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/skd-edit.py" -TemplatePath "<path>" -Operation <op> -Value "<value>"
 ```
 
@@ -32,7 +32,7 @@ python "${CLAUDE_SKILL_DIR}/scripts/skd-edit.py" -TemplatePath "<path>" -Operati
 
 Несколько значений в одном вызове через разделитель `;;`:
 
-```powershell
+```bash
 -Operation add-field -Value "Цена: decimal(15,2) ;; Количество: decimal(15,3) ;; Сумма: decimal(15,2)"
 ```
 

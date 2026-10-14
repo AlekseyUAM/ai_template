@@ -14,7 +14,7 @@ allowed-tools:
 
 Использует тот же скрипт, что и `/epf-validate` — автоопределение по типу элемента (ExternalReport).
 
-Проверяется XML. Синтаксис модулей проверяет сборка: `/epf-build`, `/erf-build`.
+Проверяется XML. Синтаксис модулей проверяет сборка: навык `1c-batch` (команда `build-epf`).
 
 ## Параметры
 
@@ -27,7 +27,7 @@ allowed-tools:
 
 ## Команда
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/../epf-validate/scripts/epf-validate.py" -ObjectPath "src/МойОтчёт"
 python "${CLAUDE_SKILL_DIR}/../epf-validate/scripts/epf-validate.py" -ObjectPath "src/МойОтчёт/МойОтчёт.xml"
 ```

@@ -5,10 +5,10 @@
 import sys, os, argparse
 from lxml import etree
 
-# Регистронезависимый ввод — паритет с PS1: в PowerShell имена параметров и [ValidateSet]
-# регистр не различают, в argparse совпадение точное.
+# Регистронезависимый ввод: имена параметров и значения choices принимаются
+# в любом регистре (в argparse по умолчанию совпадение точное).
 def ci_parse_args(parser, argv=None):
-    """parse_args по правилам PS: имена параметров и значения choices регистронезависимы."""
+    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
@@ -225,7 +225,7 @@ def main():
         r.error(f'Font index {max_font_ref} referenced but no fonts defined')
     else:
         # Макет без единого шрифта — норма (ячейки-поля ввода, макеты без оформления).
-        # Строку печатаем как ps1-порт: раньше py молчал, и на таком макете число проверок
+        # Строку печатаем явно: раньше вывод молчал, и на таком макете число проверок
         # у портов расходилось.
         r.ok('No font references')
 

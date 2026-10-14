@@ -11,8 +11,8 @@ import sys
 
 from lxml import etree
 
-# Регистронезависимый ввод — паритет с PS1: в PowerShell имена параметров и [ValidateSet]
-# регистр не различают, в argparse совпадение точное.
+# Регистронезависимый ввод: имена параметров и значения choices принимаются
+# в любом регистре (в argparse по умолчанию совпадение точное).
 
 def parse_json_input(text, source, expected=None, inline=False):
     """Разбор пользовательского JSON: одна строка в stderr вместо traceback (issue #80).
@@ -113,7 +113,7 @@ def ci_json(obj):
     return obj
 
 def ci_parse_args(parser, argv=None):
-    """parse_args по правилам PS: имена параметров и значения choices регистронезависимы."""
+    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
@@ -361,7 +361,7 @@ def format_rank(ver):
 
 
 def to_font_size(raw):
-    """Размер шрифта бывает дробным (8.3, 11.3). int() на таком падал, ps1 ТИХО округлял.
+    """Размер шрифта бывает дробным (8.3, 11.3). int() на таком падал — дробное округляем.
     Целое держим целым, иначе "10" превратилось бы в "10.0"."""
     s = str(raw).strip() if raw is not None else ''
     if not s:
@@ -374,8 +374,8 @@ def to_font_size(raw):
 
 
 def parse_col_value(val):
-    """Позиция колонки как целое, иначе None. Аналог [int]::TryParse в ps1:
-    целое из JSON приходит int, "3" — строкой, 3.0 — float (ps1 печатает такое как "3")."""
+    """Позиция колонки как целое, иначе None. Разбор целого без исключения:
+    целое из JSON приходит int, "3" — строкой, 3.0 — float (печатаем такое как "3")."""
     if isinstance(val, bool) or val is None:
         return None
     if isinstance(val, int):
@@ -782,7 +782,7 @@ def cell_value(cell, canon_type, where):
     if isinstance(v, bool):
         return {'Type': 'xs:boolean', 'Text': 'true' if v else 'false'}
     if isinstance(v, (int, float)):
-        # 8.0 обязано дать "8", как в PS-порту: там Convert.ToString инвариантной культурой
+        # 8.0 обязано дать "8": строковое представление инвариантной культурой
         # хвостовой .0 не пишет, а str() в py — пишет.
         text = str(int(v)) if (isinstance(v, float) and v.is_integer()) else str(v)
         return {'Type': 'xs:decimal', 'Text': text}
@@ -1906,7 +1906,7 @@ def main():
                 # Прощающий ввод: строка, в которой НИ У ОДНОЙ ячейки нет col, раскладывается
                 # слева направо с учётом span и rowspan сверху. Канон один и он в документации —
                 # col обязателен; здесь мы лишь спасаем естественный DSL вместо тихой порчи
-                # (в ps1 $null -> [int]0 -> Col = -1). Смешанную строку не угадываем: это опечатка.
+                # (пустое значение раньше превращалось в Col = -1). Смешанную строку не угадываем: это опечатка.
                 positioned = [c for c in row['cells']
                               if 'col' in c and c.get('col') is not None and str(c.get('col')) != '']
                 if len(positioned) == 0:
@@ -1927,7 +1927,7 @@ def main():
                     sys.exit(1)
 
                 # Позиция обязана быть в 1..columns: до этой проверки нечисловой или нулевой col
-                # ронял py голым KeyError/ValueError, а ps1 молча писал Col = -1.
+                # ронял голым KeyError/ValueError вместо молчаливого Col = -1.
                 for cell_idx, cell in enumerate(row['cells'], start=1):
                     col_parsed = parse_col_value(cell.get('col'))
                     if col_parsed is None or col_parsed < 1 or col_parsed > area_columns:
@@ -2411,7 +2411,7 @@ def main():
     # 7g. Named items
     # Платформа хранит именованные элементы ОТСОРТИРОВАННЫМИ по имени: на выборке 541 макета
     # с несколькими элементами иного порядка нет ни разу. Сортировка регистронезависимая и
-    # ординальная (в ps1 поэтому нельзя Sort-Object — он сортирует по текущей культуре).
+    # ординальная (не зависит от текущей культуры).
     # NB: имён с «ё» в выборке не встретилось, этот случай не проверен.
     # Имя рисунка — namedItem другого типа, но список общий: на корпусе оба вида отсортированы
     # вместе по имени во всех 266 макетах с именованными рисунками.

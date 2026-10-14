@@ -26,7 +26,7 @@ allowed-tools:
 | `Value` | зависит | Фрагмент XSD, литерал, URI или текст. `@путь` — взять содержимое из файла |
 | `NoValidate` | нет | Не запускать `xdto-validate` после правки |
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/xdto-edit.py" -PackagePath "<путь>" -Operation <op> -Target "<адрес>" -Value "<значение>"
 ```
 
@@ -49,7 +49,7 @@ python "${CLAUDE_SKILL_DIR}/scripts/xdto-edit.py" -PackagePath "<путь>" -Ope
 Батч через `;;` там, где перечисление осмысленно: `remove-property`, `remove-type`,
 `add-enum`, `add-import`.
 
-```powershell
+```bash
 ... -Operation add-property -Target "Платёж" -Value '<xs:element name="Комментарий" type="xs:string" minOccurs="0"/>'
 ... -Operation remove-property -Target "Платёж.Комментарий ;; Платёж.Черновик"
 ... -Operation add-enum -Target "ВидДокумента" -Value "Инкассо ;; Аккредитив"

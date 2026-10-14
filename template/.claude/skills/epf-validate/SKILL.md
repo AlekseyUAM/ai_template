@@ -12,7 +12,7 @@ allowed-tools:
 
 Проверяет структурную корректность XML-исходников внешней обработки: корневую структуру, InternalInfo, свойства, ChildObjects, реквизиты, табличные части, уникальность имён, наличие файлов форм и макетов. Также работает для внешних отчётов (ERF).
 
-Проверяется XML. Синтаксис модулей проверяет сборка: `/epf-build`, `/erf-build`.
+Проверяется XML. Синтаксис модулей проверяет сборка: навык `1c-batch` (команда `build-epf`).
 
 ## Параметры
 
@@ -25,7 +25,7 @@ allowed-tools:
 
 ## Команда
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/epf-validate.py" -ObjectPath "src/МояОбработка"
 python "${CLAUDE_SKILL_DIR}/scripts/epf-validate.py" -ObjectPath "src/МояОбработка/МояОбработка.xml"
 ```

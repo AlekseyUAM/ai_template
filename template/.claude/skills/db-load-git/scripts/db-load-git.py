@@ -14,10 +14,10 @@ import subprocess
 import sys
 import tempfile
 
-# Регистронезависимый ввод — паритет с PS1: в PowerShell имена параметров и [ValidateSet]
-# регистр не различают, в argparse совпадение точное.
+# Регистронезависимый ввод: имена параметров и значения choices принимаются
+# в любом регистре (в argparse по умолчанию совпадение точное).
 def ci_parse_args(parser, argv=None):
-    """parse_args по правилам PS: имена параметров и значения choices регистронезависимы."""
+    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
@@ -318,9 +318,8 @@ def resolve_extra_args(engine, v8_extra, ibcmd_extra, hints):
     passed parameter for the other engine is an error; the same keys coming from
     .v8-project.json simply do not apply — a project may describe both engines.
 
-    Comma-separated elements are split apart: PowerShell's -File cannot bind an array,
-    so that form is the documented one and both ports must accept it. A value containing
-    a comma is not supported."""
+    Comma-separated elements are split apart: the documented invocation passes them
+    as one comma-separated value. A value containing a comma is not supported."""
     v8_extra = [p for tok in v8_extra for p in str(tok).split(",") if p]
     ibcmd_extra = [p for tok in ibcmd_extra for p in str(tok).split(",") if p]
     if engine == "ibcmd" and v8_extra:
@@ -368,7 +367,7 @@ def resolve_v8path(v8path, args):
                 + glob.glob(r"C:\Program Files (x86)\1cv8\*\bin\1cv8.exe")
             )
         else:
-            # PY-only: PS-порт на *nix не исполняется, поэтому *nix-раскладки нет в .ps1.
+            # *nix-раскладка путей установки платформы 1С.
             candidates = glob.glob("/opt/1cv8/*/1cv8")
         if candidates:
             v8path = max(candidates, key=_version_key)

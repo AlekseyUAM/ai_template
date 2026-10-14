@@ -23,7 +23,7 @@ allowed-tools:
 | `DefinitionFile` | JSON-файл с массивом операций |
 | `NoValidate` | Пропустить авто-валидацию |
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/cf-edit.py" -ConfigPath '<path>' -Operation modify-property -Value 'Version=1.0.0.1'
 ```
 
@@ -45,7 +45,7 @@ python "${CLAUDE_SKILL_DIR}/scripts/cf-edit.py" -ConfigPath '<path>' -Operation 
 
 ## Примеры
 
-```powershell
+```bash
 # Изменить версию и поставщика
 ... -ConfigPath src -Operation modify-property -Value "Version=1.0.0.1 ;; Vendor=Фирма 1С"
 

@@ -27,7 +27,7 @@ allowed-tools:
 
 `-Path` — тот же путь, который отклонил `support-guard` (объект, форма, макет или каталог дампа).
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/support-edit.py" -Path "Catalogs/Контрагенты.xml" -Set editable
 ```
 

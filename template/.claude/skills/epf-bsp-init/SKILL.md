@@ -217,4 +217,4 @@ allowed-tools:
 - Добавить ещё команду: `/epf-bsp-add-command`
 - Добавить форму: `/form-add`
 - Добавить макет: `/template-add`
-- Собрать EPF: `/epf-build`
+- Собрать EPF: навык `1c-batch`, команда `build-epf`

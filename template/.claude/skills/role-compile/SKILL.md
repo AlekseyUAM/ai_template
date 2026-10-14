@@ -20,7 +20,7 @@ allowed-tools:
 | `JsonPath` | Путь к JSON-определению роли |
 | `OutputDir` | Корень выгрузки конфигурации (где `Configuration.xml`, `Roles/` и т.д.) |
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/role-compile.py" -JsonPath "<json>" -OutputDir "<ConfigDir>"
 ```
 

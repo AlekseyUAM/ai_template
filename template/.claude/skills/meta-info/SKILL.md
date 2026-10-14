@@ -22,7 +22,7 @@ allowed-tools:
 | `Limit` / `Offset` | Пагинация (по умолчанию 150 строк) |
 | `OutFile` | Записать результат в файл (UTF-8 BOM) |
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/meta-info.py" -ObjectPath "<путь>"
 ```
 
@@ -47,7 +47,7 @@ python "${CLAUDE_SKILL_DIR}/scripts/meta-info.py" -ObjectPath "<путь>"
 
 ## Примеры
 
-```powershell
+```bash
 # Справочник — overview
 ... -ObjectPath Catalogs/Валюты/Валюты.xml
 

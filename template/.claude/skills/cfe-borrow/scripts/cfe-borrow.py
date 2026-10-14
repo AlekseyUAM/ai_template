@@ -11,10 +11,10 @@ import sys
 import uuid
 from lxml import etree
 
-# Регистронезависимый ввод — паритет с PS1: в PowerShell имена параметров и [ValidateSet]
-# регистр не различают, в argparse совпадение точное.
+# Регистронезависимый ввод: имена параметров и значения choices принимаются
+# в любом регистре (в argparse по умолчанию совпадение точное).
 def ci_parse_args(parser, argv=None):
-    """parse_args по правилам PS: имена параметров и значения choices регистронезависимы."""
+    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
@@ -306,7 +306,7 @@ def get_own_child_object_names(obj_file):
 def insert_into_own_child_objects(text, content):
     """Вставка в СОБСТВЕННЫЙ <ChildObjects> объекта. Свой контейнер закрывается в файле последним:
     объект в файле один, а вложенные <ChildObjects> табличных частей закрываются раньше. Замена по
-    всем вхождениям раскидывала реквизиты по каждой ТЧ — ps1 рвал XML, py прятал ТЧ внутрь ТЧ."""
+    всем вхождениям раскидывала реквизиты по каждой ТЧ — рвался XML или ТЧ пряталась внутрь ТЧ."""
     close_idx = text.rfind("</ChildObjects>")
     if close_idx >= 0:
         return text[:close_idx] + content + "\r\n\t\t" + text[close_idx:]
@@ -320,8 +320,8 @@ def insert_into_own_child_objects(text, content):
 
 def decode_numeric_entities(s):
     """lxml emits numeric character refs (&#xNNNN;) for non-ASCII in some self-closed
-    elements where the PowerShell port writes literal characters. Normalize numeric refs
-    back to literal so PS↔PY output matches. Named entities (&amp; &lt; ...) are left intact."""
+    elements. Normalize numeric refs
+    back to literal so output is stable. Named entities (&amp; &lt; ...) are left intact."""
     s = re.sub(r'&#x([0-9A-Fa-f]+);', lambda m: chr(int(m.group(1), 16)), s)
     s = re.sub(r'&#(\d+);', lambda m: chr(int(m.group(1))), s)
     return s
@@ -1449,7 +1449,7 @@ def main():
         if main_attr is None:
             return None
         # with_tail=False: хвостовой пробельный узел — часть родителя, а не секции; иначе в
-        # вывод попадают пустые строки, которых нет у PS (OuterXml хвост не включает).
+        # вывод попадают пустые строки (хвост OuterXml их не включает).
         xml = decode_numeric_entities(etree.tostring(main_attr, encoding="unicode", with_tail=False))
         xml = ns_strip_pattern.sub("", xml)
         # id заменяется только в открывающем теге самого реквизита — у вложенных элементов свои
@@ -2191,7 +2191,7 @@ def main():
             if ln in FORM_ATTRIBUTE_REF_PROPS:
                 continue
             # with_tail=False — хвостовой пробел принадлежит родителю; с ним в вывод попадали
-            # пустые строки, которых нет у PS-порта (OuterXml хвост не включает).
+            # пустые строки (хвост OuterXml их не включает).
             form_props.append(decode_numeric_entities(etree.tostring(fc, encoding="unicode", with_tail=False)))
 
         ns_strip_pattern = re.compile(r'\s+xmlns(?::\w+)?="[^"]*"')
@@ -2283,7 +2283,7 @@ def main():
         if src_child_items is not None:
             for deco in [e for e in src_child_items.iter() if isinstance(e.tag, str) and localname(e) == "PictureDecoration"]:
                 for deco_pic in [c for c in deco if isinstance(c.tag, str) and localname(c) == "Picture"]:
-                    # Отступ перед картинкой — хвост предыдущего узла; как в PS-порте, уходит он,
+                    # Отступ перед картинкой — хвост предыдущего узла; уходит он,
                     # а хвост самой картинки занимает его место.
                     prev = deco_pic.getprevious()
                     if prev is not None:
@@ -2442,7 +2442,7 @@ def main():
         # Вне блока ChildItems: стили нужны и оформлению формы без элементов
         # Auto-borrow StyleItems referenced in ChildItems and in the form's conditional appearance
         # (стиль только из оформления Конфигуратор тоже заимствует — эталон УТ CAStyle).
-        # Порядок первого упоминания — как в PS-порте (от него зависит порядок в ChildObjects)
+        # Порядок первого упоминания (от него зависит порядок в ChildObjects)
         style_scan_xml = child_items_xml + src_cond_appearance_xml
         referenced_styles = {}
         for m in re.finditer(r'ref="style:(\w+)"[^>]*kind="StyleItem"', style_scan_xml):
@@ -2646,7 +2646,7 @@ def main():
             kind = raw.strip()
             if not kind:
                 continue
-            # Сравнение РЕГИСТРОНЕЗАВИСИМОЕ явно: в ps1-порте `-ieq`, и молчаливое расхождение
+            # Сравнение РЕГИСТРОНЕЗАВИСИМОЕ явно, иначе молчаливое расхождение
             # портов на «none» ловится только глазами.
             if kind.lower() == "none":
                 no_module = True

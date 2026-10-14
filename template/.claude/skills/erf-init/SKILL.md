@@ -1,7 +1,7 @@
 ---
 name: erf-init
 description: Создать пустой внешний отчёт 1С (scaffold XML-исходников). Используй когда нужно создать новый внешний отчёт с нуля
-argument-hint: <Name> [Synonym] [--with-skd]
+argument-hint: -Name <Name> [-Synonym <Synonym>] [-SrcDir <SrcDir>] [-FormatVersion <версия>] [-WithSKD]
 allowed-tools:
   - Bash
   - Read
@@ -37,8 +37,8 @@ allowed-tools:
 
 ## Команда
 
-```powershell
-python "${CLAUDE_SKILL_DIR}/scripts/init.py" -Name "<Name>" [-Synonym "<Synonym>"] [-SrcDir "<SrcDir>"] [-FormatVersion "<версия>"] [-WithSKD]
+```bash
+python "${CLAUDE_SKILL_DIR}/scripts/erf-init.py" -Name "<Name>" [-Synonym "<Synonym>"] [-SrcDir "<SrcDir>"] [-FormatVersion "<версия>"] [-WithSKD]
 ```
 
 ## Дальнейшие шаги
@@ -46,4 +46,4 @@ python "${CLAUDE_SKILL_DIR}/scripts/init.py" -Name "<Name>" [-Synonym "<Synonym>
 - Добавить форму: `/form-add`
 - Добавить макет: `/template-add`
 - Добавить справку: `/help-add`
-- Собрать ERF: `/erf-build`
+- Собрать ERF: навык `1c-batch`, команда `build-epf` (та же команда собирает и .erf)

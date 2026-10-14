@@ -71,13 +71,13 @@ allowed-tools:
 
 ## Команда
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/cfe-borrow.py" -ExtensionPath src\cfe\extname -ConfigPath src\cf -Object "Catalog.Контрагенты"
 ```
 
 ## Примеры
 
-```powershell
+```bash
 # Заимствовать один объект
 ... -ExtensionPath src\cfe\extname -ConfigPath src\cf -Object "Catalog.Контрагенты"
 

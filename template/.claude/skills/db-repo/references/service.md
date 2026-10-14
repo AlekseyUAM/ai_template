@@ -2,7 +2,7 @@
 
 ## set-label — метка на версию
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/db-repo.py" -Command set-label -InfoBasePath "C:\Bases\MyDB" -Label "Релиз 1.2" -Version 120 -Comment "Передано в тест"
 ```
 
@@ -10,7 +10,7 @@ python "${CLAUDE_SKILL_DIR}/scripts/db-repo.py" -Command set-label -InfoBasePath
 
 ## optimize — оптимизация хранения
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/db-repo.py" -Command optimize -InfoBasePath "C:\Bases\MyDB"
 ```
 
@@ -18,7 +18,7 @@ python "${CLAUDE_SKILL_DIR}/scripts/db-repo.py" -Command optimize -InfoBasePath 
 
 ## clear-cache — очистка кеша
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/db-repo.py" -Command clear-cache -InfoBasePath "C:\Bases\MyDB" -CacheScope local
 ```
 

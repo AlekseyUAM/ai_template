@@ -14,7 +14,7 @@ allowed-tools:
 
 ## Команда
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/v8-xsd-fetch.py" -Versions "2.20"
 ```
 

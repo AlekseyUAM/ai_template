@@ -23,7 +23,7 @@ allowed-tools:
 2. Запусти скрипт.
 3. Изменить созданный объект — `/meta-edit`; проверить — `/meta-validate`.
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/meta-compile.py" -JsonPath "<json>" -OutputDir "<ConfigDir>"
 ```
 

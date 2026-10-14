@@ -3,7 +3,7 @@
 ## add-enumValue / add-command
 
 Просто имена (batch через `;;`):
-```powershell
+```bash
 -Operation add-enumValue -Value "Значение1 ;; Значение2 ;; Значение3"
 -Operation add-command -Value "ОткрытьДосье"
 ```

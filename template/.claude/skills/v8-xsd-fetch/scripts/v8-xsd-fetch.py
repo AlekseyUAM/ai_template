@@ -29,7 +29,7 @@ README_TEMPLATE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
 
 
 def ci_parse_args(parser, argv=None):
-    """parse_args по правилам PS: имена параметров и значения choices регистронезависимы."""
+    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
@@ -80,7 +80,7 @@ def http_get(url):
 
 def main():
     parser = argparse.ArgumentParser(description="Download 1C platform XSD schemas into .v8-xsd", allow_abbrev=False)
-    # Списком одной строкой — паритет с PS: powershell -File не связывает массивы
+    # Версии одной строкой через запятую (не массивом).
     parser.add_argument("-Versions", default="")
     parser.add_argument("-OutPath", default="")
     parser.add_argument("-Ref", default="main")
@@ -212,7 +212,7 @@ def main():
     local_versions = sorted((d for d in os.listdir(target)
                              if re.match(r"^\d+\.\d+$", d) and os.path.isdir(os.path.join(target, d))),
                             key=version_key)
-    # Руками, а не json.dumps: форматирование совпадает с PS-мастером.
+    # Руками, а не json.dumps: стабильное форматирование.
     # Версия без записи о происхождении (скопирована вручную) — с пустыми полями.
     def esc_json(s):
         return s.replace("\\", "\\\\").replace('"', '\\"')

@@ -27,7 +27,7 @@ allowed-tools:
 
 ## Команда
 
-```powershell
+```bash
 # Режим JSON DSL
 python "${CLAUDE_SKILL_DIR}/scripts/form-compile.py" -JsonPath "<json>" -OutputPath "<Form.xml>"
 
@@ -565,4 +565,4 @@ PictureField, привязанный к булеву/числу, рисует и
 
 - **Тип главного реквизита**: `ExternalDataProcessorObject.ИмяОбработки` (не `DataProcessorObject`)
 - **DataPath**: используйте реквизиты формы (`ИмяРеквизита`), а не `Объект.ИмяРеквизита` — у внешних обработок нет реквизитов объекта в метаданных
-- **Ссылочные типы**: `CatalogRef.XXX`, `DocumentRef.XXX` допустимы в XML, но для сборки EPF потребуется база с целевой конфигурацией (см. `/epf-build`)
+- **Ссылочные типы**: `CatalogRef.XXX`, `DocumentRef.XXX` допустимы в XML, но для сборки EPF потребуется база с целевой конфигурацией (см. навык `1c-batch`, команда `build-epf`)

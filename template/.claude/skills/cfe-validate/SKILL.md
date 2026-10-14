@@ -35,7 +35,7 @@ allowed-tools:
 
 ## Команда
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/cfe-validate.py" -ExtensionPath "src\cfe\extname"
 python "${CLAUDE_SKILL_DIR}/scripts/cfe-validate.py" -ExtensionPath "src\cfe\extname\Configuration.xml"
 python "${CLAUDE_SKILL_DIR}/scripts/cfe-validate.py" -ExtensionPath "src\cfe\extname" -ConfigPath "src\cf"

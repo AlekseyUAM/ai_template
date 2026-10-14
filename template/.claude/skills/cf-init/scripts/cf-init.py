@@ -4,10 +4,10 @@
 """Generates minimal XML source files for a 1C configuration."""
 import sys, os, argparse, re, uuid
 
-# Регистронезависимый ввод — паритет с PS1: в PowerShell имена параметров и [ValidateSet]
-# регистр не различают, в argparse совпадение точное.
+# Регистронезависимый ввод: имена параметров и значения choices принимаются
+# в любом регистре (в argparse по умолчанию совпадение точное).
 def ci_parse_args(parser, argv=None):
-    """parse_args по правилам PS: имена параметров и значения choices регистронезависимы."""
+    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
@@ -92,8 +92,8 @@ def main():
     # свежая база получает Version8_3_<своя>, и ни одна типовая в корпусе DontUse не содержит.
     # Само значение легально — платформа принимает его без ошибок, — но не выживает: замерено на
     # 8.3.25 и 8.3.27, выгрузка обоих возвращает Version8_3_8. Поэтому предупреждение, а не запрет.
-    # Сравнение регистронезависимо ЯВНО: в PS -eq таков по умолчанию, в py — нет, и молчаливое
-    # расхождение портов началось бы прямо здесь.
+    # Сравнение регистронезависимо ЯВНО (в Python по умолчанию с учётом регистра),
+    # иначе ошибка проходила бы молча.
     if (args.CompatibilityMode or "").lower() == "dontuse":
         print("WARNING: CompatibilityMode 'DontUse' is not \"no restrictions\" — the platform stores it as Version8_3_8. For no compatibility restrictions use the target platform version (e.g. Version8_3_27 for 8.3.27).", file=sys.stderr)
 
@@ -106,7 +106,7 @@ def main():
         "8.3.20": "2.13", "8.3.21": "2.14", "8.3.22": "2.15", "8.3.23": "2.16", "8.3.24": "2.17",
         "8.3.25": "2.18", "8.3.26": "2.19", "8.3.27": "2.20", "8.5.1": "2.21",
     }
-    # Регистронезависимо — как -match в PS-мастере
+    # Регистронезависимо
     m = re.match(r'^Version(\d+)_(\d+)_(\d+)$', args.CompatibilityMode or "", re.IGNORECASE)
     if m:
         compat_platform = f"{m.group(1)}.{m.group(2)}.{m.group(3)}"

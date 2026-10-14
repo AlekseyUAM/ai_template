@@ -6,7 +6,7 @@
 
 Изменение свойств объекта по имени свойства 1С (PascalCase, как в конфигураторе). Формат: `Ключ=Значение`
 (batch через `;;`):
-```powershell
+```bash
 -Operation modify-property -Value "CodeLength=11 ;; DescriptionLength=150"
 -Operation modify-property -Value "Hierarchical=true"
 ```
@@ -18,7 +18,7 @@
 
 `Type=...` перестраивает дескриптор типа значения. Значение — тип 1С в том же синтаксисе,
 что у реквизитов: составной через `+`, с квалификаторами и ссылочными типами:
-```powershell
+```bash
 -Operation modify-property -Value "Type=String(100) + Number(15,2) + CatalogRef.Номенклатура"
 ```
 Структурные свойства (со вложенными узлами) через `Ключ=Значение` не задаются — исключение только `Type`.
@@ -41,7 +41,7 @@
 ### add-owner / add-registerRecord / add-basedOn / add-registeredDocument
 
 Полное имя метаданных `MetaType.Name`:
-```powershell
+```bash
 -Operation add-owner -Value "Catalog.Контрагенты ;; Catalog.Организации"
 -Operation add-registerRecord -Value "AccumulationRegister.ОстаткиТоваров"
 -Operation add-basedOn -Value "Document.ЗаказКлиента"
@@ -51,14 +51,14 @@
 ### add-inputByString / add-dataLockField
 
 Пути полей (короткое имя реквизита разворачивается в полный путь автоматически):
-```powershell
+```bash
 -Operation add-inputByString -Value "StandardAttribute.Description ;; StandardAttribute.Code"
 -Operation add-dataLockField -Value "Организация ;; Контрагент"
 ```
 
 ### remove-owner / remove-registerRecord / remove-basedOn / remove-inputByString / remove-dataLockField / remove-registeredDocument
 
-```powershell
+```bash
 -Operation remove-owner -Value "Catalog.Контрагенты"
 -Operation remove-inputByString -Value "Catalog.МойСпр.StandardAttribute.Code"
 -Operation remove-dataLockField -Value "Организация"
@@ -67,7 +67,7 @@
 ### set-owners / set-registerRecords / set-basedOn / set-inputByString / set-dataLockFields / set-registeredDocuments
 
 Заменяют **весь список** (в отличие от add/remove):
-```powershell
+```bash
 -Operation set-owners -Value "Catalog.Организации ;; Catalog.Контрагенты"
 -Operation set-registerRecords -Value "AccumulationRegister.Продажи ;; AccumulationRegister.ОстаткиТоваров"
 -Operation set-inputByString -Value "StandardAttribute.Description ;; StandardAttribute.Code"

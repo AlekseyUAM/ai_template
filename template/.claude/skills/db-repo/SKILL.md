@@ -77,7 +77,7 @@ allowed-tools:
 
 ## Команда
 
-```powershell
+```bash
 python "${CLAUDE_SKILL_DIR}/scripts/db-repo.py" -Command <подкоманда> <параметры>
 ```
 
@@ -174,7 +174,7 @@ python "${CLAUDE_SKILL_DIR}/scripts/db-repo.py" -Command <подкоманда> 
 
 ## Примеры
 
-```powershell
+```bash
 # Захватить справочник вместе с подчинёнными объектами
 python "${CLAUDE_SKILL_DIR}/scripts/db-repo.py" -Command lock -InfoBasePath "C:\Bases\MyDB" -Objects "Справочник.Номенклатура" -WithChildren
 
