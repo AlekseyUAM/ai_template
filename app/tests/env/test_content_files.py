@@ -1,7 +1,7 @@
 from pathlib import Path
 
 CONTENT = Path(__file__).resolve().parents[3] / "template" / ".claude"
-AGENTS = {"analyst", "architect", "developer-tests", "developer", "tester", "reviewer",
+AGENTS = {"analyst", "architect", "developer-tests", "developer", "reviewer",
           "technical-writer"}
 SKILLS = {"mcp-usage", "bsl-coding-standards", "sdd-tdd-workflow", "task-orchestration",
           "query-analyze", "query-review"}

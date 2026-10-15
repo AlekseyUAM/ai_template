@@ -20,8 +20,9 @@ description: Запуск юнит-тестов 1С через run-enterprise с
 - Загрузка перед прогоном — расширения, а не конфигурации:
   `python .claude/skills/1c-batch/scripts/1c-batch.py load-extension src/cfe/ЮнитТесты --name ЮнитТесты`.
 
-Детали ролей — в `.claude/agents/developer-tests.md` (пишет тесты, фаза Red) и
-`.claude/agents/tester.md` (запускает, выносит вердикт). Это авторитетный источник.
+Детали ролей — в `.claude/agents/developer-tests.md` (пишет тесты и конфиг запуска,
+фаза Red) и навыке `task-orchestration` (оркестратор запускает прогон и выносит вердикт
+в `TESTING.md` на этапе `testing`). Это авторитетный источник.
 
 ## Как запускать
 

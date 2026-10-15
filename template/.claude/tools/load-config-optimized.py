@@ -4,10 +4,17 @@ load-config-optimized.py
 Кроссплатформенная загрузка конфигурации 1С: грузит в ИБ только изменённые файлы
 (git diff относительно HEAD по src/cf) через 1c-batch load-config --list-file.
 
-Использование:
-    python .claude/tools/load-config-optimized.py [--full]
+Частичная загрузка — единственный режим: она корректно отрабатывает все операции
+(добавление/удаление реквизита, добавление/удаление объекта) с тем же результатом,
+что и полная перезагрузка, но быстрее.
 
---full     выполнить полную загрузку (без --list-file)
+Использование:
+    python .claude/tools/load-config-optimized.py
+
+Скрипт печатает ход загрузки в stdout и завершается кодом 0 при успехе
+(или «нет изменённых файлов») и ненулевым кодом при ошибке загрузки. Оркестратор
+запускает его в фоне с перенаправлением вывода в лог — см. правило
+`optimized-config-loading`.
 """
 
 import sys
@@ -113,29 +120,6 @@ def get_changed_files() -> List[str]:
 
     return result
 
-def run_full_load() -> int:
-    """Выполни полную загрузку конфигурации"""
-    print("🔄 Режим: полная загрузка (--full)")
-    print()
-    print("Команда: 1c-batch load-config src/cf")
-
-    try:
-        result = subprocess.run(
-            batch_cmd() + ["load-config", "src/cf"],
-            cwd=get_project_root()
-        )
-
-        print()
-        if result.returncode == 0:
-            print("✅ Полная загрузка завершена")
-        else:
-            print("❌ Ошибка при загрузке конфигурации")
-
-        return result.returncode
-    except FileNotFoundError:
-        print("❌ Ошибка: не найден wrapper 1c-batch в .claude/skills/1c-batch/scripts.", file=sys.stderr)
-        return 1
-
 def run_optimized_load(files: List[str]) -> int:
     """Выполни оптимизированную загрузку конфигурации"""
     if not files:
@@ -193,26 +177,17 @@ def run_optimized_load(files: List[str]) -> int:
 
 def main():
     """Главная функция"""
-    print("📦 Загрузка конфигурации 1С (оптимизированная)")
+    print("📦 Загрузка конфигурации 1С (частичная, только изменённые файлы)")
     print()
 
-    # Проверь аргументы
-    full_load = "--full" in sys.argv
+    print("🔍 Определение изменённых файлов...")
+    files = get_changed_files()
 
-    if full_load:
-        return run_full_load()
-    else:
-        print("🔍 Определение изменённых файлов...")
-        files = get_changed_files()
+    if not files:
+        print("✅ Нет изменённых файлов конфигурации — загрузка не требуется")
+        return 0
 
-        if not files:
-            print("✅ Нет изменённых файлов конфигурации")
-            print()
-            print("📊 Совет: для гарантии консистентности выполните полную загрузку:")
-            print("   python .claude/tools/load-config-optimized.py --full")
-            return 0
-
-        return run_optimized_load(files)
+    return run_optimized_load(files)
 
 if __name__ == "__main__":
     try:

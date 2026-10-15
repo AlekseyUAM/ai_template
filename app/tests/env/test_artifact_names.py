@@ -7,9 +7,15 @@ def test_task_artifacts_rule_lists_all_seven():
     for a in SEVEN:
         assert a in text, a
 
-def test_tester_names_both_stages():
-    text = (TPL / "agents" / "tester.md").read_text(encoding="utf-8")
-    assert "TESTS.md" in text and "TESTING.md" in text and "TEST.md" not in text
+def test_developer_tests_names_tests_artifact():
+    text = (TPL / "agents" / "developer-tests.md").read_text(encoding="utf-8")
+    assert "TESTS.md" in text
+
+
+def test_orchestrator_names_testing_artifact():
+    # Этап testing (и его артефакт TESTING.md) ведёт оркестратор — субагента нет.
+    text = (TPL / "skills" / "task-orchestration" / "SKILL.md").read_text(encoding="utf-8")
+    assert "TESTING.md" in text
 
 def test_developer_names_develop():
     text = (TPL / "agents" / "developer.md").read_text(encoding="utf-8")

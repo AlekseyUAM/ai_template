@@ -3,13 +3,12 @@ let mcpData = [];
 // Выбранные MCP ids (порядок сохраняется)
 let mcpSelectedIds = [];
 
-const agentRoles = ["analyst", "architect", "developer-tests", "developer", "tester", "reviewer", "technical-writer"];
+const agentRoles = ["analyst", "architect", "developer-tests", "developer", "reviewer", "technical-writer"];
 const agentLabels = {
   analyst: "Аналитик",
   architect: "Архитектор",
   "developer-tests": "Разработчик тестов",
   developer: "Разработчик",
-  tester: "Тестировщик",
   reviewer: "Ревьюер",
   "technical-writer": "Технический писатель",
 };
@@ -22,7 +21,6 @@ const agentDefaults = {
   architect: { model: "opus", effort: "high" },
   "developer-tests": { model: "claude-sonnet-4-5", effort: "high" },
   developer: { model: "sonnet", effort: "high" },
-  tester: { model: "haiku", effort: "high" },
   reviewer: { model: "claude-opus-4-7", effort: "high" },
   "technical-writer": { model: "claude-sonnet-4-5", effort: "medium" },
 };
