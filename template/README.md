@@ -2,7 +2,7 @@
 
 Здесь хранится содержимое окружения Claude-агентов, которое разворачивается в `.claude/` проекта:
 
-- `agents/` — промпты субагентов (analyst, architect, developer-tests, developer, tester, reviewer, technical-writer)
+- `agents/` — промпты субагентов (analyst, architect, developer-tests, developer, reviewer, technical-writer); этап `testing` ведёт оркестратор сам, субагента-тестировщика нет
 - `skills/` — навыки агентов (каждый в отдельном подкаталоге со своим `SKILL.md`)
 - `rules/` — правила работы агентов
 - `hooks/` — хуки (например, `bsl_nudge.py` для подсказок при редактировании BSL)

@@ -83,7 +83,8 @@ class TestBuildStages:
         assert stage_dict["plan"]["subagent"] == "architect"
         assert stage_dict["tests"]["subagent"] == "developer-tests"
         assert stage_dict["develop"]["subagent"] == "developer"
-        assert stage_dict["testing"]["subagent"] == "tester"
+        # У testing нет субагента — этап ведёт оркестратор сам.
+        assert stage_dict["testing"]["subagent"] == ""
         assert stage_dict["review"]["subagent"] == "reviewer"
         assert stage_dict["docs"]["subagent"] == "technical-writer"
 

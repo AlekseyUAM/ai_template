@@ -3,6 +3,7 @@ TPL = Path(__file__).resolve().parents[3] / "template" / ".claude"
 
 
 def test_no_yaxunit_hardcoded():
-    for rel in ("agents/tester.md", "skills/sdd-tdd-workflow/SKILL.md"):
+    for rel in ("agents/developer-tests.md", "skills/sdd-tdd-workflow/SKILL.md",
+                "skills/task-orchestration/SKILL.md", "rules/run-unit-tests.md"):
         text = (TPL / rel).read_text(encoding="utf-8").lower()
         assert "yaxunit" not in text and "яксюнит" not in text

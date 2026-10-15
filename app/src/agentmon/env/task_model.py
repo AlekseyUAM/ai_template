@@ -13,7 +13,9 @@ DEFAULT_STAGES = [
     {"name": "plan", "subagent": "architect", "artifact": "ARCHITECT.md"},
     {"name": "tests", "subagent": "developer-tests", "artifact": "TESTS.md"},
     {"name": "develop", "subagent": "developer", "artifact": "DEVELOP.md"},
-    {"name": "testing", "subagent": "tester", "artifact": "TESTING.md"},
+    # У этапа testing нет субагента: прогон тестов и вердикт в TESTING.md ведёт
+    # оркестратор сам (долгая фоновая операция, субагент не умеет её дождаться).
+    {"name": "testing", "subagent": "", "artifact": "TESTING.md"},
     {"name": "review", "subagent": "reviewer", "artifact": "REVIEW.md"},
     {"name": "docs", "subagent": "technical-writer", "artifact": "DOCS.md"},
 ]

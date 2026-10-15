@@ -12,8 +12,9 @@ def build_output(event: dict) -> dict:
             "additionalContext": (
                 "[ai1c] Это выполнение задачи. Действуй как оркестратор: следуй "
                 "навыку task-orchestration, веди этапы из task.json и делегируй "
-                "субагентам (analyst/architect/developer-tests/developer/tester/"
-                "reviewer/technical-writer)."),
+                "субагентам (analyst/architect/developer-tests/developer/"
+                "reviewer/technical-writer). Этап testing оркестратор ведёт сам: "
+                "прогоняет тесты и выносит вердикт в TESTING.md (субагента нет)."),
         }}
     return {}
 
