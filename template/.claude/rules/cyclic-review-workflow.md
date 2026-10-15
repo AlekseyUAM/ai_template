@@ -10,14 +10,28 @@ description: Циклический workflow develop → [testing] → review д
 ## Включение циклического workflow
 
 Циклический workflow **активируется автоматически**, если включены этапы:
-- `testing: true` И/ИЛИ `review: true`
+- `testing: true` И/ИЛИ `review: true`, ИЛИ включён флаг `update_db: true`
 
 При этом:
+- Если `update_db` включён и загрузка в ИБ упала → цикл: develop → develop
 - Если `testing` включен и не пройдён → цикл: develop → testing → develop
 - Если `testing` включен и пройдён → цикл: develop → testing → review → develop
 - Если `testing` отключен, но `review` включен → цикл: develop → review → develop
 
 ## Логика выполнения
+
+### 0. Загрузка в ИБ после `develop` (если `update_db` включён)
+```
+После develop оркестратор грузит конфигурацию в ИБ (см. task-orchestration,
+правило optimized-config-loading); лог — logs/task#<id>/load-config.log:
+├─ Ошибка загрузки (в «грязную» базу грузить нельзя):
+│  ├─ Инкрементировать счётчик итераций
+│  ├─ Если итерации < 10: перезагрузить develop в pending
+│  │  (разработчик читает load-config.log и чинит исходники/метаданные)
+│  └─ Если итерации ≥ 10: отметить develop как failed, остановиться
+└─ Успех:
+   └─ Перейти к следующему включённому этапу (testing/review/docs)
+```
 
 ### 1. Этап `testing` (если включен)
 ```

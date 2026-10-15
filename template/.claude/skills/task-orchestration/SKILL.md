@@ -93,9 +93,16 @@ analyze → plan → tests → develop → testing → review → docs.
 python .claude/tools/load-config-optimized.py > logs/task#<id>/load-config.log 2>&1
 ```
 Проснувшись по завершении, проанализируй `logs/task#<id>/load-config.log` (см. правило
-`optimized-config-loading`): при ошибке загрузки/обновления пометь `develop` как
-`failed` (а не `done`) — загрузка в «грязную» базу недопустима. Итог зафиксируй при
-переходе к следующему этапу. Если `update_db` выключен — шаг пропусти.
+`optimized-config-loading`):
+- **Успех** — зафиксируй итог и переходи к следующему включённому этапу.
+- **Ошибка загрузки/обновления** — загрузка в «грязную» базу недопустима, поэтому
+  **верни задачу на `develop`** так же, как при падении тестов (цикл
+  `cyclic-review-workflow`): инкрементируй `.iteration_count`, заархивируй `DEVELOP.md`
+  (→ `DEVELOP.<n>.md`), переведи `develop` в `pending` и запусти его заново. Разработчик
+  прочитает `logs/task#<id>/load-config.log`, починит исходники/метаданные. При
+  `.iteration_count ≥ 10` пометь `develop` как `failed` и остановись.
+
+Если `update_db` выключен — шаг пропусти.
 
 ## Этап testing (ведёт оркестратор)
 Если этап `testing` включён, его ведёт **оркестратор** сам (субагента `tester` нет).
