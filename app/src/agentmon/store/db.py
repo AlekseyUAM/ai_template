@@ -70,6 +70,12 @@ class Db:
         # повторно (без блокировки), а параллельные потоки ждут снаружи.
         with self._lock:
             self._autocommit = False
+            # postgres открыт с autocommit=True — на время транзакции выключаем,
+            # чтобы commit/rollback охватывали весь блок. sqlite живёт на своём
+            # isolation_level, его не трогаем.
+            pg = self.dialect == "postgres"
+            if pg:
+                self.conn.autocommit = False
             try:
                 yield
                 self.conn.commit()
@@ -78,6 +84,9 @@ class Db:
                 raise
             finally:
                 self._autocommit = True
+                if pg:
+                    # после commit/rollback транзакции нет — вернуть autocommit
+                    self.conn.autocommit = True
 
     def execute(self, sql, params=()):
         def work(cur):
@@ -138,7 +147,13 @@ class Db:
 def connect(dsn: str) -> Db:
     if dsn.startswith(("postgresql://", "postgres://")):
         import psycopg
-        connector = lambda: psycopg.connect(dsn)  # noqa: E731
+        # autocommit=True — обязательно для долгоживущего общего соединения.
+        # Без него psycopg держит неявную транзакцию, и одно упавшее выражение
+        # (любой кривой запрос или тик диспетчера) переводит транзакцию в
+        # aborted-состояние: все последующие запросы падают с
+        # InFailedSqlTransaction до перезапуска процесса. Явные транзакции
+        # по-прежнему возможны — transaction() временно выключает autocommit.
+        connector = lambda: psycopg.connect(dsn, autocommit=True)  # noqa: E731
         return Db(connector(), "postgres", connector=connector)
     path = dsn[len("sqlite:///"):] if dsn.startswith("sqlite:///") else dsn
     conn = sqlite3.connect(path, check_same_thread=False)
