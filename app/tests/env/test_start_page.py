@@ -63,3 +63,22 @@ def test_start_js_has_russian_labels_and_project_name(tmp_path):
     assert "разработка" in js       # develop
     # имя проекта в заголовке стека
     assert "project_name" in js
+
+
+def test_start_js_has_collapsible_projects_and_stack_controls(tmp_path):
+    client = _client(tmp_path)
+    js = client.get("/static/start.js").text
+    # сворачивание проектов в дереве
+    assert "function toggleProject" in js
+    assert "collapsedProjects" in js
+    # заголовок стека: идентификатор + имя проекта, яркий статус
+    assert "stack-head-left" in js
+    assert "stack-id" in js
+    assert "function stackStatusClass" in js
+    # кнопки состояния + «нажата»/неактивна
+    assert "pressed" in js
+    assert "disabled" in js
+    # развёрнутая карточка задачи: пункты столбиком
+    assert "Продолжительность" in js
+    # перетаскивание только для planned-задач
+    assert 'draggable="${planned}"' in js

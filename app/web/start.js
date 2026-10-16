@@ -2,7 +2,8 @@
 
 const REFRESH_INTERVAL_MS = 5000;
 
-const expandedTasks = new Set();   // task_id развёрнутых карточек
+const expandedTasks = new Set();      // task_id развёрнутых карточек задач в стеке
+const collapsedProjects = new Set();  // id свёрнутых проектов в дереве (по умолчанию развёрнуты)
 
 function fmtTime(sec) {
   if (!sec) return "—";
@@ -100,9 +101,16 @@ function statusClass(status) {
 // Русское название статуса стека для отображения (сырые значения: idle/running/stopped)
 function stackStatusLabel(status) {
   if (status === "running") return "выполняется";
-  if (status === "stopped") return "остановлен";
+  if (status === "stopped") return "пауза";
   if (status === "idle") return "ожидает";
   return status;
+}
+
+// CSS-класс статуса стека для яркой подсветки
+function stackStatusClass(status) {
+  if (status === "running") return "st-run";
+  if (status === "stopped") return "st-pause";
+  return "st-idle";
 }
 
 // Русское название статуса задачи (сырые значения из БД — английские)
@@ -160,10 +168,10 @@ async function renderTree() {
   }
 
   const html = projects.map(proj => {
+    const collapsed = collapsedProjects.has(Number(proj.id));
     const tasksHtml = proj.tasks && proj.tasks.length > 0
       ? proj.tasks.map(task => {
           const cls = statusClass(task.status);
-          const elapsed = task.elapsed_min != null ? task.elapsed_min + " мин" : "";
           const taskPath = task.task_path || "";
           return `
             <div class="tree-task" data-task-id="${task.id}" data-status-raw="${escHtml(task.status_raw || '')}">
@@ -171,14 +179,14 @@ async function renderTree() {
               <span class="task-name" title="${escHtml(task.name)}">${escHtml(task.name)}</span>
               <span class="task-path" title="${escHtml(taskPath)}">${escHtml(taskPath)}</span>
               <span class="task-status ${cls}">${escHtml(task.status)}</span>
-              <span class="task-elapsed">${escHtml(elapsed)}</span>
             </div>`;
         }).join("")
       : `<div class="no-tasks">Задач нет</div>`;
 
     return `
       <div class="tree-project">
-        <div class="tree-project-header">
+        <div class="tree-project-header" data-proj-id="${proj.id}">
+          <span class="chevron">${collapsed ? "▸" : "▾"}</span>
           <span class="proj-name">${escHtml(proj.name)}</span>
           <span class="proj-path">${escHtml(proj.path || "")}</span>
           <div class="proj-actions">
@@ -186,14 +194,29 @@ async function renderTree() {
             <button class="proj-btn" title="Открыть в VS Code" onclick="openVsCode(${Number(proj.id)})">${ICON_VSCODE}</button>
           </div>
         </div>
-        <div class="tree-tasks">${tasksHtml}</div>
+        <div class="tree-tasks" ${collapsed ? 'style="display:none"' : ''}>${tasksHtml}</div>
       </div>`;
   }).join("");
 
   container.innerHTML = html;
 
+  // Свернуть/развернуть проект по клику на заголовок (кроме кнопок действий)
+  container.querySelectorAll(".tree-project-header").forEach(h => {
+    h.addEventListener("click", (e) => {
+      if (e.target.closest(".proj-actions")) return;
+      toggleProject(Number(h.dataset.projId));
+    });
+  });
+
   // Делаем planned-задачи перетаскиваемыми
   makePlanedTasksDraggable();
+}
+
+function toggleProject(projId) {
+  const id = Number(projId);
+  if (collapsedProjects.has(id)) collapsedProjects.delete(id);
+  else collapsedProjects.add(id);
+  renderTree();
 }
 
 // Используем общий помощник escapeHtml из esc.js (экранирует все пять символов).
@@ -229,10 +252,6 @@ async function renderStacks() {
                           item.task_status === "done" ? "status-done" : "";
             const open = expandedTasks.has(Number(item.task_id));
             const stageInfo = item.stage ? ` · ${escHtml(stageNameLabel(item.stage))}` : "";
-            const elapsed = item.started_at
-              ? ` · ${fmtElapsed(item.started_at, item.finished_at)}`
-                + (item.max_minutes ? ` / ${item.max_minutes} мин` : "")
-              : "";
             const stagesRows = (item.stages || []).map(s => {
               const rep = (s.name === item.last_done_stage && s.artifact_exists)
                 ? `<button class="report-btn" data-stage="${escHtml(s.name)}">Отчёт</button>`
@@ -245,21 +264,27 @@ async function renderStacks() {
               ? `<div>Обновление БД: ${fmtTime(item.db_update.started_at)} → ${fmtTime(item.db_update.finished_at)}</div>`
               : "";
             const details = `<div class="task-details" ${open ? "" : 'style="display:none"'}>
-                <div>Начало: ${fmtTime(item.started_at)} · Окончание: ${fmtTime(item.finished_at)} · Лимит: ${item.max_minutes || "—"} мин</div>
+                <div class="task-meta">
+                  <div><span>Начало</span><b>${fmtTime(item.started_at)}</b></div>
+                  <div><span>Окончание</span><b>${fmtTime(item.finished_at)}</b></div>
+                  <div><span>Продолжительность</span><b>${fmtElapsed(item.started_at, item.finished_at)}</b></div>
+                  <div><span>Лимит</span><b>${item.max_minutes || "—"} мин</b></div>
+                </div>
                 ${dbRow}
                 <table class="stage-table"><thead><tr><th>Этап</th><th>Статус</th><th>Итер.</th><th>Начало</th><th>Окончание</th><th></th></tr></thead>
                 <tbody>${stagesRows}</tbody></table>
               </div>`;
             // Убрать из стека можно только запланированную задачу.
-            const rm = item.task_status === "planned"
+            const planned = item.task_status === "planned";
+            const rm = planned
               ? `<button class="stack-item-del" title="Убрать из стека">✕</button>`
               : "";
-            return `<div class="stack-item" draggable="true" data-task-id="${item.task_id}"
+            return `<div class="stack-item" draggable="${planned}" data-task-id="${item.task_id}"
                          data-item-id="${item.item_id}" data-project-id="${item.project_id}">
               <div class="task-row">
                 <span class="chevron">${open ? "▾" : "▸"}</span>
                 <span class="${itemCls}">${escHtml(item.task_name)}</span>
-                <span style="font-size:10px; color:var(--muted);"> (${escHtml(taskStatusLabel(item.task_status))})${stageInfo}${elapsed}</span>
+                <span style="font-size:10px; color:var(--muted);"> (${escHtml(taskStatusLabel(item.task_status))})${stageInfo}</span>
                 ${rm}
               </div>
               ${details}
@@ -268,15 +293,28 @@ async function renderStacks() {
         : `<div class="stack-item-empty">Нет задач</div>`;
 
       const isRunning = stack.status === "running";
+      // Выполнить активна, пока стек не выполняется; при выполнении — «нажата».
+      const startCls = "stack-btn start-btn" + (isRunning ? " pressed disabled" : "");
+      const startBtn = isRunning
+        ? `<button class="${startCls}" title="Выполняется" disabled>▶</button>`
+        : `<button class="${startCls}" title="Выполнить" onclick="startStack(${Number(stack.id)})">▶</button>`;
+      // Пауза активна только при выполнении; в паузе — «нажата»; в ожидании — неактивна.
+      const stopPressed = stack.status === "stopped";
+      const stopCls = "stack-btn stop-btn" + (stopPressed ? " pressed disabled" : (!isRunning ? " disabled" : ""));
+      const stopBtn = isRunning
+        ? `<button class="${stopCls}" title="Пауза" onclick="stopStack(${Number(stack.id)})">⏸</button>`
+        : `<button class="${stopCls}" title="Пауза" disabled>⏸</button>`;
       return `
         <div class="stack-column" data-stack-id="${stack.id}" data-stack-status="${stack.status}">
           <div class="stack-header">
-            <span class="stack-name">${escHtml(stack.project_name || "— нет проекта")}</span>
-            <span class="stack-num">#${escHtml(stack.name)}</span>
-            <span class="stack-status">${escHtml(stackStatusLabel(stack.status))}</span>
+            <div class="stack-head-left">
+              <span class="stack-id">${escHtml(stack.name)}</span>
+              <span class="stack-proj">${escHtml(stack.project_name || "— нет проекта")}</span>
+            </div>
+            <span class="stack-status ${stackStatusClass(stack.status)}">${escHtml(stackStatusLabel(stack.status))}</span>
             <div class="stack-controls">
-              <button class="stack-btn start-btn" title="Запустить" onclick="startStack(${Number(stack.id)})">▶</button>
-              <button class="stack-btn stop-btn" title="Остановить" onclick="stopStack(${Number(stack.id)})" ${!isRunning ? 'style="opacity:0.4"' : ''}>⏸</button>
+              ${startBtn}
+              ${stopBtn}
               <button class="stack-btn delete-btn" title="Удалить" onclick="deleteStack(${Number(stack.id)})">✕</button>
             </div>
           </div>
