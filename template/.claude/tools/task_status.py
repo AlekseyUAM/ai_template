@@ -66,6 +66,24 @@ def _overall_status(stages) -> str:
     return "planned"
 
 
+def set_db_update(task_dir: str, phase: str) -> None:
+    """Пишет тайминги обновления ИБ в task.json: phase ∈ {start, done}."""
+    if phase not in ("start", "done"):
+        raise SystemExit(f"db-update: ожидается start|done, получено {phase!r}")
+    path = Path(task_dir) / "task.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    now = time.time()
+    du = data.get("db_update") or {}
+    if phase == "start":
+        du = {"started_at": now, "finished_at": None}
+    else:
+        du.setdefault("started_at", now)
+        du["finished_at"] = now
+    data["db_update"] = du
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+                    encoding="utf-8")
+
+
 def update(task_dir: str, stage: str, status: str, files) -> None:
     path = Path(task_dir) / "task.json"
     data = json.loads(path.read_text(encoding="utf-8"))
@@ -122,12 +140,17 @@ def main(argv=None) -> None:
     ap = argparse.ArgumentParser(description="Обновить статус этапа задачи")
     ap.add_argument("task_dir")
     ap.add_argument("stage")
-    ap.add_argument("status", choices=VALID,
-                    help="pending|running|done|failed|skipped|approve "
-                         "(approve — подтвердить гейт этапа, не меняя статус)")
+    ap.add_argument("status",
+                    help="pending|running|done|failed|skipped|approve, "
+                         "или start|done для псевдоэтапа db-update")
     ap.add_argument("--files", nargs="*", default=[])
     args = ap.parse_args(argv)
-    update(args.task_dir, args.stage, args.status, args.files)
+    if args.stage == "db-update":
+        set_db_update(args.task_dir, args.status)
+    else:
+        if args.status not in VALID:
+            raise SystemExit(f"неизвестный статус: {args.status}")
+        update(args.task_dir, args.stage, args.status, args.files)
 
 
 if __name__ == "__main__":

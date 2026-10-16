@@ -148,3 +148,16 @@ def test_cli_rerun_increments_iteration(tmp_path):
     dev = next(s for s in data["stages"] if s["name"] == "develop")
     assert dev["iteration"] == 2
     assert dev["finished_at"] is None          # сброшен до нового завершения
+
+
+def test_cli_db_update_start_and_done(tmp_path):
+    mod = _load()
+    d = _task(tmp_path)
+    mod.main([str(d), "db-update", "start"])
+    data = json.loads((d / "task.json").read_text(encoding="utf-8"))
+    assert data["db_update"]["started_at"] is not None
+    assert data["db_update"]["finished_at"] is None
+    mod.main([str(d), "db-update", "done"])
+    data = json.loads((d / "task.json").read_text(encoding="utf-8"))
+    assert data["db_update"]["finished_at"] is not None
+    assert data["db_update"]["finished_at"] >= data["db_update"]["started_at"]
