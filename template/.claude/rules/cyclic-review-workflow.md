@@ -90,7 +90,7 @@ description: Циклический workflow develop → [testing] → review д
 # Пример: посмотреть текущую итерацию этапа develop
 grep -A 20 '"name": "develop"' tasks/task#001/task.json | grep '"iteration"'
 
-# Поле iteration содержит число итераций (0 = первый запуск)
+# Поле iteration содержит номер итерации этапа (1 = первый запуск)
 # Максимум: 10 итераций
 ```
 
@@ -119,7 +119,7 @@ grep -A 20 '"name": "develop"' tasks/task#001/task.json | grep '"iteration"'
 
 ## Примечания
 
-- Счётчик итераций начинается с 0 в поле `iteration` этапа в `task.json`
+- Счётчик итераций начинается с 1 в поле `iteration` этапа в `task.json`
 - `task_status.py` инкрементирует `iteration` при переводе этапа в `running`
 - Максимум 10 итераций предотвращает бесконечные циклы
 - Каждый раз при возврате в develop обновляется DEVELOP.md с указанием номера итерации
