@@ -296,6 +296,21 @@ def test_remove_item(tmp_path):
     assert len(items) == 0
 
 
+def test_remove_item_rejects_non_planned(tmp_path):
+    """DELETE элемента не-planned задачи → 400, элемент остаётся в стеке."""
+    client, store, mon = make_client(tmp_path)
+    pid, tid = seed_project_and_task(store, tmp_path, task_status="running")
+
+    sr = StackRepo(store)
+    stack_id = sr.add(name="Стек")
+    item_id = sr.add_item(stack_id, tid)
+
+    r = client.delete(f"/api/env/stacks/{stack_id}/items/{item_id}")
+    assert r.status_code == 400
+    # элемент не удалён
+    assert len(sr.items(stack_id)) == 1
+
+
 # ─── POST /api/env/stacks/{id}/reorder ───────────────────────────────────────
 
 def test_reorder_idle_ok(tmp_path):

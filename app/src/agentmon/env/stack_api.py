@@ -233,7 +233,18 @@ def build_stack_router(store, monitor) -> APIRouter:
     def remove_item(stack_id: int, item_id: int):
         _require_store()
         sr = StackRepo(store)
+        tr = TaskRepo(store)
         _stack_or_404(sr, stack_id)
+        # из стека можно убрать только запланированную задачу — запущенные/
+        # завершённые элементы трогать нельзя, чтобы не рассинхронить прогон.
+        item = next((i for i in sr.items(stack_id) if i["id"] == item_id), None)
+        if item is not None:
+            task = tr.get(item["task_id"])
+            if task is not None and task["status"] != "planned":
+                raise HTTPException(
+                    status_code=400,
+                    detail="из стека можно убрать только запланированную задачу",
+                )
         sr.remove_item(item_id)
         return {"ok": True}
 
