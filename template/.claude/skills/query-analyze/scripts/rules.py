@@ -402,6 +402,76 @@ def check_alias_single_char(ctx):
     return out
 
 
+@rule(code="alias-collides-with-field", severity="warning",
+      title="Псевдоним источника совпадает с именем поля — платформа не разрешит «Псевдоним.Реквизит» (неоднозначное поле)")
+def check_alias_collides_with_field(ctx):
+    """Флагует источник, чей псевдоним совпадает с именем поля ДРУГОЙ таблицы.
+
+    Это самый частый класс ошибок агентов (ошибки 1 и 3 в errors.md): таблице
+    дают псевдоним, совпадающий с именем измерения/реквизита/поля ТЧ
+    (`Номенклатура`, `Партия`, `Организация`…). Платформа тогда не может
+    разрешить обращение `Псевдоним.Реквизит` и выдаёт:
+        «Неоднозначное поле "Номенклатура.Ссылка"».
+
+    Работает по AST-модели: собирает псевдонимы источников (table.alias) и имена
+    полей (path) из списка выбора, условий ГДЕ и ключей соединений вместе с их
+    таблицей-владельцем (tableId). Если псевдоним источника T совпадает с именем
+    поля, принадлежащего ДРУГОЙ таблице (tableId != id таблицы T) — обращение
+    `T.…` неоднозначно → находка. Совпадение с полем самой таблицы T
+    (нормальная ситуация) не флагуется.
+
+    Severity=warning: при реальном обращении `Псевдоним.Реквизит` это жёсткая
+    ошибка платформы (запрос не компилируется); эвристика высокой достоверности,
+    но формально обращение могло и не встретиться.
+    Если модель недоступна — правило пропускается.
+    """
+    out = []
+    for line, distinct, model_dict in iter_query_models(ctx):
+        tables = model_dict.get("tables") or []
+        alias_to_id = {}
+        alias_disp = {}
+        for t in tables:
+            a = t.get("alias") or ""
+            if a:
+                alias_to_id[a.upper()] = t.get("id")
+                alias_disp.setdefault(a.upper(), a)
+        if not alias_to_id:
+            continue
+        # (имя_поля_upper, id_таблицы-владельца) из полей, условий и соединений
+        refs = []
+        for f in model_dict.get("fields") or []:
+            p = f.get("path")
+            if p:
+                refs.append((p.upper(), f.get("tableId")))
+        for c in model_dict.get("conditions") or []:
+            p = c.get("path")
+            if p:
+                refs.append((p.upper(), c.get("tableId")))
+        for j in model_dict.get("joins") or []:
+            join_refs = [(j.get("leftPath"), j.get("leftTableId")),
+                         (j.get("rightPath"), j.get("rightTableId"))]
+            for c in j.get("conditions") or []:
+                join_refs.append((c.get("leftPath"), c.get("leftTableId")))
+                join_refs.append((c.get("rightPath"), c.get("rightTableId")))
+            for p, tid in join_refs:
+                if p:
+                    refs.append((p.upper(), tid))
+        reported = set()
+        for name_upper, owner_id in refs:
+            tid = alias_to_id.get(name_upper)
+            if tid is not None and tid != owner_id and name_upper not in reported:
+                reported.add(name_upper)
+                out.append(Finding(
+                    "alias-collides-with-field", "warning", line,
+                    f"Псевдоним источника «{alias_disp[name_upper]}» совпадает с именем поля "
+                    f"другой таблицы — обращение «{alias_disp[name_upper]}.Реквизит» станет "
+                    f"неоднозначным (ошибка платформы «Неоднозначное поле»). "
+                    f"Дайте источнику непересекающийся псевдоним "
+                    f"(например «Спр{alias_disp[name_upper]}», «Док{alias_disp[name_upper]}»).",
+                ))
+    return out
+
+
 @rule(code="query-one-line", severity="info",
       title="Запрос написан в одну строку — следует структурировать")
 def check_query_one_line(ctx):
@@ -1396,6 +1466,162 @@ def check_last_query_from_temp_only(ctx):
             "таблица метаданных читалась напрямую."
         ),
     )]
+
+
+# ── Порядок секций: УПОРЯДОЧИТЬ ПО должно идти перед ИТОГИ ──
+
+_KW_ITOGI = re.compile(r"\bИТОГИ\b", re.UNICODE)
+_KW_ORDER = re.compile(r"\bУПОРЯДОЧИТЬ\b", re.UNICODE)
+
+
+@rule(code="order-after-totals", severity="error",
+      title="УПОРЯДОЧИТЬ ПО после ИТОГИ — нарушен порядок секций (синтаксическая ошибка платформы)")
+def check_order_after_totals(ctx):
+    """Флагует УПОРЯДОЧИТЬ ПО, расположенное ПОСЛЕ секции ИТОГИ.
+
+    Ошибка 2 в errors.md: платформа требует строгий порядок секций
+    (…УПОРЯДОЧИТЬ ПО → АВТОУПОРЯДОЧИВАНИЕ → ИТОГИ) и выдаёт синтаксическую ошибку
+    «Синтаксическая ошибка "УПОРЯДОЧИТЬ"». ВАЖНО: вендоренный SDBL-парсер к такому
+    порядку ЛОЯЛЕН — он разбирает запрос без ошибки (молча теряя УПОРЯДОЧИТЬ),
+    поэтому query-not-parseable эту ошибку НЕ ловит. Нужна отдельная текстовая
+    проверка.
+
+    Работает по тексту (без AST): в каждом операторе пакета (ctx.statements) по
+    санированному тексту (без строк/комментариев) ищет ключевые слова ИТОГИ и
+    УПОРЯДОЧИТЬ; если УПОРЯДОЧИТЬ стоит после ИТОГИ — находка. Подзапросы с
+    собственным УПОРЯДОЧИТЬ (ПЕРВЫЕ … УПОРЯДОЧИТЬ) стоят в тексте раньше ИТОГИ
+    верхнего уровня, поэтому не дают ложного срабатывания.
+
+    Severity=error: гарантированный отказ компиляции запроса на платформе.
+    """
+    out = []
+    for line, stmt in ctx.statements:
+        code = _sanitize(stmt).upper()
+        mi = _KW_ITOGI.search(code)
+        mo = _KW_ORDER.search(code)
+        if mi and mo and mo.start() > mi.start():
+            rel_line = code.count("\n", 0, mo.start())
+            out.append(Finding(
+                "order-after-totals", "error", line + rel_line,
+                "УПОРЯДОЧИТЬ ПО расположено после ИТОГИ — нарушен обязательный порядок "
+                "секций (…УПОРЯДОЧИТЬ ПО → ИТОГИ). Платформа выдаст синтаксическую ошибку. "
+                "Переставьте УПОРЯДОЧИТЬ ПО перед ИТОГИ.",
+            ))
+    return out
+
+
+# ── ИТОГИ: неагрегированные негруппировочные поля ────
+
+@rule(code="totals-field-not-aggregated", severity="warning",
+      title="Поле выводится при ИТОГИ, но не агрегировано и не входит в группировку — на строках-итогах NULL")
+def check_totals_field_not_aggregated(ctx):
+    """Флагует «голое» поле в запросе с ИТОГИ, которое не входит ни в группировку
+    ИТОГИ, ни в агрегат.
+
+    Ошибка 4 в errors.md: `ИТОГИ ПО Номенклатура` без агрегатов для полей
+    `Услуга`, `Потребность`. При обходе `ОбходРезультатаЗапроса.ПоГруппировкам`
+    (и на строках ОБЩИЕ) негруппировочные неагрегированные поля возвращаются как
+    NULL. Побочно это даёт runtime-ошибку вида «Преобразование значения к типу
+    Булево не может быть выполнено», когда такое NULL-поле используется в условии.
+
+    Работает по AST-модели: если у запроса есть секция totals, то для каждого
+    «голого» поля списка выбора (есть path, нет func, нет expression) проверяется,
+    входит ли оно в totals.groupFields (по selectAlias или path) либо в
+    totals.totalFields (по operandAlias). Если нет — поле станет NULL на
+    строках-итогах → находка. Вычисляемые поля (expression) и агрегаты (func) не
+    флагуются. Если модель недоступна — правило пропускается.
+
+    Severity=warning: приводит к NULL в данных и, как правило, к runtime-ошибке
+    при обходе результата.
+    """
+    out = []
+    for line, distinct, model_dict in iter_query_models(ctx):
+        totals = model_dict.get("totals")
+        if not totals:
+            continue
+        group_aliases = set()
+        group_paths = set()
+        for g in totals.get("groupFields") or []:
+            sa = g.get("selectAlias")
+            if sa:
+                group_aliases.add(sa.upper())
+            gp = g.get("path")
+            if gp:
+                group_paths.add(gp.upper())
+        total_aliases = set()
+        for t in totals.get("totalFields") or []:
+            oa = t.get("operandAlias")
+            if oa:
+                total_aliases.add(oa.upper())
+        for f in model_dict.get("fields") or []:
+            if f.get("func") or f.get("expression"):
+                continue  # агрегат или вычисляемое поле — не «голое»
+            path = f.get("path")
+            if not path:
+                continue
+            alias = f.get("alias") or path
+            au = alias.upper()
+            pu = path.upper()
+            if au in group_aliases or pu in group_paths or au in total_aliases:
+                continue
+            out.append(Finding(
+                "totals-field-not-aggregated", "warning", line,
+                f"Поле «{alias}» выводится, но в секции ИТОГИ не входит ни в группировку, "
+                f"ни в агрегат — на строках-итогах (обход ПоГруппировкам, строки ОБЩИЕ) "
+                f"оно вернётся как NULL. Добавьте для него агрегат в ИТОГИ "
+                f"(например МАКСИМУМ({alias})) или уберите поле из списка выбора.",
+            ))
+    return out
+
+
+# ── Агрегат по возможно пустому набору без ЕСТЬNULL ──
+
+# СУММА/СРЕДНЕЕ/МАКСИМУМ/МИНИМУМ по пустому набору дают NULL.
+# КОЛИЧЕСТВО по пустому набору даёт 0 — поэтому в набор не входит.
+_NULLABLE_AGG = frozenset({"СУММА", "СРЕДНЕЕ", "МАКСИМУМ", "МИНИМУМ"})
+
+
+@rule(code="aggregate-without-isnull", severity="warning",
+      title="Агрегат без группировки и без ЕСТЬNULL — на пустом наборе вернёт NULL, а не 0")
+def check_aggregate_without_isnull(ctx):
+    """Флагует агрегат (СУММА/СРЕДНЕЕ/МАКСИМУМ/МИНИМУМ) в запросе без
+    СГРУППИРОВАТЬ ПО, не обёрнутый в ЕСТЬNULL.
+
+    Ошибка 6 в errors.md: `СУММА(ТоварыОбороты.СтоимостьРасход)` по набору без
+    движений возвращает NULL (а не 0). У агрегатного запроса без группировки
+    всегда ровно одна строка итога, поэтому `Выборка.Следующий()` истинно, и
+    ветка «Иначе Возврат 0» недостижима — функция возвращает NULL, а сравнение
+    `NULL = <число>` ложно. Баг проходит тихо (тест «зелёный» по ошибочной
+    причине).
+
+    Работает по AST-модели: срабатывает, только если в запросе НЕТ
+    СГРУППИРОВАТЬ ПО (grouping.groupFields пуст/отсутствует) — тогда агрегат по
+    всему набору даёт одну строку, которая на пустом наборе = NULL. При наличии
+    группировки пустые группы просто не дают строк (ветка «нет строк»
+    отрабатывает корректно), поэтому правило не срабатывает. Агрегат, обёрнутый в
+    ЕСТЬNULL, парсер представляет как expression (а не func) — двойных
+    срабатываний нет. Одно срабатывание на запрос.
+
+    Severity=warning: тихая логическая ошибка, влияющая на корректность.
+    КОЛИЧЕСТВО(*) не флагуется — на пустом наборе оно даёт 0, а не NULL.
+    Если модель недоступна — правило пропускается.
+    """
+    out = []
+    for line, distinct, model_dict in iter_query_models(ctx):
+        grouping = model_dict.get("grouping") or {}
+        if grouping.get("groupFields"):
+            continue  # есть СГРУППИРОВАТЬ ПО → пустые группы отсутствуют, ловушки нет
+        for f in model_dict.get("fields") or []:
+            if (f.get("func") or "").upper() in _NULLABLE_AGG:
+                out.append(Finding(
+                    "aggregate-without-isnull", "warning", line,
+                    "Агрегат (СУММА/СРЕДНЕЕ/МАКСИМУМ/МИНИМУМ) без СГРУППИРОВАТЬ ПО: "
+                    "на пустом наборе строк запрос вернёт одну строку со значением NULL "
+                    "(а не 0), и сравнение NULL с числом окажется ложным. "
+                    "Оберните агрегат в ЕСТЬNULL(..., 0).",
+                ))
+                break  # одно срабатывание на запрос
+    return out
 
 
 @rule(code="autoorder-not-recommended", severity="warning",

@@ -127,6 +127,150 @@ def test_keyword_lowercase_not_flagged_in_dotted_field():
     assert "keyword-lowercase" not in _codes("ВЫБРАТЬ Т.конец ИЗ Регистр.Остатки КАК Т")
 
 
+# ── alias-collides-with-field (ошибки 1 и 3) ─────────
+
+@pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
+def test_alias_collides_with_field_flagged():
+    # Псевдоним «Номенклатура» источника совпал с именем поля ТЧ.
+    q = (
+        "ВЫБРАТЬ СписокНоменклатуры.Номенклатура КАК Номенклатура "
+        "ИЗ Документ.ПриходнаяНакладная.СписокНоменклатуры КАК СписокНоменклатуры "
+        "ВНУТРЕННЕЕ СОЕДИНЕНИЕ Справочник.Номенклатура КАК Номенклатура "
+        "ПО СписокНоменклатуры.Номенклатура = Номенклатура.Ссылка"
+    )
+    assert "alias-collides-with-field" in _codes(q)
+
+
+@pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
+def test_alias_collides_with_field_in_join_key():
+    # Псевдоним «Партия» совпал с полем ВТ в ключе соединения (ошибка 3).
+    q = (
+        "ВЫБРАТЬ ВТОстаткиСырые.Партия КАК Партия "
+        "ПОМЕСТИТЬ ВТОстатки "
+        "ИЗ ВТОстаткиСырые КАК ВТОстаткиСырые "
+        "ЛЕВОЕ СОЕДИНЕНИЕ Документ.ПриходнаяНакладная КАК Партия "
+        "ПО ВТОстаткиСырые.Партия = Партия.Ссылка"
+    )
+    assert "alias-collides-with-field" in _codes(q)
+
+
+@pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
+def test_alias_no_collision_not_flagged():
+    # Непересекающийся псевдоним «СпрНоменклатура» — срабатывать не должно.
+    q = (
+        "ВЫБРАТЬ СписокНоменклатуры.Номенклатура КАК Номенклатура "
+        "ИЗ Документ.ПриходнаяНакладная.СписокНоменклатуры КАК СписокНоменклатуры "
+        "ВНУТРЕННЕЕ СОЕДИНЕНИЕ Справочник.Номенклатура КАК СпрНоменклатура "
+        "ПО СписокНоменклатуры.Номенклатура = СпрНоменклатура.Ссылка"
+    )
+    assert "alias-collides-with-field" not in _codes(q)
+
+
+# ── order-after-totals (ошибка 2) ────────────────────
+
+def test_order_after_totals_flagged():
+    # Текстовое правило — работает и без node.
+    q = (
+        "ВЫБРАТЬ ВТП.Номенклатура КАК Номенклатура "
+        "ИЗ ВТПотребности КАК ВТП "
+        "ИТОГИ ПО Номенклатура "
+        "УПОРЯДОЧИТЬ ПО Номенклатура"
+    )
+    assert "order-after-totals" in _codes(q)
+
+
+def test_order_before_totals_not_flagged():
+    q = (
+        "ВЫБРАТЬ ВТП.Номенклатура КАК Номенклатура "
+        "ИЗ ВТПотребности КАК ВТП "
+        "УПОРЯДОЧИТЬ ПО Номенклатура "
+        "ИТОГИ ПО Номенклатура"
+    )
+    assert "order-after-totals" not in _codes(q)
+
+
+def test_totals_without_order_not_flagged():
+    q = "ВЫБРАТЬ ВТП.Номенклатура КАК Номенклатура ИЗ ВТ КАК ВТП ИТОГИ ПО Номенклатура"
+    assert "order-after-totals" not in _codes(q)
+
+
+# ── totals-field-not-aggregated (ошибка 4) ───────────
+
+@pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
+def test_totals_field_not_aggregated_flagged():
+    q = (
+        "ВЫБРАТЬ Т.Номенклатура КАК Номенклатура, Т.Услуга КАК Услуга "
+        "ИЗ РегистрСведений.Цены КАК Т "
+        "ИТОГИ ПО Номенклатура"
+    )
+    assert "totals-field-not-aggregated" in _codes(q)
+
+
+@pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
+def test_totals_field_aggregated_not_flagged():
+    q = (
+        "ВЫБРАТЬ Т.Номенклатура КАК Номенклатура, Т.Услуга КАК Услуга "
+        "ИЗ РегистрСведений.Цены КАК Т "
+        "ИТОГИ МАКСИМУМ(Услуга) ПО Номенклатура"
+    )
+    assert "totals-field-not-aggregated" not in _codes(q)
+
+
+@pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
+def test_totals_grouping_field_not_flagged():
+    # Группировочное поле (Номенклатура) на строках-итогах заполнено — не флагуется.
+    q = (
+        "ВЫБРАТЬ Т.Номенклатура КАК Номенклатура "
+        "ИЗ РегистрСведений.Цены КАК Т "
+        "ИТОГИ ПО Номенклатура"
+    )
+    assert "totals-field-not-aggregated" not in _codes(q)
+
+
+@pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
+def test_no_totals_not_flagged():
+    q = "ВЫБРАТЬ Т.Номенклатура КАК Номенклатура, Т.Услуга КАК Услуга ИЗ РегистрСведений.Цены КАК Т"
+    assert "totals-field-not-aggregated" not in _codes(q)
+
+
+# ── aggregate-without-isnull (ошибка 6) ──────────────
+
+@pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
+def test_aggregate_without_isnull_flagged():
+    q = (
+        "ВЫБРАТЬ СУММА(ТоварыОбороты.СтоимостьРасход) КАК С "
+        "ИЗ РегистрНакопления.Товары.Обороты КАК ТоварыОбороты"
+    )
+    assert "aggregate-without-isnull" in _codes(q)
+
+
+@pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
+def test_aggregate_with_isnull_not_flagged():
+    q = (
+        "ВЫБРАТЬ ЕСТЬNULL(СУММА(ТоварыОбороты.СтоимостьРасход), 0) КАК С "
+        "ИЗ РегистрНакопления.Товары.Обороты КАК ТоварыОбороты"
+    )
+    assert "aggregate-without-isnull" not in _codes(q)
+
+
+@pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
+def test_aggregate_with_grouping_not_flagged():
+    # Есть СГРУППИРОВАТЬ ПО — пустые группы не дают строк, ловушки нет.
+    q = (
+        "ВЫБРАТЬ Т.Номенклатура КАК Номенклатура, СУММА(Т.Количество) КАК Кол "
+        "ИЗ РегистрНакопления.Товары КАК Т "
+        "СГРУППИРОВАТЬ ПО Т.Номенклатура"
+    )
+    assert "aggregate-without-isnull" not in _codes(q)
+
+
+@pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
+def test_count_not_flagged():
+    # КОЛИЧЕСТВО(*) на пустом наборе даёт 0, а не NULL.
+    q = "ВЫБРАТЬ КОЛИЧЕСТВО(*) КАК К ИЗ Справочник.Товары КАК Т"
+    assert "aggregate-without-isnull" not in _codes(q)
+
+
 def test_keyword_case_expression_words_not_flagged_as_alias():
     # «Конец», «Выбор», «Когда», «Тогда», «Иначе» как псевдоним поля (КАК Конец)
     # не должны давать ложное срабатывание keyword-lowercase (Fix 2).

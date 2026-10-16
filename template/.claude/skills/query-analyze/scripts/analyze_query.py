@@ -8,7 +8,7 @@ sys.stderr.reconfigure(encoding="utf-8")
 import rules
 
 # Коды правил, работающих только по тексту (без AST-модели); все остальные требуют модель.
-_TEXT_ONLY_CODES = frozenset({"keyword-lowercase", "query-one-line"})
+_TEXT_ONLY_CODES = frozenset({"keyword-lowercase", "query-one-line", "order-after-totals"})
 
 
 def main(argv=None):
