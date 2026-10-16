@@ -67,7 +67,8 @@ class TestBuildStages:
 
         required_fields = {
             "name", "enabled", "subagent", "artifact", "gate",
-            "approved", "status", "changed_files"
+            "approved", "status", "changed_files",
+            "started_at", "finished_at", "iteration",
         }
 
         for stage in stages:
