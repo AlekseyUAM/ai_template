@@ -76,6 +76,16 @@ def make_client(tmp_path):
     return client, store, mon
 
 
+def _make_client_with_store(tmp_path):
+    db = open_db(tmp_path / "reg.sqlite")
+    mon = FakeMonitor()
+    store = connect(str(tmp_path / "store.db"))
+    init_schema(store)
+    app = create_app(registry=ProjectRegistry(db), queue=TaskQueue(db),
+                     monitor=mon, store=store)
+    return TestClient(app), store
+
+
 def seed_project_and_task(store, tmp_path, task_status="planned"):
     """Создаёт проект и одну задачу, возвращает (project_id, task_id)."""
     pr = ProjectRepo(store)
@@ -493,3 +503,42 @@ def test_tasks_has_db_update_json_column(tmp_path):
     store = connect(str(tmp_path / "s.db"))
     init_schema(store)
     assert "db_update_json" in _existing_columns(store, "tasks")
+
+
+# ─── Обогащение элементов стека деталями этапов ───────────────────────────────
+
+def test_enrich_item_exposes_stage_details(tmp_path):
+    import json
+    from pathlib import Path
+    client, store = _make_client_with_store(tmp_path)
+    # проект на диске + задача + task.json с готовым этапом и артефактом
+    project_path = tmp_path / "proj"
+    (project_path / "tasks" / "task#100500").mkdir(parents=True)
+    (project_path / "tasks" / "task#100500" / "ANALYZE.md").write_text("ok", encoding="utf-8")
+    pid = ProjectRepo(store).add(name="proj", path=str(project_path))
+    tid = TaskRepo(store).add(
+        project_id=pid, name="t", identifier="100500", status="running",
+        stage="plan", started_at=1.0, finished_at=None, max_minutes=30, update_db=1,
+        stages_json=json.dumps([
+            {"name": "analyze", "status": "done", "enabled": True, "gate": True,
+             "approved": True, "started_at": 1.0, "finished_at": 2.0, "iteration": 1,
+             "artifact": "ANALYZE.md"},
+            {"name": "plan", "status": "running", "enabled": True, "gate": False,
+             "approved": False, "started_at": 2.0, "finished_at": None, "iteration": 1,
+             "artifact": "ARCHITECT.md"},
+        ]))
+    TaskRepo(store).update(tid, db_update_json=json.dumps({"started_at": 5.0, "finished_at": 6.0}))
+    sid = StackRepo(store).add(name="001")
+    StackRepo(store).add_item(sid, tid)
+
+    r = client.get("/api/env/stacks")
+    item = r.json()["stacks"][0]["items"][0]
+    assert item["stage"] == "plan"
+    assert item["max_minutes"] == 30
+    assert item["update_db"] is True
+    assert item["db_update"] == {"started_at": 5.0, "finished_at": 6.0}
+    assert item["last_done_stage"] == "analyze"
+    analyze = next(s for s in item["stages"] if s["name"] == "analyze")
+    assert analyze["artifact_exists"] is True
+    plan = next(s for s in item["stages"] if s["name"] == "plan")
+    assert plan["artifact_exists"] is False

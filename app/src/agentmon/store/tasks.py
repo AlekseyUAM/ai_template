@@ -27,6 +27,8 @@ class TaskRepo:
         max_minutes: int = 60,
         interactive: int = 0,
         mark_changes: int = 0,
+        started_at=None,
+        finished_at=None,
     ) -> int:
         """Создаёт задачу, возвращает её id.
 
@@ -36,16 +38,20 @@ class TaskRepo:
         max_minutes — максимальная длительность выполнения в минутах.
         interactive — интерактивный режим выполнения (0/1).
         mark_changes — выделять ли изменения в коде идентификаторами (0/1).
+        started_at — время начала выполнения задачи (UNIX timestamp).
+        finished_at — время окончания выполнения задачи (UNIX timestamp).
         """
         columns = [
             "project_id", "name", "identifier", "goal", "plan", "constraints", "tests",
             "stages_json", "status", "stage", "created_at", "kind",
             "update_db", "max_minutes", "interactive", "mark_changes",
+            "started_at", "finished_at",
         ]
         params = [
             project_id, name, identifier, goal, plan, constraints, tests,
             stages_json, status, stage, now, kind,
             int(update_db), int(max_minutes), int(interactive), int(mark_changes),
+            started_at, finished_at,
         ]
         return self._db.returning_id("tasks", columns, params)
 

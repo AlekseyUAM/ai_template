@@ -13,6 +13,8 @@
 
 503 возвращается для всех маршрутов, если store=None.
 """
+import json
+from pathlib import Path
 from types import SimpleNamespace
 
 from fastapi import APIRouter, HTTPException
@@ -21,6 +23,7 @@ from fastapi.responses import JSONResponse
 from agentmon.store.stacks import StackRepo
 from agentmon.store.tasks import TaskRepo
 from agentmon.store.projects import ProjectRepo
+from agentmon.env.task_schema import task_folder_name
 
 
 def _project_like(project_row) -> SimpleNamespace:
@@ -62,12 +65,59 @@ def build_stack_router(store, monitor) -> APIRouter:
             task = tr.get(item["task_id"])
             if task is None:
                 continue
+            try:
+                stages = json.loads(task.get("stages_json") or "[]")
+            except (ValueError, TypeError):
+                stages = []
+            db_update = None
+            if task.get("db_update_json"):
+                try:
+                    db_update = json.loads(task["db_update_json"])
+                except (ValueError, TypeError):
+                    db_update = None
+
+            # путь проекта на диске — для проверки наличия артефактов
+            project = pr.get(task["project_id"])
+            task_dir = None
+            if project is not None:
+                folder = task_folder_name(task["id"], task.get("identifier"))
+                task_dir = Path(project["path"]) / "tasks" / folder
+
+            last_done = None
+            enriched_stages = []
+            for s in stages:
+                artifact = s.get("artifact") or ""
+                exists = bool(task_dir and artifact
+                              and (task_dir / artifact).exists())
+                enriched_stages.append({
+                    "name": s.get("name"),
+                    "status": s.get("status"),
+                    "enabled": s.get("enabled"),
+                    "gate": s.get("gate"),
+                    "approved": s.get("approved"),
+                    "started_at": s.get("started_at"),
+                    "finished_at": s.get("finished_at"),
+                    "iteration": s.get("iteration", 1),
+                    "artifact": artifact,
+                    "artifact_exists": exists,
+                })
+                if s.get("status") == "done":
+                    last_done = s.get("name")
+
             result.append({
                 "item_id": item["id"],
                 "task_id": task["id"],
                 "task_name": task["name"],
                 "project_id": task["project_id"],
                 "task_status": task["status"],
+                "stage": task.get("stage"),
+                "started_at": task.get("started_at"),
+                "finished_at": task.get("finished_at"),
+                "max_minutes": task.get("max_minutes"),
+                "update_db": bool(task.get("update_db")),
+                "db_update": db_update,
+                "stages": enriched_stages,
+                "last_done_stage": last_done,
             })
         return result
 
