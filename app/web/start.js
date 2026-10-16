@@ -190,7 +190,7 @@ async function renderStacks() {
         ? stack.items.map(item => {
             const itemCls = item.task_status === "выполняется" ? "status-running" :
                           item.task_status === "ошибка" ? "status-failed" : "";
-            const open = expandedTasks.has(item.task_id);
+            const open = expandedTasks.has(Number(item.task_id));
             const stageInfo = item.stage ? ` · ${escHtml(item.stage)}` : "";
             const elapsed = item.started_at
               ? ` · ${fmtElapsed(item.started_at, item.finished_at)}`
@@ -198,7 +198,7 @@ async function renderStacks() {
               : "";
             const stagesRows = (item.stages || []).map(s => {
               const rep = (s.name === item.last_done_stage && s.artifact_exists)
-                ? `<button class="report-btn" onclick="event.stopPropagation(); openReport(${Number(item.task_id)}, '${escHtml(s.name)}')">Отчёт</button>`
+                ? `<button class="report-btn" data-stage="${escHtml(s.name)}">Отчёт</button>`
                 : "";
               return `<tr><td>${escHtml(s.name)}</td><td>${escHtml(s.status || "")}</td>`
                 + `<td>${s.iteration || 1}</td><td>${fmtTime(s.started_at)}</td>`
@@ -215,7 +215,7 @@ async function renderStacks() {
               </div>`;
             return `<div class="stack-item" draggable="true" data-task-id="${item.task_id}"
                          data-item-id="${item.item_id}" data-project-id="${item.project_id}">
-              <div class="task-row" onclick="toggleTaskDetails(${Number(item.task_id)})">
+              <div class="task-row">
                 <span class="chevron">${open ? "▾" : "▸"}</span>
                 <span class="${itemCls}">${escHtml(item.task_name)}</span>
                 <span style="font-size:10px; color:var(--muted);"> (${escHtml(item.task_status)})${stageInfo}${elapsed}</span>
@@ -245,12 +245,29 @@ async function renderStacks() {
 
     container.innerHTML = html;
 
-    // Установить обработчики DnD для элементов стека
+    // Установить обработчики DnD и кликов для элементов стека
     document.querySelectorAll(".stack-item").forEach(item => {
       item.addEventListener("dragstart", handleStackItemDragStart);
       item.addEventListener("dragend", handleStackItemDragEnd);
       item.addEventListener("dragover", handleStackItemDragOver);
       item.addEventListener("drop", handleStackItemDrop);
+
+      const taskRow = item.querySelector(".task-row");
+      if (taskRow) {
+        taskRow.addEventListener("click", () => {
+          const id = item.dataset.taskId;
+          toggleTaskDetails(Number(id));
+        });
+      }
+
+      item.querySelectorAll(".report-btn").forEach(btn => {
+        btn.addEventListener("click", (event) => {
+          event.stopPropagation();
+          const stage = btn.dataset.stage;
+          const id = btn.closest(".stack-item").dataset.taskId;
+          openReport(Number(id), stage);
+        });
+      });
     });
   } catch (e) {
     console.error("render stacks error", e);
@@ -475,8 +492,9 @@ function handleTreeTaskDragEnd(e) {
 }
 
 function toggleTaskDetails(taskId) {
-  if (expandedTasks.has(taskId)) expandedTasks.delete(taskId);
-  else expandedTasks.add(taskId);
+  const id = Number(taskId);
+  if (expandedTasks.has(id)) expandedTasks.delete(id);
+  else expandedTasks.add(id);
   renderStacks();
 }
 
@@ -511,6 +529,7 @@ async function syncRunningProjects() {
     for (const pid of pids) {
       await fetch(`/api/env/projects/${pid}/refresh`, { method: "POST" });
     }
+    await renderTree();
     await renderStacks();
   } catch (e) {
     console.error("sync running projects error", e);
