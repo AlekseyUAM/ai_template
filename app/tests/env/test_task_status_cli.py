@@ -120,3 +120,31 @@ def test_stage_roundtrip_with_new_fields(tmp_path):
     d = ts.task_dir(tmp_path, s.id)
     reloaded = ts.load_task(d)          # from_dict(Stage(**s)) не должен падать
     assert reloaded.stages[0].iteration == 1
+
+
+def test_cli_stamps_stage_timing(tmp_path):
+    mod = _load()
+    d = _task(tmp_path)
+    mod.main([str(d), "develop", "running"])
+    data = json.loads((d / "task.json").read_text(encoding="utf-8"))
+    dev = next(s for s in data["stages"] if s["name"] == "develop")
+    assert dev["started_at"] is not None
+    assert dev["finished_at"] is None
+    assert dev["iteration"] == 1
+    mod.main([str(d), "develop", "done"])
+    data = json.loads((d / "task.json").read_text(encoding="utf-8"))
+    dev = next(s for s in data["stages"] if s["name"] == "develop")
+    assert dev["finished_at"] is not None
+    assert dev["finished_at"] >= dev["started_at"]
+
+
+def test_cli_rerun_increments_iteration(tmp_path):
+    mod = _load()
+    d = _task(tmp_path)
+    mod.main([str(d), "develop", "running"])
+    mod.main([str(d), "develop", "done"])
+    mod.main([str(d), "develop", "running"])   # повторный прогон в цикле
+    data = json.loads((d / "task.json").read_text(encoding="utf-8"))
+    dev = next(s for s in data["stages"] if s["name"] == "develop")
+    assert dev["iteration"] == 2
+    assert dev["finished_at"] is None          # сброшен до нового завершения

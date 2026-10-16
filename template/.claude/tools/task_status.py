@@ -84,6 +84,18 @@ def update(task_dir: str, stage: str, status: str, files) -> None:
                 for f in (files or []):
                     if f not in changed:
                         changed.append(f)
+                # Тайминги этапа и номер итерации
+                now_stage = time.time()
+                if status == "running":
+                    if s.get("finished_at") is not None:
+                        # повторный прогон этапа в цикле develop↔testing/review
+                        s["iteration"] = int(s.get("iteration", 1)) + 1
+                        s["finished_at"] = None
+                    else:
+                        s.setdefault("iteration", 1)
+                    s["started_at"] = now_stage
+                elif status in ("done", "failed"):
+                    s["finished_at"] = now_stage
             # Пересчитать верхнеуровневый статус задачи по этапам (как на DB-пути
             # в task_api2.update_stage), иначе он застрянет на начальном значении.
             overall = _overall_status(data.get("stages", []))
