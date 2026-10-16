@@ -483,3 +483,13 @@ def test_stop_stack_not_alive_no_monitor_stop(tmp_path):
         f"monitor.stop не должен вызываться для не-alive проекта, "
         f"но было вызовов: {len(mon.stopped)}"
     )
+
+
+# ─── БД: колонка tasks.db_update_json ────────────────────────────────────────
+
+def test_tasks_has_db_update_json_column(tmp_path):
+    """Проверяет, что после init_schema колонка db_update_json присутствует в tasks."""
+    from agentmon.store.schema import _existing_columns
+    store = connect(str(tmp_path / "s.db"))
+    init_schema(store)
+    assert "db_update_json" in _existing_columns(store, "tasks")

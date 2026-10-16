@@ -26,7 +26,8 @@ def init_schema(db) -> None:
         update_db INTEGER NOT NULL DEFAULT 0,
         max_minutes INTEGER NOT NULL DEFAULT 60,
         interactive INTEGER NOT NULL DEFAULT 0,
-        mark_changes INTEGER NOT NULL DEFAULT 0)""")
+        mark_changes INTEGER NOT NULL DEFAULT 0,
+        db_update_json TEXT)""")
     db.execute(f"""CREATE TABLE IF NOT EXISTS stacks (
         id {pk}, name TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'idle',
         created_at {ts})""")
@@ -50,6 +51,7 @@ def init_schema(db) -> None:
         "max_minutes": "INTEGER DEFAULT 60",
         "interactive": "INTEGER DEFAULT 0",
         "mark_changes": "INTEGER DEFAULT 0",
+        "db_update_json": "TEXT",
     })
 
     _ensure_indexes(db)
