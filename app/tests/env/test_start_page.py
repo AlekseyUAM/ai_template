@@ -49,3 +49,17 @@ def test_start_js_has_remove_from_stack(tmp_path):
     assert "stack-item-del" in js
     # удаление элемента из стека через существующий REST-маршрут
     assert "/items/" in js
+
+
+def test_start_js_has_russian_labels_and_project_name(tmp_path):
+    client = _client(tmp_path)
+    js = client.get("/static/start.js").text
+    # русские названия статусов задачи и этапов
+    assert "function taskStatusLabel" in js
+    assert "function stageStatusLabel" in js
+    assert "function stageNameLabel" in js
+    assert "запланирована" in js   # planned
+    assert "ожидает" in js          # pending
+    assert "разработка" in js       # develop
+    # имя проекта в заголовке стека
+    assert "project_name" in js

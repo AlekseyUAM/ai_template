@@ -100,14 +100,15 @@
     /* Стеки */
     .stacks-container { display:flex; gap:12px; height:100%; overflow-x:auto; }
     .stack-column {
-      flex:0 0 280px; background:var(--panel2); border:1px solid var(--border);
+      flex:0 0 360px; background:var(--panel2); border:1px solid var(--border);
       border-radius:6px; display:flex; flex-direction:column; overflow:hidden;
     }
     .stack-header {
       padding:10px 12px; border-bottom:1px solid var(--border); background:#0d1117;
       display:flex; align-items:center; gap:8px;
     }
-    .stack-name { flex:1; font-size:13px; font-weight:600; line-height:28px; }
+    .stack-name { flex:1; font-size:13px; font-weight:600; line-height:28px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .stack-num { font-size:11px; color:var(--muted); line-height:28px; }
     .stack-status { font-size:11px; color:var(--muted); line-height:28px; }
     .stack-controls { display:flex; align-items:center; gap:6px; }
     .stack-btn {
@@ -137,7 +138,7 @@
     .stack-item-empty { color:var(--muted); font-size:11px; padding:12px 8px; text-align:center; }
     .task-row { display:flex; align-items:center; gap:4px; cursor:pointer; }
     .chevron { font-size:10px; color:var(--muted); width:10px; }
-    .task-details { margin-top:6px; font-size:11px; color:var(--muted); }
+    .task-details { margin-top:6px; font-size:11px; color:var(--muted); overflow-x:auto; }
     .stage-table { width:100%; border-collapse:collapse; margin-top:4px; }
     .stage-table th, .stage-table td { text-align:left; padding:2px 4px; border-bottom:1px solid #30363d; }
     .report-btn { font-size:10px; padding:1px 6px; cursor:pointer; background:#21262d; color:#c9d1d9; border:1px solid #30363d; border-radius:4px; }

@@ -10,6 +10,13 @@ function fmtTime(sec) {
   return d.toLocaleString("ru-RU");
 }
 
+// Компактное время (чч:мм) — для таблицы этапов, где ширина ограничена
+function fmtClock(sec) {
+  if (!sec) return "—";
+  const d = new Date(sec * 1000);
+  return d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+}
+
 function fmtElapsed(startSec, endSec) {
   if (!startSec) return "—";
   const end = endSec ? endSec * 1000 : Date.now();
@@ -96,6 +103,35 @@ function stackStatusLabel(status) {
   if (status === "stopped") return "остановлен";
   if (status === "idle") return "ожидает";
   return status;
+}
+
+// Русское название статуса задачи (сырые значения из БД — английские)
+function taskStatusLabel(status) {
+  const map = {
+    planned: "запланирована", queued: "в очереди", running: "выполняется",
+    done: "выполнена", failed: "ошибка", stopped: "остановлена",
+    awaiting_user: "ждёт подтверждения",
+  };
+  return map[status] || status;
+}
+
+// Русское название статуса этапа
+function stageStatusLabel(status) {
+  const map = {
+    pending: "ожидает", running: "выполняется", done: "готово",
+    failed: "ошибка", skipped: "пропущен",
+  };
+  return map[status] || status;
+}
+
+// Русское название этапа
+function stageNameLabel(name) {
+  const map = {
+    analyze: "анализ", plan: "проектирование", tests: "тесты",
+    develop: "разработка", testing: "тестирование", review: "ревью",
+    docs: "документация",
+  };
+  return map[name] || name;
 }
 
 /* ── построить дерево ────────────────────────────────────────────────── */
@@ -188,10 +224,11 @@ async function renderStacks() {
     const html = stacks.map(stack => {
       const itemsHtml = stack.items && stack.items.length > 0
         ? stack.items.map(item => {
-            const itemCls = item.task_status === "выполняется" ? "status-running" :
-                          item.task_status === "ошибка" ? "status-failed" : "";
+            const itemCls = item.task_status === "running" ? "status-running" :
+                          item.task_status === "failed" ? "status-failed" :
+                          item.task_status === "done" ? "status-done" : "";
             const open = expandedTasks.has(Number(item.task_id));
-            const stageInfo = item.stage ? ` · ${escHtml(item.stage)}` : "";
+            const stageInfo = item.stage ? ` · ${escHtml(stageNameLabel(item.stage))}` : "";
             const elapsed = item.started_at
               ? ` · ${fmtElapsed(item.started_at, item.finished_at)}`
                 + (item.max_minutes ? ` / ${item.max_minutes} мин` : "")
@@ -200,9 +237,9 @@ async function renderStacks() {
               const rep = (s.name === item.last_done_stage && s.artifact_exists)
                 ? `<button class="report-btn" data-stage="${escHtml(s.name)}">Отчёт</button>`
                 : "";
-              return `<tr><td>${escHtml(s.name)}</td><td>${escHtml(s.status || "")}</td>`
-                + `<td>${s.iteration || 1}</td><td>${fmtTime(s.started_at)}</td>`
-                + `<td>${fmtTime(s.finished_at)}</td><td>${rep}</td></tr>`;
+              return `<tr><td>${escHtml(stageNameLabel(s.name))}</td><td>${escHtml(stageStatusLabel(s.status || ""))}</td>`
+                + `<td>${s.iteration || 1}</td><td>${fmtClock(s.started_at)}</td>`
+                + `<td>${fmtClock(s.finished_at)}</td><td>${rep}</td></tr>`;
             }).join("");
             const dbRow = item.db_update
               ? `<div>Обновление БД: ${fmtTime(item.db_update.started_at)} → ${fmtTime(item.db_update.finished_at)}</div>`
@@ -222,7 +259,7 @@ async function renderStacks() {
               <div class="task-row">
                 <span class="chevron">${open ? "▾" : "▸"}</span>
                 <span class="${itemCls}">${escHtml(item.task_name)}</span>
-                <span style="font-size:10px; color:var(--muted);"> (${escHtml(item.task_status)})${stageInfo}${elapsed}</span>
+                <span style="font-size:10px; color:var(--muted);"> (${escHtml(taskStatusLabel(item.task_status))})${stageInfo}${elapsed}</span>
                 ${rm}
               </div>
               ${details}
@@ -234,7 +271,8 @@ async function renderStacks() {
       return `
         <div class="stack-column" data-stack-id="${stack.id}" data-stack-status="${stack.status}">
           <div class="stack-header">
-            <span class="stack-name">${escHtml(stack.name)}</span>
+            <span class="stack-name">${escHtml(stack.project_name || "— нет проекта")}</span>
+            <span class="stack-num">#${escHtml(stack.name)}</span>
             <span class="stack-status">${escHtml(stackStatusLabel(stack.status))}</span>
             <div class="stack-controls">
               <button class="stack-btn start-btn" title="Запустить" onclick="startStack(${Number(stack.id)})">▶</button>
