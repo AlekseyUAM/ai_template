@@ -109,6 +109,7 @@ def build_stack_router(store, monitor) -> APIRouter:
                 "task_id": task["id"],
                 "task_name": task["name"],
                 "project_id": task["project_id"],
+                "project_name": project["name"] if project is not None else None,
                 "task_status": task["status"],
                 "stage": task.get("stage"),
                 "started_at": task.get("started_at"),
@@ -122,10 +123,13 @@ def build_stack_router(store, monitor) -> APIRouter:
         return result
 
     def _stack_json(stack: dict, items: list) -> dict:
+        # имя проекта берём из первого элемента (стек ведётся в рамках проекта)
+        project_name = items[0]["project_name"] if items else None
         return {
             "id": stack["id"],
             "name": stack["name"],
             "status": stack["status"],
+            "project_name": project_name,
             "items": items,
         }
 

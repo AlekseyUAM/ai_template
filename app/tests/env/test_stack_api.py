@@ -148,6 +148,9 @@ def test_get_stacks_with_items(tmp_path):
     assert item["project_id"] == pid
     assert item["task_status"] == "planned"
     assert "item_id" in item
+    # имя проекта — на уровне элемента и стека (для заголовка стека)
+    assert item["project_name"] == "test-project"
+    assert st["project_name"] == "test-project"
 
 
 # ─── POST /api/env/stacks ─────────────────────────────────────────────────────
