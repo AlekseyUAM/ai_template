@@ -9,6 +9,7 @@ from .config_schema import SCHEMA_VERSION, EnvConfig, McpSelection, AgentModel
 from .installer import install_environment
 from .project_checks import (validate_name, requirements, check_db,
                              current_env_version, is_empty_dir, infer_db_kind)
+from .task_schema import task_folder_name
 
 
 _REQUIRED_FIELDS = ("name", "path", "identifier", "email",
@@ -447,6 +448,46 @@ def build_project_router(store, registry, monitor=None, run=subprocess.run,
             raise HTTPException(
                 status_code=500,
                 detail=f"не удалось открыть VS Code: {exc}")
+        return {"ok": True}
+
+    # ── open-report: открыть артефакт этапа задачи в VS Code ─────────────────
+
+    @router.post("/api/env/tasks/{tid}/open-report")
+    def open_report(tid: int, body: dict):
+        """Открывает артефакт указанного этапа задачи в VS Code."""
+        import json
+        from pathlib import Path
+        from agentmon.store.tasks import TaskRepo
+        task_repo = TaskRepo(store)
+        task = task_repo.get(tid)
+        if task is None:
+            raise HTTPException(status_code=404, detail=f"нет задачи с id={tid}")
+        stage_name = (body or {}).get("stage")
+        try:
+            stages = json.loads(task.get("stages_json") or "[]")
+        except (ValueError, TypeError):
+            stages = []
+        stage = next((s for s in stages if s.get("name") == stage_name), None)
+        if stage is None or not stage.get("artifact"):
+            raise HTTPException(status_code=404,
+                                detail=f"этап {stage_name!r} или его артефакт не найден")
+        project_repo, _ = get_repos()
+        project = project_repo.get(task["project_id"])
+        if project is None:
+            raise HTTPException(status_code=404, detail="проект задачи не найден")
+        folder = task_folder_name(task["id"], task.get("identifier"))
+        artifact_path = Path(project["path"]) / "tasks" / folder / stage["artifact"]
+        if not artifact_path.exists():
+            raise HTTPException(status_code=404,
+                                detail=f"файл отчёта не найден: {stage['artifact']}")
+        try:
+            popen(["code", str(artifact_path)])
+        except FileNotFoundError:
+            raise HTTPException(status_code=500,
+                                detail="команда 'code' не найдена в PATH — установите VS Code CLI")
+        except Exception as exc:                           # noqa: BLE001
+            raise HTTPException(status_code=500,
+                                detail=f"не удалось открыть VS Code: {exc}")
         return {"ok": True}
 
     return router

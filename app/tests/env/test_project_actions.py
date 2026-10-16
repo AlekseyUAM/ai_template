@@ -172,3 +172,38 @@ def test_refresh_transfers_stages_and_db_update(tmp_path):
     stages = json.loads(task["stages_json"])
     assert stages[0]["iteration"] == 2
     assert json.loads(task["db_update_json"]) == {"started_at": 2.0, "finished_at": 3.0}
+
+
+# ─── open-report ────────────────────────────────────────────────────────────
+
+def test_open_report_launches_code(tmp_path):
+    rec = RecordingPopen()
+    client, store = make_client(tmp_path, popen=rec)
+    pid, project_path = _seed_project(store, tmp_path)
+    d = project_path / "tasks" / "task#100500"
+    d.mkdir(parents=True)
+    (d / "ANALYZE.md").write_text("ok", encoding="utf-8")
+    import json
+    from agentmon.store.tasks import TaskRepo
+    tid = TaskRepo(store).add(
+        project_id=pid, name="t", identifier="100500", status="running",
+        stages_json=json.dumps([{"name": "analyze", "status": "done",
+                                 "artifact": "ANALYZE.md"}]))
+    r = client.post(f"/api/env/tasks/{tid}/open-report", json={"stage": "analyze"})
+    assert r.status_code == 200
+    assert rec.calls == [["code", str(d / "ANALYZE.md")]]
+
+
+def test_open_report_404_when_file_missing(tmp_path):
+    rec = RecordingPopen()
+    client, store = make_client(tmp_path, popen=rec)
+    pid, project_path = _seed_project(store, tmp_path)
+    import json
+    from agentmon.store.tasks import TaskRepo
+    tid = TaskRepo(store).add(
+        project_id=pid, name="t", identifier="100500", status="running",
+        stages_json=json.dumps([{"name": "analyze", "status": "done",
+                                 "artifact": "ANALYZE.md"}]))
+    r = client.post(f"/api/env/tasks/{tid}/open-report", json={"stage": "analyze"})
+    assert r.status_code == 404
+    assert rec.calls == []
