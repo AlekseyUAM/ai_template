@@ -30,3 +30,13 @@ def test_index_returns_200_with_expected_content(tmp_path):
     assert "Agent Monitor" in r.text
     assert "Проекты и задачи" in r.text
     assert "Выполнение" in r.text
+
+
+def test_start_js_has_expand_and_report(tmp_path):
+    client = _client(tmp_path)
+    js = client.get("/static/start.js").text
+    assert "function toggleTaskDetails" in js
+    assert "function openReport" in js
+    assert "open-report" in js
+    assert "expandedTasks" in js
+    assert "5 * 60 * 1000" in js          # таймер синка 5 минут

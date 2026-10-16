@@ -2,6 +2,21 @@
 
 const REFRESH_INTERVAL_MS = 5000;
 
+const expandedTasks = new Set();   // task_id развёрнутых карточек
+
+function fmtTime(sec) {
+  if (!sec) return "—";
+  const d = new Date(sec * 1000);
+  return d.toLocaleString("ru-RU");
+}
+
+function fmtElapsed(startSec, endSec) {
+  if (!startSec) return "—";
+  const end = endSec ? endSec * 1000 : Date.now();
+  const mins = Math.floor((end - startSec * 1000) / 60000);
+  return mins + " мин";
+}
+
 /* SVG-иконки кнопок панели проекта */
 const ICON_REFRESH = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13.6 8a5.6 5.6 0 1 1-1.64-3.96"/><path d="M13.8 2.5V5.2H11.1"/></svg>`;
 const ICON_VSCODE = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M23.15 2.587 18.21.21a1.494 1.494 0 0 0-1.705.29l-9.46 8.63-4.12-3.128a.999.999 0 0 0-1.276.057L.327 7.261A1 1 0 0 0 .326 8.74L3.899 12 .326 15.26a1 1 0 0 0 .001 1.479L1.65 17.94a.999.999 0 0 0 1.276.057l4.12-3.128 9.46 8.63a1.492 1.492 0 0 0 1.704.29l4.942-2.377A1.5 1.5 0 0 0 24 20.06V3.939a1.5 1.5 0 0 0-.85-1.352zm-5.146 14.861L10.826 12l7.178-5.448z"/></svg>`;
@@ -175,10 +190,37 @@ async function renderStacks() {
         ? stack.items.map(item => {
             const itemCls = item.task_status === "выполняется" ? "status-running" :
                           item.task_status === "ошибка" ? "status-failed" : "";
+            const open = expandedTasks.has(item.task_id);
+            const stageInfo = item.stage ? ` · ${escHtml(item.stage)}` : "";
+            const elapsed = item.started_at
+              ? ` · ${fmtElapsed(item.started_at, item.finished_at)}`
+                + (item.max_minutes ? ` / ${item.max_minutes} мин` : "")
+              : "";
+            const stagesRows = (item.stages || []).map(s => {
+              const rep = (s.name === item.last_done_stage && s.artifact_exists)
+                ? `<button class="report-btn" onclick="event.stopPropagation(); openReport(${Number(item.task_id)}, '${escHtml(s.name)}')">Отчёт</button>`
+                : "";
+              return `<tr><td>${escHtml(s.name)}</td><td>${escHtml(s.status || "")}</td>`
+                + `<td>${s.iteration || 1}</td><td>${fmtTime(s.started_at)}</td>`
+                + `<td>${fmtTime(s.finished_at)}</td><td>${rep}</td></tr>`;
+            }).join("");
+            const dbRow = item.db_update
+              ? `<div>Обновление БД: ${fmtTime(item.db_update.started_at)} → ${fmtTime(item.db_update.finished_at)}</div>`
+              : "";
+            const details = `<div class="task-details" ${open ? "" : 'style="display:none"'}>
+                <div>Начало: ${fmtTime(item.started_at)} · Окончание: ${fmtTime(item.finished_at)} · Лимит: ${item.max_minutes || "—"} мин</div>
+                ${dbRow}
+                <table class="stage-table"><thead><tr><th>Этап</th><th>Статус</th><th>Итер.</th><th>Начало</th><th>Окончание</th><th></th></tr></thead>
+                <tbody>${stagesRows}</tbody></table>
+              </div>`;
             return `<div class="stack-item" draggable="true" data-task-id="${item.task_id}"
                          data-item-id="${item.item_id}" data-project-id="${item.project_id}">
-              <span class="${itemCls}">${escHtml(item.task_name)}</span>
-              <span style="font-size:10px; color:var(--muted);"> (${escHtml(item.task_status)})</span>
+              <div class="task-row" onclick="toggleTaskDetails(${Number(item.task_id)})">
+                <span class="chevron">${open ? "▾" : "▸"}</span>
+                <span class="${itemCls}">${escHtml(item.task_name)}</span>
+                <span style="font-size:10px; color:var(--muted);"> (${escHtml(item.task_status)})${stageInfo}${elapsed}</span>
+              </div>
+              ${details}
             </div>`;
           }).join("")
         : `<div class="stack-item-empty">Нет задач</div>`;
@@ -432,6 +474,49 @@ function handleTreeTaskDragEnd(e) {
   e.currentTarget.classList.remove("drag-from");
 }
 
+function toggleTaskDetails(taskId) {
+  if (expandedTasks.has(taskId)) expandedTasks.delete(taskId);
+  else expandedTasks.add(taskId);
+  renderStacks();
+}
+
+async function openReport(taskId, stage) {
+  try {
+    const r = await fetch(`/api/env/tasks/${taskId}/open-report`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stage }),
+    });
+    if (!r.ok) {
+      let detail = r.status;
+      try { detail = (await r.json()).detail || detail; } catch (_) {}
+      alert("Не удалось открыть отчёт: " + detail);
+    }
+  } catch (e) {
+    console.error("open report error", e);
+    alert("Ошибка соединения");
+  }
+}
+
+// Раз в 5 минут подтягиваем task.json → БД для проектов с задачами в running-стеках
+async function syncRunningProjects() {
+  try {
+    const r = await fetch("/api/env/stacks");
+    if (!r.ok) return;
+    const data = await r.json();
+    const pids = new Set();
+    (data.stacks || []).forEach(st => {
+      if (st.status === "running") (st.items || []).forEach(it => pids.add(it.project_id));
+    });
+    for (const pid of pids) {
+      await fetch(`/api/env/projects/${pid}/refresh`, { method: "POST" });
+    }
+    await renderStacks();
+  } catch (e) {
+    console.error("sync running projects error", e);
+  }
+}
+
 /* ── init ────────────────────────────────────────────────────────────── */
 document.addEventListener("DOMContentLoaded", () => {
   loadVersion();
@@ -443,6 +528,9 @@ document.addEventListener("DOMContentLoaded", () => {
     renderTree();
     renderStacks();
   }, REFRESH_INTERVAL_MS);
+
+  // Синхронизация task.json → БД раз в 5 минут
+  setInterval(syncRunningProjects, 5 * 60 * 1000);
 
   // Обработчики кнопок создания
   const btnCreateStack = document.getElementById("btn-create-stack");
