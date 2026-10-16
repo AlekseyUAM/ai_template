@@ -60,7 +60,7 @@ def test_start_js_has_russian_labels_and_project_name(tmp_path):
     assert "function stageNameLabel" in js
     assert "запланирована" in js   # planned
     assert "ожидает" in js          # pending
-    assert "разработка" in js       # develop
+    assert "Разработка" in js       # develop — как в мастере задачи
     # имя проекта в заголовке стека
     assert "project_name" in js
 

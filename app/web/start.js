@@ -132,12 +132,12 @@ function stageStatusLabel(status) {
   return map[status] || status;
 }
 
-// Русское название этапа
+// Русское название этапа — как в мастере создания задачи (task-wizard.js)
 function stageNameLabel(name) {
   const map = {
-    analyze: "анализ", plan: "проектирование", tests: "тесты",
-    develop: "разработка", testing: "тестирование", review: "ревью",
-    docs: "документация",
+    analyze: "Аналитика", plan: "Планирование", tests: "Написание тестов",
+    develop: "Разработка", testing: "Тестирование", review: "Код-ревью",
+    docs: "Документация",
   };
   return map[name] || name;
 }
