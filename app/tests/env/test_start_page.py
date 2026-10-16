@@ -40,3 +40,12 @@ def test_start_js_has_expand_and_report(tmp_path):
     assert "open-report" in js
     assert "expandedTasks" in js
     assert "5 * 60 * 1000" in js          # таймер синка 5 минут
+
+
+def test_start_js_has_remove_from_stack(tmp_path):
+    client = _client(tmp_path)
+    js = client.get("/static/start.js").text
+    assert "function removeStackItem" in js
+    assert "stack-item-del" in js
+    # удаление элемента из стека через существующий REST-маршрут
+    assert "/items/" in js

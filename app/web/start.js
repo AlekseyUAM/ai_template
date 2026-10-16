@@ -213,12 +213,17 @@ async function renderStacks() {
                 <table class="stage-table"><thead><tr><th>Этап</th><th>Статус</th><th>Итер.</th><th>Начало</th><th>Окончание</th><th></th></tr></thead>
                 <tbody>${stagesRows}</tbody></table>
               </div>`;
+            // Убрать из стека можно только запланированную задачу.
+            const rm = item.task_status === "planned"
+              ? `<button class="stack-item-del" title="Убрать из стека">✕</button>`
+              : "";
             return `<div class="stack-item" draggable="true" data-task-id="${item.task_id}"
                          data-item-id="${item.item_id}" data-project-id="${item.project_id}">
               <div class="task-row">
                 <span class="chevron">${open ? "▾" : "▸"}</span>
                 <span class="${itemCls}">${escHtml(item.task_name)}</span>
                 <span style="font-size:10px; color:var(--muted);"> (${escHtml(item.task_status)})${stageInfo}${elapsed}</span>
+                ${rm}
               </div>
               ${details}
             </div>`;
@@ -266,6 +271,15 @@ async function renderStacks() {
           const stage = btn.dataset.stage;
           const id = btn.closest(".stack-item").dataset.taskId;
           openReport(Number(id), stage);
+        });
+      });
+
+      item.querySelectorAll(".stack-item-del").forEach(btn => {
+        btn.addEventListener("click", (event) => {
+          event.stopPropagation();
+          const itemId = item.dataset.itemId;
+          const stackId = item.closest(".stack-column").dataset.stackId;
+          removeStackItem(Number(stackId), Number(itemId));
         });
       });
     });
@@ -512,6 +526,24 @@ async function openReport(taskId, stage) {
     }
   } catch (e) {
     console.error("open report error", e);
+    alert("Ошибка соединения");
+  }
+}
+
+// Убрать задачу из стека (саму задачу не удаляет). Бэкенд разрешает только planned.
+async function removeStackItem(stackId, itemId) {
+  try {
+    const r = await fetch(`/api/env/stacks/${stackId}/items/${itemId}`, {
+      method: "DELETE",
+    });
+    if (!r.ok) {
+      let detail = r.status;
+      try { detail = (await r.json()).detail || detail; } catch (_) {}
+      alert("Не удалось убрать задачу из стека: " + detail);
+    }
+    await renderStacks();
+  } catch (e) {
+    console.error("remove stack item error", e);
     alert("Ошибка соединения");
   }
 }
