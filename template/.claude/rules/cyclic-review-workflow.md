@@ -25,11 +25,12 @@ description: Циклический workflow develop → [testing] → review д
 После develop оркестратор грузит конфигурацию в ИБ (см. task-orchestration,
 правило optimized-config-loading); лог — logs/task#<id>/load-config.log:
 ├─ Ошибка загрузки (в «грязную» базу грузить нельзя):
-│  ├─ Перезагрузить develop в pending (task_status.py ... develop pending — 
-│  │  автоматически инкрементирует iteration в task.json)
-│  ├─ Если iteration ≥ 10: отметить develop как failed, остановиться
+│  ├─ Если iteration этапа develop ≥ 10: отметить develop как failed, остановиться
+│  ├─ Иначе: архивировать DEVELOP.md → DEVELOP.<n>.md, где <n> — текущее значение
+│  │  iteration в task.json на момент архивирования (до следующего running)
+│  ├─ Перезагрузить develop в pending: task_status.py ... develop pending
 │  │  (разработчик читает load-config.log и чинит исходники/метаданные)
-│  └─ Архивировать DEVELOP.md → DEVELOP.<n>.md, где <n> — прежнее значение iteration
+│  │  iteration инкрементируется автоматически при следующем переводе в running
 └─ Успех:
    └─ Перейти к следующему включённому этапу (testing/review/docs)
 ```
@@ -40,13 +41,18 @@ description: Циклический workflow develop → [testing] → review д
 «| Вердикт | ✓ ПРОЙДЕНО |» (не голый глиф ✓/✗):
 ├─ Если строки «| Вердикт | ✓ ПРОЙДЕНО |» НЕТ (тесты не пройдены —
 │  строка «| Вердикт | ✗ НЕ ПРОЙДЕНО |»):
-│  ├─ Вернуть по виновнику (строка «| Виновник | … |») — task_status.py 
-│  │  автоматически инкрементирует iteration возвращаемого этапа в task.json:
-│  │  ├─ «| Виновник | код |»  → task_status.py ... develop pending (чинит разработчик)
-│  │  └─ «| Виновник | тест |» → task_status.py ... tests pending (чинит developer-tests;
-│  │     develop не трогаем — код не менялся)
-│  ├─ Архивировать артефакты (DEVELOP.md → DEVELOP.<n>.md, где <n> — прежнее iteration)
-│  └─ Если iteration ≥ 10: отметить этап как failed, остановиться
+│  ├─ Определить возвращаемый этап по виновнику (строка «| Виновник | … |»):
+│  │  ├─ «| Виновник | код |»  → возвращаемый этап: develop
+│  │  └─ «| Виновник | тест |» → возвращаемый этап: tests
+│  ├─ Если iteration возвращаемого этапа ≥ 10: отметить этот этап как failed, остановиться
+│  ├─ Архивировать артефакты возвращаемого этапа:
+│  │  ├─ виновник код  → DEVELOP.md → DEVELOP.<n>.md, где <n> — текущее iteration
+│  │  │  этапа develop в task.json на момент архивирования (до следующего running)
+│  │  └─ виновник тест → TESTS.md → TESTS.<n>.md, где <n> — текущее iteration
+│  │     этапа tests в task.json на момент архивирования (до следующего running)
+│  └─ Вернуть этап в pending: task_status.py ... <этап> pending
+│     (iteration инкрементируется автоматически при следующем переводе в running;
+│      develop не трогаем при виновнике тест — код не менялся)
 └─ Если строка «| Вердикт | ✓ ПРОЙДЕНО |» есть (все тесты пройдены):
    └─ Перейти к review
 ```
@@ -57,11 +63,14 @@ description: Циклический workflow develop → [testing] → review д
 «| Вердикт | ✓ ПРИНЯТО |» (не голый глиф ✓/✗ — он встречается в чек-листе):
 ├─ Если строки «| Вердикт | ✓ ПРИНЯТО |» НЕТ (вердикт «на доработку» —
 │  строка «| Вердикт | ✗ НА ДОРАБОТКУ |»):
-│  ├─ Определить следующий этап: task_status.py инкрементирует iteration:
-│  │  ├─ Если testing включен: task_status.py ... testing pending
-│  │  └─ Если testing отключен: task_status.py ... develop pending
-│  ├─ Архивировать артефакты (REVIEW.md → REVIEW.<n>.md, где <n> — прежнее iteration)
-│  └─ Если iteration ≥ 10: отметить review как failed, остановиться
+│  ├─ Определить возвращаемый этап:
+│  │  ├─ Если testing включен: возвращаемый этап — testing
+│  │  └─ Если testing отключен: возвращаемый этап — develop
+│  ├─ Если iteration возвращаемого этапа ≥ 10: отметить этот этап как failed, остановиться
+│  ├─ Архивировать артефакты (REVIEW.md → REVIEW.<n>.md, где <n> — текущее значение
+│  │  iteration этапа review в task.json на момент архивирования (до следующего running))
+│  └─ Вернуть этап в pending: task_status.py ... <этап> pending
+│     (iteration инкрементируется автоматически при следующем переводе в running)
 └─ Если строка «| Вердикт | ✓ ПРИНЯТО |» есть (одобрено):
    └─ Перейти к следующему включённому этапу (обычно `docs`)
 ```
@@ -90,13 +99,15 @@ grep -A 20 '"name": "develop"' tasks/task#001/task.json | grep '"iteration"'
 Перед новой итерацией артефакты переименовываются для сохранения истории:
 
 ```bash
-# Пример: если это итерация 2, то:
-# TESTS.md → TESTS.1.md (старый, если возврат на tests — виновник тест)
-# DEVELOP.md → DEVELOP.1.md (старый, если возврат на develop — виновник код)
-# TESTING.md → TESTING.1.md (старый)
-# REVIEW.md → REVIEW.1.md (старый)
+# <n> — текущее значение поля iteration этапа в task.json НА МОМЕНТ архивирования
+# (до следующего перевода в running, который инкрементирует iteration).
+# Пример: iteration = 1 в момент архивирования → файл получает суффикс .1.md:
+# DEVELOP.md → DEVELOP.1.md  (виновник код → возврат на develop)
+# TESTS.md   → TESTS.1.md    (виновник тест → возврат на tests)
+# TESTING.md → TESTING.1.md  (при возврате на develop/tests из-за падения тестов)
+# REVIEW.md  → REVIEW.1.md   (при возврате из review на доработку)
 #
-# Новые артефакты будут созданы как TESTS.md / DEVELOP.md, TESTING.md, REVIEW.md
+# Новые артефакты создаются с исходным именем: DEVELOP.md, TESTS.md, TESTING.md, REVIEW.md
 ```
 
 ## Остановка цикла
