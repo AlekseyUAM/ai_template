@@ -17,6 +17,9 @@ class Stage:
     artifact: str
     status: str
     changed_files: list
+    started_at: float | None = None
+    finished_at: float | None = None
+    iteration: int = 1
 
 
 @dataclass
@@ -50,7 +53,8 @@ def build_stages(enabled_names) -> list:
         stages.append(Stage(name=d["name"], enabled=on, subagent=d["subagent"],
                             artifact=d["artifact"],
                             status="pending" if on else "skipped",
-                            changed_files=[]))
+                            changed_files=[],
+                            started_at=None, finished_at=None, iteration=1))
     return stages
 
 

@@ -101,3 +101,22 @@ def test_cli_clears_finished_at_when_reopened(tmp_path):
     reopened = json.loads((d / "task.json").read_text(encoding="utf-8"))
     assert reopened["status"] == "planned"
     assert reopened["finished_at"] is None
+
+
+def test_stage_has_timing_and_iteration_defaults(tmp_path):
+    s = ts.create_task(tmp_path, title="a", goal="", plan="", constraints="",
+                       enabled_stages=["develop"])
+    d = ts.task_dir(tmp_path, s.id)
+    data = json.loads((d / "task.json").read_text(encoding="utf-8"))
+    dev = next(x for x in data["stages"] if x["name"] == "develop")
+    assert dev["started_at"] is None
+    assert dev["finished_at"] is None
+    assert dev["iteration"] == 1
+
+
+def test_stage_roundtrip_with_new_fields(tmp_path):
+    s = ts.create_task(tmp_path, title="a", goal="", plan="", constraints="",
+                       enabled_stages=["develop"])
+    d = ts.task_dir(tmp_path, s.id)
+    reloaded = ts.load_task(d)          # from_dict(Stage(**s)) не должен падать
+    assert reloaded.stages[0].iteration == 1

@@ -61,6 +61,9 @@ def build_stages(enabled_names, gated_names=()):
             "approved": False,
             "status": "pending" if is_enabled else "skipped",
             "changed_files": [],
+            "started_at": None,
+            "finished_at": None,
+            "iteration": 1,
         }
         stages.append(stage)
 
