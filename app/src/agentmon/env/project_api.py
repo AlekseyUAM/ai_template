@@ -417,6 +417,11 @@ def build_project_router(store, registry, monitor=None, run=subprocess.run,
             file_status = data.get("status")
             if file_status and task.get("status") not in protected:
                 fields["status"] = file_status
+            if "stages" in data:
+                fields["stages_json"] = json.dumps(data["stages"], ensure_ascii=False)
+            if "db_update" in data:
+                fields["db_update_json"] = json.dumps(data["db_update"],
+                                                       ensure_ascii=False)
             if fields:
                 task_repo.update(task["id"], **fields)
                 updated += 1

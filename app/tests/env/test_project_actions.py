@@ -150,3 +150,25 @@ def test_open_vscode_unknown_project_404(tmp_path):
     rec = RecordingPopen()
     client, _ = make_client(tmp_path, popen=rec)
     assert client.post("/api/env/projects/999/open-vscode").status_code == 404
+
+
+def test_refresh_transfers_stages_and_db_update(tmp_path):
+    client, store = make_client(tmp_path)
+    pid, project_path = _seed_project(store, tmp_path)
+    from agentmon.store.tasks import TaskRepo
+    tid = TaskRepo(store).add(project_id=pid, name="t", identifier="100500",
+                              stages_json="[]", status="planned")
+    _write_task_json(project_path, "task#100500", {
+        "status": "running", "stage": "develop",
+        "started_at": 1.0, "finished_at": None,
+        "stages": [{"name": "develop", "status": "running", "iteration": 2,
+                    "started_at": 1.0, "finished_at": None}],
+        "db_update": {"started_at": 2.0, "finished_at": 3.0},
+    })
+    r = client.post(f"/api/env/projects/{pid}/refresh")
+    assert r.status_code == 200
+    import json
+    task = TaskRepo(store).get(tid)
+    stages = json.loads(task["stages_json"])
+    assert stages[0]["iteration"] == 2
+    assert json.loads(task["db_update_json"]) == {"started_at": 2.0, "finished_at": 3.0}
