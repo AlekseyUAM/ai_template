@@ -271,7 +271,7 @@ async function renderStacks() {
                   <div><span>Лимит</span><b>${item.max_minutes || "—"} мин</b></div>
                 </div>
                 ${dbRow}
-                <table class="stage-table"><thead><tr><th>Этап</th><th>Статус</th><th>Итер.</th><th>Начало</th><th>Окончание</th><th></th></tr></thead>
+                <table class="stage-table"><thead><tr><th>Этап</th><th>Статус</th><th>Ит.</th><th>Нач.</th><th>Оконч.</th><th></th></tr></thead>
                 <tbody>${stagesRows}</tbody></table>
               </div>`;
             // Убрать из стека можно только запланированную задачу.

@@ -103,7 +103,7 @@
     /* Стеки */
     .stacks-container { display:flex; gap:12px; flex:1; min-height:0; overflow-x:auto; }
     .stack-column {
-      flex:0 0 360px; background:var(--panel2); border:1px solid var(--border);
+      flex:0 0 400px; background:var(--panel2); border:1px solid var(--border);
       border-radius:6px; display:flex; flex-direction:column; overflow:hidden;
     }
     .stack-header {
@@ -112,7 +112,7 @@
     }
     .stack-head-left { flex:1; display:flex; flex-direction:column; min-width:0; }
     .stack-id { font-size:16px; font-weight:700; line-height:1.2; color:var(--txt); }
-    .stack-proj { font-size:11px; color:var(--muted); font-weight:400;
+    .stack-proj { font-size:13px; color:var(--muted); font-weight:400;
                   white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     .stack-status { font-size:12px; font-weight:600; }
     .stack-status.st-run   { color:var(--green); }
@@ -156,8 +156,14 @@
     .task-meta > div { display:flex; justify-content:space-between; gap:8px; }
     .task-meta > div > span { color:var(--muted); }
     .task-meta > div > b { color:var(--txt); font-weight:600; }
-    .stage-table { width:100%; border-collapse:collapse; margin-top:4px; }
-    .stage-table th, .stage-table td { text-align:left; padding:2px 4px; border-bottom:1px solid #30363d; }
+    .stage-table { width:100%; border-collapse:collapse; margin-top:4px; font-size:10px; table-layout:fixed; }
+    .stage-table th, .stage-table td { text-align:left; padding:1px 3px; border-bottom:1px solid #30363d;
+                                       overflow-wrap:anywhere; }
+    /* узкие колонки итерации/времени, остальное — под этап и статус */
+    .stage-table th:nth-child(3), .stage-table td:nth-child(3) { width:26px; text-align:center; }
+    .stage-table th:nth-child(4), .stage-table td:nth-child(4),
+    .stage-table th:nth-child(5), .stage-table td:nth-child(5) { width:40px; }
+    .stage-table th:nth-child(6), .stage-table td:nth-child(6) { width:46px; }
     .report-btn { font-size:10px; padding:1px 6px; cursor:pointer; background:#21262d; color:#c9d1d9; border:1px solid #30363d; border-radius:4px; }
     .report-btn:hover { background:#30363d; }
     .stack-item-del { margin-left:auto; font-size:11px; line-height:1; padding:0 4px; cursor:pointer; background:none; color:var(--muted); border:none; }
@@ -207,7 +213,7 @@
   </div>
 
   <script src="/static/esc.js"></script>
-  <script src="/static/start.js?v=5"></script>
+  <script src="/static/start.js?v=6"></script>
   <script src="/static/header.js"></script>
 </body>
 </html>
