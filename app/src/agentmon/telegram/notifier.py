@@ -8,7 +8,7 @@ from agentmon.store.telegram_store import NotifyStateRepo
 logger = logging.getLogger(__name__)
 
 TASK_EVENTS = {"running", "done", "failed", "awaiting_user"}
-STACK_EVENTS = {"running", "idle", "completed"}
+STACK_EVENTS = {"running", "stopped", "completed", "idle"}
 
 _TASK_LABEL = {
     "running": "▶️ Задача «{name}» запущена",
@@ -18,14 +18,14 @@ _TASK_LABEL = {
 }
 _STACK_LABEL = {
     "running": "▶️ Стек «{name}» запущен",
-    "idle": "⏹ Стек «{name}» остановлен",
+    "stopped": "⏹ Стек «{name}» остановлен",
     "completed": "✅ Стек «{name}» выполнен",
+    "idle": "🏁 Стек «{name}» завершён",
 }
 
 
 class TelegramNotifier:
     def __init__(self, db, send, chat_ids):
-        self._db = db
         self._send = send
         self._chat_ids = chat_ids
         self._state = NotifyStateRepo(db)
@@ -50,8 +50,10 @@ class TelegramNotifier:
     def _stack_status(self, stack) -> str:
         items = self._stacks.items(stack["id"])
         if items:
-            done = all(self._tasks.get(i["task_id"]) and
-                       self._tasks.get(i["task_id"])["status"] == "done" for i in items)
+            done = all(
+                (task := self._tasks.get(i["task_id"])) and task["status"] == "done"
+                for i in items
+            )
             if done:
                 return "completed"
         return stack["status"]

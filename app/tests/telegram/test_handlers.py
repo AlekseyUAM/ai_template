@@ -87,4 +87,4 @@ async def test_gate_note_flow_saves_and_approves(tmp_path):
 
     from agentmon.store.telegram_store import FeedbackRepo
     assert FeedbackRepo(db).list_for_task(tid)[0]["text"] == "учти Y"
-    assert f"/api/env/tasks/{tid}/approve" in " ".join(caps.posted)
+    assert f"/api/env/tasks/{tid}/approve" in caps.posted

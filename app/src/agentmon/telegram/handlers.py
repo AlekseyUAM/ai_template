@@ -90,6 +90,9 @@ class Handlers:
         parts = data.split(":")
         kind = parts[0]
         if kind == "stk":
+            if len(parts) != 3:
+                await self._send(chat_id, "неизвестная команда")
+                return
             _, action, sid = parts
             if action == "start":
                 await self._api_post(f"/api/env/stacks/{sid}/start")
@@ -97,11 +100,20 @@ class Handlers:
             elif action == "stop":
                 await self._api_post(f"/api/env/stacks/{sid}/stop")
                 await self._send(chat_id, f"Стек {sid}: остановлен")
-        elif kind == "tsk" and parts[1] == "report":
+        elif kind == "tsk":
+            if len(parts) != 3 or parts[1] != "report":
+                await self._send(chat_id, "неизвестная команда")
+                return
             await self._report_menu(chat_id, int(parts[2]))
         elif kind == "rep":
+            if len(parts) != 3:
+                await self._send(chat_id, "неизвестная команда")
+                return
             await self._show_report(chat_id, int(parts[1]), parts[2])
         elif kind == "gate":
+            if len(parts) != 4:
+                await self._send(chat_id, "неизвестная команда")
+                return
             action, task_id, stage = parts[1], int(parts[2]), parts[3]
             if action == "ok":
                 await self._api_post(f"/api/env/tasks/{task_id}/approve", json={"stage": stage})
@@ -109,6 +121,8 @@ class Handlers:
             elif action == "note":
                 self._pending_feedback[chat_id] = (task_id, stage)
                 await self._send(chat_id, "Пришлите текст замечания одним сообщением")
+        else:
+            await self._send(chat_id, "неизвестная команда")
 
     async def _report_menu(self, chat_id, task_id: int) -> None:
         task = self._tasks.get(task_id)

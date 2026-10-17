@@ -16,7 +16,7 @@ from .run_store import RunStore
 from .store.db import connect
 from .store.schema import init_schema
 from .env.stack_dispatcher import StackDispatcher
-from agentmon.telegram.runtime import build_bot
+from .telegram.runtime import build_bot
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +56,8 @@ def build(db_path=None):
         repeats = 0
         stack_last_error = None
         stack_repeats = 0
+        notifier_last_error = None
+        notifier_repeats = 0
         while True:
             try:
                 # tick блокирующий: refresh идёт на бэкенды, а первый контакт
@@ -90,8 +92,17 @@ def build(db_path=None):
             if tg_notifier is not None:
                 try:
                     await tg_notifier.tick()
-                except Exception:
-                    logger.exception("тик Telegram-нотификатора не удался")
+                    notifier_last_error = None
+                    notifier_repeats = 0
+                except Exception as exc:
+                    signature = (type(exc), str(exc))
+                    if signature != notifier_last_error:
+                        logger.exception("тик Telegram-нотификатора не удался")
+                        notifier_last_error, notifier_repeats = signature, 1
+                    else:
+                        notifier_repeats += 1
+                        logger.warning("тик Telegram-нотификатора не удался снова (%d-й раз): %s",
+                                       notifier_repeats, exc)
             await asyncio.sleep(config.DISPATCH_INTERVAL)
 
     @contextlib.asynccontextmanager
