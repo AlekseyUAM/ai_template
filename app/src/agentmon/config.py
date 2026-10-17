@@ -17,3 +17,21 @@ PORT = int(os.environ.get("AGENTMON_PORT", "8765"))
 # Период опроса диспетчера и минимальная длительность задачи (сек).
 DISPATCH_INTERVAL = 3.0
 MIN_RUN_SECONDS = 5.0
+
+# --- Telegram-интеграция (опционально) ---
+# Нет токена → фича выключена: ни бот, ни нотификатор не стартуют.
+TG_TOKEN = os.environ.get("AGENTMON_TG_TOKEN") or None
+
+# Разрешённые chat_id (через запятую). Чужие чаты игнорируются.
+TG_CHAT_IDS = [
+    part.strip()
+    for part in os.environ.get("AGENTMON_TG_CHAT_IDS", "").split(",")
+    if part.strip()
+]
+
+# База Bot API и локальный REST приложения (вызовы изнутри процесса).
+TG_API_BASE = os.environ.get("AGENTMON_TG_API_BASE", "https://api.telegram.org")
+
+
+def local_base_url() -> str:
+    return f"http://127.0.0.1:{PORT}"

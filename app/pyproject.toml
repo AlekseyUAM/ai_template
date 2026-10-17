@@ -13,13 +13,13 @@ dependencies = [
     "paramiko",
     "psycopg[binary]",
     "pywinpty; sys_platform == 'win32'",
+    "httpx",
 ]
 
 [project.optional-dependencies]
 # Тестовые зависимости: pip install -e ".[dev]"
 dev = [
     "pytest",
-    "httpx",
 ]
 
 [tool.setuptools.packages.find]
