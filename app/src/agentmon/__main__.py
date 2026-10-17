@@ -16,6 +16,7 @@ from .run_store import RunStore
 from .store.db import connect
 from .store.schema import init_schema
 from .env.stack_dispatcher import StackDispatcher
+from agentmon.telegram.runtime import build_bot
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,11 @@ def build(db_path=None):
     app_store = connect(config.DSN)
     init_schema(app_store)
     stack_dispatcher = StackDispatcher(app_store, monitor)
+    tg = build_bot(app_store, app_store, registry)
+    tg_client = tg[0] if tg else None
+    tg_bot = tg[1] if tg else None
+    tg_notifier = tg[2] if tg else None
+    tg_stop = asyncio.Event()
 
     async def dispatch_loop():
         # Последний отказ: полный traceback пишем один раз на каждый новый
@@ -81,17 +87,30 @@ def build(db_path=None):
                     stack_repeats += 1
                     logger.warning("тик стек-раннера не удался снова (%d-й раз): %s",
                                    stack_repeats, exc)
+            if tg_notifier is not None:
+                try:
+                    await tg_notifier.tick()
+                except Exception:
+                    logger.exception("тик Telegram-нотификатора не удался")
             await asyncio.sleep(config.DISPATCH_INTERVAL)
 
     @contextlib.asynccontextmanager
     async def lifespan(application):
         task = asyncio.create_task(dispatch_loop())
+        bot_task = asyncio.create_task(tg_bot.run(tg_stop)) if tg_bot else None
         try:
             yield
         finally:
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await task
+            tg_stop.set()
+            if bot_task:
+                bot_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await bot_task
+            if tg_client:
+                await tg_client.aclose()
             monitor.shutdown()
 
     return create_app(registry=registry, queue=queue, monitor=monitor,
