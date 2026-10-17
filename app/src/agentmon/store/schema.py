@@ -39,6 +39,12 @@ def init_schema(db) -> None:
         id {pk}, project_id INTEGER NOT NULL, task_id INTEGER, pid INTEGER NOT NULL,
         log_file TEXT, exit_file TEXT, status TEXT NOT NULL DEFAULT 'running',
         started_at {ts}, finished_at {ts}, exit_code INTEGER)""")
+    db.execute(f"""CREATE TABLE IF NOT EXISTS tg_notify_state (
+        id {pk}, scope TEXT NOT NULL, ref_id INTEGER NOT NULL,
+        last_status TEXT, UNIQUE(scope, ref_id))""")
+    db.execute(f"""CREATE TABLE IF NOT EXISTS task_feedback (
+        id {pk}, task_id INTEGER NOT NULL, chat_id TEXT NOT NULL,
+        text TEXT NOT NULL, created_at {ts}, consumed INTEGER NOT NULL DEFAULT 0)""")
 
     # Миграции существующих БД: добавляем недостающие колонки идемпотентно.
     _ensure_columns(db, "mcp_servers", {
@@ -73,6 +79,7 @@ def _ensure_indexes(db) -> None:
         ("idx_stack_items_stack_id", "stack_items(stack_id)"),
         ("idx_project_mcp_project_id", "project_mcp(project_id)"),
         ("idx_project_mcp_mcp_id", "project_mcp(mcp_id)"),
+        ("idx_task_feedback_task_id", "task_feedback(task_id)"),
     ]
     for name, target in indexes:
         db.execute(f"CREATE INDEX IF NOT EXISTS {name} ON {target}")
