@@ -20,6 +20,7 @@ dependencies = [
 # Тестовые зависимости: pip install -e ".[dev]"
 dev = [
     "pytest",
+    "pytest-asyncio",
 ]
 
 [tool.setuptools.packages.find]
