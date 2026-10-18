@@ -1337,11 +1337,12 @@ class TestDockerRunner:
     def test_send_input_collapses_crlf(self):
         """\\r\\n схлопываются в пробел перед отправкой."""
         runner, _, spawned = _make_runner()
-        runner.start(_project())
-        runner.send_input(spawned[0].cmd and "proj-1", "line1\r\nline2")
-        # ищем в written: должен быть "line1  line2\r"
-        written = spawned[0].written
-        assert any("line1" in w and "\r\n" not in w for w in written)
+        agent_id = runner.start(_project())
+        runner.send_input(agent_id, "line1\r\nline2")
+        # \r\n схлопываются в пробелы, в конце добавляется один \r
+        written = "".join(spawned[0].written)
+        assert "line1  line2\r" in written
+        assert "\r\n" not in written
 
     def test_send_input_appends_cr(self):
         """Каждый send_input завершается \\r."""
