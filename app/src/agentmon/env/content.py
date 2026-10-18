@@ -178,6 +178,8 @@ def deploy_content(prov, config, *, update: bool) -> None:
                          _project_readme(config.project_name), update=update)
         if overrides:
             _apply_mcp_names(prov, claude, overrides)
+    from .nethasp import deploy_nethasp
+    deploy_nethasp(prov, config)
 
 
 def _project_readme(project_name: str) -> str:
