@@ -15,6 +15,7 @@ import time
 from pathlib import Path
 
 from . import BUFFER_LIMIT, RunResult, is_cruft  # noqa: F401 — is_cruft/BUFFER_LIMIT нужны позже
+from ..models import FileRef
 from .. import pty_process
 from ..env import mcp_docker
 
@@ -249,6 +250,19 @@ class _DockerContainer:
     # ------------------------------------------------------------------
     # Удаление контейнера
     # ------------------------------------------------------------------
+
+    def exec_run_bytes(self, argv: list[str]) -> tuple[int, bytes]:
+        """Выполнить команду внутри контейнера и вернуть сырые байты stdout.
+
+        В отличие от ``exec_run``, не декодирует stdout — нужно для
+        ``DockerFiles.read_from``, где важна побайтовая точность смещений.
+        Возвращает ``(returncode, stdout_bytes)``.
+        """
+        cmd = ["docker", "exec", self._name, *argv]
+        r = self._run(cmd, capture_output=True)
+        rc = r.returncode
+        raw = r.stdout if isinstance(r.stdout, bytes) else (r.stdout or b"")
+        return rc, raw
 
     def remove(self) -> None:
         """Принудительно удалить контейнер (``docker rm -f <name>``)."""
@@ -522,3 +536,142 @@ class DockerRunner:
                 pass
         self._procs.clear()
         self._buffers.clear()
+
+
+class DockerFiles:
+    """Доступ к журналам сессий claude внутри Docker-контейнера.
+
+    Домашний каталог пользователя внутри контейнера определяется лениво —
+    угадывать его молча небезопасно: промах неотличим от «сессий пока нет»
+    (``list_files`` тихо вернёт []). Поэтому при отсутствии явного ``home``
+    он определяется при первом реальном обращении через
+    ``docker exec <c> sh -c 'echo $HOME'`` и кешируется. Неудача не
+    кешируется, чтобы определение повторилось, когда контейнер восстановится.
+    """
+
+    def __init__(self, container: _DockerContainer, home: str | None = None, guess: str = "/root"):
+        self._container = container
+        self._resolved_home: str | None = home
+        self._guess = guess
+
+    # ------------------------------------------------------------------
+    # Ленивое определение домашнего каталога
+    # ------------------------------------------------------------------
+
+    def _resolve_home(self) -> str:
+        """Вернуть домашний каталог пользователя внутри контейнера.
+
+        Если ``home`` задан явно — возвращает его без exec.
+        Иначе выполняет ``sh -c 'echo $HOME'`` и кеширует при успехе.
+        При неудаче логирует предупреждение и возвращает ``guess`` БЕЗ
+        кеширования, чтобы следующий вызов повторил попытку.
+        """
+        if self._resolved_home is not None:
+            return self._resolved_home
+        try:
+            res = self._container.exec_run(["sh", "-c", "echo $HOME"])
+        except Exception as exc:
+            logger.warning(
+                "не удалось определить домашний каталог в контейнере %s: %s, "
+                "использую догадку %s",
+                self._container.name, exc, self._guess,
+            )
+            return self._guess
+        candidate = res.stdout.strip()
+        if res.returncode == 0 and candidate and candidate.startswith("/"):
+            self._resolved_home = candidate
+            return candidate
+        logger.warning(
+            "не удалось определить домашний каталог в контейнере %s "
+            "(rc=%d, stdout=%r), использую догадку %s",
+            self._container.name, res.returncode, res.stdout, self._guess,
+        )
+        return self._guess
+
+    # ------------------------------------------------------------------
+    # SessionFiles protocol
+    # ------------------------------------------------------------------
+
+    def home_projects_dir(self) -> str:
+        """Вернуть путь к каталогу проектов claude внутри контейнера."""
+        try:
+            home = self._resolve_home()
+        except Exception:
+            home = self._guess
+        return f"{home.rstrip('/')}/.claude/projects"
+
+    def list_files(self, projects_dir: str) -> list[FileRef]:
+        """Перечислить журналы сессий (``*.jsonl``) в каталоге ``projects_dir``.
+
+        Выполняет ``find <dir> -name '*.jsonl' -printf '%p\\t%s\\t%T@\\n'``
+        внутри контейнера и разбирает вывод в список ``FileRef``.
+        Если ``find`` завершается с ненулевым кодом (каталог не существует
+        или команда не поддерживается), возвращает ``[]``. Аварии
+        контейнера/демона помечаются через ``mark_broken``.
+        """
+        try:
+            res = self._container.exec_run(
+                ["find", projects_dir, "-name", "*.jsonl", "-printf", "%p\t%s\t%T@\n"]
+            )
+        except Exception as exc:
+            logger.warning(
+                "ошибка find в контейнере %s: %s",
+                self._container.name, exc,
+            )
+            self._container.mark_broken()
+            return []
+
+        if res.returncode != 0:
+            # find rc≠0 — скорее всего каталог ещё не создан; не считаем
+            # контейнер сломанным, просто нет данных.
+            return []
+
+        refs: list[FileRef] = []
+        for line in res.stdout.splitlines():
+            parts = line.split("\t")
+            if len(parts) != 3:
+                continue
+            path, size_s, mtime_s = parts
+            if not path or not size_s or not mtime_s:
+                continue
+            try:
+                size = int(size_s)
+                mtime = float(mtime_s)
+            except ValueError:
+                continue
+            filename = posixpath.basename(path)
+            if not filename.endswith(".jsonl"):
+                continue
+            dir_name = posixpath.basename(posixpath.dirname(path))
+            session_id = filename[: -len(".jsonl")]
+            refs.append(FileRef(
+                path=path,
+                dir_name=dir_name,
+                session_id=session_id,
+                size=size,
+                mtime=mtime,
+            ))
+        return refs
+
+    def read_from(self, path: str, offset: int) -> tuple[bytes, int]:
+        """Прочитать хвост файла начиная с байтового смещения ``offset``.
+
+        Использует ``tail -c +N`` (1-индексированный), поэтому смещение
+        ``offset`` преобразуется в ``offset + 1``. Возвращает
+        ``(data_bytes, offset + len(data_bytes))``.
+        При любой ошибке возвращает ``(b"", offset)``; аварии
+        контейнера/демона дополнительно помечаются через ``mark_broken``.
+        """
+        cmd = ["sh", "-c", f"tail -c +{offset + 1} {shlex.quote(path)}"]
+        try:
+            rc, data = self._container.exec_run_bytes(cmd)
+        except Exception as exc:
+            logger.warning(
+                "ошибка read_from %s в контейнере %s: %s",
+                path, self._container.name, exc,
+            )
+            self._container.mark_broken()
+            return b"", offset
+        if rc != 0:
+            return b"", offset
+        return data, offset + len(data)

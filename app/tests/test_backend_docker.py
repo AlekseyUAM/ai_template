@@ -15,9 +15,11 @@ from agentmon.backends.docker import (
     _DockerContainer,
     DockerProvisioner,
     DockerRunner,
+    DockerFiles,
     container_name,
 )
 from agentmon.backends import RunResult
+from agentmon.models import FileRef
 
 
 # ---------------------------------------------------------------------------
@@ -1455,3 +1457,278 @@ class TestDockerRunner:
         runner.shutdown_all()
         assert not runner.is_alive("a")
         assert not runner.is_alive("b")
+
+
+# ---------------------------------------------------------------------------
+# TestDockerFiles — чтение журналов через docker exec
+# ---------------------------------------------------------------------------
+
+class _FakeFilesContainer:
+    """Фейк-контейнер для DockerFiles: раздельные очереди для exec_run и exec_run_bytes.
+
+    ``set_exec(result)``  — поставить RunResult в очередь exec_run.
+    ``set_bytes(rc, data)`` — поставить (rc, bytes) в очередь exec_run_bytes.
+    ``mark_broken()``      — запоминает, что контейнер помечен битым.
+    """
+
+    def __init__(self, name: str = "ai1c-test"):
+        self._name = name
+        self._exec_q: list[RunResult] = []
+        self._bytes_q: list[tuple[int, bytes]] = []
+        self.exec_calls: list[list[str]] = []
+        self.bytes_calls: list[list[str]] = []
+        self.broken_called = False
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    def mark_broken(self) -> None:
+        self.broken_called = True
+
+    def set_exec(self, result: RunResult) -> None:
+        self._exec_q.append(result)
+
+    def set_bytes(self, rc: int, data: bytes) -> None:
+        self._bytes_q.append((rc, data))
+
+    def exec_run(self, argv: list[str], cwd=None) -> RunResult:
+        self.exec_calls.append(list(argv))
+        if self._exec_q:
+            return self._exec_q.pop(0)
+        return RunResult(0, "", "")
+
+    def exec_run_bytes(self, argv: list[str]) -> tuple[int, bytes]:
+        self.bytes_calls.append(list(argv))
+        if self._bytes_q:
+            return self._bytes_q.pop(0)
+        return (0, b"")
+
+
+def _make_files(name="ai1c-test", home=None, guess="/root"):
+    """Фабрика: возвращает (DockerFiles, _FakeFilesContainer)."""
+    container = _FakeFilesContainer(name=name)
+    files = DockerFiles(container, home=home, guess=guess)
+    return files, container
+
+
+class TestDockerFiles:
+
+    # --- ленивый home: echo $HOME вызывается один раз ---
+
+    def test_home_resolved_lazily_on_first_use(self):
+        """_resolve_home вызывает echo $HOME только при первом обращении."""
+        files, container = _make_files()
+        container.set_exec(RunResult(0, "/home/user\n", ""))
+        container.set_exec(RunResult(0, "/home/user\n", ""))  # не должен использоваться
+
+        files.home_projects_dir()
+        files.home_projects_dir()
+
+        echo_calls = [c for c in container.exec_calls if "echo" in " ".join(c)]
+        assert len(echo_calls) == 1, "echo $HOME должен быть вызван ровно один раз"
+
+    def test_home_cached_after_success(self):
+        """Успешное определение home кешируется — повторный exec не нужен."""
+        files, container = _make_files()
+        container.set_exec(RunResult(0, "/home/alice\n", ""))
+
+        files._resolve_home()
+        files._resolve_home()
+
+        assert files._resolved_home == "/home/alice"
+        assert len(container.exec_calls) == 1
+
+    def test_explicit_home_no_exec(self):
+        """Явный home= — exec_run не вызывается вовсе."""
+        files, container = _make_files(home="/explicit/home")
+        _ = files.home_projects_dir()
+        assert container.exec_calls == []
+
+    def test_failure_not_cached_next_call_retries(self):
+        """Неудача не кешируется: следующий вызов снова пробует echo $HOME."""
+        files, container = _make_files(guess="/root")
+        # Первый вызов — неудача (rc=1)
+        container.set_exec(RunResult(1, "", "error"))
+        # Второй вызов — успех
+        container.set_exec(RunResult(0, "/home/bob\n", ""))
+
+        first = files._resolve_home()
+        second = files._resolve_home()
+
+        assert first == "/root"          # возвращает guess
+        assert second == "/home/bob"     # теперь успешно разрешён
+        assert files._resolved_home == "/home/bob"
+        assert len(container.exec_calls) == 2
+
+    def test_failure_empty_stdout_returns_guess(self):
+        """Пустой stdout → возвращает guess, не кеширует."""
+        files, container = _make_files(guess="/root")
+        container.set_exec(RunResult(0, "", ""))
+        result = files._resolve_home()
+        assert result == "/root"
+        assert files._resolved_home is None
+
+    def test_failure_relative_path_returns_guess(self):
+        """Относительный путь в $HOME (не начинается с /) → guess, не кешируем."""
+        files, container = _make_files(guess="/root")
+        container.set_exec(RunResult(0, "relative/path\n", ""))
+        result = files._resolve_home()
+        assert result == "/root"
+        assert files._resolved_home is None
+
+    # --- home_projects_dir ---
+
+    def test_home_projects_dir_format(self):
+        """home_projects_dir = <home>/.claude/projects."""
+        files, container = _make_files(home="/home/user")
+        assert files.home_projects_dir() == "/home/user/.claude/projects"
+
+    def test_home_projects_dir_strips_trailing_slash(self):
+        """Лишний слеш в конце home обрезается."""
+        files, container = _make_files(home="/home/user/")
+        assert files.home_projects_dir() == "/home/user/.claude/projects"
+
+    def test_home_projects_dir_with_lazy_home(self):
+        """home_projects_dir через ленивое определение."""
+        files, container = _make_files()
+        container.set_exec(RunResult(0, "/root\n", ""))
+        assert files.home_projects_dir() == "/root/.claude/projects"
+
+    # --- list_files: разбор вывода find -printf ---
+
+    def test_list_files_parses_find_output(self):
+        """Корректный вывод find → список FileRef с правильными полями."""
+        files, container = _make_files(home="/root")
+        find_output = (
+            "/root/.claude/projects/proj-abc/session-1.jsonl\t1234\t1718000000.123456\n"
+            "/root/.claude/projects/proj-abc/session-2.jsonl\t5678\t1718001000.0\n"
+        )
+        container.set_exec(RunResult(0, find_output, ""))
+
+        refs = files.list_files("/root/.claude/projects")
+
+        assert len(refs) == 2
+        ref1 = refs[0]
+        assert ref1.path == "/root/.claude/projects/proj-abc/session-1.jsonl"
+        assert ref1.dir_name == "proj-abc"
+        assert ref1.session_id == "session-1"
+        assert ref1.size == 1234
+        assert abs(ref1.mtime - 1718000000.123456) < 1e-3
+
+    def test_list_files_empty_output_returns_empty(self):
+        """Пустой вывод find (каталог пуст) → []."""
+        files, container = _make_files(home="/root")
+        container.set_exec(RunResult(0, "", ""))
+        refs = files.list_files("/root/.claude/projects")
+        assert refs == []
+
+    def test_list_files_nonzero_rc_returns_empty(self):
+        """find rc≠0 (каталог не существует) → [] без mark_broken."""
+        files, container = _make_files(home="/root")
+        container.set_exec(RunResult(1, "", "No such file or directory"))
+        refs = files.list_files("/root/.claude/projects")
+        assert refs == []
+        assert not container.broken_called
+
+    def test_list_files_malformed_line_skipped(self):
+        """Строка без табуляций пропускается; остальные разбираются."""
+        files, container = _make_files(home="/root")
+        find_output = (
+            "malformed_line_no_tabs\n"
+            "/root/.claude/projects/proj/ok.jsonl\t100\t1718000000.0\n"
+        )
+        container.set_exec(RunResult(0, find_output, ""))
+        refs = files.list_files("/root/.claude/projects")
+        assert len(refs) == 1
+        assert refs[0].session_id == "ok"
+
+    def test_list_files_uses_find_printf_command(self):
+        """list_files вызывает find с правильными аргументами."""
+        files, container = _make_files(home="/root")
+        container.set_exec(RunResult(0, "", ""))
+        files.list_files("/root/.claude/projects")
+        argv = container.exec_calls[-1]
+        assert argv[0] == "find"
+        assert "/root/.claude/projects" in argv
+        assert "-name" in argv
+        assert "*.jsonl" in argv
+        assert "-printf" in argv
+        fmt_idx = argv.index("-printf")
+        assert "%p" in argv[fmt_idx + 1]
+        assert "%s" in argv[fmt_idx + 1]
+        assert "%T@" in argv[fmt_idx + 1]
+
+    def test_list_files_dir_name_is_parent_dir(self):
+        """dir_name — имя непосредственного родительского каталога файла."""
+        files, container = _make_files(home="/root")
+        container.set_exec(RunResult(0,
+            "/root/.claude/projects/my-project/abc.jsonl\t42\t1000000.0\n", ""))
+        refs = files.list_files("/root/.claude/projects")
+        assert refs[0].dir_name == "my-project"
+
+    def test_list_files_session_id_without_extension(self):
+        """session_id — имя файла без суффикса .jsonl."""
+        files, container = _make_files(home="/root")
+        container.set_exec(RunResult(0,
+            "/root/.claude/projects/p/my-session-id.jsonl\t10\t1000000.0\n", ""))
+        refs = files.list_files("/root/.claude/projects")
+        assert refs[0].session_id == "my-session-id"
+
+    # --- read_from: tail -c + правильное смещение ---
+
+    def test_read_from_builds_tail_command(self):
+        """read_from строит tail -c +<offset+1> с quoted путём."""
+        files, container = _make_files(home="/root")
+        container.set_bytes(0, b"data chunk")
+        files.read_from("/root/.claude/projects/p/s.jsonl", 100)
+        argv = container.bytes_calls[-1]
+        joined = " ".join(argv)
+        assert "tail" in joined
+        assert "-c" in joined
+        assert "+101" in joined          # offset=100 → +101
+
+    def test_read_from_offset_zero(self):
+        """offset=0 → tail -c +1 (читает весь файл)."""
+        files, container = _make_files(home="/root")
+        container.set_bytes(0, b"full content")
+        files.read_from("/some/file.jsonl", 0)
+        argv = container.bytes_calls[-1]
+        joined = " ".join(argv)
+        assert "+1" in joined
+
+    def test_read_from_returns_data_and_new_offset(self):
+        """Возвращает (data, offset + len(data))."""
+        files, container = _make_files(home="/root")
+        payload = b"hello world"
+        container.set_bytes(0, payload)
+        data, new_offset = files.read_from("/p/s.jsonl", 50)
+        assert data == payload
+        assert new_offset == 50 + len(payload)
+
+    def test_read_from_failure_returns_empty(self):
+        """rc≠0 → (b"", offset)."""
+        files, container = _make_files(home="/root")
+        container.set_bytes(1, b"")
+        data, new_offset = files.read_from("/p/s.jsonl", 42)
+        assert data == b""
+        assert new_offset == 42
+
+    def test_read_from_quotes_path(self):
+        """Путь с пробелами корректно цитируется через shlex.quote."""
+        files, container = _make_files(home="/root")
+        container.set_bytes(0, b"")
+        files.read_from("/path with spaces/file.jsonl", 0)
+        argv = container.bytes_calls[-1]
+        joined = " ".join(argv)
+        assert "'/path with spaces/file.jsonl'" in joined
+
+    def test_read_from_uses_exec_run_bytes(self):
+        """read_from использует exec_run_bytes, а не exec_run."""
+        files, container = _make_files(home="/root")
+        container.set_bytes(0, b"result")
+        files.read_from("/some/file.jsonl", 0)
+        assert container.bytes_calls, "exec_run_bytes должен быть вызван"
+        assert not any("tail" in " ".join(c) for c in container.exec_calls), (
+            "exec_run (text) не должен вызываться из read_from"
+        )
