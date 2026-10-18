@@ -48,9 +48,9 @@ def install_environment(
             yield ProgressEvent(name, "ok")
 
     def _prepare_src():
-        write_devbase(config, user=db_user, password=db_password)
+        write_devbase(prov, config, user=db_user, password=db_password)
         if git_init:
-            git_init_project(base, config=config, run=run)
+            git_init_project(prov, str(base), config=config)
 
     # ai1c.config.json не генерируем: источник истины — внутренняя БД.
     # При обновлении версии окружения трогаем только контент шаблона: .mcp.json
@@ -76,7 +76,7 @@ def install_environment(
     # Фиксируем все сгенерированные файлы одним коммитом — только при создании.
     if git_init and not update:
         steps.append(("git-commit",
-                      lambda: git_commit_all(base, "init", config=config, run=run)))
+                      lambda: git_commit_all(prov, str(base), "init", config=config)))
     steps.append(("register", lambda: register(config)))
 
     try:
