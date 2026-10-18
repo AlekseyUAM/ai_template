@@ -68,6 +68,7 @@ class _DockerContainer:
         self._clock = clock
         self._retry_seconds = retry_seconds
         self._broken_at: float | None = None
+        self._ready = False
 
     # ------------------------------------------------------------------
     # Состояние «сломан»
@@ -82,6 +83,7 @@ class _DockerContainer:
         if self.broken:
             return
         self._broken_at = self._clock()
+        self._ready = False
 
     @property
     def broken(self) -> bool:
@@ -146,6 +148,9 @@ class _DockerContainer:
         4. running → контейнер уже поднят, но Xvfb всё ещё гарантируется ниже.
         При ненулевом коде docker run/start → ``mark_broken()`` + ``RuntimeError``.
         """
+        if self._ready and not self.broken:
+            return
+
         if not mcp_docker.image_exists(self._image, run=self._run):
             self._build()
 
@@ -188,6 +193,7 @@ class _DockerContainer:
             ["docker", "exec", "-d", self._name, "sh", "-c", xvfb_cmd],
             capture_output=True, text=True,
         )
+        self._ready = True
 
     # ------------------------------------------------------------------
     # Запуск команд внутри контейнера

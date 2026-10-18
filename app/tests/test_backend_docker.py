@@ -314,6 +314,91 @@ class TestEnsureRunning:
 
 
 # ---------------------------------------------------------------------------
+# ensure() — кеш готовности (_ready): повторный вызов не дёргает docker
+# ---------------------------------------------------------------------------
+
+class TestEnsureReadyCache:
+    def _fake_for_absent(self):
+        """FakeRun: образ есть, inspect → absent, run → ok."""
+        return FakeRun(routes=[
+            ("docker images -q", 0, "abc123\n", ""),
+            ("docker inspect", 1, "", "No such object"),
+            # docker run → default rc=0
+            # docker exec -d (Xvfb) → default rc=0
+        ])
+
+    def test_second_ensure_no_docker_calls(self):
+        """После первого ensure() повторный вызов не делает ни одного docker-вызова."""
+        fake = self._fake_for_absent()
+        c = _make_container(fake, name="ai1c-cache")
+        c.ensure()
+        # Сбросить историю вызовов после первого ensure
+        fake.calls.clear()
+        # Второй вызов — должен быть no-op
+        c.ensure()
+        assert len(fake.calls) == 0, (
+            "второй ensure() не должен делать docker-вызовы, но сделал: "
+            + str(fake.calls)
+        )
+
+    def test_after_mark_broken_ensure_reruns_lifecycle(self):
+        """После mark_broken() следующий ensure() снова выполняет полный жизненный цикл."""
+        fake = FakeRun(routes=[
+            ("docker images -q", 0, "abc123\n", ""),
+            ("docker inspect", 1, "", "No such object"),
+            # docker run (первый ensure) → default rc=0
+            # docker exec -d Xvfb (первый ensure) → default rc=0
+            # После mark_broken — второй ensure:
+            # docker images -q → abc123 (маршрут уже задан)
+            # docker inspect → running (контейнер поднят, переиспользуем)
+            # docker exec -d Xvfb → default rc=0
+        ])
+        # Переопределим inspect: после первого ensure будет returning "running"
+        # Это сделаем через отдельный FakeRun с двумя маршрутами для inspect.
+        call_counts = {"inspect": 0}
+        original_call = fake.__call__
+
+        def patched_call(cmd, **kw):
+            joined = " ".join(cmd)
+            if "docker inspect" in joined:
+                call_counts["inspect"] += 1
+                # Первый вызов — absent; все последующие — running
+                if call_counts["inspect"] == 1:
+                    class R:
+                        returncode = 1
+                        stdout = ""
+                        stderr = "No such object"
+                    return R()
+                else:
+                    class R:
+                        returncode = 0
+                        stdout = "running\n"
+                        stderr = ""
+                    return R()
+            return original_call(cmd, **kw)
+
+        fake.__call__ = patched_call
+
+        c = _make_container(fake, name="ai1c-cache2")
+        c.ensure()  # первый ensure — полный жизненный цикл
+        assert c._ready, "_ready должен быть True после первого ensure"
+
+        c.mark_broken()
+        assert not c._ready, "_ready должен быть False после mark_broken"
+
+        # Сбросить историю вызовов
+        fake.calls.clear()
+
+        c.ensure()  # второй ensure — должен выполнить полный цикл заново
+        # Ожидаем как минимум docker images -q и docker inspect
+        assert len(fake.calls) > 0, (
+            "после mark_broken() ensure() должен снова делать docker-вызовы"
+        )
+        joined_calls = " ".join(" ".join(c) for c in fake.calls)
+        assert "docker images" in joined_calls or "docker inspect" in joined_calls
+
+
+# ---------------------------------------------------------------------------
 # ensure() — образ отсутствует → RuntimeError из _build
 # ---------------------------------------------------------------------------
 
