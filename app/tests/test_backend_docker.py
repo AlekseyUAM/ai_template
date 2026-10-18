@@ -57,18 +57,19 @@ class FakeRun:
 
 def _make_container(fake_run, *, name="ai1c-test", image="ai1c-agent:latest",
                     workdir="/workspace", volume="/tmp/vol",
-                    network="host", env=None, clock=None,
+                    add_hosts=None, env=None, clock=None,
                     retry_seconds=DEFAULT_RETRY_SECONDS):
     """Фабрика контейнера с инъектируемым FakeRun."""
     kw = {}
     if clock is not None:
         kw["clock"] = clock
+    if add_hosts is not None:
+        kw["add_hosts"] = add_hosts
     return _DockerContainer(
         name=name,
         image=image,
         workdir=workdir,
         volume=volume,
-        network=network,
         env=env,
         run=fake_run,
         retry_seconds=retry_seconds,
@@ -182,12 +183,16 @@ class TestEnsureAbsent:
         idx = cmd.index("--restart")
         assert cmd[idx + 1] == "unless-stopped"
 
-    def test_docker_run_has_network(self):
+    def test_docker_run_has_add_host_and_no_network(self):
         fake = self._fake_for_absent()
-        c = _make_container(fake, network="host")
+        c = _make_container(fake)
         c.ensure()
         cmd = fake.called_with("docker run")[0]
-        assert "--network=host" in cmd
+        joined = " ".join(cmd)
+        assert "--add-host=host.docker.internal:host-gateway" in joined
+        assert "-e" in cmd
+        assert "DISPLAY=:99" in joined
+        assert "--network" not in joined
 
     def test_docker_run_has_volume(self):
         fake = self._fake_for_absent()

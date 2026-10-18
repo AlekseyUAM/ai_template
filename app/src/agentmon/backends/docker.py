@@ -50,7 +50,7 @@ class _DockerContainer:
         *,
         workdir: str,
         volume: str,
-        network: str = "host",
+        add_hosts: list[str] | None = None,
         env: dict | None = None,
         run=subprocess.run,
         clock=time.monotonic,
@@ -60,8 +60,8 @@ class _DockerContainer:
         self._image = image
         self._workdir = workdir
         self._volume = volume
-        self._network = network
-        self._env = env or {}
+        self._add_hosts = add_hosts if add_hosts is not None else ["host.docker.internal:host-gateway"]
+        self._env = {"DISPLAY": ":99", **(env or {})}
         self._run = run
         self._clock = clock
         self._retry_seconds = retry_seconds
@@ -157,7 +157,10 @@ class _DockerContainer:
                 "docker", "run", "-d",
                 "--name", self._name,
                 "--restart", "unless-stopped",
-                f"--network={self._network}",
+            ]
+            for h in self._add_hosts:
+                cmd.append(f"--add-host={h}")
+            cmd += [
                 "-v", f"{self._volume}:{self._workdir}",
             ]
             for k, v in self._env.items():
