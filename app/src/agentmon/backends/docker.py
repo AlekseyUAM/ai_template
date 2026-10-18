@@ -14,7 +14,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from . import BUFFER_LIMIT, RunResult, is_cruft  # noqa: F401 — is_cruft/BUFFER_LIMIT нужны позже
+from . import BUFFER_LIMIT, Backend, RunResult, is_cruft  # noqa: F401 — is_cruft/BUFFER_LIMIT нужны позже
 from ..models import FileRef
 from .. import pty_process
 from ..env import mcp_docker
@@ -675,3 +675,50 @@ class DockerFiles:
         if rc != 0:
             return b"", offset
         return data, offset + len(data)
+
+
+class DockerBackend(Backend):
+    """Бэкенд Docker: один долгоживущий контейнер на один проект.
+
+    Контейнер живёт до явного удаления; перезапуск монитора его не трогает.
+    ``key`` включает полный путь к проекту, поэтому два проекта в разных
+    каталогах всегда получают разные контейнеры и разные ключи в реестре.
+    """
+
+    def __init__(
+        self,
+        project_path: str,
+        *,
+        claude_cmd: str,
+        image: str = DEFAULT_IMAGE,
+        workdir: str = DEFAULT_WORKDIR,
+        run=subprocess.run,
+        spawn_fn=pty_process.spawn,
+        home: str | None = None,
+    ):
+        name = container_name(project_path)
+        volume = f"{name}-work"
+        self.key = f"docker||{project_path}"
+        self._container = _DockerContainer(
+            name,
+            image,
+            workdir=workdir,
+            volume=volume,
+            run=run,
+        )
+        self.runner = DockerRunner(self._container, claude_cmd, workdir=workdir, spawn_fn=spawn_fn)
+        self.files = DockerFiles(self._container, home=home)
+        self.provisioner = DockerProvisioner(self._container, workdir=workdir)
+
+    @property
+    def is_broken(self) -> bool:
+        """True если контейнер помечен битым."""
+        return self._container.broken
+
+    def check(self) -> None:
+        """Убедиться, что контейнер запущен; бросает исключение при ошибке."""
+        self._container.ensure()
+
+    def close(self) -> None:
+        """Убить все PTY-процессы агентов. Контейнер НЕ удаляется — он переживает перезапуск монитора."""
+        self.runner.shutdown_all()

@@ -97,3 +97,93 @@ def test_unknown_backend_raises():
     p.backend = "podman"
     with pytest.raises(ValueError, match="podman"):
         reg.get(p)
+
+
+# ---------------------------------------------------------------------------
+# Docker-бэкенд в реестре
+# ---------------------------------------------------------------------------
+
+def docker_project(path="/docker/proj"):
+    return Project(id=3, name="d", path=path, backend="docker", conn=None,
+                   claude_cmd=None, created_at=0.0)
+
+
+def make_with_docker():
+    """Реестр со всеми тремя фабриками-заглушками (без реального Docker/SSH)."""
+    made = []
+
+    def local_factory():
+        b = FakeBackend("local")
+        made.append(b)
+        return b
+
+    def ssh_factory(conn):
+        b = FakeBackend(f"ssh|{conn['user']}@{conn['host']}:{conn['port']}")
+        made.append(b)
+        return b
+
+    def docker_factory(project):
+        b = FakeBackend(f"docker||{project.path}")
+        made.append(b)
+        return b
+
+    reg = BackendRegistry(
+        claude_cmd="claude",
+        local_factory=local_factory,
+        ssh_factory=ssh_factory,
+        docker_factory=docker_factory,
+    )
+    return reg, made
+
+
+def test_key_for_docker_project():
+    """key_for для docker-проекта = 'docker||<path>'."""
+    reg, _ = make_with_docker()
+    p = docker_project("/docker/myapp")
+    assert reg.key_for(p) == "docker||/docker/myapp"
+
+
+def test_docker_projects_different_paths_get_different_backends():
+    """Два docker-проекта с разными путями → разные бэкенды."""
+    reg, made = make_with_docker()
+    b1 = reg.get(docker_project("/docker/proj1"))
+    b2 = reg.get(docker_project("/docker/proj2"))
+    assert b1 is not b2
+    assert len(made) == 2
+
+
+def test_docker_projects_same_path_cached():
+    """Один путь → один бэкенд (кеш работает)."""
+    reg, made = make_with_docker()
+    b1 = reg.get(docker_project("/docker/proj"))
+    b2 = reg.get(docker_project("/docker/proj"))
+    assert b1 is b2
+    assert len(made) == 1
+
+
+def test_docker_unknown_backend_still_raises():
+    """unknown backend по-прежнему бросает ValueError при наличии docker_factory."""
+    reg, _ = make_with_docker()
+    p = docker_project()
+    p.backend = "podman"
+    with pytest.raises(ValueError, match="podman"):
+        reg.get(p)
+
+
+def test_local_and_ssh_keys_unchanged_with_docker_factory():
+    """Добавление docker_factory не ломает local/ssh key_for (регрессия)."""
+    reg, _ = make_with_docker()
+    assert reg.key_for(local()) == "local"
+    assert reg.key_for(ssh()) == "ssh|root@srv:22"
+
+
+def test_local_ssh_docker_all_coexist():
+    """Все три типа бэкендов создаются и кешируются независимо."""
+    reg, made = make_with_docker()
+    bl = reg.get(local())
+    bs = reg.get(ssh())
+    bd = reg.get(docker_project())
+    assert bl is not bs
+    assert bs is not bd
+    assert bd is not bl
+    assert len(made) == 3

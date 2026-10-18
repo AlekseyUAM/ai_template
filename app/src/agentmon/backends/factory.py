@@ -1,3 +1,4 @@
+from .docker import DEFAULT_IMAGE, DockerBackend
 from .local import LocalBackend
 from .ssh import DEFAULT_PORT, SshBackend
 
@@ -6,14 +7,22 @@ class BackendRegistry:
     """Кеш бэкендов по ключу подключения.
 
     Все локальные проекты делят один бэкенд; все проекты одного пользователя на
-    одном хосте делят одно SSH-соединение.
+    одном хосте делят одно SSH-соединение; каждый docker-проект получает
+    отдельный контейнер (ключ включает путь).
     """
 
-    def __init__(self, claude_cmd, local_factory=None, ssh_factory=None):
+    def __init__(self, claude_cmd, local_factory=None, ssh_factory=None, docker_factory=None):
         self.claude_cmd = claude_cmd
         self._local_factory = local_factory or (lambda: LocalBackend(claude_cmd))
         self._ssh_factory = ssh_factory or (
             lambda conn: SshBackend(conn, claude_cmd))
+        self._docker_factory = docker_factory or (
+            lambda project: DockerBackend(
+                project.path,
+                claude_cmd=claude_cmd,
+                image=(project.conn or {}).get("image") or DEFAULT_IMAGE,
+            )
+        )
         self._cache: dict[str, object] = {}
 
     def key_for(self, project) -> str:
@@ -24,14 +33,20 @@ class BackendRegistry:
             user = conn.get("user") or ""
             port = int(conn.get("port") or DEFAULT_PORT)
             return f"ssh|{user}@{conn.get('host')}:{port}"
+        if project.backend == "docker":
+            return f"docker||{project.path}"
         raise ValueError(f"неизвестный backend: {project.backend!r}")
 
     def get(self, project):
         key = self.key_for(project)
         backend = self._cache.get(key)
         if backend is None:
-            backend = (self._local_factory() if project.backend == "local"
-                       else self._ssh_factory(project.conn or {}))
+            if project.backend == "local":
+                backend = self._local_factory()
+            elif project.backend == "ssh":
+                backend = self._ssh_factory(project.conn or {})
+            else:  # docker
+                backend = self._docker_factory(project)
             self._cache[key] = backend
         return backend
 

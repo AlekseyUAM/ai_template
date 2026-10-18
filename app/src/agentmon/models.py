@@ -20,7 +20,7 @@ class Project:
     id: int | None
     name: str
     path: str
-    backend: str                 # "local" | "ssh"
+    backend: str                 # "local" | "ssh" | "docker"
     conn: dict | None            # {host, port, user, key_path} для ssh
     claude_cmd: str | None       # переопределение команды запуска
     created_at: float

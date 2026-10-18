@@ -13,6 +13,7 @@ from agentmon.backends.docker import (
     DEFAULT_WORKDIR,
     DEFAULT_RETRY_SECONDS,
     _DockerContainer,
+    DockerBackend,
     DockerProvisioner,
     DockerRunner,
     DockerFiles,
@@ -1732,3 +1733,141 @@ class TestDockerFiles:
         assert not any("tail" in " ".join(c) for c in container.exec_calls), (
             "exec_run (text) не должен вызываться из read_from"
         )
+
+
+# ---------------------------------------------------------------------------
+# TestDockerBackend — сборка бэкенда и проверка интерфейса
+# ---------------------------------------------------------------------------
+
+class TestDockerBackend:
+    """DockerBackend собирает все четыре docker-класса и проксирует Backend-протокол."""
+
+    def _make(self, path="/workspace"):
+        """Фабрика: DockerBackend с FakeRun и fake_spawn, без реального Docker."""
+        spawned = []
+
+        def fake_spawn(cmd, cwd, env=None):
+            p = _FakePty(cmd, cwd)
+            spawned.append(p)
+            return p
+
+        fake_run = FakeRun(
+            routes=[
+                ("docker images -q", 0, "abc123\n", ""),
+                ("docker inspect", 0, "running\n", ""),
+            ]
+        )
+        backend = DockerBackend(
+            path,
+            claude_cmd="claude",
+            run=fake_run,
+            spawn_fn=fake_spawn,
+        )
+        return backend, fake_run, spawned
+
+    # --- ключ ---
+
+    def test_key_format(self):
+        """key = 'docker||<project_path>'."""
+        backend, _, _ = self._make("/workspace")
+        assert backend.key == "docker||/workspace"
+
+    def test_key_includes_full_path(self):
+        """Полный путь, а не только basename."""
+        backend, _, _ = self._make("/srv/projects/myapp")
+        assert backend.key == "docker||/srv/projects/myapp"
+
+    # --- типы атрибутов ---
+
+    def test_runner_is_docker_runner(self):
+        backend, _, _ = self._make()
+        assert isinstance(backend.runner, DockerRunner)
+
+    def test_files_is_docker_files(self):
+        backend, _, _ = self._make()
+        assert isinstance(backend.files, DockerFiles)
+
+    def test_provisioner_is_docker_provisioner(self):
+        backend, _, _ = self._make()
+        assert isinstance(backend.provisioner, DockerProvisioner)
+
+    # --- один экземпляр _DockerContainer ---
+
+    def test_runner_and_files_share_same_container(self):
+        """runner и files ссылаются на один и тот же _DockerContainer."""
+        backend, _, _ = self._make()
+        assert backend.runner._container is backend._container
+
+    def test_files_and_provisioner_share_same_container(self):
+        """files и provisioner ссылаются на один и тот же _DockerContainer."""
+        backend, _, _ = self._make()
+        assert backend.files._container is backend._container
+
+    def test_all_share_same_container(self):
+        """runner, files, provisioner — все три используют один контейнер."""
+        backend, _, _ = self._make()
+        c = backend._container
+        assert backend.runner._container is c
+        assert backend.files._container is c
+        assert backend.provisioner._container is c
+
+    # --- is_broken ---
+
+    def test_is_broken_false_initially(self):
+        """Новый бэкенд не сломан."""
+        backend, _, _ = self._make()
+        assert backend.is_broken is False
+
+    def test_is_broken_reflects_container_broken(self):
+        """is_broken проксирует container.broken."""
+        backend, _, _ = self._make()
+        backend._container.mark_broken()
+        assert backend.is_broken is True
+
+    # --- check ---
+
+    def test_check_calls_container_ensure(self):
+        """check() вызывает _container.ensure()."""
+        backend, fake_run, _ = self._make()
+        # ensure() потребует docker images -q и docker inspect — уже настроены
+        fake_run.calls.clear()
+        backend.check()
+        # Ожидаем хотя бы вызов docker images -q или docker inspect
+        joined = " ".join(" ".join(c) for c in fake_run.calls)
+        assert "docker" in joined
+
+    # --- close: shutdown_all, NO docker rm ---
+
+    def test_close_calls_shutdown_all(self):
+        """close() убивает все PTY-агенты через runner.shutdown_all()."""
+        backend, _, spawned = self._make()
+        import types
+        proj = types.SimpleNamespace(key="p1", claude_cmd=None)
+        # Чтобы запустить агента, нужен ensure → настроен fake_run
+        backend.runner._container.ensure()
+        backend.runner._procs["p1"] = _FakePty("docker exec ...", "/tmp")
+        backend.close()
+        assert backend.runner._procs == {}
+
+    def test_close_does_not_call_docker_rm(self):
+        """close() НЕ удаляет контейнер (docker rm не вызывается)."""
+        backend, fake_run, _ = self._make()
+        fake_run.calls.clear()
+        backend.close()
+        rm_calls = fake_run.called_with("docker rm")
+        assert rm_calls == [], f"docker rm не должен вызываться при close(), вызовы: {rm_calls}"
+
+    # --- имя контейнера и volume ---
+
+    def test_container_name_derived_from_path(self):
+        """Имя контейнера вычисляется через container_name(project_path)."""
+        path = "/workspace"
+        backend, _, _ = self._make(path)
+        assert backend._container.name == container_name(path)
+
+    def test_volume_name_matches_container_name(self):
+        """Volume = '<container_name>-work'."""
+        path = "/workspace"
+        backend, _, _ = self._make(path)
+        expected_volume = f"{container_name(path)}-work"
+        assert backend._container._volume == expected_volume
