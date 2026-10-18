@@ -3,8 +3,6 @@
 """
 
 import keyword
-import shutil
-import subprocess
 import sys
 from pathlib import Path
 
@@ -27,60 +25,23 @@ def validate_name(name: str) -> tuple[bool, str | None]:
     return (True, None)
 
 
-def is_empty_dir(path: str) -> bool:
-    """
-    Проверяет, пригоден ли каталог для нового проекта.
-
-    Каталог пригоден (пуст), если он не существует либо существует и пуст.
-    Если по пути лежит файл или непустой каталог — возвращает False.
-
-    :param path: Путь к каталогу проекта
-    :return: True, если каталог пуст/не существует
-    """
-    if not path:
-        return False
-    p = Path(path)
-    if not p.exists():
-        return True
-    if not p.is_dir():
-        return False
-    return not any(p.iterdir())
+def is_empty_dir(prov, path) -> bool:
+    return prov.is_empty_dir(path)
 
 
-def requirements(run=subprocess.run) -> list[dict]:
-    """
-    Проверяет наличие требуемых инструментов: git, claude, node.
-    На Windows дополнительно проверяет наличие git bash (bash) — он нужен для
-    bash-скриптов навыков.
-    (docker не требуется при установке проекта — он нужен лишь для подъёма MCP.)
-
-    Python в PATH цели НЕ требуется: скиллам разворачивается изолированный .venv
-    (строится интерпретатором agentmon), а его путь впечатывается в хуки/доки.
-    node требуется нескольким навыкам (query-analyze, web-test и др.).
-
-    :param run: Функция для запуска подпроцессов (по умолчанию subprocess.run)
-    :return: Список словарей с ключами name, ok, detail
-    """
+def requirements(prov) -> list[dict]:
     required_tools = ["git", "claude", "node"]
     result = []
-
     for tool in required_tools:
-        path = shutil.which(tool)
-        result.append({
-            "name": tool,
-            "ok": path is not None,
-            "detail": path if path else "не найден"
-        })
-
-    # git bash нужен только на Windows (bash-скрипты навыков)
+        path = prov.which(tool)
+        result.append({"name": tool, "ok": path is not None,
+                       "detail": path if path else "не найден"})
+    # git bash нужен только если цель — Windows; в удалённых Linux-сценариях нет.
+    # Для local сохраняем прежнюю проверку по sys.platform монитора.
     if sys.platform.startswith("win"):
-        path = shutil.which("bash")
-        result.append({
-            "name": "git bash",
-            "ok": path is not None,
-            "detail": path if path else "не найден (установите Git for Windows)"
-        })
-
+        path = prov.which("bash")
+        result.append({"name": "git bash", "ok": path is not None,
+                       "detail": path if path else "не найден (установите Git for Windows)"})
     return result
 
 
@@ -109,23 +70,23 @@ def infer_db_kind(connection: str) -> str:
     return "file"
 
 
-def platform_binary(platform_dir: str) -> str | None:
-    """Путь к исполняемому 1cv8 (кроссплатформенно).
+def platform_binary(prov, platform_dir) -> str | None:
+    """Путь к исполняемому 1cv8 на ЦЕЛИ. Цель — Linux: имя `1cv8`.
 
-    Если platform_dir — файл, возвращает его. Иначе ищет `1cv8.exe` (Windows) или
-    `1cv8` (прочие ОС) в самом каталоге и в подкаталоге `bin`. None, если не найден.
+    Если platform_dir указывает прямо на файл — вернём его (prov.exists).
+    Иначе ищем `1cv8` в каталоге и в bin/.
     """
     if not platform_dir:
         return None
-    p = Path(platform_dir)
-    if p.is_file():
-        return str(p)
-    names = ["1cv8.exe"] if sys.platform.startswith("win") else ["1cv8", "1cv8.exe"]
-    for base in (p, p / "bin"):
-        for name in names:
-            cand = base / name
-            if cand.exists():
-                return str(cand)
+    if prov.exists(platform_dir) and not prov.exists(f"{platform_dir}/1cv8") \
+            and not prov.exists(f"{platform_dir}/bin/1cv8"):
+        # platform_dir может быть самим файлом 1cv8 — отличим по отсутствию детей.
+        # (эвристика достаточна: каталог платформы всегда содержит 1cv8|bin/1cv8)
+        return platform_dir
+    for cand in (f"{platform_dir}/1cv8", f"{platform_dir}/bin/1cv8",
+                 f"{platform_dir}/1cv8.exe", f"{platform_dir}/bin/1cv8.exe"):
+        if prov.exists(cand):
+            return cand
     return None
 
 
@@ -167,7 +128,7 @@ def _designer_db_arg(db_kind: str, connection: str) -> tuple[str, str]:
     return ("/F", path)
 
 
-def build_check_db_command(platform_dir, db_connection="", user="", password="",
+def build_check_db_command(binary, db_connection="", user="", password="",
                            *, db_kind="", out_log="") -> list[str]:
     """Собирает команду проверки доступа к базе через `1cv8 DESIGNER`.
 
@@ -176,8 +137,6 @@ def build_check_db_command(platform_dir, db_connection="", user="", password="",
     """
     if not db_kind:
         db_kind = infer_db_kind(db_connection)
-    binary = platform_binary(platform_dir) or str(
-        Path(platform_dir) / ("1cv8.exe" if sys.platform.startswith("win") else "1cv8"))
     flag, value = _designer_db_arg(db_kind, db_connection)
     return [
         binary, "DESIGNER", flag, value,
@@ -187,51 +146,32 @@ def build_check_db_command(platform_dir, db_connection="", user="", password="",
     ]
 
 
-def check_db(*, platform_dir: str, db_connection: str, db_kind: str = "",
-             user: str = "", password: str = "", run=subprocess.run) -> dict:
-    """Проверяет доступ к базе (returncode==0 → успех).
+def check_db(prov, *, platform_dir: str, db_connection: str, db_kind: str = "",
+             user: str = "", password: str = "") -> dict:
+    """Проверяет доступ к базе через `1cv8 DESIGNER ... /DumpDBCfgList` на ЦЕЛИ.
 
-    Запускает `1cv8 DESIGNER ... /DumpDBCfgList`. Путь к платформе обязателен.
+    Запуск — через prov.run (на удалённом хосте там же, где платформа и сеть до
+    сервера 1С). Лог ошибки собираем из stdout/stderr команды.
     """
     if not platform_dir:
         return {"ok": False, "log": "Укажите путь к платформе 1С."}
-    if platform_binary(platform_dir) is None:
+    binary = platform_binary(prov, platform_dir)
+    if binary is None:
         return {"ok": False,
                 "log": f"Не найден исполняемый 1cv8 по пути платформы: {platform_dir}"}
-
     if not db_kind:
         db_kind = infer_db_kind(db_connection)
-
-    import tempfile
-    tmp = tempfile.NamedTemporaryFile(prefix="check-db-", suffix=".log", delete=False)
-    tmp.close()
-    out_log = tmp.name
+    out_log = f"{platform_dir}/.ai1c-check-db.log"
+    cmd = build_check_db_command(binary, db_connection, user, password,
+                                 db_kind=db_kind, out_log=out_log)
+    res = prov.run(cmd)
+    ok = res.returncode == 0
+    if ok:
+        return {"ok": True, "log": "Доступ есть"}
+    tail = ((res.stdout or "") + (res.stderr or "")).strip()
     try:
-        cmd = build_check_db_command(platform_dir, db_connection, user, password,
-                                     db_kind=db_kind, out_log=out_log)
-        try:
-            result = run(cmd, capture_output=True, text=True)
-        except FileNotFoundError as exc:
-            return {"ok": False, "log": f"не удалось запустить 1cv8: {exc}"}
-
-        ok = result.returncode == 0
-        # При успехе /DumpDBCfgList выводит список расширений — к проверке доступа
-        # он отношения не имеет, поэтому в лог кладём только диагностику при ошибке.
-        pieces = []
-        if not ok:
-            try:
-                file_log = Path(out_log).read_text(encoding="utf-8", errors="replace")
-            except OSError:
-                file_log = ""
-            if file_log.strip():
-                pieces.append(file_log.strip())
-            tail = ((result.stdout or "") + (result.stderr or "")).strip()
-            if tail:
-                pieces.append(tail)
-        log = "\n".join(pieces) or ("Доступ есть" if ok else f"Код возврата {result.returncode}")
-        return {"ok": ok, "log": log}
-    finally:
-        try:
-            Path(out_log).unlink()
-        except OSError:
-            pass
+        file_log = prov.read_text(out_log).strip()
+    except Exception:
+        file_log = ""
+    log = "\n".join(p for p in (file_log, tail) if p) or f"Код возврата {res.returncode}"
+    return {"ok": False, "log": log}
