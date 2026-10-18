@@ -38,10 +38,24 @@ document.addEventListener("DOMContentLoaded", async () => {
   await checkUrlParams();
   loadRequirements();
 
-  // Переключение SSH-полей по выбору бэкенда
+  // Переключение полей по выбору бэкенда (local / ssh / docker)
   const backendSel = document.getElementById("backend");
   const sshFields = document.getElementById("sshFields");
-  function syncBackend() { sshFields.hidden = backendSel.value !== "ssh"; }
+  const dockerFields = document.getElementById("dockerFields");
+  function syncBackend() {
+    const v = backendSel.value;
+    sshFields.hidden = v !== "ssh";
+    dockerFields.hidden = v !== "docker";
+    // При переключении на docker предзаполняем пустые поля path и platformDir
+    // разумными дефолтами для контейнера. Делаем это только здесь (при смене
+    // бэкенда), не при каждом вводе, чтобы не затирать уже введённые значения.
+    if (v === "docker") {
+      const pathInput = document.getElementById("path");
+      const platformDirInput = document.getElementById("platformDir");
+      if (!pathInput.value) pathInput.value = "/workspace";
+      if (!platformDirInput.value) platformDirInput.value = "/opt/1cv8/current";
+    }
+  }
   backendSel.addEventListener("change", syncBackend);
   syncBackend();
 });
@@ -114,16 +128,24 @@ async function loadRequirements() {
   }
 }
 
-// ─── Вспомогательная функция: SSH conn или null ───────────────────────────────
+// ─── Вспомогательная функция: conn-объект или null ───────────────────────────
 
 function readConn() {
-  if (document.getElementById("backend").value !== "ssh") return null;
-  return {
-    host: document.getElementById("sshHost").value.trim(),
-    port: parseInt(document.getElementById("sshPort").value, 10) || 22,
-    user: document.getElementById("sshUser").value.trim() || null,
-    key_path: document.getElementById("sshKeyPath").value.trim() || null,
-  };
+  const backend = document.getElementById("backend").value;
+  if (backend === "ssh") {
+    return {
+      host: document.getElementById("sshHost").value.trim(),
+      port: parseInt(document.getElementById("sshPort").value, 10) || 22,
+      user: document.getElementById("sshUser").value.trim() || null,
+      key_path: document.getElementById("sshKeyPath").value.trim() || null,
+    };
+  }
+  if (backend === "docker") {
+    const image = document.getElementById("dockerImage").value.trim();
+    // {} допустим: image необязателен; бэкенд возьмёт дефолт из образа-тулкита
+    return image ? { image } : {};
+  }
+  return null;
 }
 
 // ─── Проверка доступа к базе ───────────────────────────────────────────────────

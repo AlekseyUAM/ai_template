@@ -35,6 +35,18 @@ def test_html_has_license_server_input():
     assert 'id="licenseServer"' in _html(), "Missing id=\"licenseServer\" in project-wizard.html"
 
 
+def test_html_has_docker_option():
+    assert 'value="docker"' in _html(), "Missing docker option in project-wizard.html"
+
+
+def test_html_has_docker_fields_container():
+    assert 'id="dockerFields"' in _html(), "Missing id=\"dockerFields\" in project-wizard.html"
+
+
+def test_html_has_docker_image_input():
+    assert 'id="dockerImage"' in _html(), "Missing id=\"dockerImage\" in project-wizard.html"
+
+
 # ── JS assertions ────────────────────────────────────────────────────────────
 
 def test_js_has_backend_in_body():
@@ -56,3 +68,22 @@ def test_js_read_conn_used_in_check_db():
     assert js.count("readConn()") >= 2, (
         "readConn() should be called at least twice (check-db and createProject)"
     )
+
+
+def test_js_sync_backend_handles_docker():
+    """syncBackend must reference dockerFields for three-way backend switching."""
+    assert "dockerFields" in _js(), "Missing dockerFields reference in project-wizard.js"
+
+
+def test_js_read_conn_docker_branch():
+    """readConn must have a docker branch returning a conn object."""
+    assert '"docker"' in _js() or "'docker'" in _js(), (
+        "readConn in project-wizard.js missing docker branch"
+    )
+
+
+def test_js_docker_path_defaults():
+    """/workspace and /opt/1cv8/current default paths must be set for docker backend."""
+    js = _js()
+    assert "/workspace" in js, "Missing /workspace default path for docker in project-wizard.js"
+    assert "/opt/1cv8/current" in js, "Missing /opt/1cv8/current default platformDir for docker in project-wizard.js"

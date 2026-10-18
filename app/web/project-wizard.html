@@ -174,6 +174,7 @@
           <select id="backend">
             <option value="local" selected>Локально</option>
             <option value="ssh">Удалённо (SSH)</option>
+            <option value="docker">В Docker-контейнере</option>
           </select>
         </label>
         <div id="sshFields" hidden>
@@ -185,6 +186,10 @@
             <input id="sshUser" type="text" placeholder="root"></label>
           <label><span class="label-text">Путь к ключу</span>
             <input id="sshKeyPath" type="text" placeholder="~/.ssh/id_ed25519"></label>
+        </div>
+        <div id="dockerFields" hidden>
+          <label><span class="label-text">Образ контейнера</span>
+            <input id="dockerImage" type="text" placeholder="ai1c-agent:latest"></label>
         </div>
       </div>
     </div>
