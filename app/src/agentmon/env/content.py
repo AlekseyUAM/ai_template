@@ -51,12 +51,15 @@ def _model_effort(config, name):
     return _DEFAULT_MODEL, _DEFAULT_EFFORT
 
 
-def _render_agents(prov, config, agents_dst) -> None:
+def _render_agents(prov, config, agents_dst, overrides: dict | None = None) -> None:
     prov.mkdirs([agents_dst])
     for src in sorted((CONTENT_DIR / "agents").glob("*.md")):
         model, effort = _model_effort(config, src.stem)
         text = src.read_text(encoding="utf-8")
         text = text.replace("{{MODEL}}", model).replace("{{EFFORT}}", effort)
+        if overrides:
+            for placeholder, actual in overrides.items():
+                text = text.replace(placeholder, actual)
         prov.write_text(f"{agents_dst}/{src.name}", text)
 
 
@@ -71,12 +74,16 @@ def _apply_mcp_names(prov, claude_dir, overrides) -> None:
     """Подставляет актуальные имена MCP вместо плейсхолдеров — пишем на цель.
 
     Обходим текстовые файлы шаблона .claude на мониторе; меняем и пишем на цель
-    только изменившиеся.
+    только изменившиеся. Агенты и settings.json пропускаем: агенты обрабатываются
+    в _render_agents (с учётом model/effort), settings.json — через write_preserving.
     """
     for src in sorted(CONTENT_DIR.rglob("*")):
         if not src.is_file() or "__pycache__" in src.parts:
             continue
         rel = src.relative_to(CONTENT_DIR)
+        # agents/ обрабатываются в _render_agents; settings.json — через write_preserving
+        if rel.parts[:1] == ("agents",) or rel.parts == ("settings.json",):
+            continue
         try:
             text = src.read_text(encoding="utf-8")
         except (UnicodeDecodeError, OSError):
@@ -156,16 +163,19 @@ def deploy_content(prov, config, *, update: bool) -> None:
     project_dir = config.project_dir
     claude = f"{project_dir}/.claude"
     prov.put_tree(str(TEMPLATE_DIR), project_dir, skip=_is_special)
-    _render_agents(prov, config, f"{claude}/agents")
+    overrides = mcp_name_overrides(config.mcp) if not update else {}
+    _render_agents(prov, config, f"{claude}/agents", overrides=overrides or None)
     py_json = '\\"' + prov.venv_python(project_dir) + '\\"'
     settings = _PY_INVOKE.sub(lambda m: py_json + " ", _render_settings())
+    if overrides:
+        for placeholder, actual in overrides.items():
+            settings = settings.replace(placeholder, actual)
     write_preserving(prov, f"{claude}/settings.json", settings, update=update)
     _rewrite_python_invocations(prov, claude, _py_cmd(prov, project_dir))
     _deploy_vscode(prov, project_dir, update=update)
     if not update:
         write_preserving(prov, f"{project_dir}/README.md",
                          _project_readme(config.project_name), update=update)
-        overrides = mcp_name_overrides(config.mcp)
         if overrides:
             _apply_mcp_names(prov, claude, overrides)
 

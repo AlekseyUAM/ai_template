@@ -142,6 +142,27 @@ def test_deploy_update_skips_mcp_substitution(prov, tmp_path):
     assert "bsl_checker" not in dev
 
 
+def test_mcp_rename_does_not_clobber_rendered_agent_model(prov, tmp_path):
+    """Регрессия: mcp-override не должен перетирать отрендеренный model/effort агента.
+
+    При наличии и нестандартной модели агента, и MCP-переименования, финальный файл
+    агента должен иметь оба изменения: подставленную модель и подставленное mcp-имя.
+    """
+    agents = [AgentModel("developer", "claude-opus-4-8", "high")]
+    config = cfg(tmp_path, agents)
+    config.mcp = _bsl_renamed()
+    content.deploy_content(prov, config, update=False)
+    text = (tmp_path / ".claude" / "agents" / "developer.md").read_text(encoding="utf-8")
+    # model/effort подставлены
+    assert "{{MODEL}}" not in text, "{{MODEL}} не заменён — агент перезаписан шаблоном"
+    assert "{{EFFORT}}" not in text, "{{EFFORT}} не заменён — агент перезаписан шаблоном"
+    assert "claude-opus-4-8" in text
+    assert "high" in text
+    # mcp-имя тоже подставлено
+    assert "mcp__bsl_checker__" in text
+    assert "mcp__bsl_ls__" not in text
+
+
 def test_deploy_no_overrides_when_default_name(prov, tmp_path):
     config = cfg(tmp_path, [])
     config.mcp = [McpSelection(
