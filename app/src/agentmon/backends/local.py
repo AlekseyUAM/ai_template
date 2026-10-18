@@ -1,11 +1,88 @@
 import logging
 import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
 
 from ..models import FileRef
 from ..pty_process import spawn as default_spawn
-from . import BUFFER_LIMIT, Backend
+from . import BUFFER_LIMIT, Backend, RunResult
 
 logger = logging.getLogger(__name__)
+
+
+class LocalProvisioner:
+    """Provisioner для той же машины: прямые Path/shutil/subprocess-операции.
+
+    Поведение повторяет прежний код слоя env/ (scaffold/content/checks) —
+    рефакторинг не должен менять результат для backend=local.
+    """
+
+    _CRUFT_DIRS = {"__pycache__", "build", ".pytest_cache"}
+
+    def mkdirs(self, paths) -> None:
+        for p in paths:
+            Path(p).mkdir(parents=True, exist_ok=True)
+
+    def exists(self, path) -> bool:
+        return Path(path).exists()
+
+    def is_empty_dir(self, path) -> bool:
+        if not path:
+            return False
+        p = Path(path)
+        if not p.exists():
+            return True
+        if not p.is_dir():
+            return False
+        return not any(p.iterdir())
+
+    def read_text(self, path) -> str:
+        return Path(path).read_text(encoding="utf-8")
+
+    def write_text(self, path, content) -> None:
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        Path(path).write_text(content, encoding="utf-8")
+
+    def write_bytes(self, path, data) -> None:
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        Path(path).write_bytes(data)
+
+    def _is_cruft(self, item: Path) -> bool:
+        return any(p in self._CRUFT_DIRS or p.endswith(".egg-info")
+                   for p in item.parts)
+
+    def put_tree(self, local_src, dst, skip=None) -> None:
+        src, dstp = Path(local_src), Path(dst)
+        for item in sorted(src.rglob("*")):
+            if self._is_cruft(item):
+                continue
+            rel = item.relative_to(src)
+            if skip is not None and skip(rel):
+                continue
+            target = dstp / rel
+            if item.is_dir():
+                target.mkdir(parents=True, exist_ok=True)
+            else:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(item.read_bytes())
+
+    def run(self, cmd, cwd=None) -> RunResult:
+        proc = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
+        return RunResult(proc.returncode, proc.stdout or "", proc.stderr or "")
+
+    def which(self, tool) -> str | None:
+        return shutil.which(tool)
+
+    def python_cmd(self):
+        return [sys.executable]
+
+    def venv_python(self, project_dir) -> str:
+        base = Path(project_dir) / ".venv"
+        if os.name == "nt":
+            return str(base / "Scripts" / "python.exe")
+        return str(base / "bin" / "python")
 
 
 class LocalRunner:
@@ -156,6 +233,7 @@ class LocalBackend(Backend):
     def __init__(self, claude_cmd, spawn_fn=default_spawn, home=None):
         self.runner = LocalRunner(claude_cmd, spawn_fn=spawn_fn)
         self.files = LocalFiles(home=home)
+        self.provisioner = LocalProvisioner()
 
     def check(self) -> None:
         return None
