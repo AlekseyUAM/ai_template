@@ -60,3 +60,18 @@ def test_venv_python_matches_os(tmp_path):
     prov = LocalProvisioner()
     got = prov.venv_python(str(tmp_path))
     assert ".venv" in got and got.endswith(("python", "python.exe"))
+
+
+def test_is_file_distinguishes_file_from_dir(tmp_path):
+    prov = LocalProvisioner()
+    f = tmp_path / "bin"
+    f.write_text("x")
+    assert prov.is_file(str(f)) is True
+    assert prov.is_file(str(tmp_path)) is False
+    assert prov.is_file(str(tmp_path / "missing")) is False
+
+
+def test_tempdir_returns_string():
+    prov = LocalProvisioner()
+    td = prov.tempdir()
+    assert isinstance(td, str) and len(td) > 0

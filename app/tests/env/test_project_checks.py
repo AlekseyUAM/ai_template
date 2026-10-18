@@ -5,8 +5,9 @@ from agentmon.env import project_checks as pc
 
 class FakeProv:
     def __init__(self, exists=None, which_map=None, run_result=None,
-                 empty=True):
+                 empty=True, files=None):
         self._exists = set(exists or [])
+        self._files = set(files or [])
         self._which = which_map or {}
         self._run_result = run_result or RunResult(0, "", "")
         self._empty = empty
@@ -14,6 +15,9 @@ class FakeProv:
 
     def exists(self, path):
         return path in self._exists
+
+    def is_file(self, path):
+        return path in self._files
 
     def is_empty_dir(self, path):
         return self._empty
@@ -24,6 +28,9 @@ class FakeProv:
     def run(self, cmd, cwd=None):
         self.run_calls.append(cmd)
         return self._run_result
+
+    def tempdir(self):
+        return "/tmp"
 
 
 def test_is_empty_dir_delegates_to_prov():
@@ -44,12 +51,22 @@ def test_platform_binary_found_via_prov_exists():
     assert pc.platform_binary(prov, "/opt/1cv8") == "/opt/1cv8/1cv8"
 
 
-def test_check_db_runs_designer_via_prov(tmp_path):
+def test_check_db_runs_designer_via_prov():
     prov = FakeProv(exists={"/opt/1cv8/1cv8"}, run_result=RunResult(0, "", ""))
     res = pc.check_db(prov, platform_dir="/opt/1cv8",
                       db_connection='srvr="s";ref="base"', db_kind="server")
     assert res["ok"] is True
     assert prov.run_calls and "DESIGNER" in prov.run_calls[0]
+
+
+def test_check_db_dir_not_binary():
+    """Каталог платформы существует, но 1cv8 внутри нет — binary не найден,
+    prov.run не вызывается (исключает PermissionError при попытке exec каталога)."""
+    prov = FakeProv(exists={"/opt/1cv8"})  # каталог существует, дочерних 1cv8 нет
+    res = pc.check_db(prov, platform_dir="/opt/1cv8", db_connection="File=/b")
+    assert res["ok"] is False
+    assert "1cv8" in res["log"]
+    assert not prov.run_calls
 
 
 def test_is_empty_dir_nonexistent(tmp_path):

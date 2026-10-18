@@ -28,6 +28,9 @@ class LocalProvisioner:
     def exists(self, path) -> bool:
         return Path(path).exists()
 
+    def is_file(self, path) -> bool:
+        return Path(path).is_file()
+
     def is_empty_dir(self, path) -> bool:
         if not path:
             return False
@@ -83,6 +86,10 @@ class LocalProvisioner:
         if os.name == "nt":
             return str(base / "Scripts" / "python.exe")
         return str(base / "bin" / "python")
+
+    def tempdir(self) -> str:
+        import tempfile
+        return tempfile.gettempdir()
 
 
 class LocalRunner:

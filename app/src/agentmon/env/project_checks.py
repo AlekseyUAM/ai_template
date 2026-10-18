@@ -3,6 +3,7 @@
 """
 
 import keyword
+import os
 import sys
 from pathlib import Path
 
@@ -73,15 +74,12 @@ def infer_db_kind(connection: str) -> str:
 def platform_binary(prov, platform_dir) -> str | None:
     """Путь к исполняемому 1cv8 на ЦЕЛИ. Цель — Linux: имя `1cv8`.
 
-    Если platform_dir указывает прямо на файл — вернём его (prov.exists).
-    Иначе ищем `1cv8` в каталоге и в bin/.
+    Если platform_dir указывает прямо на файл — вернём его.
+    Иначе ищем `1cv8` и `1cv8.exe` в каталоге и в bin/.
     """
     if not platform_dir:
         return None
-    if prov.exists(platform_dir) and not prov.exists(f"{platform_dir}/1cv8") \
-            and not prov.exists(f"{platform_dir}/bin/1cv8"):
-        # platform_dir может быть самим файлом 1cv8 — отличим по отсутствию детей.
-        # (эвристика достаточна: каталог платформы всегда содержит 1cv8|bin/1cv8)
+    if prov.is_file(platform_dir):
         return platform_dir
     for cand in (f"{platform_dir}/1cv8", f"{platform_dir}/bin/1cv8",
                  f"{platform_dir}/1cv8.exe", f"{platform_dir}/bin/1cv8.exe"):
@@ -161,7 +159,7 @@ def check_db(prov, *, platform_dir: str, db_connection: str, db_kind: str = "",
                 "log": f"Не найден исполняемый 1cv8 по пути платформы: {platform_dir}"}
     if not db_kind:
         db_kind = infer_db_kind(db_connection)
-    out_log = f"{platform_dir}/.ai1c-check-db.log"
+    out_log = f"{prov.tempdir()}/ai1c-check-db-{os.getpid()}.log"
     cmd = build_check_db_command(binary, db_connection, user, password,
                                  db_kind=db_kind, out_log=out_log)
     res = prov.run(cmd)
