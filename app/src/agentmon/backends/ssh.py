@@ -1,11 +1,13 @@
 import logging
 import os
+import posixpath
 import shlex
 import stat
+import stat as _stat
 import time
 
 from ..models import FileRef
-from . import BUFFER_LIMIT, Backend
+from . import BUFFER_LIMIT, Backend, RunResult
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +120,18 @@ class _Connection:
                 raise SshUnavailable(f"SFTP недоступен: {exc}") from exc
         return self._sftp
 
+    def exec(self, cmd: str):
+        """Open a one-shot exec channel, run *cmd*, return the channel.
+
+        Callers should read stdout/stderr and call recv_exit_status() on the
+        returned channel.  This is a thin convenience wrapper so that
+        SshProvisioner (and tests) do not have to reach through
+        client().get_transport().open_session() every time.
+        """
+        chan = self.client().get_transport().open_session()
+        chan.exec_command(cmd)
+        return chan
+
     def close(self):
         if self._client is not None:
             try:
@@ -127,6 +141,113 @@ class _Connection:
         self._client = None
         self._sftp = None
         self._broken_at = None
+
+
+class SshProvisioner:
+    """Provisioner по SSH: файловые операции через SFTP, команды через exec-канал.
+
+    Переиспользует _Connection ssh-бэкенда (одно соединение на хост). Цель —
+    Linux: пути POSIX, интерпретатор python3, venv в .venv/bin/python.
+    """
+
+    def __init__(self, connection):
+        self._c = connection
+
+    # --- файловые операции (SFTP) ---
+
+    def mkdirs(self, paths) -> None:
+        sftp = self._c.sftp()
+        for path in paths:
+            parts = path.strip("/").split("/")
+            cur = ""
+            for seg in parts:
+                cur = cur + "/" + seg
+                try:
+                    sftp.stat(cur)
+                except FileNotFoundError:
+                    sftp.mkdir(cur)
+
+    def exists(self, path) -> bool:
+        try:
+            self._c.sftp().stat(path)
+            return True
+        except FileNotFoundError:
+            return False
+
+    def is_file(self, path) -> bool:
+        try:
+            st = self._c.sftp().stat(path)
+        except FileNotFoundError:
+            return False
+        return _stat.S_ISREG(st.st_mode)
+
+    def is_empty_dir(self, path) -> bool:
+        if not path:
+            return False
+        if not self.exists(path):
+            return True
+        if self.is_file(path):
+            return False
+        try:
+            return len(self._c.sftp().listdir(path)) == 0
+        except OSError:
+            return False
+
+    def read_text(self, path) -> str:
+        with self._c.sftp().open(path, "r") as fh:
+            data = fh.read()
+        return data.decode("utf-8") if isinstance(data, bytes) else data
+
+    def write_text(self, path, content) -> None:
+        self.write_bytes(path, content.encode("utf-8"))
+
+    def write_bytes(self, path, data) -> None:
+        self.mkdirs([posixpath.dirname(path)])
+        with self._c.sftp().open(path, "w") as fh:
+            fh.write(data)
+
+    def put_tree(self, local_src, dst, skip=None) -> None:
+        from pathlib import Path
+        cruft = {"__pycache__", "build", ".pytest_cache"}
+        src = Path(local_src)
+        for item in sorted(src.rglob("*")):
+            if any(p in cruft or p.endswith(".egg-info") for p in item.parts):
+                continue
+            rel = item.relative_to(src)
+            if skip is not None and skip(rel):
+                continue
+            target = f"{dst}/{rel.as_posix()}"
+            if item.is_dir():
+                self.mkdirs([target])
+            else:
+                self.write_bytes(target, item.read_bytes())
+
+    # --- выполнение команд (exec) ---
+
+    def run(self, cmd, cwd=None) -> RunResult:
+        line = " ".join(shlex.quote(c) for c in cmd)
+        if cwd:
+            line = f"cd {shlex.quote(cwd)} && {line}"
+        chan = self._c.exec(line)
+        out = chan.makefile("rb").read()
+        err = chan.makefile_stderr("rb").read()
+        rc = chan.recv_exit_status()
+        return RunResult(rc, out.decode("utf-8", "replace"),
+                         err.decode("utf-8", "replace"))
+
+    def which(self, tool) -> str | None:
+        res = self.run(["command", "-v", tool])
+        path = res.stdout.strip()
+        return path or None
+
+    def python_cmd(self) -> list:
+        return ["python3"]
+
+    def venv_python(self, project_dir) -> str:
+        return f"{project_dir}/.venv/bin/python"
+
+    def tempdir(self) -> str:
+        return "/tmp"
 
 
 class SshRunner:
@@ -364,6 +485,7 @@ class SshBackend(Backend):
         # через SFTP normalize(".") при первом обращении; если home задан
         # явно, запроса не будет вовсе.
         self.files = SshFiles(self._connection, conn.get("host"), home=home, guess=guess)
+        self.provisioner = SshProvisioner(self._connection)
 
     def mark_broken(self) -> None:
         self._connection.mark_broken()
