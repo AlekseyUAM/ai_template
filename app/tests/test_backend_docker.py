@@ -290,6 +290,27 @@ class TestEnsureRunning:
         assert not fake.called_with("docker run")
         assert not fake.called_with("docker start")
 
+    def test_xvfb_still_ensured_when_already_running(self):
+        """Когда контейнер уже running, ensure() всё ещё должен вызвать docker exec для Xvfb."""
+        fake = FakeRun(routes=[
+            ("docker images -q", 0, "sha256:abc\n", ""),
+            ("docker inspect", 0, "running\n", ""),
+            # docker exec -d (Xvfb) → default rc=0
+        ])
+        c = _make_container(fake, name="ai1c-test")
+        c.ensure()
+        # Проверяем, что docker run и docker start НЕ вызваны
+        assert not fake.called_with("docker run")
+        assert not fake.called_with("docker start")
+        # Но docker exec с Xvfb :99 ДО ЛЖЕ вызван
+        xvfb_calls = fake.called_with("docker exec")
+        assert len(xvfb_calls) == 1
+        cmd = xvfb_calls[0]
+        assert "-d" in cmd
+        assert "ai1c-test" in cmd
+        full = " ".join(cmd)
+        assert "Xvfb :99" in full
+
 
 # ---------------------------------------------------------------------------
 # ensure() — образ отсутствует → RuntimeError из _build
@@ -353,9 +374,9 @@ class TestMarkBroken:
         c.mark_broken()   # t=5 — уже broken, окно НЕ перезапускается
         assert c._broken_at == first_broken_at, "broken_at не должен изменяться при повторном mark_broken"
 
-    def test_broken_false_after_retry_window(self):
-        """После истечения окна broken → False (окно не перезапускалось)."""
-        # Окно 2 секунды; после вызова mark_broken симулируем пройденное время
+    def test_broken_stays_true_after_retry_window(self):
+        """broken остаётся True после истечения окна (окно влияет только на попытки, не сбрасывает флаг)."""
+        # Окно 5 секунд; после вызова mark_broken симулируем пройденное время
         times = [0.0, 10.0]  # первый вызов clock() — при mark_broken; второй — при проверке broken
         idx = [0]
 
@@ -367,11 +388,10 @@ class TestMarkBroken:
         fake = FakeRun()
         c = _make_container(fake, clock=fake_clock, retry_seconds=5.0)
         c.mark_broken()
-        # Теперь clock() вернёт 10.0, а retry_seconds=5.0 → 10-0=10 >= 5 → broken НЕ проверяет окно
-        # (broken просто проверяет _broken_at is not None)
-        # По аналогии с _Connection.broken — broken=True если _broken_at is not None
-        # Но окно используется в client(); здесь проверяем только mark_broken-идемпотентность.
-        assert c.broken  # помечен — значит broken=True
+        # Теперь clock() вернёт 10.0, а retry_seconds=5.0 → 10-0=10 >= 5 → прошло окно
+        # Но broken просто проверяет _broken_at is not None — флаг остаётся true.
+        # Окно используется в client() для гейтинга попыток, а не для сброса флага.
+        assert c.broken  # помечен — значит broken=True даже после окна
 
     def test_within_retry_window_true_when_fresh(self):
         times = [0.0, 1.0]

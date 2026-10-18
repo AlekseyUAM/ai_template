@@ -141,17 +141,13 @@ class _DockerContainer:
         1. Если образа нет — вызвать хук ``_build`` (по умолчанию исключение).
         2. absent → ``docker run -d --name ... sleep infinity``.
         3. exited → ``docker start <name>``.
-        4. running → ничего делать не нужно.
+        4. running → контейнер уже поднят, но Xvfb всё ещё гарантируется ниже.
         При ненулевом коде docker run/start → ``mark_broken()`` + ``RuntimeError``.
         """
         if not mcp_docker.image_exists(self._image, run=self._run):
             self._build()
 
         state = self.status()
-
-        if state == "running":
-            return
-
         if state == "absent":
             cmd = [
                 "docker", "run", "-d",
@@ -160,38 +156,35 @@ class _DockerContainer:
             ]
             for h in self._add_hosts:
                 cmd.append(f"--add-host={h}")
-            cmd += [
-                "-v", f"{self._volume}:{self._workdir}",
-            ]
+            cmd += ["-v", f"{self._volume}:{self._workdir}"]
             for k, v in self._env.items():
                 cmd += ["-e", f"{k}={v}"]
             cmd += [self._image, "sleep", "infinity"]
             r = self._run(cmd, capture_output=True, text=True)
-        else:
-            # state == "exited"
+        elif state == "exited":
             r = self._run(
                 ["docker", "start", self._name],
-                capture_output=True,
-                text=True,
+                capture_output=True, text=True,
             )
+        else:
+            r = None  # running — контейнер уже поднят
 
-        if r.returncode != 0:
+        if r is not None and r.returncode != 0:
             log = ((r.stdout or "") + (r.stderr or "")).strip()
             self.mark_broken()
             raise RuntimeError(
                 f"Не удалось запустить контейнер {self._name!r}: {log}"
             )
 
-        # Шаг 3: Xvfb — 1С Конфигуратор требует X-дисплей даже в headless.
-        # Идемпотентно: pgrep проверяет, не запущен ли уже Xvfb :99.
+        # Xvfb — на каждом ensure (идемпотентно): контейнер мог быть уже
+        # запущен, но его Xvfb мог умереть. 1С Конфигуратор требует X-дисплей.
         xvfb_cmd = (
             "pgrep -f 'Xvfb :99' >/dev/null 2>&1 "
             "|| setsid Xvfb :99 -screen 0 1024x768x24 >/tmp/xvfb.log 2>&1"
         )
         self._run(
             ["docker", "exec", "-d", self._name, "sh", "-c", xvfb_cmd],
-            capture_output=True,
-            text=True,
+            capture_output=True, text=True,
         )
 
     # ------------------------------------------------------------------
