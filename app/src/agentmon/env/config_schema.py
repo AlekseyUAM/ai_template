@@ -34,6 +34,7 @@ class EnvConfig:
     web_publication: str
     mcp: list[McpSelection]
     agents: list[AgentModel]
+    license_server: str | None = None
 
     def to_dict(self) -> dict:
         data = asdict(self)

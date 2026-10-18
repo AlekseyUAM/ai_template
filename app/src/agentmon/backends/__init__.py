@@ -6,6 +6,7 @@
 удобнее порознь.
 """
 
+from dataclasses import dataclass
 from typing import Protocol
 
 from ..models import FileRef, Project
@@ -26,12 +27,41 @@ class SessionFiles(Protocol):
     def read_from(self, path: str, offset: int) -> tuple[bytes, int]: ...
 
 
+@dataclass
+class RunResult:
+    returncode: int
+    stdout: str = ""
+    stderr: str = ""
+
+
+class Provisioner(Protocol):
+    """Операции над файловой системой целевой машины и запуск команд на ней.
+
+    Позволяет развернуть проект на любой цели (локальная ФС, удалённый хост по
+    SFTP, контейнер) одним и тем же кодом слоя `env/`. put_tree читает дерево с
+    машины монитора (local_src всегда локален) и переносит его на цель.
+    """
+
+    def mkdirs(self, paths: list[str]) -> None: ...
+    def exists(self, path: str) -> bool: ...
+    def is_empty_dir(self, path: str) -> bool: ...
+    def read_text(self, path: str) -> str: ...
+    def write_text(self, path: str, content: str) -> None: ...
+    def write_bytes(self, path: str, data: bytes) -> None: ...
+    def put_tree(self, local_src: str, dst: str, skip=None) -> None: ...
+    def run(self, cmd: list[str], cwd: str | None = None) -> "RunResult": ...
+    def which(self, tool: str) -> str | None: ...
+    def python_cmd(self) -> list[str]: ...
+    def venv_python(self, project_dir: str) -> str: ...
+
+
 class Backend:
     """Пара «исполнитель + доступ к журналам» для одной целевой машины."""
 
     key: str
     runner: AgentRunner
     files: SessionFiles
+    provisioner: "Provisioner"
 
     @property
     def is_broken(self) -> bool:
