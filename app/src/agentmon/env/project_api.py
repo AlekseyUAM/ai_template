@@ -11,6 +11,7 @@ from .project_checks import (validate_name, requirements, check_db,
                              current_env_version, is_empty_dir, infer_db_kind)
 from .task_schema import task_folder_name
 from ..backends.local import LocalProvisioner
+from ..backends.docker import DEFAULT_PLATFORM_DIR
 
 
 _REQUIRED_FIELDS = ("name", "path", "identifier", "email",
@@ -42,12 +43,12 @@ def build_project_router(store, registry, monitor=None, run=subprocess.run,
         from agentmon.store.mcp import McpRepo
         return ProjectRepo(db), McpRepo(db)
 
-    def _provisioner_for(backend, conn):
+    def _provisioner_for(backend, conn, path=""):
         if (backend and backend != "local"
                 and monitor is not None
                 and getattr(monitor, "backends", None) is not None):
             from ..models import Project
-            probe = Project(id=0, name="probe", path="", backend=backend,
+            probe = Project(id=0, name="probe", path=path, backend=backend,
                             conn=conn or {}, claude_cmd=None, created_at=0.0)
             return monitor.backends.get(probe).provisioner
         return LocalProvisioner()
@@ -86,7 +87,8 @@ def build_project_router(store, registry, monitor=None, run=subprocess.run,
     @router.post("/api/env/projects/check-db")
     def check_db_route(body: dict):
         result = check_db(
-            _provisioner_for(body.get("backend", "local"), body.get("conn")),
+            _provisioner_for(body.get("backend", "local"), body.get("conn"),
+                             body.get("path", "")),
             platform_dir=body.get("platform_dir", ""),
             db_kind=body.get("db_kind", ""),
             db_connection=body.get("db_connection", ""),
@@ -106,6 +108,11 @@ def build_project_router(store, registry, monitor=None, run=subprocess.run,
 
         Возвращает (pid, config, prov, backend, conn). Бросает HTTPException при ошибке ввода.
         """
+        # Для docker-бэкенда платформа вшита в образ — применяем дефолтный путь,
+        # если мастер прислал пустое значение (single source of truth: docker.py).
+        if body.get("backend") == "docker" and not body.get("platform_dir"):
+            body = {**body, "platform_dir": DEFAULT_PLATFORM_DIR}
+
         missing = [f for f in _REQUIRED_FIELDS if not body.get(f)]
         absent = [f for f in _PRESENT_FIELDS if f not in body]
         if missing or absent:
@@ -120,7 +127,7 @@ def build_project_router(store, registry, monitor=None, run=subprocess.run,
 
         backend = body.get("backend", "local")
         conn = body.get("conn")
-        prov = _provisioner_for(backend, conn)
+        prov = _provisioner_for(backend, conn, body.get("path", ""))
 
         if not is_empty_dir(prov, body["path"]):
             raise HTTPException(

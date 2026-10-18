@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_IMAGE = "ai1c-agent:latest"
 DEFAULT_WORKDIR = "/workspace"
+DEFAULT_PLATFORM_DIR = "/opt/1cv8/current"
 DEFAULT_RETRY_SECONDS = 10.0
 
 

@@ -6,7 +6,7 @@ import time
 from .models import Project
 
 SCHEMA_VERSION = 1
-BACKENDS = ("local", "ssh")
+BACKENDS = ("local", "ssh", "docker")
 
 
 class _Result:
