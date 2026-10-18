@@ -4,6 +4,7 @@ import time
 from pathlib import Path
 
 from .project_checks import platform_binary, infer_db_kind, _designer_db_arg, auth_args
+from ..backends.local import LocalProvisioner
 
 # Признаки ошибки аутентификации — такие НЕ ретраим (чтобы не залочить учётку).
 _AUTH_MARKERS = ("парол", "идентификац", "аутентификац")
@@ -16,16 +17,18 @@ def _is_auth_error(log: str) -> bool:
 _TARGET = {"cf": ("src", "cf"), "cfe": ("src", "cfe")}
 
 
-def build_dump_command(config, kind: str, *, user: str = "", password: str = "") -> list[str]:
+def build_dump_command(config, kind: str, *, user: str = "", password: str = "",
+                       prov=None) -> list[str]:
     """Команда выгрузки конфигурации/расширений через нативный `1cv8 DESIGNER`.
 
     cf: `/DumpConfigToFiles <dir>`; cfe: то же с `-AllExtensions`. Кроссплатформенно
     (1cv8.exe на Windows, иначе 1cv8). Без зависимости от внешнего модуля.
     """
+    prov = prov or LocalProvisioner()
     if kind not in _TARGET:
         raise ValueError(f"неизвестный вид выгрузки: {kind!r}")
     target = str(Path(config.project_dir).joinpath(*_TARGET[kind]))
-    binary = platform_binary(config.platform_dir) or str(
+    binary = platform_binary(prov, config.platform_dir) or str(
         Path(config.platform_dir) /
         ("1cv8.exe" if sys.platform.startswith("win") else "1cv8"))
     db_kind = getattr(config, "db_kind", "") or infer_db_kind(config.db_connection)
@@ -42,7 +45,7 @@ def build_dump_command(config, kind: str, *, user: str = "", password: str = "")
 
 def dump(config, kind: str, *, user: str = "", password: str = "",
          run=subprocess.run, sleep=time.sleep, clock=time.monotonic,
-         max_wait: float = 900.0, interval: float = 30.0) -> None:
+         max_wait: float = 900.0, interval: float = 30.0, prov=None) -> None:
     """Выгружает cf/cfe. При занятости конфигуратора повторяет попытки.
 
     1С не сразу освобождает конфигуратор после предыдущей выгрузки, поэтому при
@@ -50,7 +53,8 @@ def dump(config, kind: str, *, user: str = "", password: str = "",
     до `max_wait` секунд. Ошибку аутентификации НЕ ретраим, чтобы не заблокировать
     учётную запись.
     """
-    cmd = build_dump_command(config, kind, user=user, password=password)
+    prov = prov or LocalProvisioner()
+    cmd = build_dump_command(config, kind, user=user, password=password, prov=prov)
     deadline = clock() + max_wait
     while True:
         # Таймаут запуска ограничиваем остатком времени до дедлайна, чтобы

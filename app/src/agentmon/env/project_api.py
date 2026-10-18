@@ -10,6 +10,7 @@ from .installer import install_environment
 from .project_checks import (validate_name, requirements, check_db,
                              current_env_version, is_empty_dir, infer_db_kind)
 from .task_schema import task_folder_name
+from ..backends.local import LocalProvisioner
 
 
 _REQUIRED_FIELDS = ("name", "path", "identifier", "email",
@@ -67,19 +68,19 @@ def build_project_router(store, registry, monitor=None, run=subprocess.run,
 
     @router.get("/api/env/projects/requirements")
     def get_requirements():
-        return {"requirements": requirements()}
+        return {"requirements": requirements(LocalProvisioner())}
 
     # ── check-db ─────────────────────────────────────────────────────────────
 
     @router.post("/api/env/projects/check-db")
     def check_db_route(body: dict):
         result = check_db(
+            LocalProvisioner(),
             platform_dir=body.get("platform_dir", ""),
             db_kind=body.get("db_kind", ""),
             db_connection=body.get("db_connection", ""),
             user=body.get("user", ""),
             password=body.get("password", ""),
-            run=run,
         )
         return result
 
@@ -105,7 +106,7 @@ def build_project_router(store, registry, monitor=None, run=subprocess.run,
         ok, error = validate_name(body["name"])
         if not ok:
             raise HTTPException(status_code=400, detail=error)
-        if not is_empty_dir(body["path"]):
+        if not is_empty_dir(LocalProvisioner(), body["path"]):
             raise HTTPException(
                 status_code=400,
                 detail=f"каталог проекта должен быть пустым: {body['path']}",

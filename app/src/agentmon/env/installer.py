@@ -9,6 +9,7 @@ from .platform_dump import dump
 from .content import deploy_content, provision_venv
 from .devbase import git_commit_all, git_init_project, write_devbase
 from .tools_install import install_tools as install_tools_fn
+from ..backends.local import LocalProvisioner
 
 
 @dataclass
@@ -27,7 +28,9 @@ def install_environment(
     db_user: str = "",
     db_password: str = "",
     run=subprocess.run,
+    prov=None,
 ) -> Iterator[ProgressEvent]:
+    prov = prov or LocalProvisioner()
     base = Path(config.project_dir)
 
     def step(name, fn):
@@ -53,21 +56,21 @@ def install_environment(
     # При обновлении версии окружения трогаем только контент шаблона: .mcp.json
     # и .1c-devbase.json не перезаписываем, git init и выгрузки cf/cfe не делаем.
     steps = [
-        ("layout", lambda: scaffold_layout(base)),
-        ("content", lambda: deploy_content(config, update=update)),
+        ("layout", lambda: scaffold_layout(prov, config.project_dir)),
+        ("content", lambda: deploy_content(prov, config, update=update)),
         # Изолированный .venv проекта с рантайм-зависимостями навыков (lxml/psutil/
         # click). Путь к интерпретатору уже впечатан в хуки/доки шагом content.
-        ("venv", lambda: provision_venv(config, update=update, run=run)),
+        ("venv", lambda: provision_venv(prov, config, update=update)),
     ]
     if not update:
-        steps.append(("mcp", lambda: write_env_files(config, update=update)))
+        steps.append(("mcp", lambda: write_env_files(prov, config, update=update)))
         steps.append(("prepare-src", _prepare_src))
     if dump_cf and not update:
         steps.append(("dump-cf",
-                      lambda: dump(config, "cf", user=db_user, password=db_password, run=run)))
+                      lambda: dump(config, "cf", user=db_user, password=db_password, run=run, prov=prov)))
     if dump_cfe and not update:
         steps.append(("dump-cfe",
-                      lambda: dump(config, "cfe", user=db_user, password=db_password, run=run)))
+                      lambda: dump(config, "cfe", user=db_user, password=db_password, run=run, prov=prov)))
     if install_tools:
         steps.append(("tools-install", lambda: install_tools_fn(config, run=run)))
     # Фиксируем все сгенерированные файлы одним коммитом — только при создании.

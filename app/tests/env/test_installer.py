@@ -42,16 +42,18 @@ def test_install_writes_config_and_registers(tmp_path):
 
 def test_venv_step_warns_on_pip_failure(tmp_path):
     """Сбой pip при подъёме .venv даёт статус "warn", но не валит установку."""
-    import subprocess
+    from agentmon.backends import RunResult
+    from agentmon.backends.local import LocalProvisioner
 
-    def run(args, **kw):
-        if "pip" in args:
-            raise subprocess.CalledProcessError(1, args)
-        return ok_run(args)
+    class PipFailProv(LocalProvisioner):
+        def run(self, cmd, cwd=None):
+            if "pip" in cmd:
+                return RunResult(returncode=1, stderr="pip error")
+            return super().run(cmd, cwd=cwd)
 
     events = list(installer.install_environment(
         cfg(tmp_path), update=False, register=lambda c: None,
-        dump_cf=False, dump_cfe=False, run=run))
+        dump_cf=False, dump_cfe=False, run=ok_run, prov=PipFailProv()))
     venv = [e for e in events if e.step == "venv"]
     assert any(e.status == "warn" and "setup-venv.py" in e.detail for e in venv)
     # предупреждение не прерывает установку — register всё равно ok
