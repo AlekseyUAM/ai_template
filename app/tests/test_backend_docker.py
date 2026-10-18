@@ -11,6 +11,7 @@ from agentmon.backends.docker import (
     DEFAULT_WORKDIR,
     DEFAULT_RETRY_SECONDS,
     _DockerContainer,
+    DockerProvisioner,
     container_name,
 )
 from agentmon.backends import RunResult
@@ -644,3 +645,370 @@ class TestXvfb:
         c.ensure()
         xvfb_calls = fake.called_with("docker exec")
         assert len(xvfb_calls) >= 1
+
+
+# ---------------------------------------------------------------------------
+# DockerProvisioner — фейк-контейнер для unit-тестов
+# ---------------------------------------------------------------------------
+
+class _FakeContainer:
+    """Фейк-контейнер для DockerProvisioner: записывает вызовы, возвращает RunResult.
+
+    Позволяет настраивать ответы через ``set_result`` перед конкретным вызовом.
+    ``ensure_count`` — число вызовов ensure() для проверки.
+    """
+
+    def __init__(self, default_rc=0, default_stdout="", default_stderr=""):
+        self.ensure_count = 0
+        self.exec_calls: list[dict] = []   # {'argv': [...], 'cwd': ...}
+        self.input_calls: list[dict] = []  # {'argv': [...], 'data': ...}
+        self._default = RunResult(default_rc, default_stdout, default_stderr)
+        self._next_results: list[RunResult] = []
+
+    def ensure(self) -> None:
+        """Имитация _DockerContainer.ensure(); считает вызовы."""
+        self.ensure_count += 1
+
+    def set_result(self, result: RunResult) -> None:
+        """Задать RunResult для следующего вызова exec_run/exec_input."""
+        self._next_results.append(result)
+
+    def _pop_result(self) -> RunResult:
+        if self._next_results:
+            return self._next_results.pop(0)
+        return self._default
+
+    def exec_run(self, argv: list[str], cwd=None) -> RunResult:
+        self.exec_calls.append({"argv": list(argv), "cwd": cwd})
+        return self._pop_result()
+
+    def exec_input(self, argv: list[str], data: bytes) -> RunResult:
+        self.input_calls.append({"argv": list(argv), "data": data})
+        return self._pop_result()
+
+
+def _make_provisioner(default_rc=0, default_stdout="", default_stderr=""):
+    """Фабрика: возвращает (DockerProvisioner, _FakeContainer)."""
+    container = _FakeContainer(default_rc, default_stdout, default_stderr)
+    provisioner = DockerProvisioner(container)
+    return provisioner, container
+
+
+# ---------------------------------------------------------------------------
+# TestDockerProvisioner — файловые операции
+# ---------------------------------------------------------------------------
+
+class TestDockerProvisioner:
+
+    # --- mkdirs ---
+
+    def test_mkdirs_calls_mkdir_p(self):
+        p, c = _make_provisioner()
+        p.mkdirs(["/workspace/a", "/workspace/b"])
+        argvs = [call["argv"] for call in c.exec_calls]
+        assert ["mkdir", "-p", "/workspace/a"] in argvs
+        assert ["mkdir", "-p", "/workspace/b"] in argvs
+
+    def test_mkdirs_triggers_ensure(self):
+        p, c = _make_provisioner()
+        p.mkdirs(["/tmp/x"])
+        assert c.ensure_count >= 1
+
+    # --- exists ---
+
+    def test_exists_true_on_rc0(self):
+        p, c = _make_provisioner(default_rc=0)
+        assert p.exists("/workspace/file") is True
+
+    def test_exists_false_on_rc1(self):
+        p, c = _make_provisioner(default_rc=1)
+        assert p.exists("/workspace/missing") is False
+
+    def test_exists_uses_test_e(self):
+        p, c = _make_provisioner()
+        p.exists("/workspace/foo")
+        argv = c.exec_calls[-1]["argv"]
+        assert argv == ["test", "-e", "/workspace/foo"]
+
+    def test_exists_triggers_ensure(self):
+        p, c = _make_provisioner()
+        p.exists("/x")
+        assert c.ensure_count >= 1
+
+    # --- is_file ---
+
+    def test_is_file_true_on_rc0(self):
+        p, c = _make_provisioner(default_rc=0)
+        assert p.is_file("/workspace/f.txt") is True
+
+    def test_is_file_false_on_rc1(self):
+        p, c = _make_provisioner(default_rc=1)
+        assert p.is_file("/workspace/dir") is False
+
+    def test_is_file_uses_test_f(self):
+        p, c = _make_provisioner()
+        p.is_file("/workspace/f.txt")
+        argv = c.exec_calls[-1]["argv"]
+        assert argv == ["test", "-f", "/workspace/f.txt"]
+
+    def test_is_file_triggers_ensure(self):
+        p, c = _make_provisioner()
+        p.is_file("/x")
+        assert c.ensure_count >= 1
+
+    # --- is_empty_dir ---
+
+    def test_is_empty_dir_empty_path_returns_false(self):
+        p, c = _make_provisioner()
+        assert p.is_empty_dir("") is False
+        # ensure не должен был вызываться
+        assert c.ensure_count == 0
+
+    def test_is_empty_dir_nonexistent_returns_true(self):
+        """Несуществующий путь → True (место свободно)."""
+        p, c = _make_provisioner(default_rc=1)  # test -e rc=1 → not exists
+        assert p.is_empty_dir("/workspace/new") is True
+
+    def test_is_empty_dir_file_returns_false(self):
+        """Если путь — файл → False."""
+        container = _FakeContainer()
+        # exists → rc=0 (True); is_file → rc=0 (True)
+        container.set_result(RunResult(0))   # ensure уже звал set_result?
+        # Нет — ensure() не вызывает exec_run, он не из _pop_result.
+        # exists вызывает exec_run с "test -e" → rc=0
+        container.set_result(RunResult(0))   # test -e → exists=True
+        container.set_result(RunResult(0))   # test -f → is_file=True
+        p = DockerProvisioner(container)
+        assert p.is_empty_dir("/workspace/file.txt") is False
+
+    def test_is_empty_dir_empty_dir_returns_true(self):
+        """Пустой каталог → True."""
+        container = _FakeContainer()
+        container.set_result(RunResult(0))        # test -e → exists=True
+        container.set_result(RunResult(1))        # test -f → is_file=False
+        container.set_result(RunResult(0, ""))    # ls -A → empty stdout
+        p = DockerProvisioner(container)
+        assert p.is_empty_dir("/workspace/empty") is True
+
+    def test_is_empty_dir_nonempty_dir_returns_false(self):
+        """Непустой каталог → False."""
+        container = _FakeContainer()
+        container.set_result(RunResult(0))              # test -e → True
+        container.set_result(RunResult(1))              # test -f → False
+        container.set_result(RunResult(0, "file.txt"))  # ls -A → non-empty
+        p = DockerProvisioner(container)
+        assert p.is_empty_dir("/workspace/full") is False
+
+    def test_is_empty_dir_triggers_ensure(self):
+        p, c = _make_provisioner(default_rc=1)
+        p.is_empty_dir("/x")
+        assert c.ensure_count >= 1
+
+    # --- read_text ---
+
+    def test_read_text_returns_stdout(self):
+        p, c = _make_provisioner(default_stdout="hello world\n")
+        result = p.read_text("/workspace/file.txt")
+        assert result == "hello world\n"
+
+    def test_read_text_uses_cat(self):
+        p, c = _make_provisioner()
+        p.read_text("/workspace/cfg.txt")
+        argv = c.exec_calls[-1]["argv"]
+        assert argv == ["cat", "/workspace/cfg.txt"]
+
+    def test_read_text_triggers_ensure(self):
+        p, c = _make_provisioner()
+        p.read_text("/x")
+        assert c.ensure_count >= 1
+
+    # --- write_bytes ---
+
+    def test_write_bytes_calls_exec_input(self):
+        p, c = _make_provisioner()
+        p.write_bytes("/workspace/out.bin", b"\x00\x01\x02")
+        assert len(c.input_calls) == 1
+        call = c.input_calls[0]
+        assert call["data"] == b"\x00\x01\x02"
+
+    def test_write_bytes_uses_cat_redirect(self):
+        """exec_input argv должен быть sh -c 'cat > <quoted path>'."""
+        p, c = _make_provisioner()
+        p.write_bytes("/workspace/f.bin", b"data")
+        argv = c.input_calls[0]["argv"]
+        assert argv[0] == "sh"
+        assert argv[1] == "-c"
+        assert "cat >" in argv[2]
+        assert "/workspace/f.bin" in argv[2]
+
+    def test_write_bytes_creates_parent_dir(self):
+        """write_bytes вызывает mkdirs для родительского каталога."""
+        p, c = _make_provisioner()
+        p.write_bytes("/workspace/subdir/f.bin", b"x")
+        mkdir_calls = [call["argv"] for call in c.exec_calls
+                       if call["argv"][:2] == ["mkdir", "-p"]]
+        assert any("/workspace/subdir" in " ".join(argv) for argv in mkdir_calls)
+
+    def test_write_bytes_triggers_ensure(self):
+        p, c = _make_provisioner()
+        p.write_bytes("/x/f", b"")
+        assert c.ensure_count >= 1
+
+    # --- write_text ---
+
+    def test_write_text_encodes_utf8(self):
+        p, c = _make_provisioner()
+        p.write_text("/workspace/t.txt", "Привет мир")
+        assert c.input_calls[0]["data"] == "Привет мир".encode("utf-8")
+
+    def test_write_text_triggers_ensure(self):
+        p, c = _make_provisioner()
+        p.write_text("/x", "hello")
+        assert c.ensure_count >= 1
+
+    # --- put_tree ---
+
+    def test_put_tree_transfers_files(self, tmp_path):
+        """Дерево файлов переносится через write_bytes."""
+        (tmp_path / "a.txt").write_bytes(b"aaa")
+        subdir = tmp_path / "sub"
+        subdir.mkdir()
+        (subdir / "b.txt").write_bytes(b"bbb")
+
+        p, c = _make_provisioner()
+        p.put_tree(str(tmp_path), "/dst")
+
+        written = {call["argv"][2]: call["data"] for call in c.input_calls}
+        # пути могут быть в sh -c 'cat > ...' form; берём весь argv[2]
+        assert any("a.txt" in k for k in written)
+        assert any("b.txt" in k for k in written)
+
+    def test_put_tree_skips_pycache(self, tmp_path):
+        """__pycache__ не переносится."""
+        cache = tmp_path / "__pycache__"
+        cache.mkdir()
+        (cache / "mod.pyc").write_bytes(b"pyc")
+        (tmp_path / "real.py").write_bytes(b"code")
+
+        p, c = _make_provisioner()
+        p.put_tree(str(tmp_path), "/dst")
+
+        transferred = " ".join(
+            call["argv"][2] for call in c.input_calls
+        )
+        assert "pyc" not in transferred
+        assert "real.py" in transferred
+
+    def test_put_tree_skips_egg_info(self, tmp_path):
+        """*.egg-info не переносится."""
+        egg = tmp_path / "mypkg.egg-info"
+        egg.mkdir()
+        (egg / "PKG-INFO").write_bytes(b"meta")
+        (tmp_path / "mod.py").write_bytes(b"x")
+
+        p, c = _make_provisioner()
+        p.put_tree(str(tmp_path), "/dst")
+
+        transferred = " ".join(
+            call["argv"][2] for call in c.input_calls
+        )
+        assert "PKG-INFO" not in transferred
+        assert "mod.py" in transferred
+
+    def test_put_tree_respects_custom_skip(self, tmp_path):
+        """Кастомный skip-предикат применяется."""
+        (tmp_path / "keep.py").write_bytes(b"k")
+        (tmp_path / "skip_me.txt").write_bytes(b"s")
+
+        p, c = _make_provisioner()
+        p.put_tree(str(tmp_path), "/dst", skip=lambda rel: rel.name == "skip_me.txt")
+
+        transferred = " ".join(
+            call["argv"][2] for call in c.input_calls
+        )
+        assert "skip_me" not in transferred
+        assert "keep.py" in transferred
+
+    def test_put_tree_uses_correct_target_path(self, tmp_path):
+        """Целевой путь: dst/rel.as_posix()."""
+        sub = tmp_path / "pkg"
+        sub.mkdir()
+        (sub / "mod.py").write_bytes(b"x")
+
+        p, c = _make_provisioner()
+        p.put_tree(str(tmp_path), "/dst")
+
+        # Ищем в exec_input — argv[2] = "cat > '/dst/pkg/mod.py'"
+        target_args = [call["argv"][2] for call in c.input_calls]
+        assert any("/dst/pkg/mod.py" in arg for arg in target_args)
+
+    def test_put_tree_creates_dirs(self, tmp_path):
+        """Подкаталоги создаются через mkdirs."""
+        sub = tmp_path / "subdir"
+        sub.mkdir()
+        (sub / "f.py").write_bytes(b"x")
+
+        p, c = _make_provisioner()
+        p.put_tree(str(tmp_path), "/dst")
+
+        mkdir_calls = [call["argv"] for call in c.exec_calls
+                       if call["argv"][:2] == ["mkdir", "-p"]]
+        # mkdirs вызван хотя бы для /dst/subdir
+        all_dirs = " ".join(" ".join(argv) for argv in mkdir_calls)
+        assert "/dst/subdir" in all_dirs
+
+    def test_put_tree_triggers_ensure(self, tmp_path):
+        p, c = _make_provisioner()
+        p.put_tree(str(tmp_path), "/dst")
+        assert c.ensure_count >= 1
+
+    # --- run ---
+
+    def test_run_delegates_to_exec_run(self):
+        p, c = _make_provisioner(default_rc=0, default_stdout="ok\n")
+        r = p.run(["ls", "-la"], cwd="/workspace")
+        assert c.exec_calls[-1] == {"argv": ["ls", "-la"], "cwd": "/workspace"}
+        assert isinstance(r, RunResult)
+        assert r.stdout == "ok\n"
+
+    def test_run_triggers_ensure(self):
+        p, c = _make_provisioner()
+        p.run(["ls"])
+        assert c.ensure_count >= 1
+
+    # --- which ---
+
+    def test_which_returns_path_on_success(self):
+        p, c = _make_provisioner(default_rc=0, default_stdout="/usr/bin/git\n")
+        result = p.which("git")
+        assert result == "/usr/bin/git"
+
+    def test_which_returns_none_on_empty(self):
+        p, c = _make_provisioner(default_rc=1, default_stdout="")
+        result = p.which("nonexistent")
+        assert result is None
+
+    def test_which_uses_command_v(self):
+        p, c = _make_provisioner()
+        p.which("python3")
+        argv = c.exec_calls[-1]["argv"]
+        assert argv == ["command", "-v", "python3"]
+
+    def test_which_triggers_ensure(self):
+        p, c = _make_provisioner()
+        p.which("git")
+        assert c.ensure_count >= 1
+
+    # --- python_cmd / venv_python / tempdir ---
+
+    def test_python_cmd_returns_python3(self):
+        p, _ = _make_provisioner()
+        assert p.python_cmd() == ["python3"]
+
+    def test_venv_python_correct_path(self):
+        p, _ = _make_provisioner()
+        assert p.venv_python("/workspace/proj") == "/workspace/proj/.venv/bin/python"
+
+    def test_tempdir_returns_tmp(self):
+        p, _ = _make_provisioner()
+        assert p.tempdir() == "/tmp"

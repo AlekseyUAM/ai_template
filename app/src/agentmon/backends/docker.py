@@ -6,7 +6,9 @@
 """
 import hashlib
 import logging
+import posixpath
 import re
+import shlex
 import subprocess
 import time
 from pathlib import Path
@@ -236,3 +238,138 @@ class _DockerContainer:
             capture_output=True,
             text=True,
         )
+
+
+class DockerProvisioner:
+    """Provisioner для Docker-контейнера: файловые операции и команды через docker exec.
+
+    Реализует протокол ``Provisioner``: файловые операции идут через
+    ``exec_run`` / ``exec_input`` (POSIX-пути внутри контейнера), дерево
+    переносится с хоста через ``put_tree`` (обход ``rglob``, фильтр ``is_cruft``).
+    Перед каждой операцией вызывает ``_ensure()`` — контейнер поднимается лениво.
+    """
+
+    def __init__(self, container: _DockerContainer, workdir: str = DEFAULT_WORKDIR):
+        self._container = container
+        self._workdir = workdir
+
+    # ------------------------------------------------------------------
+    # Вспомогательный метод
+    # ------------------------------------------------------------------
+
+    def _ensure(self) -> None:
+        """Убедиться, что контейнер запущен (вызывается в начале каждой операции)."""
+        self._container.ensure()
+
+    # ------------------------------------------------------------------
+    # Файловые операции
+    # ------------------------------------------------------------------
+
+    def mkdirs(self, paths: list[str]) -> None:
+        """Создать каталоги (рекурсивно) внутри контейнера."""
+        self._ensure()
+        for p in paths:
+            self._container.exec_run(["mkdir", "-p", p])
+
+    def exists(self, path: str) -> bool:
+        """True если путь существует внутри контейнера."""
+        self._ensure()
+        r = self._container.exec_run(["test", "-e", path])
+        return r.returncode == 0
+
+    def is_file(self, path: str) -> bool:
+        """True если путь — обычный файл внутри контейнера."""
+        self._ensure()
+        r = self._container.exec_run(["test", "-f", path])
+        return r.returncode == 0
+
+    def is_empty_dir(self, path: str) -> bool:
+        """True если каталог существует и пуст; False для файла или непустого каталога.
+
+        Семантика идентична ``SshProvisioner.is_empty_dir``:
+        - пустая строка пути → False;
+        - путь не существует → True (идемпотентная логика «каталог свободен»);
+        - путь — файл → False;
+        - иначе перечислить содержимое ``ls -A``; True iff вывод пуст.
+        """
+        if not path:
+            return False
+        self._ensure()
+        if not self.exists(path):
+            return True
+        if self.is_file(path):
+            return False
+        r = self._container.exec_run(["sh", "-c", f"ls -A {shlex.quote(path)}"])
+        return r.returncode == 0 and r.stdout.strip() == ""
+
+    def read_text(self, path: str) -> str:
+        """Прочитать текстовый файл из контейнера через cat."""
+        self._ensure()
+        r = self._container.exec_run(["cat", path])
+        return r.stdout
+
+    def write_bytes(self, path: str, data: bytes) -> None:
+        """Записать байты в файл внутри контейнера через stdin (cat >).
+
+        Предварительно создаёт родительский каталог.
+        """
+        self._ensure()
+        self.mkdirs([posixpath.dirname(path)])
+        self._container.exec_input(
+            ["sh", "-c", f"cat > {shlex.quote(path)}"],
+            data,
+        )
+
+    def write_text(self, path: str, content: str) -> None:
+        """Записать текстовый файл внутри контейнера (UTF-8)."""
+        self.write_bytes(path, content.encode("utf-8"))
+
+    def put_tree(self, local_src: str, dst: str, skip=None) -> None:
+        """Перенести дерево каталогов с хоста в контейнер.
+
+        Обходит ``local_src`` через ``rglob("*")``, пропускает служебные
+        каталоги (``is_cruft``) и пути, для которых ``skip(rel)`` вернёт True.
+        Каталоги создаются через ``mkdirs``, файлы — через ``write_bytes``.
+        Симметрично ``SshProvisioner.put_tree``.
+        """
+        self._ensure()
+        src = Path(local_src)
+        for item in sorted(src.rglob("*")):
+            rel = item.relative_to(src)
+            if is_cruft(rel):
+                continue
+            if skip is not None and skip(rel):
+                continue
+            target = f"{dst}/{rel.as_posix()}"
+            if item.is_dir():
+                self.mkdirs([target])
+            else:
+                self.write_bytes(target, item.read_bytes())
+
+    # ------------------------------------------------------------------
+    # Запуск команд
+    # ------------------------------------------------------------------
+
+    def run(self, cmd: list[str], cwd: str | None = None) -> RunResult:
+        """Выполнить команду внутри контейнера."""
+        self._ensure()
+        return self._container.exec_run(cmd, cwd)
+
+    def which(self, tool: str) -> str | None:
+        """Найти исполняемый файл в контейнере через ``command -v``."""
+        self._ensure()
+        r = self._container.exec_run(["command", "-v", tool])
+        path = r.stdout.strip()
+        return path or None
+
+    def python_cmd(self) -> list[str]:
+        """Команда для запуска Python 3 в контейнере."""
+        return ["python3"]
+
+    def venv_python(self, project_dir: str) -> str:
+        """Путь к интерпретатору виртуального окружения в контейнере."""
+        return f"{project_dir}/.venv/bin/python"
+
+    def tempdir(self) -> str:
+        """Временный каталог внутри контейнера."""
+        return "/tmp"
