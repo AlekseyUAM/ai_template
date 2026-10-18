@@ -42,7 +42,17 @@ def build_project_router(store, registry, monitor=None, run=subprocess.run,
         from agentmon.store.mcp import McpRepo
         return ProjectRepo(db), McpRepo(db)
 
-    def _register(config: EnvConfig) -> None:
+    def _provisioner_for(backend, conn):
+        if (backend and backend != "local"
+                and monitor is not None
+                and getattr(monitor, "backends", None) is not None):
+            from ..models import Project
+            probe = Project(id=0, name="probe", path="", backend=backend,
+                            conn=conn or {}, claude_cmd=None, created_at=0.0)
+            return monitor.backends.get(probe).provisioner
+        return LocalProvisioner()
+
+    def _register(config: EnvConfig, backend="local", conn=None) -> None:
         """Идемпотентная регистрация в registry при создании проекта."""
         for p in registry.list():
             if p.path == config.project_dir:
@@ -51,7 +61,8 @@ def build_project_router(store, registry, monitor=None, run=subprocess.run,
             registry.add(
                 name=config.project_name,
                 path=config.project_dir,
-                backend="local",
+                backend=backend,
+                conn=conn,
             )
         except ValueError:
             pass  # уже есть — идемпотентно
@@ -75,7 +86,7 @@ def build_project_router(store, registry, monitor=None, run=subprocess.run,
     @router.post("/api/env/projects/check-db")
     def check_db_route(body: dict):
         result = check_db(
-            LocalProvisioner(),
+            _provisioner_for(body.get("backend", "local"), body.get("conn")),
             platform_dir=body.get("platform_dir", ""),
             db_kind=body.get("db_kind", ""),
             db_connection=body.get("db_connection", ""),
@@ -93,7 +104,7 @@ def build_project_router(store, registry, monitor=None, run=subprocess.run,
     def _prepare_install(body: dict):
         """Валидирует тело, сохраняет проект+MCP в БД, строит EnvConfig.
 
-        Возвращает (pid, config). Бросает HTTPException при ошибке ввода.
+        Возвращает (pid, config, prov, backend, conn). Бросает HTTPException при ошибке ввода.
         """
         missing = [f for f in _REQUIRED_FIELDS if not body.get(f)]
         absent = [f for f in _PRESENT_FIELDS if f not in body]
@@ -106,7 +117,12 @@ def build_project_router(store, registry, monitor=None, run=subprocess.run,
         ok, error = validate_name(body["name"])
         if not ok:
             raise HTTPException(status_code=400, detail=error)
-        if not is_empty_dir(LocalProvisioner(), body["path"]):
+
+        backend = body.get("backend", "local")
+        conn = body.get("conn")
+        prov = _provisioner_for(backend, conn)
+
+        if not is_empty_dir(prov, body["path"]):
             raise HTTPException(
                 status_code=400,
                 detail=f"каталог проекта должен быть пустым: {body['path']}",
@@ -148,29 +164,32 @@ def build_project_router(store, registry, monitor=None, run=subprocess.run,
             web_publication=body.get("web_publication", ""),
             mcp=mcp_selections,
             agents=[AgentModel(**a) for a in body.get("agents", [])],
+            license_server=body.get("license_server"),
         )
-        return pid, config
+        return pid, config, prov, backend, conn
 
-    def _install_iter(config, body):
+    def _install_iter(config, body, prov, backend, conn):
+        is_local = (backend == "local")
         return install_environment(
             config,
             update=bool(body.get("update")),
-            register=lambda c: _register(c),
-            dump_cf=bool(body.get("dump_cf")),
-            dump_cfe=bool(body.get("dump_cfe")),
-            install_tools=bool(body.get("install_tools")),
+            register=lambda c: _register(c, backend, conn),
+            dump_cf=bool(body.get("dump_cf")) and is_local,
+            dump_cfe=bool(body.get("dump_cfe")) and is_local,
+            install_tools=bool(body.get("install_tools")) and is_local,
             git_init=bool(body.get("git_init", True)),
             db_user=body.get("user", ""),
             db_password=body.get("password", ""),
             run=run,
+            prov=prov,
         )
 
     # ── create project (блокирующе) ───────────────────────────────────────────
 
     @router.post("/api/env/projects/create")
     def create_project(body: dict):
-        pid, config = _prepare_install(body)
-        events = list(_install_iter(config, body))
+        pid, config, prov, backend, conn = _prepare_install(body)
+        events = list(_install_iter(config, body, prov, backend, conn))
         project_repo, _ = get_repos()
         project = project_repo.get(pid)
         return {"project": project, "events": [asdict(e) for e in events]}
@@ -180,13 +199,13 @@ def build_project_router(store, registry, monitor=None, run=subprocess.run,
     @router.post("/api/env/projects/create/stream")
     def create_project_stream(body: dict):
         # Валидация и запись в БД — до стрима (чтобы 400 возвращался статусом)
-        pid, config = _prepare_install(body)
+        pid, config, prov, backend, conn = _prepare_install(body)
 
         def gen():
             yield f"▶ Создание проекта «{config.project_name}» ({config.project_dir})\n"
             failed = False
             try:
-                for ev in _install_iter(config, body):
+                for ev in _install_iter(config, body, prov, backend, conn):
                     detail = f" {ev.detail}" if ev.detail else ""
                     yield f"[{ev.step}] {ev.status}{detail}\n"
                     if ev.status == "error":
