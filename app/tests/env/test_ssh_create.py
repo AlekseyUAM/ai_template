@@ -32,8 +32,6 @@ from test_monitor import FakeBackends  # noqa: E402
 class RecordingProvisioner:
     """In-memory provisioner: записывает все обращения без реальной ФС/SSH."""
 
-    _CRUFT_DIRS = {"__pycache__", "build", ".pytest_cache"}
-
     def __init__(self):
         self.writes: dict[str, str | bytes] = {}
         self.runs: list[tuple] = []
@@ -48,13 +46,13 @@ class RecordingProvisioner:
 
     def put_tree(self, local_src, dst, skip=None) -> None:
         """Обходит реальный шаблон на мониторе; записывает целевые пути в writes."""
+        from agentmon.backends import is_cruft
         src_path = Path(local_src)
         dst_path = dst
         for item in sorted(src_path.rglob("*")):
-            if any(p in self._CRUFT_DIRS or p.endswith(".egg-info")
-                   for p in item.parts):
-                continue
             rel = item.relative_to(src_path)
+            if is_cruft(rel):          # как в проде: cruft по относительному пути
+                continue
             if skip is not None and skip(rel):
                 continue
             if item.is_dir():
