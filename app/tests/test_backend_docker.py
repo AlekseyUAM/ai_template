@@ -4,6 +4,8 @@
 FakeRun позволяет задавать разные ответы на разные команды по ключевому
 слову из argv (подстрока в строке вида «docker inspect», «docker images» и т.д.).
 """
+import types
+
 import pytest
 
 from agentmon.backends.docker import (
@@ -12,6 +14,7 @@ from agentmon.backends.docker import (
     DEFAULT_RETRY_SECONDS,
     _DockerContainer,
     DockerProvisioner,
+    DockerRunner,
     container_name,
 )
 from agentmon.backends import RunResult
@@ -1173,3 +1176,282 @@ class TestDockerProvisioner:
     def test_tempdir_returns_tmp(self):
         p, _ = _make_provisioner()
         assert p.tempdir() == "/tmp"
+
+
+# ---------------------------------------------------------------------------
+# TestDockerRunner — агент claude в контейнере через docker exec -it
+# ---------------------------------------------------------------------------
+
+class _FakePty:
+    """Фейк PTY-процесса: записывает команду/cwd, имитирует alive/kill/interrupt."""
+
+    def __init__(self, cmd, cwd):
+        self.cmd = cmd
+        self.cwd = cwd
+        self.written: list[str] = []
+        self.alive = True
+        self.killed = False
+        self.interrupted = False
+        self.pending = ""
+        self.raise_on_interrupt = False
+
+    def write(self, text: str) -> None:
+        self.written.append(text)
+
+    def read_available(self) -> str:
+        out, self.pending = self.pending, ""
+        return out
+
+    def interrupt(self) -> None:
+        if self.raise_on_interrupt:
+            raise OSError("simulated dead pty")
+        self.interrupted = True
+        self.written.append("\x1b")
+
+    def kill(self) -> None:
+        self.killed = True
+        self.alive = False
+
+
+class _FakeDockerContainer:
+    """Фейк _DockerContainer: запоминает ensure()-вызовы, предоставляет name."""
+
+    def __init__(self, name: str = "ai1c-myproj"):
+        self._name = name
+        self.ensure_count = 0
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    def ensure(self) -> None:
+        self.ensure_count += 1
+
+
+def _make_runner(container_name="ai1c-myproj", claude_cmd="claude --go",
+                 workdir=DEFAULT_WORKDIR, host_cwd="/tmp"):
+    """Фабрика: возвращает (DockerRunner, FakeContainer, список spawned Pty)."""
+    spawned: list[_FakePty] = []
+    container = _FakeDockerContainer(name=container_name)
+
+    def fake_spawn(cmd: str, cwd: str, env=None):
+        p = _FakePty(cmd, cwd)
+        spawned.append(p)
+        return p
+
+    runner = DockerRunner(
+        container=container,
+        claude_cmd=claude_cmd,
+        workdir=workdir,
+        spawn_fn=fake_spawn,
+        host_cwd=host_cwd,
+    )
+    return runner, container, spawned
+
+
+def _project(key="proj-1", claude_cmd=None):
+    """Простой фейк-проект (SimpleNamespace)."""
+    return types.SimpleNamespace(key=key, claude_cmd=claude_cmd)
+
+
+class TestDockerRunner:
+
+    # --- start: правильная команда ---
+
+    def test_start_spawns_docker_exec_it(self):
+        """start() формирует команду docker exec -it с флагами -w, именем и claude_cmd."""
+        runner, container, spawned = _make_runner(
+            container_name="ai1c-myproj",
+            claude_cmd="claude --go",
+            workdir="/workspace",
+            host_cwd="/tmp",
+        )
+        runner.start(_project())
+        assert len(spawned) == 1
+        cmd = spawned[0].cmd
+        assert cmd == "docker exec -it -w /workspace ai1c-myproj claude --go"
+
+    def test_start_uses_project_claude_cmd_when_set(self):
+        """project.claude_cmd перекрывает дефолтную команду runner'а."""
+        runner, _, spawned = _make_runner(claude_cmd="claude --default")
+        runner.start(_project(claude_cmd="claude --project-specific"))
+        assert "claude --project-specific" in spawned[0].cmd
+
+    def test_start_uses_default_claude_cmd_when_project_cmd_is_none(self):
+        """Если project.claude_cmd is None — берётся runner.claude_cmd."""
+        runner, _, spawned = _make_runner(claude_cmd="claude --go")
+        runner.start(_project(claude_cmd=None))
+        assert "claude --go" in spawned[0].cmd
+
+    def test_start_cwd_is_host_cwd_not_project_path(self):
+        """spawn() вызывается с host_cwd, а не project.path (который в контейнере)."""
+        runner, _, spawned = _make_runner(host_cwd="/tmp")
+        runner.start(_project())
+        assert spawned[0].cwd == "/tmp"
+
+    def test_start_calls_container_ensure(self):
+        """start() обязан вызвать container.ensure() перед spawn."""
+        runner, container, _ = _make_runner()
+        runner.start(_project())
+        assert container.ensure_count == 1
+
+    def test_start_returns_project_key(self):
+        """start() возвращает project.key как agent_id."""
+        runner, _, _ = _make_runner()
+        aid = runner.start(_project(key="my-proj"))
+        assert aid == "my-proj"
+
+    def test_start_idempotent_alive_proc(self):
+        """Повторный start() с живым процессом не spawns новый и не зовёт ensure повторно."""
+        runner, container, spawned = _make_runner()
+        proj = _project()
+        aid1 = runner.start(proj)
+        ensure_after_first = container.ensure_count
+        aid2 = runner.start(proj)
+        assert aid1 == aid2
+        assert len(spawned) == 1, "повторный spawn не должен происходить"
+        assert container.ensure_count == ensure_after_first, (
+            "ensure не должен вызываться повторно для живого агента"
+        )
+
+    def test_start_respawns_dead_proc(self):
+        """После гибели процесса start() запускает нового агента."""
+        runner, _, spawned = _make_runner()
+        proj = _project()
+        runner.start(proj)
+        spawned[0].alive = False       # симулируем гибель
+        runner.start(proj)
+        assert len(spawned) == 2, "должен был сделать повторный spawn"
+
+    def test_start_quotes_container_name_with_spaces(self):
+        """Имена с пробелами экранируются через shlex.quote."""
+        runner, _, spawned = _make_runner(container_name="ai1c my proj")
+        runner.start(_project())
+        assert "'ai1c my proj'" in spawned[0].cmd
+
+    # --- send_input ---
+
+    def test_send_input_collapses_crlf(self):
+        """\\r\\n схлопываются в пробел перед отправкой."""
+        runner, _, spawned = _make_runner()
+        runner.start(_project())
+        runner.send_input(spawned[0].cmd and "proj-1", "line1\r\nline2")
+        # ищем в written: должен быть "line1  line2\r"
+        written = spawned[0].written
+        assert any("line1" in w and "\r\n" not in w for w in written)
+
+    def test_send_input_appends_cr(self):
+        """Каждый send_input завершается \\r."""
+        runner, _, spawned = _make_runner()
+        runner.start(_project(key="k1"))
+        runner.send_input("k1", "hello")
+        last = spawned[0].written[-1]
+        assert last.endswith("\r")
+
+    def test_send_input_replaces_newlines_with_space(self):
+        """\\n внутри текста заменяются на пробел."""
+        runner, _, spawned = _make_runner()
+        runner.start(_project(key="k2"))
+        runner.send_input("k2", "a\nb")
+        last = spawned[0].written[-1]
+        assert "\n" not in last
+        assert "a b" in last
+
+    def test_send_input_unknown_agent_raises(self):
+        """send_input для несуществующего agent_id бросает KeyError."""
+        runner, _, _ = _make_runner()
+        with pytest.raises(KeyError):
+            runner.send_input("nonexistent", "hi")
+
+    # --- tail_output ---
+
+    def test_tail_output_returns_buffered_output(self):
+        """tail_output возвращает накопленный вывод процесса."""
+        runner, _, spawned = _make_runner()
+        runner.start(_project(key="k3"))
+        spawned[0].pending = "hello from container"
+        out = runner.tail_output("k3")
+        assert "hello from container" in out
+
+    def test_tail_output_empty_for_unknown_agent(self):
+        """tail_output для несуществующего агента возвращает пустую строку."""
+        runner, _, _ = _make_runner()
+        assert runner.tail_output("ghost") == ""
+
+    # --- stop ---
+
+    def test_stop_kill_calls_proc_kill(self):
+        """stop(..., 'kill') убивает PTY-процесс и удаляет агента."""
+        runner, _, spawned = _make_runner()
+        runner.start(_project(key="k4"))
+        runner.stop("k4", "kill")
+        assert spawned[0].killed
+
+    def test_stop_kill_forgets_agent(self):
+        """После stop('kill') is_alive() возвращает False."""
+        runner, _, spawned = _make_runner()
+        runner.start(_project(key="k5"))
+        runner.stop("k5", "kill")
+        assert not runner.is_alive("k5")
+
+    def test_stop_interrupt_sends_escape(self):
+        """stop(..., 'interrupt') вызывает proc.interrupt()."""
+        runner, _, spawned = _make_runner()
+        runner.start(_project(key="k6"))
+        runner.stop("k6", "interrupt")
+        assert spawned[0].interrupted
+
+    def test_stop_interrupt_dead_proc_no_exception(self):
+        """OSError при interrupt (мёртвый PTY) не всплывает; агент забывается."""
+        runner, _, spawned = _make_runner()
+        runner.start(_project(key="k7"))
+        spawned[0].raise_on_interrupt = True
+        runner.stop("k7", "interrupt")   # не должно бросить
+        assert not runner.is_alive("k7")
+
+    def test_stop_unknown_agent_raises(self):
+        """stop для несуществующего agent_id бросает KeyError."""
+        runner, _, _ = _make_runner()
+        with pytest.raises(KeyError):
+            runner.stop("ghost", "kill")
+
+    # --- is_alive ---
+
+    def test_is_alive_true_for_running_proc(self):
+        """is_alive() возвращает True для живого агента."""
+        runner, _, spawned = _make_runner()
+        runner.start(_project(key="k8"))
+        assert runner.is_alive("k8")
+
+    def test_is_alive_false_and_pops_dead_proc(self):
+        """is_alive() возвращает False и убирает запись для мёртвого процесса."""
+        runner, _, spawned = _make_runner()
+        runner.start(_project(key="k9"))
+        spawned[0].alive = False
+        assert not runner.is_alive("k9")
+        # повторный запрос — тоже False (запись уже удалена)
+        assert not runner.is_alive("k9")
+
+    def test_is_alive_false_for_unknown_agent(self):
+        """is_alive() для несуществующего агента возвращает False."""
+        runner, _, _ = _make_runner()
+        assert not runner.is_alive("ghost")
+
+    # --- shutdown_all ---
+
+    def test_shutdown_all_kills_all_procs(self):
+        """shutdown_all() убивает все запущенные PTY-процессы."""
+        runner, _, spawned = _make_runner()
+        runner.start(_project(key="a"))
+        runner.start(_project(key="b"))
+        runner.shutdown_all()
+        assert all(p.killed for p in spawned)
+
+    def test_shutdown_all_clears_state(self):
+        """После shutdown_all() runner не знает ни одного агента."""
+        runner, _, _ = _make_runner()
+        runner.start(_project(key="a"))
+        runner.start(_project(key="b"))
+        runner.shutdown_all()
+        assert not runner.is_alive("a")
+        assert not runner.is_alive("b")

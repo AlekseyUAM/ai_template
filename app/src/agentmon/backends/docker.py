@@ -10,10 +10,12 @@ import posixpath
 import re
 import shlex
 import subprocess
+import tempfile
 import time
 from pathlib import Path
 
 from . import BUFFER_LIMIT, RunResult, is_cruft  # noqa: F401 — is_cruft/BUFFER_LIMIT нужны позже
+from .. import pty_process
 from ..env import mcp_docker
 
 logger = logging.getLogger(__name__)
@@ -69,6 +71,11 @@ class _DockerContainer:
         self._retry_seconds = retry_seconds
         self._broken_at: float | None = None
         self._ready = False
+
+    @property
+    def name(self) -> str:
+        """Имя контейнера (публичный доступ для DockerRunner)."""
+        return self._name
 
     # ------------------------------------------------------------------
     # Состояние «сломан»
@@ -385,3 +392,133 @@ class DockerProvisioner:
     def tempdir(self) -> str:
         """Временный каталог внутри контейнера."""
         return "/tmp"
+
+
+class DockerRunner:
+    """Агент claude запускается внутри контейнера через ``docker exec -it``.
+
+    PTY живёт на хосте — docker CLI пробрасывает терминал внутрь контейнера.
+    Буферизация, накачка и жизненный цикл процессов — как у ``LocalRunner``;
+    различие только в формировании команды и использовании хостового cwd.
+    """
+
+    def __init__(
+        self,
+        container,
+        claude_cmd: str,
+        workdir: str = DEFAULT_WORKDIR,
+        spawn_fn=pty_process.spawn,
+        host_cwd: str | None = None,
+    ):
+        self._container = container
+        self.claude_cmd = claude_cmd
+        self._workdir = workdir
+        self._spawn = spawn_fn
+        # cwd для spawn должен быть валиден на ХОСТЕ; project.path — путь
+        # внутри контейнера и хостовой ФС не существует. Используем tempdir.
+        self._host_cwd = host_cwd or tempfile.gettempdir()
+        self._procs: dict[str, object] = {}
+        self._buffers: dict[str, str] = {}
+
+    def start(self, project) -> str:
+        """Запустить агента в контейнере через ``docker exec -it``.
+
+        Идемпотентен: если процесс уже жив, возвращает тот же agent_id.
+        Перед запуском гарантирует, что контейнер поднят (``container.ensure``).
+        Рабочий каталог внутри контейнера задаётся флагом ``-w``.
+        """
+        agent_id = project.key
+        proc = self._procs.get(agent_id)
+        if proc is not None and proc.alive:
+            return agent_id
+        self._container.ensure()
+        cmd = project.claude_cmd or self.claude_cmd
+        wrapped = (
+            f"docker exec -it"
+            f" -w {shlex.quote(self._workdir)}"
+            f" {shlex.quote(self._container.name)}"
+            f" {cmd}"
+        )
+        self._procs[agent_id] = self._spawn(wrapped, self._host_cwd)
+        self._buffers[agent_id] = ""
+        return agent_id
+
+    def _pump(self, agent_id: str) -> None:
+        """Вычитать доступный вывод процесса и дописать в буфер."""
+        proc = self._procs.get(agent_id)
+        if proc is None:
+            return
+        chunk = proc.read_available()
+        if chunk:
+            buf = self._buffers.get(agent_id, "") + chunk
+            self._buffers[agent_id] = buf[-BUFFER_LIMIT:]
+
+    def _require(self, agent_id: str):
+        """Вернуть процесс или бросить KeyError, если агент не запущен."""
+        proc = self._procs.get(agent_id)
+        if proc is None:
+            raise KeyError(f"агент не запущен: {agent_id}")
+        return proc
+
+    def send_input(self, agent_id: str, text: str) -> None:
+        """Передать текст агенту в PTY.
+
+        Переводы строк схлопываются в пробел — иначе они отправили бы ввод
+        раньше времени. Строка завершается ``\\r`` (Enter в терминале).
+        """
+        proc = self._require(agent_id)
+        self._pump(agent_id)
+        clean = text.replace("\r", " ").replace("\n", " ")
+        proc.write(clean + "\r")
+
+    def stop(self, agent_id: str, mode: str = "interrupt") -> None:
+        """Остановить агента.
+
+        ``kill``   — убивает локальный PTY-процесс ``docker exec`` (контейнер
+                     не трогаем) и убирает запись.
+        ``interrupt`` — шлёт Escape; при записи в мёртвый PTY ловим OSError
+                        и тихо забываем агента — как в ``LocalRunner``.
+        """
+        proc = self._require(agent_id)
+        if mode == "kill":
+            proc.kill()
+            self._procs.pop(agent_id, None)
+            self._buffers.pop(agent_id, None)
+        else:
+            try:
+                proc.interrupt()
+            except OSError as exc:
+                # Запись в PTY мёртвого процесса — EIO/EBADF. Считаем агента
+                # уже умершим и забываем его, как это делает ветка kill.
+                logger.warning(
+                    "не удалось прервать агента %s: процесс уже мёртв (%s)",
+                    agent_id, exc,
+                )
+                self._procs.pop(agent_id, None)
+                self._buffers.pop(agent_id, None)
+
+    def is_alive(self, agent_id: str) -> bool:
+        """Жив ли агент; мёртвые процессы убираются из словаря."""
+        proc = self._procs.get(agent_id)
+        if proc is None:
+            return False
+        self._pump(agent_id)
+        if not proc.alive:
+            self._procs.pop(agent_id, None)
+            return False
+        return True
+
+    def tail_output(self, agent_id: str, limit: int = BUFFER_LIMIT) -> str:
+        """Последние ``limit`` байт буфера вывода агента."""
+        self._pump(agent_id)
+        return self._buffers.get(agent_id, "")[-limit:]
+
+    def shutdown_all(self) -> None:
+        """Убить все запущенные агенты (docker exec PTY-процессы)."""
+        for agent_id in list(self._procs):
+            try:
+                self._procs[agent_id].kill()
+            except Exception:
+                pass
+        self._procs.clear()
+        self._buffers.clear()
