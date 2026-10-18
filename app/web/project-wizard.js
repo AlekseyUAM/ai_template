@@ -37,6 +37,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   setupNameValidation();
   await checkUrlParams();
   loadRequirements();
+
+  // Переключение SSH-полей по выбору бэкенда
+  const backendSel = document.getElementById("backend");
+  const sshFields = document.getElementById("sshFields");
+  function syncBackend() { sshFields.hidden = backendSel.value !== "ssh"; }
+  backendSel.addEventListener("change", syncBackend);
+  syncBackend();
 });
 
 // ─── Скачивание расширения юнит-тестов ───────────────────────────────────────
@@ -107,6 +114,18 @@ async function loadRequirements() {
   }
 }
 
+// ─── Вспомогательная функция: SSH conn или null ───────────────────────────────
+
+function readConn() {
+  if (document.getElementById("backend").value !== "ssh") return null;
+  return {
+    host: document.getElementById("sshHost").value.trim(),
+    port: parseInt(document.getElementById("sshPort").value, 10) || 22,
+    user: document.getElementById("sshUser").value.trim() || null,
+    key_path: document.getElementById("sshKeyPath").value.trim() || null,
+  };
+}
+
 // ─── Проверка доступа к базе ───────────────────────────────────────────────────
 
 async function checkDb() {
@@ -131,6 +150,8 @@ async function checkDb() {
         db_connection: document.getElementById("dbConnection").value,
         user: document.getElementById("dbUser").value || "",
         password: document.getElementById("dbPassword").value || "",
+        backend: document.getElementById("backend").value,
+        conn: readConn(),
       }),
     });
     const data = await r.json();
@@ -312,6 +333,8 @@ async function createProject() {
     user: document.getElementById("dbUser").value || "",
     password: document.getElementById("dbPassword").value || "",
     web_publication: document.getElementById("webPublication").value || "",
+    backend: document.getElementById("backend").value,
+    license_server: document.getElementById("licenseServer").value || null,
     mcp_ids: [...mcpSelectedIds],
     agents: agentRoles.map(role => ({
       agent: role,
@@ -324,6 +347,8 @@ async function createProject() {
     git_init: document.getElementById("gitInit").checked,
     update: false,
   };
+  const conn = readConn();
+  if (conn) body.conn = conn;
 
   const logElem = document.getElementById("createLog");
   logElem.className = "log-output";
@@ -433,6 +458,10 @@ async function checkUrlParams() {
     document.getElementById("webPublication").value = p.web_publication || "";
     document.getElementById("name").readOnly = true;
     document.getElementById("path").readOnly = true;
+
+    // Best-effort prefill for backend/licenseServer (ssh update-env is a follow-up)
+    if (p.backend) document.getElementById("backend").value = p.backend;
+    if (p.license_server) document.getElementById("licenseServer").value = p.license_server;
 
     // Предзаполнить ранее выбранные MCP проекта
     mcpSelectedIds = (p.mcp_ids || []).map(x => String(x));

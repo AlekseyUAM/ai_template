@@ -165,6 +165,30 @@
       </div>
     </div>
 
+    <!-- Размещение -->
+    <div class="section">
+      <h2>Размещение</h2>
+      <div class="field-group">
+        <label>
+          <span class="label-text">Бэкенд</span>
+          <select id="backend">
+            <option value="local" selected>Локально</option>
+            <option value="ssh">Удалённо (SSH)</option>
+          </select>
+        </label>
+        <div id="sshFields" hidden>
+          <label><span class="label-text">SSH host <span class="req">*</span></span>
+            <input id="sshHost" type="text" placeholder="server.example.com"></label>
+          <label><span class="label-text">SSH порт</span>
+            <input id="sshPort" type="text" placeholder="22"></label>
+          <label><span class="label-text">SSH пользователь</span>
+            <input id="sshUser" type="text" placeholder="root"></label>
+          <label><span class="label-text">Путь к ключу</span>
+            <input id="sshKeyPath" type="text" placeholder="~/.ssh/id_ed25519"></label>
+        </div>
+      </div>
+    </div>
+
     <!-- Разработчик -->
     <div class="section">
       <h2>Разработчик</h2>
@@ -191,6 +215,12 @@
         <label>
           <span class="label-text">Версия платформы <span class="req">*</span></span>
           <input id="platformVersion" type="text" placeholder="8.3.25" required>
+        </label>
+      </div>
+      <div class="field-group" style="margin-top:12px;">
+        <label>
+          <span class="label-text">Сервер лицензий</span>
+          <input id="licenseServer" type="text" placeholder="10.0.0.5 (NETHASP), необязательно">
         </label>
       </div>
     </div>
