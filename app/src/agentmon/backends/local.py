@@ -7,7 +7,7 @@ from pathlib import Path
 
 from ..models import FileRef
 from ..pty_process import spawn as default_spawn
-from . import BUFFER_LIMIT, Backend, RunResult
+from . import BUFFER_LIMIT, Backend, RunResult, is_cruft
 
 logger = logging.getLogger(__name__)
 
@@ -18,8 +18,6 @@ class LocalProvisioner:
     Поведение повторяет прежний код слоя env/ (scaffold/content/checks) —
     рефакторинг не должен менять результат для backend=local.
     """
-
-    _CRUFT_DIRS = {"__pycache__", "build", ".pytest_cache"}
 
     def mkdirs(self, paths) -> None:
         for p in paths:
@@ -52,16 +50,12 @@ class LocalProvisioner:
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         Path(path).write_bytes(data)
 
-    def _is_cruft(self, item: Path) -> bool:
-        return any(p in self._CRUFT_DIRS or p.endswith(".egg-info")
-                   for p in item.parts)
-
     def put_tree(self, local_src, dst, skip=None) -> None:
         src, dstp = Path(local_src), Path(dst)
         for item in sorted(src.rglob("*")):
-            if self._is_cruft(item):
-                continue
             rel = item.relative_to(src)
+            if is_cruft(rel):
+                continue
             if skip is not None and skip(rel):
                 continue
             target = dstp / rel

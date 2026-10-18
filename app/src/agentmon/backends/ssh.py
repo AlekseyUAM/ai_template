@@ -7,7 +7,7 @@ import stat as _stat
 import time
 
 from ..models import FileRef
-from . import BUFFER_LIMIT, Backend, RunResult
+from . import BUFFER_LIMIT, Backend, RunResult, is_cruft
 
 logger = logging.getLogger(__name__)
 
@@ -208,12 +208,11 @@ class SshProvisioner:
 
     def put_tree(self, local_src, dst, skip=None) -> None:
         from pathlib import Path
-        cruft = {"__pycache__", "build", ".pytest_cache"}
         src = Path(local_src)
         for item in sorted(src.rglob("*")):
-            if any(p in cruft or p.endswith(".egg-info") for p in item.parts):
-                continue
             rel = item.relative_to(src)
+            if is_cruft(rel):
+                continue
             if skip is not None and skip(rel):
                 continue
             target = f"{dst}/{rel.as_posix()}"

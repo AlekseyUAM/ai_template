@@ -75,3 +75,16 @@ def test_tempdir_returns_string():
     prov = LocalProvisioner()
     td = prov.tempdir()
     assert isinstance(td, str) and len(td) > 0
+
+
+def test_put_tree_ancestor_named_build_does_not_skip_root(tmp_path):
+    """Абсолютный путь к src содержит 'build' — содержимое НЕ должно скипаться."""
+    src = tmp_path / "build" / "src"
+    (src / "pkg" / "__pycache__").mkdir(parents=True)
+    (src / "keep.txt").write_text("keep")
+    (src / "pkg" / "__pycache__" / "x.pyc").write_bytes(b"\x00")
+    dst = tmp_path / "dst"
+    prov = LocalProvisioner()
+    prov.put_tree(str(src), str(dst))
+    assert (dst / "keep.txt").read_text() == "keep"
+    assert not (dst / "pkg" / "__pycache__" / "x.pyc").exists()

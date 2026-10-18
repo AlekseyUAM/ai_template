@@ -22,14 +22,6 @@ _DEFAULT_EFFORT = "medium"
 _PY_INVOKE = re.compile(r"\bpython (?=[\"'.$\\-])")
 
 
-# Сборочные/тестовые артефакты, которые не должны попадать в развёрнутый проект.
-_CRUFT_DIRS = {"__pycache__", "build", ".pytest_cache"}
-
-
-def _is_cruft(item: Path) -> bool:
-    return any(p in _CRUFT_DIRS or p.endswith(".egg-info") for p in item.parts)
-
-
 def _is_special(rel: Path) -> bool:
     """Файлы шаблона, которые разворачиваются не копией, а отдельно.
 
@@ -78,9 +70,11 @@ def _apply_mcp_names(prov, claude_dir, overrides) -> None:
     в _render_agents (с учётом model/effort), settings.json — через write_preserving.
     """
     for src in sorted(CONTENT_DIR.rglob("*")):
-        if not src.is_file() or "__pycache__" in src.parts:
+        if not src.is_file():
             continue
         rel = src.relative_to(CONTENT_DIR)
+        if "__pycache__" in rel.parts:
+            continue
         # agents/ обрабатываются в _render_agents; settings.json — через write_preserving
         if rel.parts[:1] == ("agents",) or rel.parts == ("settings.json",):
             continue
@@ -117,9 +111,9 @@ def _rewrite_python_invocations(prov, claude_dir, py_cmd) -> None:
     Источник списка файлов — шаблон на мониторе (CONTENT_DIR); пишем на цель.
     """
     for src in sorted(CONTENT_DIR.rglob("*.md")):
-        if "__pycache__" in src.parts:
-            continue
         rel = src.relative_to(CONTENT_DIR)
+        if "__pycache__" in rel.parts:
+            continue
         try:
             text = src.read_text(encoding="utf-8")
         except (UnicodeDecodeError, OSError):

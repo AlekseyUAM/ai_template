@@ -7,9 +7,17 @@
 """
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Protocol
 
 from ..models import FileRef, Project
+
+CRUFT_DIRS = {"__pycache__", "build", ".pytest_cache"}
+
+
+def is_cruft(rel: Path) -> bool:
+    """True если относительный путь лежит в служебном каталоге сборки/кэша."""
+    return any(p in CRUFT_DIRS or p.endswith(".egg-info") for p in rel.parts)
 
 
 class AgentRunner(Protocol):

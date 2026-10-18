@@ -241,3 +241,17 @@ def test_mkdirs_skips_existing_segments():
     # existing dirs shouldn't cause errors
     assert "/srv" in sftp.dirs
     assert "/srv/demo" in sftp.dirs
+
+
+def test_put_tree_ancestor_named_build_does_not_skip_root(tmp_path):
+    """Абсолютный путь src содержит 'build' — содержимое НЕ должно скипаться."""
+    src = tmp_path / "build" / "src"
+    (src / "pkg" / "__pycache__").mkdir(parents=True)
+    (src / "keep.txt").write_text("keep")
+    (src / "pkg" / "__pycache__" / "x.pyc").write_bytes(b"\x00")
+    sftp = FakeSftpRW()
+    prov = SshProvisioner(FakeConn(sftp))
+    prov.put_tree(str(src), "/remote/dst")
+    written = set(sftp.files)
+    assert "/remote/dst/keep.txt" in written
+    assert all("__pycache__" not in p for p in written)
