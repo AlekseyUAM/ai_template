@@ -1,5 +1,12 @@
+import pytest
+from agentmon.backends.local import LocalProvisioner
 from agentmon.env.config_schema import EnvConfig, SCHEMA_VERSION
 from agentmon.env import content, task_schema as ts
+
+
+@pytest.fixture
+def prov():
+    return LocalProvisioner()
 
 
 def cfg(tmp_path):
@@ -10,14 +17,14 @@ def cfg(tmp_path):
         web_publication="", mcp=[], agents=[])
 
 
-def test_deploy_places_task_status_tool(tmp_path):
-    content.deploy_content(cfg(tmp_path), update=False)
+def test_deploy_places_task_status_tool(prov, tmp_path):
+    content.deploy_content(prov, cfg(tmp_path), update=False)
     assert (tmp_path / ".claude" / "tools" / "task_status.py").exists()
     assert (tmp_path / ".claude" / "agents" / "developer.md").exists()
 
 
-def test_task_and_tool_coexist(tmp_path):
-    content.deploy_content(cfg(tmp_path), update=False)
+def test_task_and_tool_coexist(prov, tmp_path):
+    content.deploy_content(prov, cfg(tmp_path), update=False)
     spec = ts.create_task(tmp_path, title="T", goal="g", plan="p", constraints="c",
                           enabled_stages=ts.STAGE_NAMES)
     assert (ts.task_dir(tmp_path, spec.id) / "task.json").exists()

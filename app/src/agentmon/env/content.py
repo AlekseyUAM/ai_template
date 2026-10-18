@@ -1,8 +1,5 @@
 import json
-import os
 import re
-import subprocess
-import sys
 from pathlib import Path
 
 from .scaffold import write_preserving
@@ -33,21 +30,6 @@ def _is_cruft(item: Path) -> bool:
     return any(p in _CRUFT_DIRS or p.endswith(".egg-info") for p in item.parts)
 
 
-def _copy_tree(src: Path, dst: Path, *, skip=None) -> None:
-    for item in sorted(src.rglob("*")):
-        if _is_cruft(item):
-            continue
-        rel = item.relative_to(src)
-        if skip is not None and skip(rel):
-            continue
-        target = dst / rel
-        if item.is_dir():
-            target.mkdir(parents=True, exist_ok=True)
-        else:
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(item.read_bytes())
-
-
 def _is_special(rel: Path) -> bool:
     """Файлы шаблона, которые разворачиваются не копией, а отдельно.
 
@@ -69,13 +51,13 @@ def _model_effort(config, name):
     return _DEFAULT_MODEL, _DEFAULT_EFFORT
 
 
-def _render_agents(config, agents_dst: Path) -> None:
-    agents_dst.mkdir(parents=True, exist_ok=True)
+def _render_agents(prov, config, agents_dst) -> None:
+    prov.mkdirs([agents_dst])
     for src in sorted((CONTENT_DIR / "agents").glob("*.md")):
         model, effort = _model_effort(config, src.stem)
         text = src.read_text(encoding="utf-8")
         text = text.replace("{{MODEL}}", model).replace("{{EFFORT}}", effort)
-        (agents_dst / src.name).write_text(text, encoding="utf-8")
+        prov.write_text(f"{agents_dst}/{src.name}", text)
 
 
 def _render_settings() -> str:
@@ -85,102 +67,107 @@ def _render_settings() -> str:
     return (CONTENT_DIR / "settings.json").read_text(encoding="utf-8")
 
 
-def _apply_mcp_names(claude_dir: Path, overrides: dict) -> None:
-    """Подставляет актуальные имена MCP вместо плейсхолдеров шаблона.
+def _apply_mcp_names(prov, claude_dir, overrides) -> None:
+    """Подставляет актуальные имена MCP вместо плейсхолдеров — пишем на цель.
 
-    Проходит по всем текстовым файлам .claude и заменяет каждое имя-плейсхолдер
-    на актуальное. Бинарные/нечитаемые файлы и __pycache__ пропускаются.
+    Обходим текстовые файлы шаблона .claude на мониторе; меняем и пишем на цель
+    только изменившиеся.
     """
-    for path in sorted(claude_dir.rglob("*")):
-        if not path.is_file() or "__pycache__" in path.parts:
+    for src in sorted(CONTENT_DIR.rglob("*")):
+        if not src.is_file() or "__pycache__" in src.parts:
             continue
+        rel = src.relative_to(CONTENT_DIR)
         try:
-            text = path.read_text(encoding="utf-8")
+            text = src.read_text(encoding="utf-8")
         except (UnicodeDecodeError, OSError):
             continue
         new = text
         for placeholder, actual in overrides.items():
             new = new.replace(placeholder, actual)
         if new != text:
-            path.write_text(new, encoding="utf-8")
+            prov.write_text(f"{claude_dir}/{rel.as_posix()}", new)
 
 
-def venv_python(project: Path) -> Path:
-    """Путь к интерпретатору .venv проекта (ветка по ОС, как в bootstrap.py)."""
-    if os.name == "nt":
-        return project / ".venv" / "Scripts" / "python.exe"
-    return project / ".venv" / "bin" / "python"
+def venv_python(prov, project_dir) -> str:
+    return prov.venv_python(project_dir)
 
 
-def _deploy_vscode(project: Path, *, update: bool) -> None:
-    """Пин интерпретатора .venv для VS Code (расширение Python).
+def _py_cmd(prov, project_dir) -> str:
+    return '"' + prov.venv_python(project_dir) + '"'
 
-    Без этого файла расширение при первом открытии проекта полагается на авто-детект
-    и успевает выбрать глобальный интерпретатор (ошибка «Invalid python interpreter»),
-    пока асинхронно не разрешится .venv. Пишем абсолютный путь из того же источника
-    (venv_python), что и вызовы в хуках/доках, — тулинг не зависит от PATH/детекта.
-    Через write_preserving: на обновлении окружения пользовательские правки сохраняются
-    в .bak, а не затираются молча.
-    """
-    vscode = project / ".vscode"
-    vscode.mkdir(parents=True, exist_ok=True)
+
+def _deploy_vscode(prov, project_dir, *, update: bool) -> None:
     content = json.dumps(
-        {"python.defaultInterpreterPath": venv_python(project).as_posix()},
+        {"python.defaultInterpreterPath": prov.venv_python(project_dir)},
         ensure_ascii=False, indent=2) + "\n"
-    write_preserving(vscode / "settings.json", content, update=update)
+    write_preserving(prov, f"{project_dir}/.vscode/settings.json",
+                     content, update=update)
 
 
-def _py_cmd(project: Path) -> str:
-    """Токен для вставки в команды: абсолютный путь venv в кавычках, forward-slash.
+def _rewrite_python_invocations(prov, claude_dir, py_cmd) -> None:
+    """Пишет версии *.md шаблона с заменой `python ` на путь venv — на цель.
 
-    as_posix() даёт прямые слэши даже на Windows (`C:/.../python.exe`) — так путь
-    корректно отрабатывает и в git-bash, которым агент исполняет команды.
+    Источник списка файлов — шаблон на мониторе (CONTENT_DIR); пишем на цель.
     """
-    return '"' + venv_python(project).as_posix() + '"'
-
-
-def _rewrite_python_invocations(claude_dir: Path, py_cmd: str) -> None:
-    """Заменяет токен `python ` на путь venv во всех `*.md` развёрнутого .claude.
-
-    Трогает только md-доки навыков/правил/агентов; шебанги `.py` и внутренние
-    `sys.executable`-вызовы не затрагиваются (дочерние процессы и так наследуют
-    интерпретатор родителя). settings.json переписывается отдельно (см. deploy).
-    """
-    for path in sorted(claude_dir.rglob("*.md")):
-        if "__pycache__" in path.parts:
+    for src in sorted(CONTENT_DIR.rglob("*.md")):
+        if "__pycache__" in src.parts:
             continue
+        rel = src.relative_to(CONTENT_DIR)
         try:
-            text = path.read_text(encoding="utf-8")
+            text = src.read_text(encoding="utf-8")
         except (UnicodeDecodeError, OSError):
             continue
         new = _PY_INVOKE.sub(lambda m: py_cmd + " ", text)
         if new != text:
-            path.write_text(new, encoding="utf-8")
+            prov.write_text(f"{claude_dir}/{rel.as_posix()}", new)
 
 
-def provision_venv(config, *, update: bool, run=subprocess.run) -> str | None:
-    """Создаёт .venv проекта и ставит туда рантайм-зависимости навыков.
+def provision_venv(prov, config, *, update: bool) -> str | None:
+    """Создаёт .venv на ЦЕЛЕВОЙ машине интерпретатором цели (prov.python_cmd()).
 
-    venv строится интерпретатором самого agentmon (sys.executable) — он гарантирован.
-    Ошибки venv/pip НЕ валят создание проекта. Возвращает None при успехе либо текст
-    предупреждения (его шаг установки покажет статусом "warn"), чтобы сбой не остался
-    незамеченным до рантайма навыка.
+    Раньше venv строился sys.executable — для SSH это интерпретатор монитора, не
+    цели. Теперь интерпретатор задаёт provisioner (local → sys.executable,
+    ssh → python3 на удалённом хосте). Ошибки venv/pip НЕ валят создание проекта.
     """
-    project = Path(config.project_dir)
-    venv_dir = project / ".venv"
-    py = venv_python(project)
+    project_dir = config.project_dir
+    venv_dir = f"{project_dir}/.venv"
+    py = prov.venv_python(project_dir)
     req = TEMPLATE_DIR / "requirements.txt"
-    try:
-        if not venv_dir.exists():
-            run([sys.executable, "-m", "venv", str(venv_dir)], check=True)
-        if req.is_file():
-            run([str(py), "-m", "pip", "install", "-r", str(req)], check=True)
-    except (subprocess.CalledProcessError, OSError) as exc:
-        return (
-            f"не удалось подготовить .venv ({exc}); зависимости навыков "
-            f"(lxml/psutil/click) не установлены. Доустановите: python setup-venv.py"
-        )
+    if not prov.exists(venv_dir):
+        res = prov.run(prov.python_cmd() + ["-m", "venv", venv_dir])
+        if res.returncode != 0:
+            return (f"не удалось подготовить .venv ({res.stderr.strip()}); "
+                    f"зависимости навыков не установлены. "
+                    f"Доустановите: python setup-venv.py")
+    if req.is_file():
+        # requirements.txt — исходник на мониторе; заливаем его на цель внутри
+        # .venv (не в корень проекта — чтобы не нарушать byte-for-byte инвариант
+        # значимого дерева проекта; .venv гитигнорен/эфемерен).
+        req_dst = f"{venv_dir}/ai1c-requirements.txt"
+        prov.write_text(req_dst, req.read_text(encoding="utf-8"))
+        res = prov.run([py, "-m", "pip", "install", "-r", req_dst])
+        if res.returncode != 0:
+            return (f"не удалось поставить зависимости навыков "
+                    f"({res.stderr.strip()}). Доустановите: python setup-venv.py")
     return None
+
+
+def deploy_content(prov, config, *, update: bool) -> None:
+    project_dir = config.project_dir
+    claude = f"{project_dir}/.claude"
+    prov.put_tree(str(TEMPLATE_DIR), project_dir, skip=_is_special)
+    _render_agents(prov, config, f"{claude}/agents")
+    py_json = '\\"' + prov.venv_python(project_dir) + '\\"'
+    settings = _PY_INVOKE.sub(lambda m: py_json + " ", _render_settings())
+    write_preserving(prov, f"{claude}/settings.json", settings, update=update)
+    _rewrite_python_invocations(prov, claude, _py_cmd(prov, project_dir))
+    _deploy_vscode(prov, project_dir, update=update)
+    if not update:
+        write_preserving(prov, f"{project_dir}/README.md",
+                         _project_readme(config.project_name), update=update)
+        overrides = mcp_name_overrides(config.mcp)
+        if overrides:
+            _apply_mcp_names(prov, claude, overrides)
 
 
 def _project_readme(project_name: str) -> str:
@@ -192,37 +179,3 @@ def _project_readme(project_name: str) -> str:
         "На свежем клоне подними его одной командой:\n\n"
         "    python setup-venv.py\n"
     )
-
-
-def deploy_content(config, *, update: bool) -> None:
-    project = Path(config.project_dir)
-    claude = project / ".claude"
-    # template — источник истины: копируем всё дерево целиком, чтобы любой
-    # добавленный в шаблон файл/каталог попал в проект. Спец-файлы (_is_special)
-    # разворачиваются отдельно ниже.
-    _copy_tree(TEMPLATE_DIR, project, skip=_is_special)
-    _render_agents(config, claude / "agents")
-    # Вызовы интерпретатора указываем на .venv проекта (абсолютный путь), чтобы
-    # хуки/скиллы не зависели от PATH. Путь детерминирован из project_dir, сам
-    # .venv создаётся отдельным шагом (provision_venv) в пайплайне установки.
-    py_cmd = _py_cmd(project)
-    # В settings.json вызов живёт внутри JSON-строки, поэтому кавычки пути должны
-    # быть экранированы (\"...\"), иначе ломается JSON. В .md — обычные кавычки.
-    py_json = '\\"' + venv_python(project).as_posix() + '\\"'
-    settings = _PY_INVOKE.sub(lambda m: py_json + " ", _render_settings())
-    write_preserving(claude / "settings.json", settings, update=update)
-    _rewrite_python_invocations(claude, py_cmd)
-    # VS Code: пин интерпретатора .venv, чтобы при открытии проекта не всплывала
-    # ошибка «Invalid python interpreter» из-за авто-детекта глобального python.
-    _deploy_vscode(project, update=update)
-    # README проекта — пустой с заголовком-именем (шаблонный template/README.md
-    # при установке заменяется на этот). При обновлении версии окружения README
-    # не трогаем — он уже принадлежит проекту.
-    if not update:
-        write_preserving(project / "README.md",
-                         _project_readme(config.project_name), update=update)
-        # Подстановка актуальных имён выбранных MCP вместо плейсхолдеров шаблона —
-        # только при создании (на обновлении окружения имена не трогаем).
-        overrides = mcp_name_overrides(config.mcp)
-        if overrides:
-            _apply_mcp_names(claude, overrides)
