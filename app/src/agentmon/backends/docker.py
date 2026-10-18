@@ -151,6 +151,11 @@ class _DockerContainer:
         if self._ready and not self.broken:
             return
 
+        if self.broken and self._within_retry_window():
+            raise RuntimeError(
+                f"контейнер {self._name!r} недоступен, следующая попытка позже"
+            )
+
         if not mcp_docker.image_exists(self._image, run=self._run):
             self._build()
 
@@ -193,6 +198,7 @@ class _DockerContainer:
             ["docker", "exec", "-d", self._name, "sh", "-c", xvfb_cmd],
             capture_output=True, text=True,
         )
+        self._broken_at = None
         self._ready = True
 
     # ------------------------------------------------------------------

@@ -342,7 +342,20 @@ class TestEnsureReadyCache:
         )
 
     def test_after_mark_broken_ensure_reruns_lifecycle(self):
-        """После mark_broken() следующий ensure() снова выполняет полный жизненный цикл."""
+        """После mark_broken() следующий ensure() снова выполняет полный жизненный цикл.
+
+        Часы продвигаются за пределы окна повторов, чтобы ensure() не упал
+        с «следующая попытка позже».
+        """
+        # Часы: 0.0 при mark_broken, 20.0 при проверке окна в ensure()
+        times = [0.0, 20.0]
+        idx = [0]
+
+        def fake_clock():
+            t = times[min(idx[0], len(times) - 1)]
+            idx[0] += 1
+            return t
+
         fake = FakeRun(routes=[
             ("docker images -q", 0, "abc123\n", ""),
             ("docker inspect", 1, "", "No such object"),
@@ -379,23 +392,86 @@ class TestEnsureReadyCache:
 
         fake.__call__ = patched_call
 
-        c = _make_container(fake, name="ai1c-cache2")
+        c = _make_container(fake, name="ai1c-cache2", clock=fake_clock,
+                            retry_seconds=DEFAULT_RETRY_SECONDS)
         c.ensure()  # первый ensure — полный жизненный цикл
         assert c._ready, "_ready должен быть True после первого ensure"
 
-        c.mark_broken()
+        c.mark_broken()  # broken_at = 0.0
         assert not c._ready, "_ready должен быть False после mark_broken"
 
         # Сбросить историю вызовов
         fake.calls.clear()
 
-        c.ensure()  # второй ensure — должен выполнить полный цикл заново
+        # Второй ensure — часы вернут 20.0, окно (10 с) истекло → проходит
+        c.ensure()
         # Ожидаем как минимум docker images -q и docker inspect
         assert len(fake.calls) > 0, (
             "после mark_broken() ensure() должен снова делать docker-вызовы"
         )
         joined_calls = " ".join(" ".join(c) for c in fake.calls)
         assert "docker images" in joined_calls or "docker inspect" in joined_calls
+
+    def test_recovery_clears_broken(self):
+        """Успешный ensure() после mark_broken сбрасывает broken → False."""
+        # broken_at = 0.0; при проверке окна в ensure() вернётся 20.0 (> retry_seconds)
+        times = [0.0, 20.0]
+        idx = [0]
+
+        def fake_clock():
+            t = times[min(idx[0], len(times) - 1)]
+            idx[0] += 1
+            return t
+
+        fake = FakeRun(routes=[
+            ("docker images -q", 0, "abc123\n", ""),
+            ("docker inspect", 0, "running\n", ""),
+        ])
+        c = _make_container(fake, name="ai1c-recovery", clock=fake_clock,
+                            retry_seconds=DEFAULT_RETRY_SECONDS)
+
+        c.mark_broken()  # broken_at = 0.0
+        assert c.broken
+
+        # Часы вернут 20.0 → окно истекло → ensure() выполняется и восстанавливает
+        c.ensure()
+        assert not c.broken, "broken должен быть False после успешного ensure()"
+        assert c._ready, "_ready должен быть True после восстановления"
+
+        # Проверяем, что следующий ensure() — no-op (fast-path)
+        fake.calls.clear()
+        c.ensure()
+        assert len(fake.calls) == 0, (
+            "после восстановления второй ensure() должен быть no-op (fast-path)"
+        )
+
+    def test_within_window_ensure_raises_no_docker_calls(self):
+        """ensure() внутри окна повторов бросает RuntimeError без docker-вызовов."""
+        # broken_at = 0.0; при проверке окна вернётся 1.0 (< retry_seconds=10)
+        times = [0.0, 1.0]
+        idx = [0]
+
+        def fake_clock():
+            t = times[min(idx[0], len(times) - 1)]
+            idx[0] += 1
+            return t
+
+        fake = FakeRun(routes=[
+            ("docker images -q", 0, "abc123\n", ""),
+            ("docker inspect", 0, "running\n", ""),
+        ])
+        c = _make_container(fake, name="ai1c-window", clock=fake_clock,
+                            retry_seconds=10.0)
+
+        c.mark_broken()  # broken_at = 0.0
+        fake.calls.clear()
+
+        with pytest.raises(RuntimeError, match="недоступен"):
+            c.ensure()  # часы → 1.0, окно не истекло → raise fast
+
+        assert len(fake.calls) == 0, (
+            "ensure() внутри окна не должен делать docker-вызовы"
+        )
 
 
 # ---------------------------------------------------------------------------
