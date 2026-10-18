@@ -239,10 +239,16 @@ Linux поднимается в сети хоста (`--network=host`) для в
 (NETHASP), платформа 1С на Linux — всё доступно по TCP; USB-ключи, файловые базы
 через SSHFS и тому подобное не предусмотрено.
 
-**Docker-бэкенд (мастер создания проекта).**
-Мастер получил третий вариант размещения — «В Docker-контейнере» (`value="docker"`).
-Модель: **чистый контейнер** на локальном Docker-демоне; файлы проекта живут в
-контейнере, все операции — через `docker exec`/`docker cp`, симметрично SSH-бэкенду.
+**Docker-бэкенд (проект 1С в контейнере).**
+Третий backend рядом с `local`/`ssh`: `DockerBackend` с `DockerProvisioner`/
+`DockerRunner`/`DockerFiles` (модуль `backends/docker.py`) и `_DockerContainer`
+(жизненный цикл контейнера). Мастер получил третий вариант размещения —
+«В Docker-контейнере» (`value="docker"`). Модель: **чистый контейнер** на локальном
+Docker-демоне; файлы проекта живут в контейнере, все операции — через `docker exec`/
+`docker cp`, симметрично SSH-бэкенду. Создание проекта (scaffold, шаблон, `.mcp.json`,
+`.venv`, `.1c-devbase.json`, `git`, `nethasp.ini`, проверки) идёт через
+`DockerProvisioner` внутри контейнера; агент `claude` запускается `docker exec -it`,
+журналы сессий читаются `docker exec`.
 
 - Тулкит-образ (платформа 1С + Xvfb + Claude) переиспользуется из
   `deps/docker_1c_sandbox` — свой Dockerfile не пишем.
