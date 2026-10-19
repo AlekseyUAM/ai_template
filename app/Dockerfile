@@ -24,6 +24,9 @@ RUN pip3 install --break-system-packages --no-cache-dir -r /tmp/requirements.txt
 COPY docker/fake-claude /usr/local/bin/claude-fake
 RUN chmod +x /usr/local/bin/claude-fake
 
+# В docker-compose-режиме working_dir и PYTHONPATH переопределяются на /opt/ai1c/...
+# (код монтируется из корня репо → /opt/ai1c; см. docker-compose.yml).
+# /app используется только при голом `docker run` без compose.
 WORKDIR /app
 EXPOSE 8765
 

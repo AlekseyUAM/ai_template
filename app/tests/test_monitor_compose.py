@@ -10,6 +10,8 @@
 """
 from pathlib import Path
 
+DOCS_DIR = Path(__file__).parent.parent.parent / "docs"
+
 import pytest
 
 APP_DIR = Path(__file__).parent.parent
@@ -128,3 +130,20 @@ class TestRequirements:
                 for ln in text.splitlines()
                 if ln.strip() and not ln.strip().startswith("#")}
         assert "httpx" not in pkgs
+
+
+# ---------------------------------------------------------------------------
+# Документация
+# ---------------------------------------------------------------------------
+
+class TestDocs:
+    def test_deploy_docker_md_exists(self):
+        """docs/DEPLOY-DOCKER.md должен существовать — requirements.txt на него ссылается."""
+        deploy_doc = DOCS_DIR / "DEPLOY-DOCKER.md"
+        assert deploy_doc.exists(), f"Файл не найден: {deploy_doc}"
+
+    def test_phases_mentions_monitor_mode(self):
+        """docs/PHASES.md должен упоминать AI1C_MONITOR_MODE (docker-режим монитора реализован)."""
+        phases = DOCS_DIR / "PHASES.md"
+        assert phases.exists()
+        assert "AI1C_MONITOR_MODE" in phases.read_text(encoding="utf-8")
