@@ -47,9 +47,10 @@ SQLite также поддерживается: путь к файлу долж�
 Чтобы авторизоваться (один раз):
 
 ```bash
-docker compose -f app/docker-compose.yml exec agentmon claude
+docker compose -f app/docker-compose.yml exec -it agentmon claude
 ```
 
+Флаг `-it` обязателен — интерактивный вход (`/login`) требует терминала (TTY).
 Введите токен по инструкции CLI. Состояние переживает пересборку образа.
 
 ## Требования
