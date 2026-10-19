@@ -23,9 +23,12 @@ services:
       AGENTMON_TG_API_BASE: "${AGENTMON_TG_API_BASE:-https://api.telegram.org}"
       # Python-пакет расположен в /opt/ai1c/app/src (корень репо смонтирован как /opt/ai1c).
       PYTHONPATH: "/opt/ai1c/app/src"
-    # Postgres работает на хосте → доступен через host.docker.internal.
+    # Postgres работает на хосте → доступен через host.docker.internal (host-режим).
+    # В docker-режиме монитор общается с ai1c-postgres напрямую через ai1c-net.
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    networks:
+      - ai1c-net
     volumes:
       # Корень репо (template/, app/, web/ — всё на месте; parents[4] найдёт template).
       - ../:/opt/ai1c
@@ -43,3 +46,10 @@ services:
 volumes:
   agentmon_claude:
   agentmon_data:
+
+# Сеть создаётся deploy/postgres/docker-compose.yml (или run.py — docker network create).
+# Монитор присоединяется к ней как external.
+networks:
+  ai1c-net:
+    name: ai1c-net
+    external: true

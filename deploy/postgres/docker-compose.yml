@@ -8,8 +8,18 @@ services:
       POSTGRES_PASSWORD: ai1c
       POSTGRES_DB: ai1c
     ports:
+      # Публикуем на loopback хоста — host-режим монитора обращается через 127.0.0.1.
       - "127.0.0.1:${AI1C_PG_PORT:-5432}:5432"
     volumes:
       - ai1c_pg:/var/lib/postgresql/data
+    networks:
+      - ai1c-net
+
 volumes:
   ai1c_pg:
+
+# Сеть ai1c-net принадлежит этому compose — он создаёт её с фиксированным именем.
+# Docker-режим монитора (app/docker-compose.yml) присоединяется к ней как external.
+networks:
+  ai1c-net:
+    name: ai1c-net

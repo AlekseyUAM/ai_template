@@ -95,6 +95,16 @@ def docker_env(env: dict) -> dict:
     return result
 
 
+def docker_prep_cmds() -> list[list[str]]:
+    """Вернуть список команд подготовки docker-окружения перед compose up.
+
+    Сейчас — одна команда: создать общую сеть ai1c-net (идемпотентно).
+    Если сеть уже существует, docker network create вернёт ненулевой код —
+    main() намеренно игнорирует этот код, чтобы не прерывать запуск.
+    """
+    return [["docker", "network", "create", "ai1c-net"]]
+
+
 def docker_plan(env: dict, extra_args: list) -> tuple:
     """Вернуть (argv, env) для запуска монитора через docker compose.
 
@@ -139,6 +149,12 @@ def main() -> None:
         print(f"[run] Agent Monitor (Docker): http://127.0.0.1:{port}  (Ctrl+C для остановки)")
 
         argv, denv = docker_plan(env, sys.argv[1:])
+
+        # Идемпотентная подготовка: создать сеть ai1c-net (если не существует).
+        # Ненулевой код (сеть уже есть) — не фатален, подавляем.
+        for prep in docker_prep_cmds():
+            subprocess.run(prep, env=denv)
+
         rc = subprocess.run(argv, env=denv).returncode
         sys.exit(rc)
 

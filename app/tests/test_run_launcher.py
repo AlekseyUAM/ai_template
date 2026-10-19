@@ -134,6 +134,28 @@ class TestHostPlan:
 
 
 # ---------------------------------------------------------------------------
+# docker_prep_cmds
+# ---------------------------------------------------------------------------
+
+
+class TestDockerPrepCmds:
+    def test_returns_list_of_lists(self):
+        result = run.docker_prep_cmds()
+        assert isinstance(result, list)
+        assert all(isinstance(cmd, list) for cmd in result)
+
+    def test_contains_network_create(self):
+        """docker_prep_cmds содержит команду создания сети ai1c-net."""
+        result = run.docker_prep_cmds()
+        assert ["docker", "network", "create", "ai1c-net"] in result
+
+    def test_exact_value(self):
+        """Ровно одна команда — идемпотентное создание сети."""
+        result = run.docker_prep_cmds()
+        assert result == [["docker", "network", "create", "ai1c-net"]]
+
+
+# ---------------------------------------------------------------------------
 # docker_plan
 # ---------------------------------------------------------------------------
 

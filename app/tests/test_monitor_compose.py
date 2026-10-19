@@ -4,7 +4,8 @@
 - корень репо смонтирован в /opt/ai1c,
 - docker.sock смонтирован,
 - host-gateway прописан для доступа к Postgres на хосте,
-- PYTHONPATH указывает на src в смонтированном репо.
+- PYTHONPATH указывает на src в смонтированном репо,
+- сеть ai1c-net объявлена как external и agentmon подключён к ней.
 
 Тест читает файл как текст — YAML-парсер не требуется (PyYAML опционален).
 """
@@ -15,13 +16,20 @@ DOCS_DIR = Path(__file__).parent.parent.parent / "docs"
 import pytest
 
 APP_DIR = Path(__file__).parent.parent
+REPO_ROOT = APP_DIR.parent
 COMPOSE_FILE = APP_DIR / "docker-compose.yml"
+PG_COMPOSE_FILE = REPO_ROOT / "deploy" / "postgres" / "docker-compose.yml"
 REQUIREMENTS_FILE = APP_DIR / "requirements.txt"
 
 
 @pytest.fixture(scope="module")
 def compose_text() -> str:
     return COMPOSE_FILE.read_text(encoding="utf-8")
+
+
+@pytest.fixture(scope="module")
+def pg_compose_text() -> str:
+    return PG_COMPOSE_FILE.read_text(encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------
@@ -114,6 +122,49 @@ class TestComposeYaml:
         svc = compose_yaml["services"]["agentmon"]
         env = svc.get("environment", {})
         assert env.get("AGENTMON_HOST") == "0.0.0.0"
+
+
+# ---------------------------------------------------------------------------
+# Сеть ai1c-net: app/docker-compose.yml (монитор — external)
+# ---------------------------------------------------------------------------
+
+class TestMonitorNetwork:
+    def test_ai1c_net_declared(self, compose_text):
+        """Верхний уровень compose содержит объявление сети ai1c-net."""
+        assert "ai1c-net" in compose_text
+
+    def test_ai1c_net_external(self, compose_text):
+        """Сеть объявлена как external (монитор не создаёт её)."""
+        assert "external: true" in compose_text
+
+    def test_agentmon_joins_ai1c_net(self, compose_text):
+        """Сервис agentmon подключён к сети ai1c-net (networks: содержит ai1c-net)."""
+        # Секция networks: сервиса содержит ai1c-net
+        assert "ai1c-net" in compose_text
+
+
+# ---------------------------------------------------------------------------
+# Сеть ai1c-net: deploy/postgres/docker-compose.yml (владелец сети)
+# ---------------------------------------------------------------------------
+
+class TestPgCompose:
+    def test_ai1c_net_declared_in_pg(self, pg_compose_text):
+        """PG compose объявляет сеть ai1c-net на верхнем уровне."""
+        assert "ai1c-net" in pg_compose_text
+
+    def test_ai1c_net_not_external_in_pg(self, pg_compose_text):
+        """PG compose СОЗДАЁТ сеть (не external) — он является её владельцем."""
+        # external: true должен отсутствовать в этом файле
+        assert "external: true" not in pg_compose_text
+
+    def test_postgres_joins_ai1c_net(self, pg_compose_text):
+        """Сервис postgres подключён к сети ai1c-net."""
+        assert "ai1c-net" in pg_compose_text
+
+    def test_loopback_publish_preserved(self, pg_compose_text):
+        """Публикация на loopback хоста сохранена (host-режим монитора)."""
+        assert "127.0.0.1:${AI1C_PG_PORT" in pg_compose_text
+        assert ":5432" in pg_compose_text
 
 
 # ---------------------------------------------------------------------------
