@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import os
 import platform
+import re
 import socket
 import subprocess
 import sys
@@ -294,6 +295,15 @@ def ensure_role_db(
 
     Поднимает subprocess.CalledProcessError при ненулевом коде возврата.
     """
+    # Защитный барьер на границе доверия: значения обычно константа ai1c,
+    # но на случай внешнего вызова — блокируем SQL-метасимволы.
+    _IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+    for _val in (user, db):
+        if not _IDENT_RE.match(_val):
+            raise ValueError(f"недопустимый идентификатор: {_val!r}")
+    # Одинарная кавычка в пароле экранируется удвоением для SQL-литерала.
+    safe_password = password.replace("'", "''")
+
     psql = str(Path(bin_dir) / bin_exe("psql"))
     base_args = [
         psql,
@@ -307,10 +317,10 @@ def ensure_role_db(
     role_sql = (
         "DO $$ BEGIN "
         f"IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname='{user}') THEN "
-        f"CREATE ROLE {user} LOGIN PASSWORD '{password}'; "
+        f"CREATE ROLE {user} LOGIN PASSWORD '{safe_password}'; "
         "END IF; "
         "END $$; "
-        f"ALTER ROLE {user} WITH PASSWORD '{password}';"
+        f"ALTER ROLE {user} WITH PASSWORD '{safe_password}';"
     )
     result = run(base_args + ["-c", role_sql], capture_output=True)
     rc = result.returncode if hasattr(result, "returncode") else 0
@@ -393,6 +403,7 @@ def provision(
     download: Callable[[str, str], None] = _default_download,
     extract: Callable[[str, str], None] = _default_extract,
     run: Callable = subprocess.run,
+    free_port_fn: Callable[[], int] = free_port,
 ) -> str:
     """Оркестрация: скачать → initdb → запустить → создать роль/БД → вернуть DSN.
 
@@ -431,9 +442,9 @@ def provision(
         try:
             chosen_port = int(port_file.read_text(encoding="utf-8").strip())
         except (ValueError, OSError):
-            chosen_port = free_port()
+            chosen_port = free_port_fn()
     else:
-        chosen_port = free_port()
+        chosen_port = free_port_fn()
 
     # Сохранить выбранный порт
     port_file.write_text(str(chosen_port), encoding="utf-8")

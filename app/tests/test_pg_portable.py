@@ -436,6 +436,43 @@ class TestEnsureRoleDb:
         with pytest.raises(subprocess.CalledProcessError):
             pg_portable.ensure_role_db(str(tmp_path / "bin"), 5432, run=fake)
 
+    def test_invalid_user_raises_value_error(self, tmp_path):
+        """Недопустимый идентификатор user → ValueError (защитный барьер)."""
+        fake = FakeRunWithStdout()
+        with pytest.raises(ValueError, match="недопустимый идентификатор"):
+            pg_portable.ensure_role_db(
+                str(tmp_path / "bin"), 5432, user="a; DROP TABLE", run=fake
+            )
+        # Псевдоним с кавычкой тоже запрещён
+        with pytest.raises(ValueError, match="недопустимый идентификатор"):
+            pg_portable.ensure_role_db(
+                str(tmp_path / "bin"), 5432, user="a'b", run=fake
+            )
+        # psql не должен был вызываться
+        assert fake.calls == []
+
+    def test_password_single_quote_is_doubled(self, tmp_path):
+        """Одинарная кавычка в пароле удваивается в SQL-литерале."""
+        fake = FakeRunWithStdout(stdout_map={1: b" 1\n"})  # БД уже есть → 2 вызова
+        pg_portable.ensure_role_db(
+            str(tmp_path / "bin"), 5432, password="pa'ss'word", run=fake
+        )
+        role_sql_argv = " ".join(fake.calls[0])
+        # Проверяем, что кавычка удвоена
+        assert "pa''ss''word" in role_sql_argv
+        # И оригинальная незащищённая строка отсутствует в виде pa'ss
+        assert "pa'ss" not in role_sql_argv.replace("pa''ss", "")
+
+    def test_valid_ai1c_identifiers_work(self, tmp_path):
+        """Стандартные константы ai1c проходят валидацию без ошибок."""
+        fake = FakeRunWithStdout(stdout_map={1: b" 1\n"})
+        pg_portable.ensure_role_db(
+            str(tmp_path / "bin"), 5432,
+            user="ai1c", password="ai1c", db="ai1c",
+            run=fake,
+        )
+        assert len(fake.calls) == 2  # роль + check (БД есть, create пропущен)
+
 
 # ---------------------------------------------------------------------------
 # dsn
@@ -645,6 +682,29 @@ class TestProvision:
         port_file = tmp_path / pg_portable.PGDATA / "ai1c.port"
         assert port_file.exists()
         assert port_file.read_text(encoding="utf-8").strip() == "5435"
+
+    def test_free_port_fn_injected_when_no_port_and_no_file(self, tmp_path):
+        """free_port_fn инъектируется: реальный socket bind не вызывается в тесте."""
+        _, extract, fake_run, calls = self._make_fakes(tmp_path)
+
+        result = pg_portable.provision(
+            tmp_path,
+            # port НЕ передаётся, файла ai1c.port тоже нет
+            system="Linux",
+            arch="x86_64",
+            download=fake_download([]),
+            extract=extract,
+            run=fake_run,
+            free_port_fn=lambda: 5599,
+        )
+
+        # DSN должен содержать инъектированный порт 5599
+        assert "5599" in result
+        # start вызывался с портом 5599
+        pg_ctl_start_calls = [c for c in calls if _pg_ctl_exe() in c[0] or c[0].endswith(_pg_ctl_exe())]
+        start_call = next((c for c in pg_ctl_start_calls if "start" in c), None)
+        assert start_call is not None, "pg_ctl start должен вызываться"
+        assert any("5599" in arg for arg in start_call), f"порт 5599 не найден в argv start: {start_call}"
 
     def test_port_loaded_from_file_on_rerun(self, tmp_path):
         """При повторном запуске без явного порта читает порт из ai1c.port."""
