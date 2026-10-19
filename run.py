@@ -150,7 +150,11 @@ def ensure_host_pg(env: dict, *, run=subprocess.run) -> None:
 
     port = _pg_portable.read_port(datadir)
     if port is None:
-        port = 5432  # fallback — не должно случаться при нормальном provision
+        # Файл порта потерян/повреждён (при нормальном provision не случается);
+        # берём дефолт, но предупреждаем — DSN в .ai1c.env может указывать на другой порт.
+        port = 5432
+        print("[run] WARNING: .ai1c/pgdata/ai1c.port не найден — старт PG на 5432",
+              file=sys.stderr)
 
     try:
         logfile.parent.mkdir(parents=True, exist_ok=True)

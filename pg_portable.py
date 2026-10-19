@@ -338,7 +338,7 @@ def ensure_role_db(
     if isinstance(stdout, bytes):
         stdout = stdout.decode(errors="replace")
 
-    if check_rc == 0 and "1" in stdout:
+    if check_rc == 0 and stdout.strip() == "1":
         # БД уже существует
         return
 
