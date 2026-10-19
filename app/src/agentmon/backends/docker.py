@@ -528,6 +528,11 @@ class DockerRunner:
         Идемпотентен: если процесс уже жив, возвращает тот же agent_id.
         Перед запуском гарантирует, что контейнер поднят (``container.ensure``).
         Рабочий каталог внутри контейнера задаётся флагом ``-w``.
+
+        При удалённом демоне (``container.docker_host`` не None) вставляет
+        ``-H <docker_host>`` сразу после ``docker``, чтобы PTY-команда шла
+        к нужному демону. При ``docker_host=None`` строка байт-в-байт совпадает
+        с прежним поведением (регресс-инвариант).
         """
         agent_id = project.key
         proc = self._procs.get(agent_id)
@@ -535,8 +540,10 @@ class DockerRunner:
             return agent_id
         self._container.ensure()
         cmd = project.claude_cmd or self.claude_cmd
+        dh = self._container.docker_host
+        host_flag = f" -H {shlex.quote(dh)}" if dh else ""
         wrapped = (
-            f"docker exec -it"
+            f"docker{host_flag} exec -it"
             f" -w {shlex.quote(self._workdir)}"
             f" {shlex.quote(self._container.name)}"
             f" {cmd}"

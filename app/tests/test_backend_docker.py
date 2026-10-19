@@ -1365,23 +1365,29 @@ class _FakePty:
 class _FakeDockerContainer:
     """Фейк _DockerContainer: запоминает ensure()-вызовы, предоставляет name."""
 
-    def __init__(self, name: str = "ai1c-myproj"):
+    def __init__(self, name: str = "ai1c-myproj", docker_host: str | None = None):
         self._name = name
+        self._docker_host = docker_host
         self.ensure_count = 0
 
     @property
     def name(self) -> str:
         return self._name
 
+    @property
+    def docker_host(self) -> str | None:
+        return self._docker_host
+
     def ensure(self) -> None:
         self.ensure_count += 1
 
 
 def _make_runner(container_name="ai1c-myproj", claude_cmd="claude --go",
-                 workdir=DEFAULT_WORKDIR, host_cwd="/tmp"):
+                 workdir=DEFAULT_WORKDIR, host_cwd="/tmp",
+                 docker_host: str | None = None):
     """Фабрика: возвращает (DockerRunner, FakeContainer, список spawned Pty)."""
     spawned: list[_FakePty] = []
-    container = _FakeDockerContainer(name=container_name)
+    container = _FakeDockerContainer(name=container_name, docker_host=docker_host)
 
     def fake_spawn(cmd: str, cwd: str, env=None):
         p = _FakePty(cmd, cwd)
@@ -1605,6 +1611,64 @@ class TestDockerRunner:
         runner.shutdown_all()
         assert not runner.is_alive("a")
         assert not runner.is_alive("b")
+
+    # --- start: -H для удалённого демона (Task 2) ---
+
+    def test_start_local_no_h_flag(self):
+        """Локальный контейнер (docker_host=None) — команда без -H (регресс)."""
+        runner, _, spawned = _make_runner(
+            container_name="ai1c-myproj",
+            claude_cmd="claude --go",
+            workdir="/workspace",
+            docker_host=None,
+        )
+        runner.start(_project())
+        assert len(spawned) == 1
+        cmd = spawned[0].cmd
+        assert cmd == "docker exec -it -w /workspace ai1c-myproj claude --go"
+        assert "-H" not in cmd
+
+    def test_start_remote_h_flag_present(self):
+        """Удалённый контейнер (docker_host='ssh://u@h') — команда содержит -H ssh://u@h."""
+        runner, _, spawned = _make_runner(
+            container_name="ai1c-myproj",
+            claude_cmd="claude --go",
+            workdir="/workspace",
+            docker_host="ssh://u@h",
+        )
+        runner.start(_project())
+        assert len(spawned) == 1
+        cmd = spawned[0].cmd
+        assert cmd == "docker -H ssh://u@h exec -it -w /workspace ai1c-myproj claude --go"
+
+    def test_start_remote_h_between_docker_and_exec(self):
+        """-H <docker_host> располагается между 'docker' и 'exec'."""
+        runner, _, spawned = _make_runner(
+            container_name="ai1c-myproj",
+            claude_cmd="claude --go",
+            workdir="/workspace",
+            docker_host="ssh://u@h",
+        )
+        runner.start(_project())
+        cmd = spawned[0].cmd
+        parts = cmd.split()
+        assert parts[0] == "docker"
+        assert parts[1] == "-H"
+        assert parts[2] == "ssh://u@h"
+        assert parts[3] == "exec"
+
+    def test_start_remote_h_flag_quoted_when_special_chars(self):
+        """docker_host со спецсимволами экранируется через shlex.quote."""
+        runner, _, spawned = _make_runner(
+            container_name="ai1c-myproj",
+            claude_cmd="claude --go",
+            workdir="/workspace",
+            docker_host="ssh://user name@host",
+        )
+        runner.start(_project())
+        cmd = spawned[0].cmd
+        # shlex.quote добавит кавычки вокруг строки со пробелом
+        assert "-H 'ssh://user name@host'" in cmd
 
 
 # ---------------------------------------------------------------------------
