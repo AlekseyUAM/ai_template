@@ -6,7 +6,7 @@
 - Файлы записываются на RecordingProvisioner, а не в реальную ФС
 - platform_dir по умолчанию /opt/1cv8/current при пустом значении
 - Проект регистрируется с backend="docker"
-- cf/cfe dump + tools-install гейтятся OFF
+- cf/cfe dump + tools-install выполняются через RecordingProvisioner (гейт is_local снят)
 - git init запускается через RecordingProvisioner.run
 """
 import sys
@@ -98,7 +98,7 @@ class RecordingProvisioner:
 
     # ── запуск команд ────────────────────────────────────────────────────────
 
-    def run(self, cmd, cwd=None) -> RunResult:
+    def run(self, cmd, cwd=None, timeout=None) -> RunResult:
         self.runs.append((cmd, cwd))
         return RunResult(0, "", "")
 
@@ -127,7 +127,7 @@ def make_client(tmp_path, monitor):
 
 def test_docker_create_uses_recording_provisioner(tmp_path):
     """Полный happy-path для backend=docker; проверяет provisioner, регистрацию,
-    probe с реальным путём, записанные файлы, git-init и гейтинг cf/cfe+tools."""
+    probe с реальным путём, записанные файлы, git-init и выполнение cf/cfe+tools через prov."""
     rec = RecordingProvisioner()
     received_projects: list = []
 
@@ -210,11 +210,14 @@ def test_docker_create_uses_recording_provisioner(tmp_path):
                for cmd in all_cmds), \
         f"git init не найден в prov.runs; cmds={all_cmds}"
 
-    # ── cf/cfe dump и tools-install НЕ запускались ────────────────────────────
+    # ── cf/cfe dump и tools-install выполнялись через RecordingProvisioner ──────
+    # is_local-гейт снят: dump и tools-install идут через разрешённый prov (docker).
     cmds_str = " ".join(" ".join(cmd) for cmd in all_cmds)
-    assert "DESIGNER" not in cmds_str, "DESIGNER обнаружен в prov.runs — dump не гейтирован"
-    assert "DumpIBCfg" not in cmds_str, "DumpIBCfg обнаружен в prov.runs"
-    assert "/DumpCfg" not in cmds_str, "/DumpCfg обнаружен в prov.runs"
+    assert "DESIGNER" in cmds_str, \
+        f"DESIGNER не найден в prov.runs — dump должен идти через docker prov; cmds={all_cmds}"
+    # tools-install: pip install вызван через prov.run
+    assert any("pip" in " ".join(cmd) for cmd in all_cmds), \
+        f"pip не найден в prov.runs — tools-install должен идти через docker prov; cmds={all_cmds}"
 
 
 def test_docker_create_platform_dir_not_overridden(tmp_path):

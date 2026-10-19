@@ -4,7 +4,7 @@
 - RecordingProvisioner внедряется через BackendRegistry(ssh_factory=...)
 - Файлы записываются на RecordingProvisioner, а не в реальную ФС
 - Проект регистрируется с backend="ssh"
-- cf/cfe dump + tools-install гейтятся OFF
+- cf/cfe dump + tools-install выполняются через RecordingProvisioner (гейт is_local снят)
 - git init запускается через RecordingProvisioner.run
 - license_server → conf/nethasp.ini пишется через RecordingProvisioner
 """
@@ -96,7 +96,7 @@ class RecordingProvisioner:
 
     # ── запуск команд ────────────────────────────────────────────────────────
 
-    def run(self, cmd, cwd=None) -> RunResult:
+    def run(self, cmd, cwd=None, timeout=None) -> RunResult:
         self.runs.append((cmd, cwd))
         return RunResult(0, "", "")
 
@@ -125,7 +125,7 @@ def make_client(tmp_path, monitor):
 
 def test_ssh_create_uses_recording_provisioner(tmp_path):
     """Полный happy-path для backend=ssh; проверяет provisioner, регистрацию,
-    записанные файлы, git-init и гейтинг cf/cfe+tools."""
+    записанные файлы, git-init и выполнение cf/cfe+tools через prov."""
     rec = RecordingProvisioner()
     backends = BackendRegistry(
         "claude",
@@ -194,11 +194,14 @@ def test_ssh_create_uses_recording_provisioner(tmp_path):
                for cmd in all_cmds), \
         f"git init не найден в prov.runs; cmds={all_cmds}"
 
-    # ── cf/cfe dump и tools-install НЕ запускались ────────────────────────────
+    # ── cf/cfe dump и tools-install выполнялись через RecordingProvisioner ──────
+    # is_local-гейт снят: dump и tools-install идут через разрешённый prov (ssh/docker).
     cmds_str = " ".join(" ".join(cmd) for cmd in all_cmds)
-    assert "DESIGNER" not in cmds_str, "DESIGNER обнаружен в prov.runs — dump не гейтирован"
-    assert "DumpIBCfg" not in cmds_str, "DumpIBCfg обнаружен в prov.runs"
-    assert "/DumpCfg" not in cmds_str, "/DumpCfg обнаружен в prov.runs"
+    assert "DESIGNER" in cmds_str, \
+        f"DESIGNER не найден в prov.runs — dump должен идти через ssh prov; cmds={all_cmds}"
+    # tools-install: pip install вызван через prov.run
+    assert any("pip" in " ".join(cmd) for cmd in all_cmds), \
+        f"pip не найден в prov.runs — tools-install должен идти через ssh prov; cmds={all_cmds}"
 
 
 def test_local_create_unchanged(tmp_path):

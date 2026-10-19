@@ -1,4 +1,3 @@
-import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Iterator
@@ -27,7 +26,6 @@ def install_environment(
     git_init: bool = True,
     db_user: str = "",
     db_password: str = "",
-    run=subprocess.run,
     prov=None,
 ) -> Iterator[ProgressEvent]:
     prov = prov or LocalProvisioner()

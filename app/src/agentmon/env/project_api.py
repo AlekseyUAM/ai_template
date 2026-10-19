@@ -176,18 +176,16 @@ def build_project_router(store, registry, monitor=None, run=subprocess.run,
         return pid, config, prov, backend, conn
 
     def _install_iter(config, body, prov, backend, conn):
-        is_local = (backend == "local")
         return install_environment(
             config,
             update=bool(body.get("update")),
             register=lambda c: _register(c, backend, conn),
-            dump_cf=bool(body.get("dump_cf")) and is_local,
-            dump_cfe=bool(body.get("dump_cfe")) and is_local,
-            install_tools=bool(body.get("install_tools")) and is_local,
+            dump_cf=bool(body.get("dump_cf")),
+            dump_cfe=bool(body.get("dump_cfe")),
+            install_tools=bool(body.get("install_tools")),
             git_init=bool(body.get("git_init", True)),
             db_user=body.get("user", ""),
             db_password=body.get("password", ""),
-            run=run,
             prov=prov,
         )
 
@@ -352,6 +350,13 @@ def build_project_router(store, registry, monitor=None, run=subprocess.run,
         project, config = _build_update_config(pid)
         project_repo, _ = get_repos()
 
+        backend, conn = "local", None
+        for p in registry.list():
+            if p.path == project["path"]:
+                backend, conn = p.backend, p.conn
+                break
+        prov = _provisioner_for(backend, conn, project["path"])
+
         events = list(install_environment(
             config,
             update=True,
@@ -359,7 +364,7 @@ def build_project_router(store, registry, monitor=None, run=subprocess.run,
             dump_cf=bool(body.get("dump_cf")),
             dump_cfe=bool(body.get("dump_cfe")),
             install_tools=bool(body.get("install_tools")),
-            run=run,
+            prov=prov,
         ))
 
         project_repo.update(pid, env_version=current_env_version())
@@ -374,6 +379,13 @@ def build_project_router(store, registry, monitor=None, run=subprocess.run,
         # Валидация проекта — до стрима (чтобы 404 возвращался статусом).
         project, config = _build_update_config(pid)
 
+        backend, conn = "local", None
+        for p in registry.list():
+            if p.path == project["path"]:
+                backend, conn = p.backend, p.conn
+                break
+        prov = _provisioner_for(backend, conn, project["path"])
+
         def gen():
             yield (f"▶ Обновление окружения «{config.project_name}» "
                    f"({config.project_dir})\n")
@@ -386,7 +398,7 @@ def build_project_router(store, registry, monitor=None, run=subprocess.run,
                     dump_cf=False,
                     dump_cfe=False,
                     install_tools=bool(body.get("install_tools")),
-                    run=run,
+                    prov=prov,
                 ):
                     detail = f" {ev.detail}" if ev.detail else ""
                     yield f"[{ev.step}] {ev.status}{detail}\n"

@@ -1,11 +1,14 @@
 """Тесты API мастера/справочника проектов (project_api.py)."""
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
 
 from agentmon.api import create_app
+from agentmon.backends import RunResult
+from agentmon.backends.factory import BackendRegistry
 from agentmon.monitor import Monitor
 from agentmon.queue import TaskQueue
 from agentmon.registry import ProjectRegistry, open_db
@@ -399,3 +402,188 @@ def test_update_env_stream_404(tmp_path):
     client, _, _ = make_client(tmp_path)
     r = client.post("/api/env/projects/999/update-env/stream", json={})
     assert r.status_code == 404
+
+
+# ─── update-env backend-aware (ssh/docker) ────────────────────────────────────
+
+class _RecordingProvisioner:
+    """Минимальный провайдер-рекордер для тестов update-env."""
+
+    def __init__(self):
+        self.runs: list[tuple] = []
+        self.writes: dict = {}
+
+    def write_text(self, path, content) -> None:
+        self.writes[path] = content
+
+    def write_bytes(self, path, data) -> None:
+        self.writes[path] = data
+
+    def put_tree(self, local_src, dst, skip=None) -> None:
+        from pathlib import Path as _Path
+        from agentmon.backends import is_cruft
+        src_path = _Path(local_src)
+        for item in sorted(src_path.rglob("*")):
+            rel = item.relative_to(src_path)
+            if is_cruft(rel):
+                continue
+            if skip is not None and skip(rel):
+                continue
+            if item.is_dir():
+                continue
+            target = f"{dst}/{rel.as_posix()}"
+            try:
+                self.writes[target] = item.read_bytes()
+            except OSError:
+                pass
+
+    def mkdirs(self, paths) -> None:
+        pass
+
+    def exists(self, path) -> bool:
+        return path in self.writes
+
+    def is_file(self, path) -> bool:
+        return path in self.writes
+
+    def is_empty_dir(self, path) -> bool:
+        return True
+
+    def read_text(self, path) -> str:
+        val = self.writes.get(path, "")
+        if isinstance(val, bytes):
+            return val.decode("utf-8", errors="replace")
+        return val
+
+    def which(self, tool) -> str | None:
+        return f"/usr/bin/{tool}"
+
+    def python_cmd(self) -> list:
+        return ["python3"]
+
+    def venv_python(self, project_dir) -> str:
+        return f"{project_dir}/.venv/bin/python"
+
+    def tempdir(self) -> str:
+        return "/tmp"
+
+    def run(self, cmd, cwd=None, timeout=None) -> RunResult:
+        self.runs.append((cmd, cwd))
+        return RunResult(0, "", "")
+
+
+def _make_client_with_monitor(tmp_path, monitor):
+    """Создаёт TestClient с заданным monitor (для backend-aware тестов)."""
+    registry_db = open_db(tmp_path / "reg.sqlite")
+    registry = ProjectRegistry(registry_db)
+    queue = TaskQueue(registry_db)
+    store = connect(str(tmp_path / "store.db"))
+    init_schema(store)
+    app = create_app(registry=registry, queue=queue, monitor=monitor,
+                     store=store, run=fake_run)
+    return TestClient(app), registry, store
+
+
+def test_update_env_ssh_uses_recording_provisioner(tmp_path):
+    """update-env для ssh-проекта разрешает provisioner из backend (не LocalProvisioner)."""
+    rec = _RecordingProvisioner()
+    backends = BackendRegistry(
+        "claude",
+        ssh_factory=lambda conn: SimpleNamespace(provisioner=rec),
+    )
+    monitor = SimpleNamespace(backends=backends)
+    client, registry, store = _make_client_with_monitor(tmp_path, monitor)
+
+    project_path = "/srv/sshupd"
+
+    # Добавляем проект в store напрямую (update-env читает только из store)
+    from agentmon.store.projects import ProjectRepo
+    pr = ProjectRepo(store)
+    pid = pr.add(
+        name="sshupd", path=project_path,
+        identifier="dev", email="dev@example.com",
+        platform_dir="/opt/1c", platform_version="8.3",
+        db_kind="file", db_connection="",
+        env_version="0.0.0",
+    )
+
+    # Регистрируем проект с backend=ssh в registry
+    registry.add(name="sshupd", path=project_path, backend="ssh",
+                 conn={"host": "h", "user": "u", "port": 22, "key_path": None})
+
+    r = client.post(f"/api/env/projects/{pid}/update-env", json={})
+    assert r.status_code == 200, r.text
+
+    # RecordingProvisioner получил вызовы (content-шаги: put_tree/write_text)
+    assert rec.writes or rec.runs, \
+        "RecordingProvisioner не получил обращений — update-env не использовал ssh prov"
+
+    # env_version обновлён
+    assert pr.get(pid)["env_version"] != "0.0.0"
+
+
+def test_update_env_local_project_uses_local_provisioner(tmp_path):
+    """update-env для local-проекта (или отсутствующего в registry) — LocalProvisioner.
+
+    Если путь не найден в registry → backend=local (дефолт) → LocalProvisioner.
+    Реальный каталог существует: content-шаги запишут файлы в tmp_path/localupd.
+    """
+    project_dir = tmp_path / "localupd"
+    project_dir.mkdir()
+
+    client, registry, store = make_client(tmp_path)
+
+    from agentmon.store.projects import ProjectRepo
+    pr = ProjectRepo(store)
+    pid = pr.add(
+        name="localupd", path=str(project_dir),
+        identifier="dev", email="dev@example.com",
+        platform_dir="/opt/1c", platform_version="8.3",
+        db_kind="file", db_connection="",
+        env_version="0.0.0",
+    )
+    # НЕ регистрируем в registry → должен использоваться LocalProvisioner
+
+    r = client.post(f"/api/env/projects/{pid}/update-env", json={})
+    assert r.status_code == 200, r.text
+    data = r.json()
+    # content-шаг выполнился (LocalProvisioner пишет в реальный tmp_path)
+    assert any(e["step"] == "content" and e["status"] == "ok" for e in data["events"])
+    assert pr.get(pid)["env_version"] != "0.0.0"
+
+
+def test_update_env_stream_ssh_uses_recording_provisioner(tmp_path):
+    """update-env/stream для ssh-проекта разрешает provisioner из backend."""
+    rec = _RecordingProvisioner()
+    backends = BackendRegistry(
+        "claude",
+        ssh_factory=lambda conn: SimpleNamespace(provisioner=rec),
+    )
+    monitor = SimpleNamespace(backends=backends)
+    client, registry, store = _make_client_with_monitor(tmp_path, monitor)
+
+    project_path = "/srv/sshstream"
+
+    from agentmon.store.projects import ProjectRepo
+    pr = ProjectRepo(store)
+    pid = pr.add(
+        name="sshstream", path=project_path,
+        identifier="dev", email="dev@example.com",
+        platform_dir="/opt/1c", platform_version="8.3",
+        db_kind="file", db_connection="",
+        env_version="0.0.0",
+    )
+    registry.add(name="sshstream", path=project_path, backend="ssh",
+                 conn={"host": "h", "user": "u", "port": 22, "key_path": None})
+
+    r = client.post(f"/api/env/projects/{pid}/update-env/stream", json={})
+    assert r.status_code == 200
+    text = r.text
+    assert "Обновление окружения" in text
+    assert "Окружение обновлено" in text
+
+    # RecordingProvisioner получил вызовы
+    assert rec.writes or rec.runs, \
+        "RecordingProvisioner не получил обращений — update-env/stream не использовал ssh prov"
+
+    assert pr.get(pid)["env_version"] != "0.0.0"
