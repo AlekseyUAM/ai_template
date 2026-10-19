@@ -3,37 +3,43 @@ services:
     build: .
     image: agentmon-debian
     container_name: agentmon
+    restart: unless-stopped
     ports:
-      - "8765:8765"
+      - "${AGENTMON_PORT:-8765}:8765"
     environment:
       # Слушать на всех интерфейсах, чтобы порт был доступен с хоста.
       AGENTMON_HOST: "0.0.0.0"
-      AGENTMON_PORT: "8765"
-      # По умолчанию — прогон без токенов через заглушку.
-      # Для боевого прогона поменяй на: "claude --dangerously-skip-permissions ."
-      # AGENTMON_CLAUDE_CMD: "claude-fake --dangerously-skip-permissions ."
-      AGENTMON_CLAUDE_CMD: "claude --dangerously-skip-permissions ."
-      # Разрешает --dangerously-skip-permissions под root в контейнере
-      # (иначе реальный claude откажется запускаться).
+      AGENTMON_PORT: "${AGENTMON_PORT:-8765}"
+      # DSN Postgres (ai1c-postgres на хосте) — передаётся из .ai1c.env через run.py.
+      AGENTMON_DSN: "${AGENTMON_DSN:-}"
+      # SQLite очереди — в персистентном каталоге (fallback, если нет Postgres).
+      AGENTMON_DB: "${AGENTMON_DB:-/data/agentmon.db}"
+      # Команда запуска claude; IS_SANDBOX=1 разрешает --dangerously-skip-permissions под root.
+      AGENTMON_CLAUDE_CMD: "${AGENTMON_CLAUDE_CMD:-claude --dangerously-skip-permissions .}"
       IS_SANDBOX: "1"
-      # SQLite очереди — в персистентном каталоге.
-      AGENTMON_DB: "/data/agentmon.db"
+      # Telegram-уведомления (опционально, берутся из .ai1c.env).
+      AGENTMON_TG_TOKEN: "${AGENTMON_TG_TOKEN:-}"
+      AGENTMON_TG_CHAT_IDS: "${AGENTMON_TG_CHAT_IDS:-}"
+      AGENTMON_TG_API_BASE: "${AGENTMON_TG_API_BASE:-https://api.telegram.org}"
+      # Python-пакет расположен в /opt/ai1c/app/src (корень репо смонтирован как /opt/ai1c).
+      PYTHONPATH: "/opt/ai1c/app/src"
+    # Postgres работает на хосте → доступен через host.docker.internal.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
-      # Живой код (правки с хоста сразу видны в контейнере).
-      - ./:/app
-      # Изолированный ~/.claude контейнера (не трогает хостовый), переживает перезапуск.
+      # Корень репо (template/, app/, web/ — всё на месте; parents[4] найдёт template).
+      - ../:/opt/ai1c
+      # Docker-сокет — монитор запускает MCP + backend-контейнеры через docker CLI.
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Изолированный ~/.claude контейнера (авторизация переживает перезапуск):
+      #   docker compose exec agentmon bash  →  claude  →  /login
       - agentmon_claude:/root/.claude
-      # Каталоги проектов, которые ты создашь внутри.
-      - agentmon_projects:/root/projects
       # БД очереди.
       - agentmon_data:/data
-    working_dir: /app
-    # Контейнер сам поднимает сервер (в браузере хоста: http://127.0.0.1:8765).
-    # Заходить внутрь для авторизации/создания проектов: docker compose exec agentmon bash
+    working_dir: /opt/ai1c/app
+    # Конфиг берётся из .ai1c.env — run.py передаёт переменные в окружение compose.
     command: ["python", "-m", "agentmon"]
-    restart: unless-stopped
 
 volumes:
   agentmon_claude:
-  agentmon_projects:
   agentmon_data:

@@ -2,8 +2,7 @@
 FROM debian:12
 
 ENV DEBIAN_FRONTEND=noninteractive \
-    PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/app/src
+    PYTHONUNBUFFERED=1
 
 # Системные пакеты + Node.js (для реального claude CLI).
 RUN apt-get update && apt-get install -y --no-install-recommends \
