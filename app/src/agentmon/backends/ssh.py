@@ -225,7 +225,14 @@ class SshProvisioner:
     # --- выполнение команд (exec) ---
 
     def run(self, cmd, cwd=None, timeout=None) -> RunResult:
-        """Выполнить команду по SSH. При timeout → RunResult(124, ..., "<timeout>")."""
+        """Выполнить команду по SSH. При timeout → RunResult(124, ..., "<timeout>").
+
+        Таймаут — best-effort: `settimeout` ограничивает чтение stdout/stderr, но
+        paramiko `recv_exit_status()` ждёт событие без таймаута. Зависший процесс,
+        который уже отдал весь вывод, но не завершился, здесь не прервётся по
+        таймауту (редкий случай; типичный зависший 1cv8 вывода не даёт и режется
+        на чтении). Полную гарантию дал бы отдельный поток — вне скоупа.
+        """
         line = " ".join(shlex.quote(c) for c in cmd)
         if cwd:
             line = f"cd {shlex.quote(cwd)} && {line}"
