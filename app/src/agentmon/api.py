@@ -19,7 +19,7 @@ class _NoCacheStatic(StaticFiles):
         return resp
 
 
-def create_app(registry, queue, monitor, lifespan=None, store=None, run=None,
+def create_app(registry, queue, monitor, lifespan=None, store=None,
                popen=None):
     app = FastAPI(lifespan=lifespan)
     from .env.api import build_env_router
@@ -27,7 +27,7 @@ def create_app(registry, queue, monitor, lifespan=None, store=None, run=None,
     from .env.mcp_api import build_mcp_router
     app.include_router(build_mcp_router(store))
     from .env.project_api import build_project_router
-    router_kwargs = {} if run is None else {"run": run}
+    router_kwargs = {}
     if popen is not None:
         router_kwargs["popen"] = popen
     app.include_router(build_project_router(store, registry, monitor, **router_kwargs))

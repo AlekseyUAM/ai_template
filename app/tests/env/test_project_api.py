@@ -1,5 +1,4 @@
 """Тесты API мастера/справочника проектов (project_api.py)."""
-import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -20,23 +19,14 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from test_monitor import FakeBackends  # noqa
 
 
-def fake_run(cmd, **kwargs):
-    """Заглушка subprocess.run: всегда rc=0."""
-    class Result:
-        returncode = 0
-        stdout = "ok"
-        stderr = ""
-    return Result()
-
-
-def make_client(tmp_path, run=fake_run):
+def make_client(tmp_path):
     registry_db = open_db(tmp_path / "reg.sqlite")
     registry = ProjectRegistry(registry_db)
     queue = TaskQueue(registry_db)
     mon = Monitor(registry, FakeBackends(None), generating_window=10.0, now_fn=lambda: 1.0)
     store = connect(str(tmp_path / "store.db"))
     init_schema(store)
-    app = create_app(registry=registry, queue=queue, monitor=mon, store=store, run=run)
+    app = create_app(registry=registry, queue=queue, monitor=mon, store=store)
     return TestClient(app), registry, store
 
 
@@ -308,7 +298,7 @@ def test_no_store_503(tmp_path):
     registry = ProjectRegistry(registry_db)
     queue = TaskQueue(registry_db)
     mon = Monitor(registry, FakeBackends(None), generating_window=10.0, now_fn=lambda: 1.0)
-    app = create_app(registry=registry, queue=queue, monitor=mon, store=None, run=fake_run)
+    app = create_app(registry=registry, queue=queue, monitor=mon, store=None)
     c = TestClient(app)
     r = c.get("/api/env/projects")
     assert r.status_code == 503
@@ -480,7 +470,7 @@ def _make_client_with_monitor(tmp_path, monitor):
     store = connect(str(tmp_path / "store.db"))
     init_schema(store)
     app = create_app(registry=registry, queue=queue, monitor=monitor,
-                     store=store, run=fake_run)
+                     store=store)
     return TestClient(app), registry, store
 
 

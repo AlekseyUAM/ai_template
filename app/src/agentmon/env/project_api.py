@@ -20,14 +20,13 @@ _REQUIRED_FIELDS = ("name", "path", "identifier", "email",
 _PRESENT_FIELDS = ("db_connection",)
 
 
-def build_project_router(store, registry, monitor=None, run=subprocess.run,
+def build_project_router(store, registry, monitor=None,
                          popen=subprocess.Popen) -> APIRouter:
     """Строит APIRouter для /api/env/projects/* и /api/env/version.
 
     store — объект Db (P1.1) или None.
     Если store is None, все операции с БД возвращают 503.
     registry — ProjectRegistry (для регистрации при создании).
-    run — функция запуска подпроцессов (замена в тестах).
     popen — неблокирующий запуск подпроцесса (для открытия VS Code; замена в тестах).
     """
     router = APIRouter()

@@ -103,15 +103,6 @@ class RecordingProvisioner:
         return RunResult(0, "", "")
 
 
-def fake_subprocess_run(cmd, **kwargs):
-    """Заглушка subprocess.run: RC=0 (для локальных шагов, которых не должно быть)."""
-    class _R:
-        returncode = 0
-        stdout = ""
-        stderr = ""
-    return _R()
-
-
 def make_client(tmp_path, monitor):
     registry_db = open_db(tmp_path / "reg.sqlite")
     registry = ProjectRegistry(registry_db)
@@ -119,7 +110,7 @@ def make_client(tmp_path, monitor):
     store = connect(str(tmp_path / "store.db"))
     init_schema(store)
     app = create_app(registry=registry, queue=queue, monitor=monitor,
-                     store=store, run=fake_subprocess_run)
+                     store=store)
     return TestClient(app), registry, store
 
 
@@ -265,7 +256,7 @@ def test_docker_create_no_platform_dir_other_backend(tmp_path):
     store = connect(str(tmp_path / "store.db"))
     init_schema(store)
     app = create_app(registry=registry, queue=queue, monitor=mon,
-                     store=store, run=fake_subprocess_run)
+                     store=store)
     client = TestClient(app)
 
     project_dir = tmp_path / "localproj"
