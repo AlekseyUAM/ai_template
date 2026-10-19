@@ -35,11 +35,28 @@ UI будет доступен по адресу `http://127.0.0.1:${AGENTMON_PO
 
 ## База данных
 
-Postgres (`ai1c-postgres`) запускается на хосте через `bootstrap.py`.
-Из контейнера он доступен как `host.docker.internal` (прописан через `extra_hosts: host.docker.internal:host-gateway`).
-`run.py` автоматически переписывает loopback-адрес (`127.0.0.1` / `localhost`) в DSN на `host.docker.internal` перед запуском compose.
+Postgres (`ai1c-postgres`) запускается на хосте через `bootstrap.py` и подключается к
+общей docker-сети **`ai1c-net`**. Контейнер монитора тоже входит в `ai1c-net` (в
+`app/docker-compose.yml` она объявлена `external`), поэтому достаёт БД **по имени
+контейнера `ai1c-postgres:5432`** (внутренний порт контейнера), а не через
+опубликованный на хосте loopback-порт. `run.py` в docker-режиме:
 
-SQLite также поддерживается: путь к файлу должен быть внутри тома `agentmon_data` (`/data/...`).
+- автоматически переписывает loopback-DSN (`@127.0.0.1:<port>` / `@localhost:<port>`)
+  на `@ai1c-postgres:5432` для контейнера (вручную менять DSN не нужно);
+- идемпотентно создаёт сеть `ai1c-net` перед `docker compose up` (если `bootstrap.py`
+  ещё не поднимал Postgres).
+
+Порядок: сначала `python bootstrap.py` (поднимает `ai1c-postgres` + создаёт сеть),
+затем `AI1C_MONITOR_MODE=docker` → `python run.py`. `host.docker.internal`
+(`extra_hosts`) остаётся для прочих ресурсов хоста (не для БД).
+
+> Почему не `host.docker.internal` для БД: `ai1c-postgres` публикует порт только на
+> `127.0.0.1` хоста, а `host.docker.internal` из контейнера идёт на gateway-IP — такой
+> loopback-publish оттуда недостижим. Общая сеть решает это надёжно.
+
+SQLite в docker-режиме не рекомендуется (bootstrap при доступном Docker выбирает
+Postgres); при необходимости путь к файлу должен быть внутри тома `agentmon_data`
+(`/data/...`).
 
 ## Авторизация claude
 
