@@ -22,6 +22,38 @@ from ..env import mcp_docker
 logger = logging.getLogger(__name__)
 
 DEFAULT_IMAGE = "ai1c-agent:latest"
+
+
+# Коды возврата docker CLI, означающие «демон или контейнер недоступен»:
+# 125 — ошибка самого docker CLI до входа в контейнер
+# 126 — команда найдена, но не исполняема
+# 127 — команда не найдена (exec не смог запустить sh/find/tail)
+_CONTAINER_DOWN_RCS = frozenset({125, 126, 127})
+
+# Фразы из stderr docker, однозначно указывающие на недоступность контейнера/демона.
+# Совпадение проверяется как case-sensitive подстрока (это точные формулировки docker).
+_CONTAINER_DOWN_PHRASES = (
+    "No such container",
+    "is not running",
+    "Cannot connect to the Docker daemon",
+    "No such exec",
+    "error during connect",
+)
+
+
+def _is_container_down(rc: int, stderr: str) -> bool:
+    """Вернуть True, если rc или stderr указывают на аварию контейнера/демона.
+
+    Отличает «контейнер упал / демон недоступен» (→ mark_broken) от
+    «каталог не существует / команда завершилась с ошибкой» (→ просто []).
+
+    Критерии:
+    - rc ∈ {125, 126, 127}: коды docker CLI для «не удалось войти в контейнер».
+    - stderr содержит одну из точных docker-фраз, свидетельствующих о недоступности.
+    """
+    if rc in _CONTAINER_DOWN_RCS:
+        return True
+    return any(phrase in stderr for phrase in _CONTAINER_DOWN_PHRASES)
 DEFAULT_WORKDIR = "/workspace"
 DEFAULT_PLATFORM_DIR = "/opt/1cv8/current"
 DEFAULT_RETRY_SECONDS = 10.0
@@ -259,18 +291,23 @@ class _DockerContainer:
     # Удаление контейнера
     # ------------------------------------------------------------------
 
-    def exec_run_bytes(self, argv: list[str]) -> tuple[int, bytes]:
-        """Выполнить команду внутри контейнера и вернуть сырые байты stdout.
+    def exec_run_bytes(self, argv: list[str]) -> tuple[int, bytes, str]:
+        """Выполнить команду внутри контейнера и вернуть сырые байты stdout и stderr.
 
         В отличие от ``exec_run``, не декодирует stdout — нужно для
         ``DockerFiles.read_from``, где важна побайтовая точность смещений.
-        Возвращает ``(returncode, stdout_bytes)``.
+        Возвращает ``(returncode, stdout_bytes, stderr_str)``.
+        stderr декодируется из bytes с ``errors="replace"`` или берётся как str.
         """
         cmd = ["docker", "exec", self._name, *argv]
         r = self._run(cmd, capture_output=True)
         rc = r.returncode
         raw = r.stdout if isinstance(r.stdout, bytes) else (r.stdout or b"")
-        return rc, raw
+        if isinstance(r.stderr, bytes):
+            stderr_str = r.stderr.decode("utf-8", errors="replace")
+        else:
+            stderr_str = r.stderr or ""
+        return rc, raw, stderr_str
 
     def remove(self) -> None:
         """Принудительно удалить контейнер (``docker rm -f <name>``)."""
@@ -614,9 +651,15 @@ class DockerFiles:
 
         Выполняет ``find <dir> -name '*.jsonl' -printf '%p\\t%s\\t%T@\\n'``
         внутри контейнера и разбирает вывод в список ``FileRef``.
-        Если ``find`` завершается с ненулевым кодом (каталог не существует
-        или команда не поддерживается), возвращает ``[]``. Аварии
-        контейнера/демона помечаются через ``mark_broken``.
+
+        Ветки обработки результата:
+        - ``rc == 0`` → разобрать строки в ``FileRef``.
+        - ``rc != 0`` и ``_is_container_down(rc, stderr)`` → ``mark_broken()``
+          и вернуть ``[]`` (контейнер упал или демон недоступен).
+        - ``rc != 0`` иначе → вернуть ``[]`` без ``mark_broken``
+          (каталог не существует, сессий ещё нет — штатная ситуация).
+        - ``Exception`` → ``mark_broken()`` и ``[]`` (нельзя достучаться до
+          контейнера вообще).
         """
         try:
             res = self._container.exec_run(
@@ -631,8 +674,12 @@ class DockerFiles:
             return []
 
         if res.returncode != 0:
-            # find rc≠0 — скорее всего каталог ещё не создан; не считаем
-            # контейнер сломанным, просто нет данных.
+            if _is_container_down(res.returncode, res.stderr or ""):
+                logger.warning(
+                    "контейнер %s недоступен (rc=%d, stderr=%r)",
+                    self._container.name, res.returncode, res.stderr,
+                )
+                self._container.mark_broken()
             return []
 
         refs: list[FileRef] = []
@@ -668,12 +715,18 @@ class DockerFiles:
         Использует ``tail -c +N`` (1-индексированный), поэтому смещение
         ``offset`` преобразуется в ``offset + 1``. Возвращает
         ``(data_bytes, offset + len(data_bytes))``.
-        При любой ошибке возвращает ``(b"", offset)``; аварии
-        контейнера/демона дополнительно помечаются через ``mark_broken``.
+
+        Ветки обработки:
+        - ``rc == 0`` → ``(data, offset + len(data))``.
+        - ``rc != 0`` и ``_is_container_down(rc, stderr)`` → ``mark_broken()``
+          и ``(b"", offset)``.
+        - ``rc != 0`` иначе → ``(b"", offset)`` без ``mark_broken``
+          (файл исчез, смещение вне диапазона — не авария контейнера).
+        - ``Exception`` → ``mark_broken()`` и ``(b"", offset)``.
         """
         cmd = ["sh", "-c", f"tail -c +{offset + 1} {shlex.quote(path)}"]
         try:
-            rc, data = self._container.exec_run_bytes(cmd)
+            rc, data, stderr = self._container.exec_run_bytes(cmd)
         except Exception as exc:
             logger.warning(
                 "ошибка read_from %s в контейнере %s: %s",
@@ -682,6 +735,12 @@ class DockerFiles:
             self._container.mark_broken()
             return b"", offset
         if rc != 0:
+            if _is_container_down(rc, stderr):
+                logger.warning(
+                    "контейнер %s недоступен при read_from %s (rc=%d, stderr=%r)",
+                    self._container.name, path, rc, stderr,
+                )
+                self._container.mark_broken()
             return b"", offset
         return data, offset + len(data)
 

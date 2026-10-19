@@ -19,6 +19,7 @@ from agentmon.backends.docker import (
     DockerRunner,
     DockerFiles,
     container_name,
+    _is_container_down,
 )
 from agentmon.backends import RunResult
 from agentmon.models import FileRef
@@ -1613,15 +1614,17 @@ class TestDockerRunner:
 class _FakeFilesContainer:
     """Фейк-контейнер для DockerFiles: раздельные очереди для exec_run и exec_run_bytes.
 
-    ``set_exec(result)``  — поставить RunResult в очередь exec_run.
-    ``set_bytes(rc, data)`` — поставить (rc, bytes) в очередь exec_run_bytes.
-    ``mark_broken()``      — запоминает, что контейнер помечен битым.
+    ``set_exec(result)``           — поставить RunResult в очередь exec_run.
+    ``set_bytes(rc, data, stderr)`` — поставить (rc, bytes, stderr_str) в
+                                       очередь exec_run_bytes; stderr можно
+                                       опустить (по умолчанию "").
+    ``mark_broken()``              — запоминает, что контейнер помечен битым.
     """
 
     def __init__(self, name: str = "ai1c-test"):
         self._name = name
         self._exec_q: list[RunResult] = []
-        self._bytes_q: list[tuple[int, bytes]] = []
+        self._bytes_q: list[tuple[int, bytes, str]] = []
         self.exec_calls: list[list[str]] = []
         self.bytes_calls: list[list[str]] = []
         self.broken_called = False
@@ -1636,8 +1639,8 @@ class _FakeFilesContainer:
     def set_exec(self, result: RunResult) -> None:
         self._exec_q.append(result)
 
-    def set_bytes(self, rc: int, data: bytes) -> None:
-        self._bytes_q.append((rc, data))
+    def set_bytes(self, rc: int, data: bytes, stderr: str = "") -> None:
+        self._bytes_q.append((rc, data, stderr))
 
     def exec_run(self, argv: list[str], cwd=None) -> RunResult:
         self.exec_calls.append(list(argv))
@@ -1645,11 +1648,11 @@ class _FakeFilesContainer:
             return self._exec_q.pop(0)
         return RunResult(0, "", "")
 
-    def exec_run_bytes(self, argv: list[str]) -> tuple[int, bytes]:
+    def exec_run_bytes(self, argv: list[str]) -> tuple[int, bytes, str]:
         self.bytes_calls.append(list(argv))
         if self._bytes_q:
             return self._bytes_q.pop(0)
-        return (0, b"")
+        return (0, b"", "")
 
 
 def _make_files(name="ai1c-test", home=None, guess="/root"):
@@ -1879,6 +1882,204 @@ class TestDockerFiles:
         assert not any("tail" in " ".join(c) for c in container.exec_calls), (
             "exec_run (text) не должен вызываться из read_from"
         )
+
+
+# ---------------------------------------------------------------------------
+# TestIsContainerDown — unit-таблица для _is_container_down
+# ---------------------------------------------------------------------------
+
+class TestIsContainerDown:
+    """Таблица истинности для _is_container_down(rc, stderr)."""
+
+    # --- rc-based ---
+
+    def test_rc_125_is_down(self):
+        assert _is_container_down(125, "") is True
+
+    def test_rc_126_is_down(self):
+        assert _is_container_down(126, "") is True
+
+    def test_rc_127_is_down(self):
+        assert _is_container_down(127, "") is True
+
+    def test_rc_0_not_down(self):
+        assert _is_container_down(0, "") is False
+
+    def test_rc_1_not_down(self):
+        assert _is_container_down(1, "") is False
+
+    def test_rc_2_not_down(self):
+        assert _is_container_down(2, "") is False
+
+    def test_rc_124_not_down(self):
+        """124 — таймаут, не авария контейнера."""
+        assert _is_container_down(124, "") is False
+
+    # --- stderr-based (rc=1 — не должен попасть по rc) ---
+
+    def test_stderr_no_such_container(self):
+        assert _is_container_down(1, "Error: No such container: mycontainer") is True
+
+    def test_stderr_is_not_running(self):
+        assert _is_container_down(1, "Error response from daemon: Container is not running") is True
+
+    def test_stderr_cannot_connect_to_docker_daemon(self):
+        assert _is_container_down(1, "Cannot connect to the Docker daemon at unix:///var/run/docker.sock") is True
+
+    def test_stderr_no_such_exec(self):
+        assert _is_container_down(1, "No such exec instance") is True
+
+    def test_stderr_error_during_connect(self):
+        assert _is_container_down(1, "error during connect: Post http://...: dial tcp") is True
+
+    # --- ordinary find stderr — должен вернуть False (важно!) ---
+
+    def test_ordinary_find_no_such_file_is_not_down(self):
+        """find: '/x': No such file or directory — штатный rc=1, не авария контейнера."""
+        assert _is_container_down(1, "find: '/x': No such file or directory") is False
+
+    def test_ordinary_find_permission_denied_is_not_down(self):
+        assert _is_container_down(1, "find: '/root': Permission denied") is False
+
+    def test_empty_stderr_rc1_is_not_down(self):
+        assert _is_container_down(1, "") is False
+
+    def test_rc125_with_down_stderr_both_match(self):
+        """Если совпадает и rc и stderr — всё равно True (не два раза)."""
+        assert _is_container_down(125, "No such container: x") is True
+
+
+# ---------------------------------------------------------------------------
+# TestDockerFiles_ContainerDown — list_files и read_from: отличие down vs нет-сессий
+# ---------------------------------------------------------------------------
+
+class TestDockerFilesContainerDown:
+    """Проверяем, что mark_broken вызывается только при container-down, но не при rc=1/find-error."""
+
+    # --- list_files ---
+
+    def test_list_files_rc125_calls_mark_broken(self):
+        """rc=125 → _is_container_down → mark_broken вызван."""
+        files, container = _make_files(home="/root")
+        container.set_exec(RunResult(125, "", ""))
+        result = files.list_files("/root/.claude/projects")
+        assert result == []
+        assert container.broken_called
+
+    def test_list_files_rc126_calls_mark_broken(self):
+        files, container = _make_files(home="/root")
+        container.set_exec(RunResult(126, "", ""))
+        result = files.list_files("/root/.claude/projects")
+        assert result == []
+        assert container.broken_called
+
+    def test_list_files_rc127_calls_mark_broken(self):
+        files, container = _make_files(home="/root")
+        container.set_exec(RunResult(127, "", ""))
+        result = files.list_files("/root/.claude/projects")
+        assert result == []
+        assert container.broken_called
+
+    def test_list_files_stderr_no_such_container_calls_mark_broken(self):
+        """stderr с 'No such container' при rc=1 → mark_broken."""
+        files, container = _make_files(home="/root")
+        container.set_exec(RunResult(1, "", "Error: No such container: ai1c-test"))
+        result = files.list_files("/root/.claude/projects")
+        assert result == []
+        assert container.broken_called
+
+    def test_list_files_stderr_is_not_running_calls_mark_broken(self):
+        files, container = _make_files(home="/root")
+        container.set_exec(RunResult(1, "", "Container is not running"))
+        result = files.list_files("/root/.claude/projects")
+        assert result == []
+        assert container.broken_called
+
+    def test_list_files_stderr_cannot_connect_calls_mark_broken(self):
+        files, container = _make_files(home="/root")
+        container.set_exec(RunResult(1, "", "Cannot connect to the Docker daemon"))
+        result = files.list_files("/root/.claude/projects")
+        assert result == []
+        assert container.broken_called
+
+    def test_list_files_rc1_no_such_file_no_mark_broken(self):
+        """rc=1 + обычная find-ошибка → [] без mark_broken (сессий ещё нет)."""
+        files, container = _make_files(home="/root")
+        container.set_exec(RunResult(1, "", "find: '/root/.claude/projects': No such file or directory"))
+        result = files.list_files("/root/.claude/projects")
+        assert result == []
+        assert not container.broken_called
+
+    def test_list_files_rc1_empty_stderr_no_mark_broken(self):
+        """rc=1 с пустым stderr → [] без mark_broken."""
+        files, container = _make_files(home="/root")
+        container.set_exec(RunResult(1, "", ""))
+        result = files.list_files("/root/.claude/projects")
+        assert result == []
+        assert not container.broken_called
+
+    def test_list_files_rc0_parses_correctly(self):
+        """rc=0 → парсинг FileRef (регрессия)."""
+        files, container = _make_files(home="/root")
+        find_output = "/root/.claude/projects/proj/sess.jsonl\t100\t1718000000.0\n"
+        container.set_exec(RunResult(0, find_output, ""))
+        result = files.list_files("/root/.claude/projects")
+        assert len(result) == 1
+        assert result[0].session_id == "sess"
+        assert not container.broken_called
+
+    # --- read_from ---
+
+    def test_read_from_rc125_calls_mark_broken(self):
+        """rc=125 → _is_container_down → mark_broken + (b"", offset)."""
+        files, container = _make_files(home="/root")
+        container.set_bytes(125, b"", "")
+        data, off = files.read_from("/root/.claude/projects/p/s.jsonl", 10)
+        assert data == b""
+        assert off == 10
+        assert container.broken_called
+
+    def test_read_from_rc126_calls_mark_broken(self):
+        files, container = _make_files(home="/root")
+        container.set_bytes(126, b"", "")
+        data, off = files.read_from("/root/.claude/projects/p/s.jsonl", 0)
+        assert data == b""
+        assert container.broken_called
+
+    def test_read_from_rc127_calls_mark_broken(self):
+        files, container = _make_files(home="/root")
+        container.set_bytes(127, b"", "")
+        data, off = files.read_from("/root/.claude/projects/p/s.jsonl", 0)
+        assert data == b""
+        assert container.broken_called
+
+    def test_read_from_stderr_no_such_container_calls_mark_broken(self):
+        """stderr с 'No such container' при rc=1 → mark_broken."""
+        files, container = _make_files(home="/root")
+        container.set_bytes(1, b"", "No such container: ai1c-test")
+        data, off = files.read_from("/root/.claude/projects/p/s.jsonl", 5)
+        assert data == b""
+        assert off == 5
+        assert container.broken_called
+
+    def test_read_from_rc1_no_mark_broken(self):
+        """rc=1 без docker-маркеров → (b"", offset) без mark_broken."""
+        files, container = _make_files(home="/root")
+        container.set_bytes(1, b"", "")
+        data, off = files.read_from("/root/.claude/projects/p/s.jsonl", 42)
+        assert data == b""
+        assert off == 42
+        assert not container.broken_called
+
+    def test_read_from_rc0_returns_data_and_offset(self):
+        """rc=0 → (data, offset+len) без mark_broken (регрессия)."""
+        files, container = _make_files(home="/root")
+        payload = b"some data"
+        container.set_bytes(0, payload, "")
+        data, off = files.read_from("/root/.claude/projects/p/s.jsonl", 50)
+        assert data == payload
+        assert off == 50 + len(payload)
+        assert not container.broken_called
 
 
 # ---------------------------------------------------------------------------
