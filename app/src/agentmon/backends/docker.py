@@ -60,6 +60,27 @@ DEFAULT_PLATFORM_DIR = "/opt/1cv8/current"
 DEFAULT_RETRY_SECONDS = 10.0
 
 
+def docker_host_from_conn(conn: dict | None) -> str | None:
+    """Вычислить DOCKER_HOST из словаря подключения проекта.
+
+    Приоритеты:
+    1. ``conn["docker_host"]`` — используется как есть (явный адрес демона).
+    2. ``conn["host"]`` — строится ``ssh://[user@]host[:port]``.
+    3. Иначе → None (локальный демон).
+    """
+    if not conn:
+        return None
+    if conn.get("docker_host"):
+        return conn["docker_host"]
+    host = conn.get("host")
+    if not host:
+        return None
+    user = conn.get("user")
+    port = conn.get("port")
+    addr = (f"{user}@" if user else "") + host + (f":{port}" if port else "")
+    return f"ssh://{addr}"
+
+
 def container_name(path: str) -> str:
     """Детерминированное имя контейнера ``ai1c-<slug>`` из пути к проекту.
 
@@ -812,11 +833,35 @@ class DockerBackend(Backend):
         run=subprocess.run,
         spawn_fn=pty_process.spawn,
         home: str | None = None,
+        docker_host: str | None = None,
     ):
         name = container_name(project_path)
         volume = f"{name}-work"
         claude_volume = f"{name}-claude"
-        self.key = f"docker||{project_path}"
+        # Извлечь host-токен из docker_host для ключа реестра.
+        # Формат совпадает с key_for(project) в factory: "docker|{host}|{path}".
+        # При docker_host=None → host пуст → "docker||{path}" (локальный, как прежде).
+        if docker_host is not None:
+            # Берём host_token из docker_host для ключа реестра.
+            # Формат должен совпадать с key_for(project): там используется
+            # project.host = conn.get("host") — голый hostname без схемы и user@.
+            # Извлекаем его из docker_host: убираем схему (ssh://) и user@,
+            # оставляем host[:port] — но project.host тоже без порта.
+            # Точный host_token = bare hostname = conn["host"].
+            # Поскольку DockerBackend может создаваться напрямую (без conn),
+            # пытаемся извлечь host из docker_host сами.
+            _dh = docker_host
+            if "://" in _dh:
+                _dh = _dh.split("://", 1)[1]
+            if "@" in _dh:
+                _dh = _dh.split("@", 1)[1]
+            # Убираем порт, чтобы совпасть с conn["host"]
+            if ":" in _dh:
+                _dh = _dh.split(":", 1)[0]
+            host_token = _dh
+        else:
+            host_token = ""
+        self.key = f"docker|{host_token}|{project_path}"
         self._container = _DockerContainer(
             name,
             image,
@@ -824,6 +869,7 @@ class DockerBackend(Backend):
             volume=volume,
             claude_volume=claude_volume,
             run=run,
+            docker_host=docker_host,
         )
         self.runner = DockerRunner(self._container, claude_cmd, workdir=workdir, spawn_fn=spawn_fn)
         self.files = DockerFiles(self._container, home=home)

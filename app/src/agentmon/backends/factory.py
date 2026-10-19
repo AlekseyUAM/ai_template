@@ -1,4 +1,4 @@
-from .docker import DEFAULT_IMAGE, DockerBackend
+from .docker import DEFAULT_IMAGE, DockerBackend, docker_host_from_conn
 from .local import LocalBackend
 from .ssh import DEFAULT_PORT, SshBackend
 
@@ -21,6 +21,7 @@ class BackendRegistry:
                 project.path,
                 claude_cmd=claude_cmd,
                 image=(project.conn or {}).get("image") or DEFAULT_IMAGE,
+                docker_host=docker_host_from_conn(project.conn),
             )
         )
         self._cache: dict[str, object] = {}
@@ -34,7 +35,7 @@ class BackendRegistry:
             port = int(conn.get("port") or DEFAULT_PORT)
             return f"ssh|{user}@{conn.get('host')}:{port}"
         if project.backend == "docker":
-            return f"docker||{project.path}"
+            return f"docker|{project.host or ''}|{project.path}"
         raise ValueError(f"неизвестный backend: {project.backend!r}")
 
     def get(self, project):

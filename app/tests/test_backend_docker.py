@@ -20,6 +20,7 @@ from agentmon.backends.docker import (
     DockerFiles,
     container_name,
     _is_container_down,
+    docker_host_from_conn,
 )
 from agentmon.backends import RunResult
 from agentmon.models import FileRef
@@ -2654,3 +2655,169 @@ class TestDockerHostArgv:
         for call in fake.calls:
             assert call[0] == "docker"
             assert call[1] != "-H", f"после docker не должно быть -H: {call}"
+
+
+# ---------------------------------------------------------------------------
+# TestDockerHostFromConn — парсинг conn → docker_host
+# ---------------------------------------------------------------------------
+
+class TestDockerHostFromConn:
+    """docker_host_from_conn: все варианты входных данных."""
+
+    def test_explicit_docker_host_returned_as_is(self):
+        """conn["docker_host"] возвращается без изменений."""
+        assert docker_host_from_conn({"docker_host": "ssh://x"}) == "ssh://x"
+
+    def test_explicit_docker_host_takes_priority_over_host(self):
+        """conn["docker_host"] имеет приоритет над conn["host"]."""
+        result = docker_host_from_conn({"docker_host": "tcp://1.2.3.4:2376", "host": "other"})
+        assert result == "tcp://1.2.3.4:2376"
+
+    def test_host_user_port_builds_ssh_url(self):
+        """host + user + port → ssh://user@host:port."""
+        assert docker_host_from_conn({"host": "h", "user": "u", "port": 22}) == "ssh://u@h:22"
+
+    def test_host_user_no_port(self):
+        """host + user без port → ssh://user@host."""
+        assert docker_host_from_conn({"host": "h", "user": "u"}) == "ssh://u@h"
+
+    def test_host_only(self):
+        """Только host → ssh://host."""
+        assert docker_host_from_conn({"host": "h"}) == "ssh://h"
+
+    def test_host_port_no_user(self):
+        """host + port без user → ssh://host:port."""
+        assert docker_host_from_conn({"host": "h", "port": 2222}) == "ssh://h:2222"
+
+    def test_none_conn_returns_none(self):
+        """conn=None → None."""
+        assert docker_host_from_conn(None) is None
+
+    def test_empty_dict_returns_none(self):
+        """conn={} → None."""
+        assert docker_host_from_conn({}) is None
+
+    def test_conn_without_host_or_docker_host_returns_none(self):
+        """conn без host и без docker_host → None."""
+        assert docker_host_from_conn({"image": "custom:latest"}) is None
+
+    def test_port_stringified(self):
+        """port как int корректно попадает в URL."""
+        result = docker_host_from_conn({"host": "srv", "port": 2222})
+        assert ":2222" in result
+
+    def test_user_none_no_at_sign(self):
+        """user=None → нет '@' в URL."""
+        result = docker_host_from_conn({"host": "srv", "user": None})
+        assert "@" not in result
+        assert result == "ssh://srv"
+
+
+# ---------------------------------------------------------------------------
+# TestDockerBackendDockerHost — DockerBackend с docker_host
+# ---------------------------------------------------------------------------
+
+class TestDockerBackendDockerHost:
+    """DockerBackend: docker_host передаётся в контейнер, ключ включает хост."""
+
+    def _fake_run(self):
+        return FakeRun(routes=[
+            ("docker images -q", 0, "abc123\n", ""),
+            ("docker inspect", 0, "running\n", ""),
+        ])
+
+    def _make_remote(self, path="/workspace", docker_host="ssh://u@h"):
+        spawned = []
+
+        def fake_spawn(cmd, cwd, env=None):
+            p = _FakePty(cmd, cwd)
+            spawned.append(p)
+            return p
+
+        backend = DockerBackend(
+            path,
+            claude_cmd="claude",
+            run=self._fake_run(),
+            spawn_fn=fake_spawn,
+            docker_host=docker_host,
+        )
+        return backend, spawned
+
+    def test_remote_backend_key_includes_host(self):
+        """docker_host='ssh://u@h' → key содержит 'h' (bare host) и путь."""
+        backend, _ = self._make_remote("/workspace", "ssh://u@h")
+        assert "h" in backend.key
+        assert "/workspace" in backend.key
+
+    def test_remote_backend_key_format(self):
+        """Формат ключа: docker|{bare_host}|{path} (без схемы, user@ и порта)."""
+        backend, _ = self._make_remote("/workspace", "ssh://u@h")
+        # host_token = bare hostname, совпадает с conn["host"] и key_for
+        assert backend.key == "docker|h|/workspace"
+
+    def test_local_backend_key_unchanged(self):
+        """docker_host=None → key = 'docker||{path}' (регрессия)."""
+        spawned = []
+
+        def fake_spawn(cmd, cwd, env=None):
+            return _FakePty(cmd, cwd)
+
+        backend = DockerBackend(
+            "/workspace",
+            claude_cmd="claude",
+            run=self._fake_run(),
+            spawn_fn=fake_spawn,
+            docker_host=None,
+        )
+        assert backend.key == "docker||/workspace"
+
+    def test_container_receives_docker_host(self):
+        """docker_host пробрасывается в _DockerContainer."""
+        backend, _ = self._make_remote("/workspace", "ssh://u@h")
+        assert backend._container.docker_host == "ssh://u@h"
+
+    def test_container_no_docker_host_when_local(self):
+        """При docker_host=None контейнер тоже имеет docker_host=None."""
+        spawned = []
+
+        def fake_spawn(cmd, cwd, env=None):
+            return _FakePty(cmd, cwd)
+
+        backend = DockerBackend(
+            "/workspace",
+            claude_cmd="claude",
+            run=self._fake_run(),
+            spawn_fn=fake_spawn,
+        )
+        assert backend._container.docker_host is None
+
+    def test_remote_container_uses_H_flag_on_ensure(self):
+        """ensure() на удалённом DockerBackend вставляет -H в docker run."""
+        fake = FakeRun(routes=[
+            ("images -q", 0, "abc123\n", ""),
+            ("inspect", 1, "", "No such object"),
+        ])
+
+        def fake_spawn(cmd, cwd, env=None):
+            return _FakePty(cmd, cwd)
+
+        backend = DockerBackend(
+            "/workspace",
+            claude_cmd="claude",
+            run=fake,
+            spawn_fn=fake_spawn,
+            docker_host="ssh://u@h",
+        )
+        backend.check()
+        run_calls = fake.called_with("run")
+        assert run_calls, "docker run должен быть вызван"
+        cmd = run_calls[0]
+        assert cmd[1] == "-H"
+        assert cmd[2] == "ssh://u@h"
+
+    def test_key_host_token_no_scheme(self):
+        """Схема ssh://, user@ и :port не попадают в host_token ключа."""
+        backend, _ = self._make_remote("/p", "ssh://user@myhost:22")
+        # ключ не должен содержать схему, user@ или порт — только bare hostname
+        assert "ssh://" not in backend.key
+        assert backend.key == "docker|myhost|/p"

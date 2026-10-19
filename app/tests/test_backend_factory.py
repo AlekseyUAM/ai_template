@@ -187,3 +187,107 @@ def test_local_ssh_docker_all_coexist():
     assert bs is not bd
     assert bd is not bl
     assert len(made) == 3
+
+
+# ---------------------------------------------------------------------------
+# Docker-бэкенд с удалённым демоном (conn.host)
+# ---------------------------------------------------------------------------
+
+def docker_remote(path="/docker/proj", host="remotehost", user=None, port=None):
+    """Docker-проект с conn.host → remote daemon."""
+    conn = {"host": host}
+    if user is not None:
+        conn["user"] = user
+    if port is not None:
+        conn["port"] = port
+    return Project(id=4, name="r", path=path, backend="docker", conn=conn,
+                   claude_cmd=None, created_at=0.0)
+
+
+def test_key_for_docker_remote_project():
+    """key_for для docker-проекта с conn.host = 'docker|{host}|{path}'."""
+    reg, _ = make_with_docker()
+    p = docker_remote(path="/docker/myapp", host="myhost")
+    assert reg.key_for(p) == "docker|myhost|/docker/myapp"
+
+
+def test_key_for_docker_local_unchanged():
+    """key_for для docker-проекта без conn.host → 'docker||{path}' (регрессия)."""
+    reg, _ = make_with_docker()
+    p = docker_project("/docker/myapp")
+    assert reg.key_for(p) == "docker||/docker/myapp"
+
+
+def test_docker_same_path_different_host_different_backends():
+    """Два docker-проекта: тот же путь, разные host → разные бэкенды."""
+    made = []
+
+    def docker_factory(project):
+        b = FakeBackend(f"docker|{project.host or ''}|{project.path}")
+        made.append(b)
+        return b
+
+    reg = BackendRegistry(
+        claude_cmd="claude",
+        docker_factory=docker_factory,
+    )
+    p1 = docker_remote(path="/docker/proj", host="host1")
+    p2 = docker_remote(path="/docker/proj", host="host2")
+    b1 = reg.get(p1)
+    b2 = reg.get(p2)
+    assert b1 is not b2
+    assert len(made) == 2
+
+
+def test_docker_same_path_same_host_cached():
+    """Два docker-проекта: тот же путь, тот же host → один бэкенд."""
+    made = []
+
+    def docker_factory(project):
+        b = FakeBackend(f"docker|{project.host or ''}|{project.path}")
+        made.append(b)
+        return b
+
+    reg = BackendRegistry(
+        claude_cmd="claude",
+        docker_factory=docker_factory,
+    )
+    p1 = docker_remote(path="/docker/proj", host="host1")
+    p2 = docker_remote(path="/docker/proj", host="host1")
+    b1 = reg.get(p1)
+    b2 = reg.get(p2)
+    assert b1 is b2
+    assert len(made) == 1
+
+
+def test_default_docker_factory_passes_docker_host():
+    """Дефолтная docker_factory вычисляет docker_host из conn и передаёт в DockerBackend."""
+    reg = BackendRegistry(claude_cmd="claude")
+    p = docker_remote(path="/docker/proj", host="srv", user="admin", port=22)
+    backend = reg.get(p)
+    # docker_host должен быть установлен в контейнере
+    assert backend._container.docker_host == "ssh://admin@srv:22"
+
+
+def test_default_docker_factory_local_no_docker_host():
+    """Дефолтная docker_factory без conn → docker_host=None (локальный демон)."""
+    reg = BackendRegistry(claude_cmd="claude")
+    p = docker_project("/docker/proj")
+    backend = reg.get(p)
+    assert backend._container.docker_host is None
+
+
+def test_default_docker_factory_key_matches_key_for():
+    """backend.key совпадает с key_for(project) для удалённого docker-проекта."""
+    reg = BackendRegistry(claude_cmd="claude")
+    p = docker_remote(path="/docker/proj", host="srv")
+    backend = reg.get(p)
+    assert backend.key == reg.key_for(p)
+
+
+def test_default_docker_factory_key_matches_key_for_local():
+    """backend.key совпадает с key_for(project) для локального docker-проекта."""
+    reg = BackendRegistry(claude_cmd="claude")
+    p = docker_project("/docker/proj")
+    backend = reg.get(p)
+    assert backend.key == reg.key_for(p)
