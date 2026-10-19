@@ -1,10 +1,12 @@
 """Tests for SshProvisioner — SFTP file operations + exec-channel commands."""
 import io
+import socket
 import stat as _stat
 
 import pytest
 
 from agentmon.backends.ssh import SshProvisioner
+from agentmon.backends import RunResult
 
 
 # ---------------------------------------------------------------------------
@@ -12,21 +14,34 @@ from agentmon.backends.ssh import SshProvisioner
 # ---------------------------------------------------------------------------
 
 class FakeExecChannel:
-    def __init__(self, rc=0, out=b"", err=b""):
+    def __init__(self, rc=0, out=b"", err=b"", timeout_on_read=False):
         self._rc, self._out, self._err = rc, out, err
+        self._timeout_on_read = timeout_on_read
         self.cmd = None
+        self.timeout_set = None
+        self.closed = False
 
     def exec_command(self, cmd):
         self.cmd = cmd
 
+    def settimeout(self, t):
+        self.timeout_set = t
+
     def makefile(self, *a):
+        if self._timeout_on_read:
+            raise socket.timeout("timed out")
         return io.BytesIO(self._out)
 
     def makefile_stderr(self, *a):
         return io.BytesIO(self._err)
 
     def recv_exit_status(self):
+        if self._timeout_on_read:
+            raise socket.timeout("timed out")
         return self._rc
+
+    def close(self):
+        self.closed = True
 
 
 class _WriteBuf:
@@ -87,9 +102,10 @@ class FakeSftpRW:
 
 
 class FakeConn:
-    def __init__(self, sftp, exec_rc=0, exec_out=b"", exec_err=b""):
+    def __init__(self, sftp, exec_rc=0, exec_out=b"", exec_err=b"",
+                 channel=None):
         self._sftp = sftp
-        self._exec = FakeExecChannel(exec_rc, exec_out, exec_err)
+        self._exec = channel or FakeExecChannel(exec_rc, exec_out, exec_err)
         self.exec_cmds: list[str] = []
 
     def sftp(self):
@@ -255,3 +271,64 @@ def test_put_tree_ancestor_named_build_does_not_skip_root(tmp_path):
     written = set(sftp.files)
     assert "/remote/dst/keep.txt" in written
     assert all("__pycache__" not in p for p in written)
+
+
+# ---------------------------------------------------------------------------
+# run timeout
+# ---------------------------------------------------------------------------
+
+def test_run_timeout_sets_channel_settimeout():
+    """timeout= передаётся в chan.settimeout перед чтением."""
+    chan = FakeExecChannel(rc=0, out=b"ok\n", err=b"")
+    conn = FakeConn(FakeSftpRW(), channel=chan)
+    prov = SshProvisioner(conn)
+    prov.run(["echo", "ok"], timeout=5.0)
+    assert chan.timeout_set == 5.0
+
+
+def test_run_timeout_none_does_not_call_settimeout():
+    """timeout=None — settimeout не вызывается (регрессия)."""
+    chan = FakeExecChannel(rc=0, out=b"ok\n", err=b"")
+    conn = FakeConn(FakeSftpRW(), channel=chan)
+    prov = SshProvisioner(conn)
+    prov.run(["echo", "ok"])
+    assert chan.timeout_set is None
+
+
+def test_run_timeout_returns_124_on_socket_timeout():
+    """socket.timeout при чтении → RunResult(124, "", "<timeout>"), без raise."""
+    chan = FakeExecChannel(rc=0, out=b"", err=b"", timeout_on_read=True)
+    conn = FakeConn(FakeSftpRW(), channel=chan)
+    prov = SshProvisioner(conn)
+    res = prov.run(["sleep", "10"], timeout=0.1)
+    assert res.returncode == 124
+    assert "<timeout>" in res.stderr
+    assert isinstance(res.stdout, str)
+
+
+def test_run_timeout_does_not_raise():
+    """socket.timeout не всплывает наружу из run()."""
+    chan = FakeExecChannel(timeout_on_read=True)
+    conn = FakeConn(FakeSftpRW(), channel=chan)
+    prov = SshProvisioner(conn)
+    res = prov.run(["cmd"], timeout=0.1)
+    assert res.returncode == 124
+
+
+def test_run_timeout_closes_channel():
+    """После socket.timeout канал закрывается."""
+    chan = FakeExecChannel(timeout_on_read=True)
+    conn = FakeConn(FakeSftpRW(), channel=chan)
+    prov = SshProvisioner(conn)
+    prov.run(["cmd"], timeout=0.1)
+    assert chan.closed is True
+
+
+def test_run_no_timeout_normal_result():
+    """timeout=None, нормальный путь — результат как раньше (регрессия)."""
+    chan = FakeExecChannel(rc=0, out=b"hello\n", err=b"")
+    conn = FakeConn(FakeSftpRW(), channel=chan)
+    prov = SshProvisioner(conn)
+    res = prov.run(["echo", "hello"])
+    assert res.returncode == 0
+    assert "hello" in res.stdout

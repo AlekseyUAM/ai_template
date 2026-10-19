@@ -4,6 +4,7 @@
 FakeRun позволяет задавать разные ответы на разные команды по ключевому
 слову из argv (подстрока в строке вида «docker inspect», «docker images» и т.д.).
 """
+import subprocess
 import types
 
 import pytest
@@ -653,6 +654,150 @@ class TestExecRun:
 
 
 # ---------------------------------------------------------------------------
+# exec_run timeout — subprocess.TimeoutExpired → RunResult(124)
+# ---------------------------------------------------------------------------
+
+class TestExecRunTimeout:
+    """_DockerContainer.exec_run и DockerProvisioner.run: таймаут → RunResult(124)."""
+
+    class _FakeRunWithTimeout:
+        """subprocess.run, который может бросить TimeoutExpired и запоминает kwargs."""
+
+        def __init__(self, raise_timeout=False, timeout_stdout=None, timeout_stderr=None):
+            self.calls: list[list[str]] = []
+            self.kwargs_list: list[dict] = []
+            self._raise = raise_timeout
+            self._timeout_stdout = timeout_stdout
+            self._timeout_stderr = timeout_stderr
+
+        def __call__(self, cmd, **kw):
+            self.calls.append(list(cmd))
+            self.kwargs_list.append(dict(kw))
+            if self._raise:
+                e = subprocess.TimeoutExpired(cmd, kw.get("timeout", 1))
+                e.stdout = self._timeout_stdout
+                e.stderr = self._timeout_stderr
+                raise e
+
+            class R:
+                returncode = 0
+                stdout = ""
+                stderr = ""
+            return R()
+
+        def called_with(self, keyword: str) -> list[list[str]]:
+            return [c for c in self.calls if keyword in " ".join(c)]
+
+    def _container(self, fake_run):
+        return _DockerContainer(
+            name="ai1c-test",
+            image="ai1c-agent:latest",
+            workdir="/workspace",
+            volume="/vol",
+            run=fake_run,
+        )
+
+    def test_exec_run_timeout_returns_124(self):
+        """TimeoutExpired в exec_run → RunResult(124, ...) без исключения."""
+        fake = self._FakeRunWithTimeout(raise_timeout=True)
+        c = self._container(fake)
+        res = c.exec_run(["sleep", "10"], timeout=1.0)
+        assert res.returncode == 124
+
+    def test_exec_run_timeout_marker_in_stderr(self):
+        """stderr содержит маркер <timeout>."""
+        fake = self._FakeRunWithTimeout(raise_timeout=True)
+        c = self._container(fake)
+        res = c.exec_run(["sleep", "10"], timeout=1.0)
+        assert "<timeout>" in res.stderr
+
+    def test_exec_run_timeout_does_not_raise(self):
+        """TimeoutExpired не всплывает из exec_run."""
+        fake = self._FakeRunWithTimeout(raise_timeout=True)
+        c = self._container(fake)
+        # Просто не должно бросить
+        res = c.exec_run(["cmd"], timeout=0.1)
+        assert res.returncode == 124
+
+    def test_exec_run_timeout_partial_output_captured(self):
+        """Если TimeoutExpired несёт частичный вывод, он попадает в RunResult."""
+        fake = self._FakeRunWithTimeout(
+            raise_timeout=True,
+            timeout_stdout="partial out",
+            timeout_stderr="partial err",
+        )
+        c = self._container(fake)
+        res = c.exec_run(["cmd"], timeout=1.0)
+        assert res.stdout == "partial out"
+        assert "partial err" in res.stderr
+        assert "<timeout>" in res.stderr
+
+    def test_exec_run_timeout_forwarded_to_subprocess(self):
+        """timeout передаётся в subprocess.run."""
+        fake = self._FakeRunWithTimeout(raise_timeout=False)
+        c = self._container(fake)
+        c.exec_run(["ls"], timeout=7.5)
+        exec_kwargs = [kw for cmd, kw in zip(fake.calls, fake.kwargs_list)
+                       if "docker exec" in " ".join(cmd)]
+        assert exec_kwargs, "docker exec должен быть вызван"
+        assert exec_kwargs[0].get("timeout") == 7.5
+
+    def test_exec_run_timeout_none_forwarded(self):
+        """timeout=None тоже передаётся (None → без таймаута)."""
+        fake = self._FakeRunWithTimeout(raise_timeout=False)
+        c = self._container(fake)
+        c.exec_run(["ls"], timeout=None)
+        exec_kwargs = [kw for cmd, kw in zip(fake.calls, fake.kwargs_list)
+                       if "docker exec" in " ".join(cmd)]
+        assert exec_kwargs[0].get("timeout") is None
+
+    def test_provisioner_run_timeout_returns_124(self):
+        """DockerProvisioner.run(timeout=) → RunResult(124) при таймауте (сквозной путь)."""
+        fake = self._FakeRunWithTimeout(raise_timeout=True)
+        from agentmon.backends.docker import _DockerContainer as DC
+
+        real_container = DC(
+            name="ai1c-test", image="ai1c-agent:latest",
+            workdir="/workspace", volume="/vol",
+            run=fake,
+        )
+        prov = DockerProvisioner(real_container)
+        real_container.ensure = lambda: None  # обойти docker-вызовы
+        res = prov.run(["sleep", "10"], timeout=1.0)
+        assert res.returncode == 124
+        assert "<timeout>" in res.stderr
+
+    def test_provisioner_run_timeout_forwarded(self):
+        """DockerProvisioner.run пробрасывает timeout в container.exec_run."""
+        received = {}
+
+        class _TrackingContainer(_FakeContainer):
+            def exec_run(self, argv, cwd=None, timeout=None):
+                received["timeout"] = timeout
+                return RunResult(0, "", "")
+
+        container = _TrackingContainer()
+        prov = DockerProvisioner(container)
+        prov.run(["ls"], timeout=3.5)
+        assert received.get("timeout") == 3.5
+
+    def test_provisioner_run_timeout_none_no_regression(self):
+        """timeout=None — обычный RunResult, без исключений (регрессия)."""
+        received = {}
+
+        class _TrackingContainer(_FakeContainer):
+            def exec_run(self, argv, cwd=None, timeout=None):
+                received["timeout"] = timeout
+                return RunResult(0, "ok\n", "")
+
+        container = _TrackingContainer()
+        prov = DockerProvisioner(container)
+        res = prov.run(["ls"])
+        assert res.returncode == 0
+        assert received.get("timeout") is None
+
+
+# ---------------------------------------------------------------------------
 # remove() — docker rm -f
 # ---------------------------------------------------------------------------
 
@@ -845,7 +990,7 @@ class _FakeContainer:
             return self._next_results.pop(0)
         return self._default
 
-    def exec_run(self, argv: list[str], cwd=None) -> RunResult:
+    def exec_run(self, argv: list[str], cwd=None, timeout=None) -> RunResult:
         self.exec_calls.append({"argv": list(argv), "cwd": cwd})
         return self._pop_result()
 

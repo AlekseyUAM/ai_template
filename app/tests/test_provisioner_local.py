@@ -1,7 +1,9 @@
+import subprocess
 import sys
 from pathlib import Path
 
 from agentmon.backends.local import LocalProvisioner
+from agentmon.backends import RunResult
 
 
 def test_mkdirs_creates_nested(tmp_path):
@@ -88,3 +90,70 @@ def test_put_tree_ancestor_named_build_does_not_skip_root(tmp_path):
     prov.put_tree(str(src), str(dst))
     assert (dst / "keep.txt").read_text() == "keep"
     assert not (dst / "pkg" / "__pycache__" / "x.pyc").exists()
+
+
+# ---------------------------------------------------------------------------
+# run timeout
+# ---------------------------------------------------------------------------
+
+def test_run_timeout_returns_124_and_timeout_marker(monkeypatch):
+    """subprocess.TimeoutExpired → RunResult(124, ...) с маркером в stderr."""
+    cmd = ["sleep", "1"]
+
+    def fake_run(args, **kw):
+        raise subprocess.TimeoutExpired(cmd, 1)
+
+    monkeypatch.setattr("agentmon.backends.local.subprocess.run", fake_run)
+    prov = LocalProvisioner()
+    res = prov.run(cmd, timeout=1)
+    assert res.returncode == 124
+    assert "<timeout>" in res.stderr
+    assert isinstance(res.stdout, str)
+    assert isinstance(res.stderr, str)
+
+
+def test_run_timeout_does_not_raise(monkeypatch):
+    """TimeoutExpired не всплывает наружу — только RunResult(124)."""
+    def fake_run(args, **kw):
+        raise subprocess.TimeoutExpired(args, 0.1)
+
+    monkeypatch.setattr("agentmon.backends.local.subprocess.run", fake_run)
+    prov = LocalProvisioner()
+    # Главное — не исключение
+    res = prov.run(["true"], timeout=0.1)
+    assert res.returncode == 124
+
+
+def test_run_timeout_none_normal_result(monkeypatch):
+    """timeout=None сохраняет нормальное поведение (регрессия)."""
+    class FakeProc:
+        returncode = 0
+        stdout = "hello\n"
+        stderr = ""
+
+    def fake_run(args, **kw):
+        assert kw.get("timeout") is None
+        return FakeProc()
+
+    monkeypatch.setattr("agentmon.backends.local.subprocess.run", fake_run)
+    prov = LocalProvisioner()
+    res = prov.run(["echo", "hello"])
+    assert res.returncode == 0
+    assert res.stdout == "hello\n"
+
+
+def test_run_timeout_partial_stdout_captured(monkeypatch):
+    """Если TimeoutExpired несёт частичный вывод, он попадает в RunResult."""
+    def fake_run(args, **kw):
+        e = subprocess.TimeoutExpired(args, 1)
+        e.stdout = "partial"
+        e.stderr = "partial_err"
+        raise e
+
+    monkeypatch.setattr("agentmon.backends.local.subprocess.run", fake_run)
+    prov = LocalProvisioner()
+    res = prov.run(["cmd"], timeout=1)
+    assert res.returncode == 124
+    assert res.stdout == "partial"
+    assert "partial_err" in res.stderr
+    assert "<timeout>" in res.stderr

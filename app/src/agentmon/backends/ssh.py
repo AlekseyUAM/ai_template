@@ -2,6 +2,7 @@ import logging
 import os
 import posixpath
 import shlex
+import socket
 import stat
 import stat as _stat
 import time
@@ -223,14 +224,24 @@ class SshProvisioner:
 
     # --- выполнение команд (exec) ---
 
-    def run(self, cmd, cwd=None) -> RunResult:
+    def run(self, cmd, cwd=None, timeout=None) -> RunResult:
+        """Выполнить команду по SSH. При timeout → RunResult(124, ..., "<timeout>")."""
         line = " ".join(shlex.quote(c) for c in cmd)
         if cwd:
             line = f"cd {shlex.quote(cwd)} && {line}"
         chan = self._c.exec(line)
-        out = chan.makefile("rb").read()
-        err = chan.makefile_stderr("rb").read()
-        rc = chan.recv_exit_status()
+        if timeout is not None:
+            chan.settimeout(timeout)
+        try:
+            out = chan.makefile("rb").read()
+            err = chan.makefile_stderr("rb").read()
+            rc = chan.recv_exit_status()
+        except socket.timeout:
+            try:
+                chan.close()
+            except Exception:
+                pass
+            return RunResult(124, "", "<timeout>")
         return RunResult(rc, out.decode("utf-8", "replace"),
                          err.decode("utf-8", "replace"))
 

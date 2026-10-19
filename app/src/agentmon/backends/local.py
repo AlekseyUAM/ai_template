@@ -65,9 +65,16 @@ class LocalProvisioner:
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes(item.read_bytes())
 
-    def run(self, cmd, cwd=None) -> RunResult:
-        proc = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
-        return RunResult(proc.returncode, proc.stdout or "", proc.stderr or "")
+    def run(self, cmd, cwd=None, timeout=None) -> RunResult:
+        """Выполнить команду локально. При timeout → RunResult(124, ..., ...\\n<timeout>)."""
+        try:
+            proc = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True,
+                                  timeout=timeout)
+            return RunResult(proc.returncode, proc.stdout or "", proc.stderr or "")
+        except subprocess.TimeoutExpired as e:
+            stdout = (e.stdout or "") if isinstance(e.stdout, str) else ""
+            stderr = (e.stderr or "") if isinstance(e.stderr, str) else ""
+            return RunResult(124, stdout, stderr + "\n<timeout>")
 
     def which(self, tool) -> str | None:
         return shutil.which(tool)

@@ -214,17 +214,24 @@ class _DockerContainer:
     # Запуск команд внутри контейнера
     # ------------------------------------------------------------------
 
-    def exec_run(self, argv: list[str], cwd: str | None = None) -> RunResult:
+    def exec_run(self, argv: list[str], cwd: str | None = None,
+                 timeout: float | None = None) -> RunResult:
         """Выполнить команду внутри контейнера через ``docker exec``.
 
         Возвращает ``RunResult(returncode, stdout, stderr)``.
+        При timeout → ``RunResult(124, ..., ...\\n<timeout>)``.
         """
         cmd = ["docker", "exec"]
         if cwd:
             cmd += ["-w", cwd]
         cmd.append(self._name)
         cmd.extend(argv)
-        r = self._run(cmd, capture_output=True, text=True)
+        try:
+            r = self._run(cmd, capture_output=True, text=True, timeout=timeout)
+        except subprocess.TimeoutExpired as e:
+            stdout = (e.stdout or "") if isinstance(e.stdout, str) else ""
+            stderr = (e.stderr or "") if isinstance(e.stderr, str) else ""
+            return RunResult(124, stdout, stderr + "\n<timeout>")
         return RunResult(
             returncode=r.returncode,
             stdout=(r.stdout or ""),
@@ -384,10 +391,11 @@ class DockerProvisioner:
     # Запуск команд
     # ------------------------------------------------------------------
 
-    def run(self, cmd: list[str], cwd: str | None = None) -> RunResult:
-        """Выполнить команду внутри контейнера."""
+    def run(self, cmd: list[str], cwd: str | None = None,
+            timeout: float | None = None) -> RunResult:
+        """Выполнить команду внутри контейнера. При timeout → RunResult(124, ..., ...\\n<timeout>)."""
         self._ensure()
-        return self._container.exec_run(cmd, cwd)
+        return self._container.exec_run(cmd, cwd, timeout=timeout)
 
     def which(self, tool: str) -> str | None:
         """Найти исполняемый файл в контейнере через ``command -v``."""
