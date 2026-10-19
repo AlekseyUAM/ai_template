@@ -176,14 +176,28 @@ def setup_database() -> str:
     return f"postgresql://ai1c:ai1c@127.0.0.1:{port}/ai1c"
 
 
-def write_env(dsn: str) -> None:
-    ENV_FILE.write_text(
+def env_file_contents(dsn: str, db: str, mode: str = "host") -> str:
+    """Возвращает текст файла .ai1c.env — чистая функция, без I/O.
+
+    dsn  — строка подключения к БД (postgresql://... или путь sqlite)
+    db   — путь к файлу agentmon.db (для SQLite fallback)
+    mode — режим монитора: «host» (по умолчанию) или «docker»
+    """
+    return (
         "# Сгенерировано bootstrap.py — используется run.py\n"
         f"AGENTMON_DSN={dsn}\n"
-        f"AGENTMON_DB={ROOT / 'app' / 'agentmon.db'}\n",
+        f"AGENTMON_DB={db}\n"
+        "# AI1C_MONITOR_MODE: host (по умолчанию, монитор на хосте) | docker (монитор в контейнере)\n"
+        f"AI1C_MONITOR_MODE={mode}\n"
+    )
+
+
+def write_env(dsn: str) -> None:
+    ENV_FILE.write_text(
+        env_file_contents(dsn, str(ROOT / "app" / "agentmon.db"), "host"),
         encoding="utf-8",
     )
-    say(f"конфиг записан: .ai1c.env (AGENTMON_DSN={dsn})")
+    say(f"конфиг записан: .ai1c.env (AGENTMON_DSN={dsn}, AI1C_MONITOR_MODE=host)")
 
 
 def check_tools() -> None:
