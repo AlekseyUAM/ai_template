@@ -141,9 +141,19 @@ function readConn() {
     };
   }
   if (backend === "docker") {
+    const conn = {};
     const image = document.getElementById("dockerImage").value.trim();
-    // {} допустим: image необязателен; бэкенд возьмёт дефолт из образа-тулкита
-    return image ? { image } : {};
+    if (image) conn.image = image;
+    const host = document.getElementById("dockerDaemonHost").value.trim();
+    if (host) {
+      conn.host = host;
+      const user = document.getElementById("dockerDaemonUser").value.trim();
+      if (user) conn.user = user;
+      const port = parseInt(document.getElementById("dockerDaemonPort").value, 10);
+      if (port) conn.port = port;
+    }
+    // {} допустим: image и host необязательны; бэкенд возьмёт дефолт из образа-тулкита
+    return conn;
   }
   return null;
 }

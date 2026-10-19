@@ -87,3 +87,34 @@ def test_js_docker_path_defaults():
     js = _js()
     assert "/workspace" in js, "Missing /workspace default path for docker in project-wizard.js"
     assert "/opt/1cv8/current" in js, "Missing /opt/1cv8/current default platformDir for docker in project-wizard.js"
+
+
+# ── Docker remote-daemon fields (Task 4) ─────────────────────────────────────
+
+def test_html_has_docker_daemon_host_input():
+    assert 'id="dockerDaemonHost"' in _html(), (
+        "Missing id=\"dockerDaemonHost\" in project-wizard.html"
+    )
+
+
+def test_html_has_docker_daemon_user_input():
+    assert 'id="dockerDaemonUser"' in _html(), (
+        "Missing id=\"dockerDaemonUser\" in project-wizard.html"
+    )
+
+
+def test_html_has_docker_daemon_port_input():
+    assert 'id="dockerDaemonPort"' in _html(), (
+        "Missing id=\"dockerDaemonPort\" in project-wizard.html"
+    )
+
+
+def test_js_read_conn_docker_daemon_host():
+    """readConn docker branch must read dockerDaemonHost and set conn.host."""
+    js = _js()
+    assert "dockerDaemonHost" in js, (
+        "readConn in project-wizard.js missing dockerDaemonHost reference"
+    )
+    assert "conn.host" in js, (
+        "readConn in project-wizard.js must set conn.host for remote daemon"
+    )

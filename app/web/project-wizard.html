@@ -190,6 +190,15 @@
         <div id="dockerFields" hidden>
           <label><span class="label-text">Образ контейнера</span>
             <input id="dockerImage" type="text" placeholder="ai1c-agent:latest"></label>
+          <label><span class="label-text">Docker-хост (удалённый, необязательно)</span>
+            <input id="dockerDaemonHost" type="text" placeholder="server.example.com"></label>
+          <label><span class="label-text">Пользователь</span>
+            <input id="dockerDaemonUser" type="text" placeholder="root"></label>
+          <label><span class="label-text">SSH-порт</span>
+            <input id="dockerDaemonPort" type="text" placeholder="22"></label>
+          <p class="mcp-hint" style="margin-top:8px;">
+            Пустой хост — локальный Docker-демон; аутентификация по ssh-agent / <code>~/.ssh/config</code>.
+          </p>
         </div>
       </div>
     </div>
