@@ -72,7 +72,7 @@ def install_environment(
         steps.append(("dump-cfe",
                       lambda: dump(config, "cfe", user=db_user, password=db_password, prov=prov)))
     if install_tools:
-        steps.append(("tools-install", lambda: install_tools_fn(config, run=run)))
+        steps.append(("tools-install", lambda: install_tools_fn(config, prov=prov)))
     # Фиксируем все сгенерированные файлы одним коммитом — только при создании.
     if git_init and not update:
         steps.append(("git-commit",
