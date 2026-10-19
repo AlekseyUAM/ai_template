@@ -54,6 +54,11 @@ Postgres (`ai1c-postgres`) запускается на хосте через `bo
 > `127.0.0.1` хоста, а `host.docker.internal` из контейнера идёт на gateway-IP — такой
 > loopback-publish оттуда недостижим. Общая сеть решает это надёжно.
 
+> Обновление со старого стека: если `ai1c-postgres` был создан до появления сети
+> `ai1c-net`, он к ней не подключён — пересоздайте контейнер, чтобы подхватить
+> `networks:` из compose: `docker compose -f deploy/postgres/docker-compose.yml up -d`
+> (том `ai1c_pg` с данными сохраняется).
+
 SQLite в docker-режиме не рекомендуется (bootstrap при доступном Docker выбирает
 Postgres); при необходимости путь к файлу должен быть внутри тома `agentmon_data`
 (`/data/...`).

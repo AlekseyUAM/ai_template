@@ -151,9 +151,11 @@ def main() -> None:
         argv, denv = docker_plan(env, sys.argv[1:])
 
         # Идемпотентная подготовка: создать сеть ai1c-net (если не существует).
-        # Ненулевой код (сеть уже есть) — не фатален, подавляем.
+        # Ненулевой код и вывод («сеть уже есть») — не фатальны: подавляем и rc,
+        # и stdout/stderr, чтобы штатное «already exists» не выглядело ошибкой.
         for prep in docker_prep_cmds():
-            subprocess.run(prep, env=denv)
+            subprocess.run(prep, stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL)
 
         rc = subprocess.run(argv, env=denv).returncode
         sys.exit(rc)
