@@ -2218,3 +2218,99 @@ class TestDockerBackend:
         backend, _, _ = self._make(path)
         expected_volume = f"{container_name(path)}-work"
         assert backend._container._volume == expected_volume
+
+    def test_claude_volume_name(self):
+        """claude_volume = '<container_name>-claude' (именованный том для ~/.claude)."""
+        path = "/workspace"
+        backend, _, _ = self._make(path)
+        expected = f"{container_name(path)}-claude"
+        assert backend._container._claude_volume == expected
+
+
+# ---------------------------------------------------------------------------
+# TestDockerContainerClaudeVolume — персистентный ~/.claude
+# ---------------------------------------------------------------------------
+
+class TestDockerContainerClaudeVolume:
+    """_DockerContainer: монтирование тома ~/.claude через claude_volume."""
+
+    def _fake_for_absent(self):
+        """FakeRun: образ есть, inspect → absent, run → ok."""
+        return FakeRun(routes=[
+            ("docker images -q", 0, "abc123\n", ""),
+            ("docker inspect", 1, "", "No such object"),
+            # docker run → default rc=0
+        ])
+
+    def _make_with_claude_volume(self, fake_run, claude_volume="x-claude",
+                                  claude_home="/root/.claude"):
+        """Фабрика контейнера с claude_volume."""
+        return _DockerContainer(
+            name="ai1c-test",
+            image="ai1c-agent:latest",
+            workdir="/workspace",
+            volume="x-work",
+            claude_volume=claude_volume,
+            claude_home=claude_home,
+            run=fake_run,
+        )
+
+    def test_ensure_with_claude_volume_adds_second_v_flag(self):
+        """ensure() с claude_volume добавляет -v <claude_volume>:<claude_home> в docker run."""
+        fake = self._fake_for_absent()
+        c = self._make_with_claude_volume(fake)
+        c.ensure()
+        cmd = fake.called_with("docker run")[0]
+        joined = " ".join(cmd)
+        assert "-v x-claude:/root/.claude" in joined
+
+    def test_ensure_with_claude_volume_also_has_workspace_volume(self):
+        """При claude_volume рабочий том (-v …:/workspace) по-прежнему присутствует."""
+        fake = self._fake_for_absent()
+        c = self._make_with_claude_volume(fake)
+        c.ensure()
+        cmd = fake.called_with("docker run")[0]
+        joined = " ".join(cmd)
+        assert "-v x-work:/workspace" in joined
+
+    def test_ensure_without_claude_volume_no_second_v(self):
+        """Без claude_volume (None) в docker run ровно один -v флаг (регрессия)."""
+        fake = self._fake_for_absent()
+        c = _DockerContainer(
+            name="ai1c-test",
+            image="ai1c-agent:latest",
+            workdir="/workspace",
+            volume="x-work",
+            # claude_volume не передаётся → None по умолчанию
+            run=fake,
+        )
+        c.ensure()
+        cmd = fake.called_with("docker run")[0]
+        # Ровно одна пара -v / значение (для рабочего тома)
+        v_count = sum(1 for x in cmd if x == "-v")
+        assert v_count == 1, f"ожидается один -v, получено {v_count}: {cmd}"
+
+    def test_ensure_without_claude_volume_no_claude_home_in_argv(self):
+        """Без claude_volume строка '/root/.claude' не появляется в docker run."""
+        fake = self._fake_for_absent()
+        c = _DockerContainer(
+            name="ai1c-test",
+            image="ai1c-agent:latest",
+            workdir="/workspace",
+            volume="x-work",
+            run=fake,
+        )
+        c.ensure()
+        cmd = fake.called_with("docker run")[0]
+        joined = " ".join(cmd)
+        assert "/root/.claude" not in joined
+
+    def test_ensure_custom_claude_home(self):
+        """claude_home кастомизируется (escape-hatch для непривилегированного образа)."""
+        fake = self._fake_for_absent()
+        c = self._make_with_claude_volume(fake, claude_volume="my-claude",
+                                           claude_home="/home/agent/.claude")
+        c.ensure()
+        cmd = fake.called_with("docker run")[0]
+        joined = " ".join(cmd)
+        assert "-v my-claude:/home/agent/.claude" in joined

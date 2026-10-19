@@ -90,16 +90,30 @@ class _DockerContainer:
         *,
         workdir: str,
         volume: str,
+        claude_volume: str | None = None,
+        claude_home: str = "/root/.claude",
         add_hosts: list[str] | None = None,
         env: dict | None = None,
         run=subprocess.run,
         clock=time.monotonic,
         retry_seconds: float = DEFAULT_RETRY_SECONDS,
     ):
+        """Инициализировать контейнер.
+
+        ``claude_volume`` — имя именованного тома для персистентного ``~/.claude``
+        (журналы сессий, авторизация claude). Если задан, при ``docker run``
+        монтируется как ``-v {claude_volume}:{claude_home}``.
+        ``claude_home`` — путь к ``.claude`` внутри контейнера; по умолчанию
+        ``/root/.claude`` — совпадает с ``HOME`` образа при запуске без ``-u``.
+        Для образов с непривилегированным пользователем используйте escape-hatch
+        ``claude_home=...``.
+        """
         self._name = name
         self._image = image
         self._workdir = workdir
         self._volume = volume
+        self._claude_volume = claude_volume
+        self._claude_home = claude_home
         self._add_hosts = add_hosts if add_hosts is not None else ["host.docker.internal:host-gateway"]
         self._env = {"DISPLAY": ":99", **(env or {})}
         self._run = run
@@ -212,6 +226,8 @@ class _DockerContainer:
             for h in self._add_hosts:
                 cmd.append(f"--add-host={h}")
             cmd += ["-v", f"{self._volume}:{self._workdir}"]
+            if self._claude_volume is not None:
+                cmd += ["-v", f"{self._claude_volume}:{self._claude_home}"]
             for k, v in self._env.items():
                 cmd += ["-e", f"{k}={v}"]
             cmd += [self._image, "sleep", "infinity"]
@@ -768,12 +784,14 @@ class DockerBackend(Backend):
     ):
         name = container_name(project_path)
         volume = f"{name}-work"
+        claude_volume = f"{name}-claude"
         self.key = f"docker||{project_path}"
         self._container = _DockerContainer(
             name,
             image,
             workdir=workdir,
             volume=volume,
+            claude_volume=claude_volume,
             run=run,
         )
         self.runner = DockerRunner(self._container, claude_cmd, workdir=workdir, spawn_fn=spawn_fn)
