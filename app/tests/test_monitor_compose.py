@@ -119,7 +119,12 @@ class TestComposeYaml:
 # ---------------------------------------------------------------------------
 
 class TestRequirements:
-    def test_httpx_present(self):
-        """httpx — runtime-зависимость telegram/MCP, должна быть в requirements.txt."""
+    def test_httpx_omitted_by_default(self):
+        """httpx нужен только опциональному Telegram-боту — в дефолтный образ его
+        намеренно не кладём (образ лёгкий; см. test_pg_dependency и
+        docs/DEPLOY-DOCKER.md). Telegram в docker — ручное добавление httpx."""
         text = REQUIREMENTS_FILE.read_text(encoding="utf-8")
-        assert "httpx" in text
+        pkgs = {ln.split(";")[0].split("[")[0].strip().lower()
+                for ln in text.splitlines()
+                if ln.strip() and not ln.strip().startswith("#")}
+        assert "httpx" not in pkgs

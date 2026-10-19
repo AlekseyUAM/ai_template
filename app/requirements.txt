@@ -1,8 +1,10 @@
 # Runtime-зависимости для прод-образа (Dockerfile ставит именно их).
 # Тестовые зависимости (pytest и пр.) — в pyproject.toml [project.optional-dependencies].dev
+# httpx НЕ ставим в дефолтный образ намеренно: он нужен только опциональному
+# Telegram-боту (telegram/client.py, telegram/runtime.py). Для Telegram в
+# docker-режиме добавьте httpx вручную (см. docs/DEPLOY-DOCKER.md).
 fastapi
 uvicorn[standard]
-httpx
 paramiko
 psycopg[binary]
 pywinpty; sys_platform == "win32"
