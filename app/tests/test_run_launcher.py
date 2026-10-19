@@ -63,14 +63,21 @@ class TestDockerEnv:
         return {"AGENTMON_DSN": dsn, "OTHER": "x"}
 
     def test_postgres_loopback_ipv4(self):
+        # Хост И порт заменяются; userinfo (ai1c:ai1c) и путь (/ai1c) сохраняются
         env = self._make("postgresql://ai1c:ai1c@127.0.0.1:5433/ai1c")
         result = run.docker_env(env)
-        assert result["AGENTMON_DSN"] == "postgresql://ai1c:ai1c@host.docker.internal:5433/ai1c"
+        assert result["AGENTMON_DSN"] == "postgresql://ai1c:ai1c@ai1c-postgres:5432/ai1c"
+
+    def test_postgres_loopback_localhost_with_query(self):
+        # localhost, userinfo (u:p), путь (/db) и query string (?sslmode=disable) сохраняются
+        env = self._make("postgres://u:p@localhost:5432/db?sslmode=disable")
+        result = run.docker_env(env)
+        assert result["AGENTMON_DSN"] == "postgres://u:p@ai1c-postgres:5432/db?sslmode=disable"
 
     def test_postgres_loopback_localhost(self):
         env = self._make("postgres://user:pw@localhost:5432/db")
         result = run.docker_env(env)
-        assert result["AGENTMON_DSN"] == "postgres://user:pw@host.docker.internal:5432/db"
+        assert result["AGENTMON_DSN"] == "postgres://user:pw@ai1c-postgres:5432/db"
 
     def test_sqlite_unchanged(self):
         env = self._make("sqlite:///x.db")
@@ -78,9 +85,9 @@ class TestDockerEnv:
         assert result["AGENTMON_DSN"] == "sqlite:///x.db"
 
     def test_external_host_unchanged(self):
-        env = self._make("postgresql://user:pw@db.example.com:5432/db")
+        env = self._make("postgresql://u:p@db.example.com:5432/db")
         result = run.docker_env(env)
-        assert result["AGENTMON_DSN"] == "postgresql://user:pw@db.example.com:5432/db"
+        assert result["AGENTMON_DSN"] == "postgresql://u:p@db.example.com:5432/db"
 
     def test_missing_dsn_unchanged(self):
         env = {"OTHER": "x"}
@@ -154,7 +161,7 @@ class TestDockerPlan:
     def test_env_dsn_rewritten(self):
         env = {"AGENTMON_DSN": "postgresql://u:p@127.0.0.1:5432/db"}
         _, denv = run.docker_plan(env, [])
-        assert "host.docker.internal" in denv["AGENTMON_DSN"]
+        assert "ai1c-postgres:5432" in denv["AGENTMON_DSN"]
 
     def test_input_env_not_mutated(self):
         env = {"AGENTMON_DSN": "postgresql://u:p@localhost:5432/db"}

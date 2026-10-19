@@ -73,17 +73,20 @@ def docker_env(env: dict) -> dict:
     """Вернуть копию env с переписанным AGENTMON_DSN для docker-режима.
 
     Если DSN — postgres(ql)://...@127.0.0.1:PORT/... или @localhost:PORT/...,
-    хост заменяется на host.docker.internal, чтобы контейнер мог достучаться
-    до Postgres на хосте.  SQLite DSN, отсутствующий DSN и нелокальные хосты
-    остаются без изменений. Входной словарь не мутируется.
+    хост и порт заменяются на ai1c-postgres:5432 — имя контейнера и его
+    внутренний порт в общей сети ai1c-net.  Хост-опубликованный порт (PORT)
+    недоступен из контейнера через loopback; оба контейнера (монитор и postgres)
+    присоединяются к ai1c-net и общаются напрямую по имени сервиса.
+    SQLite DSN, отсутствующий DSN и нелокальные хосты остаются без изменений.
+    Входной словарь не мутируется.
     """
     result = dict(env)
     dsn = result.get("AGENTMON_DSN", "")
     if dsn.startswith(("postgres://", "postgresql://")):
-        # Заменяем @127.0.0.1: или @localhost: → @host.docker.internal:
+        # Заменяем @127.0.0.1:<port> или @localhost:<port> → @ai1c-postgres:5432
         dsn_new = re.sub(
-            r"@(127\.0\.0\.1|localhost):",
-            "@host.docker.internal:",
+            r"@(127\.0\.0\.1|localhost):\d+",
+            "@ai1c-postgres:5432",
             dsn,
             count=1,
         )
