@@ -2314,3 +2314,279 @@ class TestDockerContainerClaudeVolume:
         cmd = fake.called_with("docker run")[0]
         joined = " ".join(cmd)
         assert "-v my-claude:/home/agent/.claude" in joined
+
+
+# ---------------------------------------------------------------------------
+# TestDockerHostArgv — _argv() и docker_host: -H для удалённого демона
+# ---------------------------------------------------------------------------
+
+class TestDockerHostArgv:
+    """_DockerContainer._argv и docker_host: поведение с None и с реальным host."""
+
+    _HOST = "ssh://u@h"
+    _IMAGE = "ai1c-agent:latest"
+
+    def _fake_remote(self):
+        """FakeRun для контейнера с docker_host: образ есть, inspect→absent, всё ок."""
+        return FakeRun(routes=[
+            # Маршрут совпадает по подстроке — «images» есть в обоих вариантах
+            ("images -q", 0, "sha256:abc\n", ""),
+            ("inspect", 1, "", "No such object"),  # absent
+            # run, start, exec → default rc=0
+        ])
+
+    def _make_remote(self, fake_run):
+        """Фабрика контейнера с docker_host."""
+        return _DockerContainer(
+            name="ai1c-test",
+            image=self._IMAGE,
+            workdir="/workspace",
+            volume="vol",
+            run=fake_run,
+            docker_host=self._HOST,
+        )
+
+    # --- _argv без docker_host — локальный режим ---
+
+    def test_argv_none_host_returns_plain(self):
+        """Без docker_host _argv(['x']) == ['docker', 'x'] — байт в байт."""
+        fake = FakeRun()
+        c = _make_container(fake)
+        assert c._argv(["x"]) == ["docker", "x"]
+
+    def test_argv_none_host_no_H_flag(self):
+        """Без docker_host в argv нет '-H'."""
+        fake = FakeRun()
+        c = _make_container(fake)
+        assert "-H" not in c._argv(["inspect", "foo"])
+
+    # --- _argv с docker_host ---
+
+    def test_argv_with_host_inserts_H(self):
+        """С docker_host _argv(['inspect']) == ['docker', '-H', host, 'inspect']."""
+        fake = FakeRun()
+        c = _DockerContainer(
+            name="ai1c-test", image=self._IMAGE,
+            workdir="/workspace", volume="vol",
+            run=fake, docker_host=self._HOST,
+        )
+        result = c._argv(["inspect", "foo"])
+        assert result == ["docker", "-H", self._HOST, "inspect", "foo"]
+
+    def test_docker_host_property(self):
+        """docker_host property возвращает значение из __init__."""
+        fake = FakeRun()
+        c = _DockerContainer(
+            name="ai1c-test", image=self._IMAGE,
+            workdir="/workspace", volume="vol",
+            run=fake, docker_host=self._HOST,
+        )
+        assert c.docker_host == self._HOST
+
+    def test_docker_host_property_none(self):
+        """docker_host property возвращает None при отсутствии host."""
+        fake = FakeRun()
+        c = _make_container(fake)
+        assert c.docker_host is None
+
+    # --- status() с remote host ---
+
+    def test_status_uses_H_flag(self):
+        """status() с docker_host передаёт -H сразу после docker."""
+        fake = FakeRun(routes=[("inspect", 0, "running\n", "")])
+        c = self._make_remote(fake)
+        c.status()
+        cmd = fake.called_with("docker")[0]
+        assert cmd[:3] == ["docker", "-H", self._HOST]
+        assert "inspect" in cmd
+
+    # --- ensure() с remote host: все 4 команды проверяются ---
+
+    def test_ensure_images_q_uses_H_flag(self):
+        """ensure() — images -q (проверка образа) содержит -H."""
+        fake = self._fake_remote()
+        c = self._make_remote(fake)
+        c.ensure()
+        img_calls = fake.called_with("images")
+        assert img_calls, "images -q должен быть вызван"
+        assert img_calls[0][:3] == ["docker", "-H", self._HOST]
+        assert img_calls[0][3:6] == ["-H", self._HOST, "images"] or \
+               img_calls[0][1:3] == ["-H", self._HOST]
+
+    def test_ensure_images_q_correct_argv(self):
+        """ensure() — images -q argv: ['docker', '-H', host, 'images', '-q', image]."""
+        fake = self._fake_remote()
+        c = self._make_remote(fake)
+        c.ensure()
+        img_calls = fake.called_with("images")
+        assert img_calls, "images -q должен быть вызван"
+        cmd = img_calls[0]
+        assert cmd == ["docker", "-H", self._HOST, "images", "-q", self._IMAGE]
+
+    def test_ensure_run_uses_H_flag(self):
+        """ensure() — docker run содержит -H."""
+        fake = self._fake_remote()
+        c = self._make_remote(fake)
+        c.ensure()
+        run_calls = fake.called_with("run")
+        assert run_calls, "docker run должен быть вызван"
+        cmd = run_calls[0]
+        assert cmd[0] == "docker"
+        assert cmd[1] == "-H"
+        assert cmd[2] == self._HOST
+        assert "run" in cmd
+
+    def test_ensure_xvfb_exec_uses_H_flag(self):
+        """ensure() — docker exec (Xvfb) содержит -H."""
+        fake = self._fake_remote()
+        c = self._make_remote(fake)
+        c.ensure()
+        exec_calls = fake.called_with("exec")
+        assert exec_calls, "docker exec (Xvfb) должен быть вызван"
+        cmd = exec_calls[0]
+        assert cmd[:3] == ["docker", "-H", self._HOST]
+
+    def test_ensure_start_uses_H_flag(self):
+        """ensure() — docker start (exited) содержит -H."""
+        fake = FakeRun(routes=[
+            ("images -q", 0, "sha256:abc\n", ""),
+            ("inspect", 0, "exited\n", ""),
+            # start → default rc=0
+        ])
+        c = self._make_remote(fake)
+        c.ensure()
+        start_calls = fake.called_with("start")
+        assert start_calls, "docker start должен быть вызван"
+        cmd = start_calls[0]
+        assert cmd[:3] == ["docker", "-H", self._HOST]
+
+    # --- exec_run() с remote host ---
+
+    def test_exec_run_uses_H_flag(self):
+        """exec_run() с docker_host — -H присутствует сразу после docker."""
+        fake = FakeRun()
+        c = self._make_remote(fake)
+        c.exec_run(["ls", "-la"])
+        cmd = fake.called_with("exec")[0]
+        assert cmd[:3] == ["docker", "-H", self._HOST]
+
+    # --- exec_input() с remote host ---
+
+    def test_exec_input_uses_H_flag(self):
+        """exec_input() с docker_host — -H присутствует сразу после docker."""
+
+        class _FakeRunInput:
+            def __init__(self):
+                self.calls = []
+
+            def __call__(self, cmd, **kw):
+                self.calls.append(list(cmd))
+
+                class R:
+                    returncode = 0
+                    stdout = b""
+                    stderr = b""
+                return R
+
+            def called_with(self, kw):
+                return [c for c in self.calls if kw in " ".join(c)]
+
+        fake = _FakeRunInput()
+        c = _DockerContainer(
+            name="ai1c-test", image=self._IMAGE,
+            workdir="/workspace", volume="vol",
+            run=fake, docker_host=self._HOST,
+        )
+        c.exec_input(["cat"], b"data")
+        cmd = fake.called_with("exec")[0]
+        assert cmd[:3] == ["docker", "-H", self._HOST]
+
+    # --- exec_run_bytes() с remote host ---
+
+    def test_exec_run_bytes_uses_H_flag(self):
+        """exec_run_bytes() с docker_host — -H присутствует сразу после docker."""
+
+        class _FakeRunBytes:
+            def __init__(self):
+                self.calls = []
+
+            def __call__(self, cmd, **kw):
+                self.calls.append(list(cmd))
+
+                class R:
+                    returncode = 0
+                    stdout = b""
+                    stderr = b""
+                return R
+
+            def called_with(self, kw):
+                return [c for c in self.calls if kw in " ".join(c)]
+
+        fake = _FakeRunBytes()
+        c = _DockerContainer(
+            name="ai1c-test", image=self._IMAGE,
+            workdir="/workspace", volume="vol",
+            run=fake, docker_host=self._HOST,
+        )
+        c.exec_run_bytes(["cat", "/file"])
+        cmd = fake.called_with("exec")[0]
+        assert cmd[:3] == ["docker", "-H", self._HOST]
+
+    # --- remove() с remote host ---
+
+    def test_remove_uses_H_flag(self):
+        """remove() с docker_host — -H присутствует сразу после docker."""
+        fake = FakeRun()
+        c = self._make_remote(fake)
+        c.remove()
+        rm_calls = fake.called_with("rm")
+        assert rm_calls, "docker rm должен быть вызван"
+        cmd = rm_calls[0]
+        assert cmd[:3] == ["docker", "-H", self._HOST]
+
+    # --- full lifecycle с docker_host: сквозной тест ---
+
+    def test_full_lifecycle_all_commands_have_H(self):
+        """Полный цикл: ensure(absent→run) + exec_run + remove — все команды с -H.
+
+        Все docker-вызовы должны иметь -H <host> на позиции [1:3].
+        """
+        fake = self._fake_remote()
+        c = self._make_remote(fake)
+
+        c.ensure()
+        c.exec_run(["ls"])
+        c.remove()
+
+        for call in fake.calls:
+            assert call[0] == "docker", f"первый элемент должен быть docker: {call}"
+            assert call[1] == "-H", f"второй элемент должен быть -H: {call}"
+            assert call[2] == self._HOST, f"третий элемент должен быть host: {call}"
+
+    # --- регрессия: docker_host=None — поведение как прежде ---
+
+    def test_none_host_ensure_still_works(self):
+        """docker_host=None — ensure() работает как без флага (регрессия)."""
+        fake = FakeRun(routes=[
+            ("docker images -q", 0, "sha256:abc\n", ""),
+            ("docker inspect", 1, "", "No such object"),
+        ])
+        c = _make_container(fake)
+        c.ensure()
+        # Ни одного вызова с -H
+        for call in fake.calls:
+            assert "-H" not in call, f"не должно быть -H при docker_host=None: {call}"
+
+    def test_none_host_all_commands_start_with_docker_subcommand(self):
+        """docker_host=None — argv начинается с ['docker', <subcommand>] без -H."""
+        fake = FakeRun(routes=[
+            ("docker images -q", 0, "sha256:abc\n", ""),
+            ("docker inspect", 1, "", "No such object"),
+        ])
+        c = _make_container(fake)
+        c.ensure()
+        c.exec_run(["ls"])
+        c.remove()
+        for call in fake.calls:
+            assert call[0] == "docker"
+            assert call[1] != "-H", f"после docker не должно быть -H: {call}"

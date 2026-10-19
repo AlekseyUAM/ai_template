@@ -17,7 +17,6 @@ from pathlib import Path
 from . import BUFFER_LIMIT, Backend, RunResult, is_cruft
 from ..models import FileRef
 from .. import pty_process
-from ..env import mcp_docker
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +96,7 @@ class _DockerContainer:
         run=subprocess.run,
         clock=time.monotonic,
         retry_seconds: float = DEFAULT_RETRY_SECONDS,
+        docker_host: str | None = None,
     ):
         """Инициализировать контейнер.
 
@@ -107,6 +107,9 @@ class _DockerContainer:
         ``/root/.claude`` — совпадает с ``HOME`` образа при запуске без ``-u``.
         Для образов с непривилегированным пользователем используйте escape-hatch
         ``claude_home=...``.
+        ``docker_host`` — адрес удалённого docker-демона (например, ``ssh://user@host``).
+        Если задан, все docker-команды будут содержать ``-H <docker_host>`` сразу
+        после ``docker``. Если ``None`` — поведение локальное, без изменений.
         """
         self._name = name
         self._image = image
@@ -119,6 +122,7 @@ class _DockerContainer:
         self._run = run
         self._clock = clock
         self._retry_seconds = retry_seconds
+        self._docker_host = docker_host
         self._broken_at: float | None = None
         self._ready = False
 
@@ -126,6 +130,20 @@ class _DockerContainer:
     def name(self) -> str:
         """Имя контейнера (публичный доступ для DockerRunner)."""
         return self._name
+
+    @property
+    def docker_host(self) -> str | None:
+        """Адрес удалённого docker-демона (``-H``); None — локальный демон."""
+        return self._docker_host
+
+    def _argv(self, tail: list[str]) -> list[str]:
+        """Сформировать argv команды docker с опциональным ``-H`` для удалённого демона.
+
+        При ``docker_host`` задан — вставляет ``-H <docker_host>`` сразу после
+        ``docker`` (ssh-helper или TCP-сокет). При ``docker_host=None`` возвращает
+        ровно ``["docker"] + tail`` — поведение байт в байт совпадает с прежним.
+        """
+        return ["docker"] + (["-H", self._docker_host] if self._docker_host else []) + tail
 
     # ------------------------------------------------------------------
     # Состояние «сломан»
@@ -164,7 +182,7 @@ class _DockerContainer:
         а не ``mcp_docker.status``, чтобы различать ``exited`` и ``absent``.
         """
         r = self._run(
-            ["docker", "inspect", "-f", "{{.State.Status}}", self._name],
+            self._argv(["inspect", "-f", "{{.State.Status}}", self._name]),
             capture_output=True,
             text=True,
         )
@@ -213,16 +231,21 @@ class _DockerContainer:
                 f"контейнер {self._name!r} недоступен, следующая попытка позже"
             )
 
-        if not mcp_docker.image_exists(self._image, run=self._run):
+        r_img = self._run(
+            self._argv(["images", "-q", self._image]),
+            capture_output=True, text=True,
+        )
+        image_present = r_img.returncode == 0 and bool((r_img.stdout or "").strip())
+        if not image_present:
             self._build()
 
         state = self.status()
         if state == "absent":
-            cmd = [
-                "docker", "run", "-d",
+            cmd = self._argv([
+                "run", "-d",
                 "--name", self._name,
                 "--restart", "unless-stopped",
-            ]
+            ])
             for h in self._add_hosts:
                 cmd.append(f"--add-host={h}")
             cmd += ["-v", f"{self._volume}:{self._workdir}"]
@@ -234,7 +257,7 @@ class _DockerContainer:
             r = self._run(cmd, capture_output=True, text=True)
         elif state == "exited":
             r = self._run(
-                ["docker", "start", self._name],
+                self._argv(["start", self._name]),
                 capture_output=True, text=True,
             )
         else:
@@ -254,7 +277,7 @@ class _DockerContainer:
             "|| setsid Xvfb :99 -screen 0 1024x768x24 >/tmp/xvfb.log 2>&1"
         )
         self._run(
-            ["docker", "exec", "-d", self._name, "sh", "-c", xvfb_cmd],
+            self._argv(["exec", "-d", self._name, "sh", "-c", xvfb_cmd]),
             capture_output=True, text=True,
         )
         self._broken_at = None
@@ -271,11 +294,12 @@ class _DockerContainer:
         Возвращает ``RunResult(returncode, stdout, stderr)``.
         При timeout → ``RunResult(124, ..., ...\\n<timeout>)``.
         """
-        cmd = ["docker", "exec"]
+        tail = ["exec"]
         if cwd:
-            cmd += ["-w", cwd]
-        cmd.append(self._name)
-        cmd.extend(argv)
+            tail += ["-w", cwd]
+        tail.append(self._name)
+        tail.extend(argv)
+        cmd = self._argv(tail)
         try:
             r = self._run(cmd, capture_output=True, text=True, timeout=timeout)
         except subprocess.TimeoutExpired as e:
@@ -295,7 +319,7 @@ class _DockerContainer:
         вместо отдельной операции копирования файлов. ``docker exec -i`` держит
         stdin открытым, что позволяет передать данные через ``input=``.
         """
-        cmd = ["docker", "exec", "-i", self._name, *argv]
+        cmd = self._argv(["exec", "-i", self._name, *argv])
         r = self._run(cmd, input=data, capture_output=True)
         return RunResult(
             returncode=r.returncode,
@@ -317,7 +341,7 @@ class _DockerContainer:
         Возвращает ``(returncode, stdout_bytes, stderr_str)``.
         stderr декодируется из bytes с ``errors="replace"`` или берётся как str.
         """
-        cmd = ["docker", "exec", self._name, *argv]
+        cmd = self._argv(["exec", self._name, *argv])
         r = self._run(cmd, capture_output=True)
         rc = r.returncode
         raw = r.stdout if isinstance(r.stdout, bytes) else (r.stdout or b"")
@@ -330,7 +354,7 @@ class _DockerContainer:
     def remove(self) -> None:
         """Принудительно удалить контейнер (``docker rm -f <name>``)."""
         self._run(
-            ["docker", "rm", "-f", self._name],
+            self._argv(["rm", "-f", self._name]),
             capture_output=True,
             text=True,
         )
