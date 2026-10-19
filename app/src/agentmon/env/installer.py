@@ -67,10 +67,10 @@ def install_environment(
         steps.append(("prepare-src", _prepare_src))
     if dump_cf and not update:
         steps.append(("dump-cf",
-                      lambda: dump(config, "cf", user=db_user, password=db_password, run=run, prov=prov)))
+                      lambda: dump(config, "cf", user=db_user, password=db_password, prov=prov)))
     if dump_cfe and not update:
         steps.append(("dump-cfe",
-                      lambda: dump(config, "cfe", user=db_user, password=db_password, run=run, prov=prov)))
+                      lambda: dump(config, "cfe", user=db_user, password=db_password, prov=prov)))
     if install_tools:
         steps.append(("tools-install", lambda: install_tools_fn(config, run=run)))
     # Фиксируем все сгенерированные файлы одним коммитом — только при создании.

@@ -1,4 +1,3 @@
-import subprocess
 import sys
 import time
 from pathlib import Path
@@ -44,32 +43,26 @@ def build_dump_command(config, kind: str, *, user: str = "", password: str = "",
 
 
 def dump(config, kind: str, *, user: str = "", password: str = "",
-         run=subprocess.run, sleep=time.sleep, clock=time.monotonic,
+         sleep=time.sleep, clock=time.monotonic,
          max_wait: float = 900.0, interval: float = 30.0, prov=None) -> None:
-    """Выгружает cf/cfe. При занятости конфигуратора повторяет попытки.
+    """Выгружает cf/cfe через prov.run() на целевой машине. При занятости повторяет.
 
     1С не сразу освобождает конфигуратор после предыдущей выгрузки, поэтому при
     ошибке (кроме ошибок аутентификации) повторяем запуск каждые `interval` секунд
     до `max_wait` секунд. Ошибку аутентификации НЕ ретраим, чтобы не заблокировать
-    учётную запись.
+    учётную запись. Таймаут (rc=124) считается ретраибельным сбоем.
     """
     prov = prov or LocalProvisioner()
     cmd = build_dump_command(config, kind, user=user, password=password, prov=prov)
     deadline = clock() + max_wait
     while True:
         # Таймаут запуска ограничиваем остатком времени до дедлайна, чтобы
-        # зависший 1cv8 не висел дольше max_wait. Зависание трактуем как
+        # зависший 1cv8 не висел дольше max_wait. Зависание (rc=124) трактуем как
         # неуспешную (ретраибельную) попытку — так же, как ненулевой код.
         remaining = deadline - clock()
-        try:
-            result = run(cmd, capture_output=True, text=True,
-                         timeout=max(1.0, remaining))
-            returncode = result.returncode
-            log = ((getattr(result, "stdout", "") or "")
-                   + (getattr(result, "stderr", "") or ""))
-        except subprocess.TimeoutExpired:
-            returncode = -1
-            log = f"выгрузка {kind}: конфигуратор не ответил (таймаут запуска)"
+        result = prov.run(cmd, timeout=max(1.0, remaining))
+        returncode = result.returncode
+        log = (result.stdout or "") + (result.stderr or "")
         if returncode == 0:
             return
         if _is_auth_error(log):

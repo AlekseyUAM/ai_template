@@ -1,3 +1,5 @@
+from agentmon.backends import RunResult
+from agentmon.backends.local import LocalProvisioner
 from agentmon.env.config_schema import EnvConfig, McpSelection, AgentModel, SCHEMA_VERSION
 from agentmon.env import installer
 
@@ -18,6 +20,25 @@ def ok_run(args, **kw):
         returncode = 0
         stderr = ""
     return R()
+
+
+class SpyProv(LocalProvisioner):
+    """LocalProvisioner, перехватывающий только DESIGNER-вызовы (dump).
+
+    Вызовы с `/DumpConfigToFiles` перехватываются и возвращают scripted result.
+    Остальные (git, pip, …) делегируются в LocalProvisioner.
+    """
+
+    def __init__(self, dump_returncode=0, dump_stderr=""):
+        self.run_calls: list[list] = []
+        self._dump_returncode = dump_returncode
+        self._dump_stderr = dump_stderr
+
+    def run(self, cmd, cwd=None, timeout=None) -> RunResult:
+        self.run_calls.append(list(cmd))
+        if "/DumpConfigToFiles" in cmd:
+            return RunResult(self._dump_returncode, "", self._dump_stderr)
+        return super().run(cmd, cwd=cwd, timeout=timeout)
 
 
 def test_install_writes_config_and_registers(tmp_path):
@@ -70,14 +91,11 @@ def test_venv_step_ok_on_success(tmp_path):
 
 
 def test_install_runs_dumps_when_requested(tmp_path):
-    calls = []
-    def run(args, **kw):
-        calls.append(args)
-        return ok_run(args)
+    prov = SpyProv(dump_returncode=0)
     list(installer.install_environment(
         cfg(tmp_path), update=False, register=lambda c: None,
-        dump_cf=True, dump_cfe=True, run=run))
-    dump_calls = [c for c in calls if "/DumpConfigToFiles" in c]
+        dump_cf=True, dump_cfe=True, run=ok_run, prov=prov))
+    dump_calls = [c for c in prov.run_calls if "/DumpConfigToFiles" in c]
     assert len(dump_calls) == 2       # cf и cfe
 
 
@@ -180,13 +198,24 @@ def test_update_does_not_touch_readme_mcp_dumps_git(tmp_path):
 
 
 def test_install_stops_on_dump_error(tmp_path):
-    def run(args, **kw):
-        class R:
-            returncode = 1
-            stderr = "нет платформы"
-        return R()
-    events = list(installer.install_environment(
-        cfg(tmp_path), update=False, register=lambda c: None,
-        dump_cf=True, dump_cfe=False, run=run))
+    # SpyProv перехватывает DESIGNER-вызовы: rc=1, stderr="нет платформы".
+    # Чтобы не ждать 900с реального sleep, патчим installer.dump — он берётся
+    # из модульного импорта, поэтому lambda в install_environment увидит патч.
+    original_dump = installer.dump
+
+    def fast_dump(config, kind, **kw):
+        kw.setdefault("max_wait", 0)
+        kw.setdefault("sleep", lambda _s: None)
+        return original_dump(config, kind, **kw)
+
+    installer.dump = fast_dump
+    try:
+        prov = SpyProv(dump_returncode=1, dump_stderr="нет платформы")
+        events = list(installer.install_environment(
+            cfg(tmp_path), update=False, register=lambda c: None,
+            dump_cf=True, dump_cfe=False, run=ok_run, prov=prov))
+    finally:
+        installer.dump = original_dump
+
     assert events[-1].status == "error"
     assert "нет платформы" in events[-1].detail
