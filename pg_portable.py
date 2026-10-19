@@ -391,6 +391,40 @@ def free_port(start: int = 5432, end: int = 5460) -> int:
 
 
 # ---------------------------------------------------------------------------
+# Вспомогательные функции для разрешения путей
+# ---------------------------------------------------------------------------
+
+def paths(root) -> tuple:
+    """Возвращает (bin_dir, datadir, logfile) для заданного корня проекта.
+
+    Единое место разрешения путей — используется как provision, так и run.py,
+    чтобы исключить расхождения при изменении констант PG_DIR / PGDATA.
+
+    bin_dir  — Path к <root>/.ai1c/pg/<PG_VERSION>/pgsql/bin
+    datadir  — Path к <root>/.ai1c/pgdata
+    logfile  — Path к <root>/.ai1c/pg.log
+    """
+    root = Path(root)
+    bin_dir = root / PG_DIR / PG_VERSION / "pgsql" / "bin"
+    datadir = root / PGDATA
+    logfile = root / ".ai1c" / "pg.log"
+    return bin_dir, datadir, logfile
+
+
+def read_port(datadir) -> int | None:
+    """Читает порт из <datadir>/ai1c.port.
+
+    Возвращает int или None, если файл отсутствует или содержит невалидное
+    значение.  Не поднимает исключений.
+    """
+    port_file = Path(datadir) / "ai1c.port"
+    try:
+        return int(port_file.read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        return None
+
+
+# ---------------------------------------------------------------------------
 # Главная оркестрация
 # ---------------------------------------------------------------------------
 
@@ -428,8 +462,8 @@ def provision(
         extract=extract,
     )
 
-    # 2. Каталог данных
-    datadir = root / PGDATA
+    # 2. Каталог данных и логфайл (через общий helpers — исключаем расхождения путей)
+    _, datadir, logfile = paths(root)
 
     # 3. initdb (пропустит, если datadir/PG_VERSION уже есть)
     initdb(bin_dir, datadir, run=run)
@@ -438,20 +472,15 @@ def provision(
     port_file = datadir / "ai1c.port"
     if port is not None:
         chosen_port = port
-    elif port_file.exists():
-        try:
-            chosen_port = int(port_file.read_text(encoding="utf-8").strip())
-        except (ValueError, OSError):
-            chosen_port = free_port_fn()
     else:
-        chosen_port = free_port_fn()
+        saved = read_port(datadir)
+        chosen_port = saved if saved is not None else free_port_fn()
 
     # Сохранить выбранный порт
     port_file.write_text(str(chosen_port), encoding="utf-8")
 
     # 5. Запустить (если ещё не запущен)
     if not status(bin_dir, datadir, run=run):
-        logfile = root / ".ai1c" / "pg.log"
         logfile.parent.mkdir(parents=True, exist_ok=True)
         start(bin_dir, datadir, chosen_port, logfile, run=run)
 

@@ -11,10 +11,16 @@ from __future__ import annotations
 
 import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
+
+try:
+    import pg_portable as _pg_portable  # noqa: F401 — используется в ensure_host_pg
+except ImportError:
+    _pg_portable = None  # type: ignore[assignment]
 VENV = ROOT / ".venv"
 ENV_FILE = ROOT / ".ai1c.env"
 COMPOSE_FILE = ROOT / "app" / "docker-compose.yml"
@@ -116,6 +122,43 @@ def docker_plan(env: dict, extra_args: list) -> tuple:
     return argv, docker_env(env)
 
 
+def ensure_host_pg(env: dict, *, run=subprocess.run) -> None:
+    """Поднять портативную PostgreSQL в host-режиме монитора (если нужно).
+
+    Условия для запуска:
+    - AI1C_PG_MODE == "host" (или не задан — дефолт host).
+    - Каталог данных <ROOT>/.ai1c/pgdata существует (portable PG была provisioned).
+    - pg_portable доступен (мягкий import — при отсутствии модуля no-op).
+
+    Если PostgreSQL не запущена — вызывает pg_portable.start().
+    Ошибки start логируются в stderr, но НЕ прерывают запуск монитора.
+    """
+    if _pg_portable is None:
+        return
+
+    pg_mode = (env.get("AI1C_PG_MODE") or "host").strip().lower()
+    if pg_mode != "host":
+        return
+
+    bin_dir, datadir, logfile = _pg_portable.paths(ROOT)
+
+    if not datadir.is_dir():
+        return
+
+    if _pg_portable.status(bin_dir, datadir, run=run):
+        return  # уже запущена
+
+    port = _pg_portable.read_port(datadir)
+    if port is None:
+        port = 5432  # fallback — не должно случаться при нормальном provision
+
+    try:
+        logfile.parent.mkdir(parents=True, exist_ok=True)
+        _pg_portable.start(bin_dir, datadir, port, logfile, run=run)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[run] WARNING: не удалось запустить портативную PostgreSQL: {exc}", file=sys.stderr)
+
+
 def main() -> None:
     os.chdir(ROOT)
 
@@ -130,21 +173,19 @@ def main() -> None:
             print("Сначала выполните: python bootstrap.py", file=sys.stderr)
             sys.exit(1)
 
+        ensure_host_pg(env)
+
         port = env.get("AGENTMON_PORT", "8765")
         print(f"[run] Agent Monitor: http://127.0.0.1:{port}  (Ctrl+C для остановки)")
 
         cmd, env = host_plan(env, sys.argv[1:])
         if os.name == "nt":
             # на Windows нет os.exec* с нормальной обработкой Ctrl+C — используем subprocess
-            import subprocess
-
             sys.exit(subprocess.run(cmd, env=env).returncode)
         os.execve(cmd[0], cmd, env)
 
     else:
         # Docker-режим: .venv не нужен, compose сам поднимает контейнер
-        import subprocess
-
         port = env.get("AGENTMON_PORT", "8765")
         print(f"[run] Agent Monitor (Docker): http://127.0.0.1:{port}  (Ctrl+C для остановки)")
 

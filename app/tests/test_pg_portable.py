@@ -517,6 +517,73 @@ class TestFreePort:
 
 
 # ---------------------------------------------------------------------------
+# paths / read_port — shared path helpers
+# ---------------------------------------------------------------------------
+
+class TestPaths:
+    def test_returns_three_elements(self, tmp_path):
+        result = pg_portable.paths(tmp_path)
+        assert len(result) == 3
+
+    def test_bin_dir_structure(self, tmp_path):
+        bin_dir, _, _ = pg_portable.paths(tmp_path)
+        expected = tmp_path / pg_portable.PG_DIR / pg_portable.PG_VERSION / "pgsql" / "bin"
+        assert bin_dir == expected
+
+    def test_datadir_structure(self, tmp_path):
+        _, datadir, _ = pg_portable.paths(tmp_path)
+        expected = tmp_path / pg_portable.PGDATA
+        assert datadir == expected
+
+    def test_logfile_structure(self, tmp_path):
+        _, _, logfile = pg_portable.paths(tmp_path)
+        expected = tmp_path / ".ai1c" / "pg.log"
+        assert logfile == expected
+
+    def test_bin_dir_matches_ensure_binaries(self, tmp_path):
+        """bin_dir из paths() совпадает с тем, что возвращает ensure_binaries."""
+        pg_portable.ensure_binaries(
+            tmp_path,
+            system="Linux",
+            arch="x86_64",
+            download=fake_download([]),
+            extract=fake_extract_factory(True),
+        )
+        bin_dir, _, _ = pg_portable.paths(tmp_path)
+        assert bin_dir.exists()
+        assert (bin_dir / _initdb_exe()).exists()
+
+
+class TestReadPort:
+    def test_reads_valid_port(self, tmp_path):
+        datadir = tmp_path / "pgdata"
+        datadir.mkdir()
+        (datadir / "ai1c.port").write_text("5555")
+        assert pg_portable.read_port(datadir) == 5555
+
+    def test_returns_none_when_file_absent(self, tmp_path):
+        datadir = tmp_path / "pgdata"
+        datadir.mkdir()
+        assert pg_portable.read_port(datadir) is None
+
+    def test_returns_none_on_invalid_content(self, tmp_path):
+        datadir = tmp_path / "pgdata"
+        datadir.mkdir()
+        (datadir / "ai1c.port").write_text("not-a-number")
+        assert pg_portable.read_port(datadir) is None
+
+    def test_returns_none_when_datadir_absent(self, tmp_path):
+        datadir = tmp_path / "nonexistent"
+        assert pg_portable.read_port(datadir) is None
+
+    def test_strips_whitespace(self, tmp_path):
+        datadir = tmp_path / "pgdata"
+        datadir.mkdir()
+        (datadir / "ai1c.port").write_text("  5432\n")
+        assert pg_portable.read_port(datadir) == 5432
+
+
+# ---------------------------------------------------------------------------
 # provision — полный флоу
 # ---------------------------------------------------------------------------
 
