@@ -291,3 +291,89 @@ def test_default_docker_factory_key_matches_key_for_local():
     p = docker_project("/docker/proj")
     backend = reg.get(p)
     assert backend.key == reg.key_for(p)
+
+
+# ---------------------------------------------------------------------------
+# Docker-бэкенд с docker_host-only conn (без conn.host) — исправление bug
+# ---------------------------------------------------------------------------
+
+def docker_host_only(path="/docker/proj", docker_host="ssh://u@h:22"):
+    """Docker-проект с conn["docker_host"] и без conn["host"]."""
+    return Project(id=5, name="dh", path=path, backend="docker",
+                   conn={"docker_host": docker_host},
+                   claude_cmd=None, created_at=0.0)
+
+
+def test_key_for_docker_host_only_not_empty_host():
+    """conn={"docker_host":"ssh://u@h:22"} (no host) → key_for = 'docker|h|{path}', NOT 'docker||{path}'."""
+    reg, _ = make_with_docker()
+    p = docker_host_only(path="/docker/myapp", docker_host="ssh://u@h:22")
+    key = reg.key_for(p)
+    assert key == "docker|h|/docker/myapp"
+    assert key != f"docker||/docker/myapp", "не должен коллизировать с локальным проектом"
+
+
+def test_key_for_docker_host_only_matches_backend_key():
+    """key_for(project) == DockerBackend.key для docker_host-only формы conn."""
+    reg = BackendRegistry(claude_cmd="claude")
+    p = docker_host_only(path="/docker/proj", docker_host="ssh://u@h:22")
+    backend = reg.get(p)
+    assert backend.key == reg.key_for(p), (
+        f"key_for={reg.key_for(p)!r} должен совпадать с backend.key={backend.key!r}"
+    )
+
+
+def test_docker_host_only_two_projects_same_path_different_hosts_distinct_backends():
+    """docker_host-only: разные хосты, тот же путь → разные бэкенды."""
+    made = []
+
+    def docker_factory(project):
+        from agentmon.backends.docker import docker_host_from_conn, docker_host_token
+        dh = docker_host_from_conn(project.conn)
+        key = f"docker|{docker_host_token(dh)}|{project.path}"
+        b = FakeBackend(key)
+        made.append(b)
+        return b
+
+    reg = BackendRegistry(claude_cmd="claude", docker_factory=docker_factory)
+    p1 = docker_host_only(path="/docker/proj", docker_host="ssh://u@host1:22")
+    p2 = docker_host_only(path="/docker/proj", docker_host="ssh://u@host2:22")
+    b1 = reg.get(p1)
+    b2 = reg.get(p2)
+    assert b1 is not b2
+    assert len(made) == 2
+
+
+def test_docker_host_only_two_projects_same_path_same_host_cached():
+    """docker_host-only: тот же хост, тот же путь → один бэкенд (кеш)."""
+    made = []
+
+    def docker_factory(project):
+        from agentmon.backends.docker import docker_host_from_conn, docker_host_token
+        dh = docker_host_from_conn(project.conn)
+        key = f"docker|{docker_host_token(dh)}|{project.path}"
+        b = FakeBackend(key)
+        made.append(b)
+        return b
+
+    reg = BackendRegistry(claude_cmd="claude", docker_factory=docker_factory)
+    p1 = docker_host_only(path="/docker/proj", docker_host="ssh://u@h:22")
+    p2 = docker_host_only(path="/docker/proj", docker_host="ssh://u@h:22")
+    b1 = reg.get(p1)
+    b2 = reg.get(p2)
+    assert b1 is b2
+    assert len(made) == 1
+
+
+def test_regression_local_conn_none_key_unchanged():
+    """Регрессия: conn=None → key_for = 'docker||{path}' (локальный демон)."""
+    reg, _ = make_with_docker()
+    p = docker_project("/docker/myapp")
+    assert reg.key_for(p) == "docker||/docker/myapp"
+
+
+def test_regression_conn_host_key_unchanged():
+    """Регрессия: conn.host='h' → key_for = 'docker|h|{path}'."""
+    reg, _ = make_with_docker()
+    p = docker_remote(path="/docker/myapp", host="h")
+    assert reg.key_for(p) == "docker|h|/docker/myapp"

@@ -60,6 +60,31 @@ DEFAULT_PLATFORM_DIR = "/opt/1cv8/current"
 DEFAULT_RETRY_SECONDS = 10.0
 
 
+def docker_host_token(docker_host: str | None) -> str:
+    """Голое имя хоста из docker_host (ssh://[user@]host[:port]) для ключа кеша.
+
+    None → "" (локальный демон).
+
+    Примеры:
+    - None               → ""
+    - "ssh://h"          → "h"
+    - "ssh://u@h"        → "h"
+    - "ssh://u@h:22"     → "h"
+    - "ssh://h:22"       → "h"
+    - "tcp://h:2376"     → "h"
+    """
+    if not docker_host:
+        return ""
+    dh = docker_host
+    if "://" in dh:
+        dh = dh.split("://", 1)[1]
+    if "@" in dh:
+        dh = dh.split("@", 1)[1]
+    if ":" in dh:
+        dh = dh.split(":", 1)[0]
+    return dh
+
+
 def docker_host_from_conn(conn: dict | None) -> str | None:
     """Вычислить DOCKER_HOST из словаря подключения проекта.
 
@@ -838,30 +863,10 @@ class DockerBackend(Backend):
         name = container_name(project_path)
         volume = f"{name}-work"
         claude_volume = f"{name}-claude"
-        # Извлечь host-токен из docker_host для ключа реестра.
-        # Формат совпадает с key_for(project) в factory: "docker|{host}|{path}".
-        # При docker_host=None → host пуст → "docker||{path}" (локальный, как прежде).
-        if docker_host is not None:
-            # Берём host_token из docker_host для ключа реестра.
-            # Формат должен совпадать с key_for(project): там используется
-            # project.host = conn.get("host") — голый hostname без схемы и user@.
-            # Извлекаем его из docker_host: убираем схему (ssh://) и user@,
-            # оставляем host[:port] — но project.host тоже без порта.
-            # Точный host_token = bare hostname = conn["host"].
-            # Поскольку DockerBackend может создаваться напрямую (без conn),
-            # пытаемся извлечь host из docker_host сами.
-            _dh = docker_host
-            if "://" in _dh:
-                _dh = _dh.split("://", 1)[1]
-            if "@" in _dh:
-                _dh = _dh.split("@", 1)[1]
-            # Убираем порт, чтобы совпасть с conn["host"]
-            if ":" in _dh:
-                _dh = _dh.split(":", 1)[0]
-            host_token = _dh
-        else:
-            host_token = ""
-        self.key = f"docker|{host_token}|{project_path}"
+        # Ключ реестра: "docker|{host_token}|{path}".
+        # host_token извлекается единственной реализацией docker_host_token().
+        # При docker_host=None → token="" → "docker||{path}" (локальный демон).
+        self.key = f"docker|{docker_host_token(docker_host)}|{project_path}"
         self._container = _DockerContainer(
             name,
             image,

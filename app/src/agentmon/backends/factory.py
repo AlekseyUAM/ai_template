@@ -1,4 +1,4 @@
-from .docker import DEFAULT_IMAGE, DockerBackend, docker_host_from_conn
+from .docker import DEFAULT_IMAGE, DockerBackend, docker_host_from_conn, docker_host_token
 from .local import LocalBackend
 from .ssh import DEFAULT_PORT, SshBackend
 
@@ -35,7 +35,8 @@ class BackendRegistry:
             port = int(conn.get("port") or DEFAULT_PORT)
             return f"ssh|{user}@{conn.get('host')}:{port}"
         if project.backend == "docker":
-            return f"docker|{project.host or ''}|{project.path}"
+            dh = docker_host_from_conn(project.conn)
+            return f"docker|{docker_host_token(dh)}|{project.path}"
         raise ValueError(f"неизвестный backend: {project.backend!r}")
 
     def get(self, project):

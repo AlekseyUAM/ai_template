@@ -21,6 +21,7 @@ from agentmon.backends.docker import (
     container_name,
     _is_container_down,
     docker_host_from_conn,
+    docker_host_token,
 )
 from agentmon.backends import RunResult
 from agentmon.models import FileRef
@@ -2821,3 +2822,43 @@ class TestDockerBackendDockerHost:
         # ключ не должен содержать схему, user@ или порт — только bare hostname
         assert "ssh://" not in backend.key
         assert backend.key == "docker|myhost|/p"
+
+
+# ---------------------------------------------------------------------------
+# TestDockerHostToken — unit-таблица для docker_host_token
+# ---------------------------------------------------------------------------
+
+class TestDockerHostToken:
+    """docker_host_token: извлечение bare hostname из docker_host для ключа кеша."""
+
+    def test_none_returns_empty(self):
+        """None → "" (локальный демон)."""
+        assert docker_host_token(None) == ""
+
+    def test_empty_string_returns_empty(self):
+        """Пустая строка → "" (локальный демон)."""
+        assert docker_host_token("") == ""
+
+    def test_ssh_bare_host(self):
+        """ssh://h → h."""
+        assert docker_host_token("ssh://h") == "h"
+
+    def test_ssh_user_host(self):
+        """ssh://u@h → h."""
+        assert docker_host_token("ssh://u@h") == "h"
+
+    def test_ssh_user_host_port(self):
+        """ssh://u@h:22 → h."""
+        assert docker_host_token("ssh://u@h:22") == "h"
+
+    def test_ssh_host_port_no_user(self):
+        """ssh://h:22 → h."""
+        assert docker_host_token("ssh://h:22") == "h"
+
+    def test_tcp_host_port(self):
+        """tcp://h:2376 → h (произвольная схема)."""
+        assert docker_host_token("tcp://h:2376") == "h"
+
+    def test_full_url_complex(self):
+        """ssh://admin@myserver.example.com:2222 → myserver.example.com."""
+        assert docker_host_token("ssh://admin@myserver.example.com:2222") == "myserver.example.com"
