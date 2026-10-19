@@ -54,6 +54,8 @@ def _is_container_down(rc: int, stderr: str) -> bool:
     if rc in _CONTAINER_DOWN_RCS:
         return True
     return any(phrase in stderr for phrase in _CONTAINER_DOWN_PHRASES)
+
+
 DEFAULT_WORKDIR = "/workspace"
 DEFAULT_PLATFORM_DIR = "/opt/1cv8/current"
 DEFAULT_RETRY_SECONDS = 10.0
