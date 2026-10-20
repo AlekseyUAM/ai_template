@@ -231,7 +231,7 @@ def build_task2_router(store) -> APIRouter:
 
     @router.post("/api/env/tasks/{tid}/approve")
     def approve_stage(tid: int, body: dict):
-        task_repo, _ = get_repos()
+        task_repo, project_repo = get_repos()
         task = task_or_404(task_repo, tid)
 
         stage_name = body.get("stage")
@@ -255,6 +255,15 @@ def build_task2_router(store) -> APIRouter:
         # Обновить в БД
         task_repo.update(tid, stages_json=json.dumps(stages, ensure_ascii=False))
         task_repo.set_status(tid, new_overall)
+
+        # Пробросить approved в task.json на диске — источник истины оркестратора.
+        # Его гейт стережёт task_status.py (_gate_block): пока в файле approved=
+        # false, следующий этап не перейдёт в running. Без этой записи после
+        # одобрения задача не возобновляется.
+        project = project_repo.get(task["project_id"])
+        if project:
+            from .task_sync import write_stage_approval
+            write_stage_approval(project["path"], task, stage_name)
 
         task = task_repo.get(tid)
         return {"task": task}
