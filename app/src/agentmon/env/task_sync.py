@@ -47,11 +47,14 @@ def _apply_stage_timings(file_stages, prev_by_name, now) -> list:
     return file_stages
 
 
-def sync_task_from_file(store, project_path, task, now_fn=time.time) -> dict | None:
+def sync_task_from_file(store, project_path, task, now_fn=time.time,
+                        sync_status=True) -> dict | None:
     """Читает task.json задачи и переносит актуальные поля в БД.
 
-    Возвращает словарь применённых полей; None — если файла нет или он битый
-    (в этом случае БД не трогается).
+    sync_status=False — не трогать task-статус (нужно при синке ЖИВОГО прогона:
+    процесс жив, task-статусом владеет монитор = running; переносим только
+    прогресс этапов/stage/времена, чтобы дерево было свежим). Возвращает словарь
+    применённых полей; None — если файла нет или он битый (БД не трогается).
     """
     folder = task_folder_name(task["id"], task.get("identifier"))
     tj = Path(project_path) / "tasks" / folder / "task.json"
@@ -67,7 +70,7 @@ def sync_task_from_file(store, project_path, task, now_fn=time.time) -> dict | N
         if key in data:
             fields[key] = data.get(key)
     file_status = data.get("status")
-    if file_status and task.get("status") not in PROTECTED_STATUSES:
+    if sync_status and file_status and task.get("status") not in PROTECTED_STATUSES:
         fields["status"] = file_status
     if "stages" in data:
         prev_by_name = {}

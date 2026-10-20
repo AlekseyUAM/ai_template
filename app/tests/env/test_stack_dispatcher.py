@@ -373,6 +373,32 @@ def test_gate_resume_after_approve_starts_next_stage(tmp_path):
     assert mon.started[1][2] == t1_id
 
 
+def test_running_task_syncs_live_stage_progress(tmp_path):
+    """Пока прогон идёт, прогресс этапов из task.json должен попадать в БД
+    (чтобы дерево не показывало устаревший «ожидает»), а task-статус при этом
+    оставаться running."""
+    db, proj_id, t1_id, t2_id, stack_id = _seed(tmp_path)
+    mon = FakeMonitor()
+    disp = StackDispatcher(db, mon)
+
+    disp.tick()                                   # task1 → running, is_alive
+    # оркестратор отметил analyze running в task.json (прогон ещё идёт)
+    stages = build_stages(["analyze", "develop"], gated_names=["analyze"])
+    for s in stages:
+        if s["name"] == "analyze":
+            s["status"] = "running"
+    _write_task_json(tmp_path / "proj", t1_id, "running", stages)
+
+    disp.tick()                                   # прогон всё ещё running
+
+    tr = TaskRepo(db)
+    row = tr.get(t1_id)
+    assert row["status"] == "running", "task-статус не должен слетать во время прогона"
+    db_stages = json.loads(row["stages_json"])
+    assert any(s["name"] == "analyze" and s["status"] == "running" for s in db_stages), \
+        "живой прогресс этапа должен синкаться в БД до завершения прогона"
+
+
 def test_test_kind_task_full_lifecycle(tmp_path):
     """Полный жизненный цикл тест-заглушки: planned→running→done, стек→idle.
 

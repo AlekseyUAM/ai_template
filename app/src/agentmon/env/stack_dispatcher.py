@@ -165,7 +165,11 @@ class StackDispatcher:
                     # done/failed/иное терминальное — двигаемся к следующей задаче
                     continue
                 else:
-                    # задача ещё выполняется — ждём следующего тика
+                    # задача ещё выполняется — синкаем живой прогресс этапов из
+                    # task.json в БД (без task-статуса: им владеет монитор =
+                    # running), чтобы дерево не показывало устаревший этап.
+                    task_sync.sync_task_from_file(self._store, proj.path,
+                                                  active_task, sync_status=False)
                     return
 
     def _settle_completed(self, proj, task, tr) -> str:
