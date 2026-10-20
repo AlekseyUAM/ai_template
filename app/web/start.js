@@ -253,7 +253,9 @@ async function renderStacks() {
             const open = expandedTasks.has(Number(item.task_id));
             const stageInfo = item.stage ? ` · ${escHtml(stageNameLabel(item.stage))}` : "";
             const stagesRows = (item.stages || []).map(s => {
-              const rep = (s.name === item.last_done_stage && s.artifact_exists)
+              // Кнопка «Отчёт» — у любого этапа с существующим артефактом,
+              // а не только у последнего завершённого.
+              const rep = s.artifact_exists
                 ? `<button class="report-btn" data-stage="${escHtml(s.name)}">Отчёт</button>`
                 : "";
               return `<tr><td>${escHtml(stageNameLabel(s.name))}</td><td>${escHtml(stageStatusLabel(s.status || ""))}</td>`
