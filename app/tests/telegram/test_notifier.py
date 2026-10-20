@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import pytest
 from agentmon.store.db import connect
@@ -191,6 +192,42 @@ async def test_awaiting_user_notification_carries_gate_buttons():
     assert "гейт" in text
     assert markup is not None
     cbs = _callbacks(markup)
+    assert f"gate:ok:{tid}:analyze" in cbs
+    assert f"gate:note:{tid}:analyze" in cbs
+
+
+@pytest.mark.asyncio
+async def test_awaiting_user_includes_stage_report(tmp_path):
+    """На гейте приходит содержимое артефакта этапа, а кнопки — на последнем
+    (prompt) сообщении."""
+    db = _db()
+    pid = db.returning_id("projects", ["name", "path"], ["p", str(tmp_path)])
+    tr = TaskRepo(db)
+    tid = tr.add(project_id=pid, name="t", goal="g", plan="", constraints="", tests="")
+    stages = build_stages(["analyze", "develop"], gated_names=["analyze"])
+    for st in stages:
+        if st["name"] == "analyze":
+            st["status"] = "done"
+    tr.update(tid, stages_json=json.dumps(stages, ensure_ascii=False))
+    # артефакт этапа analyze на диске
+    folder = Path(tmp_path) / "tasks" / f"task#{tid}"
+    folder.mkdir(parents=True)
+    (folder / "ANALYZE.md").write_text("СОДЕРЖИМОЕ ОТЧЁТА ABC", encoding="utf-8")
+
+    tr.set_status(tid, "running")
+    s = _Sender()
+    n = TelegramNotifier(db, s.send, ["111"])
+    await n.tick()                       # baseline
+    tr.set_status(tid, "awaiting_user")
+    await n.tick()
+
+    texts = [t for _, t, _ in s.sent]
+    assert any("СОДЕРЖИМОЕ ОТЧЁТА ABC" in t for t in texts), \
+        "содержимое артефакта этапа должно прийти в чат"
+    # кнопки — на последнем сообщении (prompt)
+    _chat, _text, last_markup = s.sent[-1]
+    assert last_markup is not None
+    cbs = _callbacks(last_markup)
     assert f"gate:ok:{tid}:analyze" in cbs
     assert f"gate:note:{tid}:analyze" in cbs
 

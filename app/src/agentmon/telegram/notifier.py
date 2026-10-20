@@ -4,8 +4,10 @@ import logging
 
 from agentmon.store.tasks import TaskRepo
 from agentmon.store.stacks import StackRepo
+from agentmon.store.projects import ProjectRepo
 from agentmon.store.telegram_store import NotifyStateRepo
 from agentmon.telegram.client import inline_keyboard
+from agentmon.telegram import reports as rep
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +62,7 @@ class TelegramNotifier:
         self._state = NotifyStateRepo(db)
         self._tasks = TaskRepo(db)
         self._stacks = StackRepo(db)
+        self._projects = ProjectRepo(db)
 
     async def tick(self) -> None:
         await self._diff_tasks()
@@ -67,14 +70,37 @@ class TelegramNotifier:
 
     async def _diff_tasks(self) -> None:
         for task in self._tasks.list():
-            markup = None
+            messages = None
             if task["status"] == "awaiting_user":
-                stage = gate_stage_name(task)
-                if stage:
-                    markup = _gate_keyboard(task["id"], stage)
+                messages = self._gate_messages(task)
             await self._handle("task", task["id"], task["status"],
                                TASK_EVENTS, _TASK_LABEL, {"name": task["name"]},
-                               reply_markup=markup)
+                               messages=messages)
+
+    def _gate_messages(self, task) -> list:
+        """Сообщения гейта: содержимое артефакта этапа (нарезка по лимиту) +
+        последним — prompt с кнопками [Одобрить]/[Замечание]."""
+        prompt = _TASK_LABEL["awaiting_user"].format(name=task["name"])
+        stage = gate_stage_name(task)
+        if not stage:
+            return [(prompt, None)]
+        messages = []
+        report = self._read_report(task, stage)
+        if report:
+            messages.append((f"📄 Отчёт этапа «{stage}»:", None))
+            for part in rep.chunk(report):
+                messages.append((part, None))
+        messages.append((prompt, _gate_keyboard(task["id"], stage)))
+        return messages
+
+    def _read_report(self, task, stage: str):
+        project = self._projects.get(task["project_id"])
+        if project is None:
+            return None
+        try:
+            return rep.read_report(project["path"], task, stage)
+        except OSError:
+            return None
 
     async def _diff_stacks(self) -> None:
         for stack in self._stacks.list():
@@ -94,7 +120,7 @@ class TelegramNotifier:
         return stack["status"]
 
     async def _handle(self, scope, ref_id, status, events, labels, fmt,
-                      reply_markup=None) -> None:
+                      messages=None) -> None:
         prev = self._state.get(scope, ref_id)
         if prev is None:                         # baseline — молчим
             self._state.set(scope, ref_id, status)
@@ -103,16 +129,19 @@ class TelegramNotifier:
             if status != prev:
                 self._state.set(scope, ref_id, status)
             return
-        text = labels[status].format(**fmt)
-        if await self._emit(text, reply_markup):
+        # messages: список (текст, клавиатура). По умолчанию — одно сообщение
+        # из метки статуса без клавиатуры.
+        msgs = messages if messages is not None else [(labels[status].format(**fmt), None)]
+        if await self._emit(msgs):
             self._state.set(scope, ref_id, status)
 
-    async def _emit(self, text: str, reply_markup=None) -> bool:
+    async def _emit(self, messages) -> bool:
         ok = True
         for chat_id in self._chat_ids:
-            try:
-                await self._send(chat_id, text, reply_markup=reply_markup)
-            except Exception:
-                logger.exception("не удалось отправить уведомление в чат %s", chat_id)
-                ok = False
+            for text, reply_markup in messages:
+                try:
+                    await self._send(chat_id, text, reply_markup=reply_markup)
+                except Exception:
+                    logger.exception("не удалось отправить уведомление в чат %s", chat_id)
+                    ok = False
         return ok
