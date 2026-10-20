@@ -118,6 +118,9 @@ PostgreSQL в Docker (если докер доступен; иначе испо�
 - **Allowlist**: бот отвечает только чатам из `AGENTMON_TG_CHAT_IDS`.
 - Интеграция **опциональна**: без `AGENTMON_TG_TOKEN` приложение работает без изменений.
 
+Настройка (токен от @BotFather, `chat_id`, docker-нюанс с `httpx`) и разбор того,
+как это устроено — в [docs/TELEGRAM.md](docs/TELEGRAM.md).
+
 ### Разворачиваемое ИИ-окружение (`template/`)
 
 - **Субагенты** (`.claude/agents/`): analyst, architect, developer-tests, developer,
