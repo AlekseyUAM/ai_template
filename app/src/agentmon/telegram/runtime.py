@@ -10,8 +10,8 @@ from agentmon.telegram.notifier import TelegramNotifier
 
 
 def notifier_send(client):
-    async def _send(chat_id, text):
-        await client.send_message(chat_id, text)
+    async def _send(chat_id, text, reply_markup=None):
+        await client.send_message(chat_id, text, reply_markup=reply_markup)
     return _send
 
 

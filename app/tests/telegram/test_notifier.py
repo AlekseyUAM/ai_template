@@ -1,8 +1,11 @@
+import json
+
 import pytest
 from agentmon.store.db import connect
 from agentmon.store.schema import init_schema
 from agentmon.store.tasks import TaskRepo
 from agentmon.store.stacks import StackRepo
+from agentmon.env.task_model import build_stages
 from agentmon.telegram.notifier import TelegramNotifier
 
 
@@ -16,8 +19,8 @@ class _Sender:
     def __init__(self):
         self.sent = []
 
-    async def send(self, chat_id, text):
-        self.sent.append((chat_id, text))
+    async def send(self, chat_id, text, reply_markup=None):
+        self.sent.append((chat_id, text, reply_markup))
 
 
 def _add_project(db):
@@ -116,7 +119,7 @@ async def test_stack_all_done_notifies_as_выполнен():
     tr.set_status(tid, "done")
     await n.tick()
     # task transition (done) + stack transition (completed) both fire
-    texts = [text for _, text in s.sent]
+    texts = [text for _, text, _ in s.sent]
     assert any("выполнен" in t for t in texts)
 
 
@@ -132,7 +135,7 @@ async def test_notifier_failure_does_not_advance_state():
 
     # sender, который всегда бросает
     class _FailSender:
-        async def send(self, chat_id, text):
+        async def send(self, chat_id, text, reply_markup=None):
             raise RuntimeError("network down")
 
     fail_s = _FailSender()
@@ -148,3 +151,62 @@ async def test_notifier_failure_does_not_advance_state():
     await n_ok.tick()                    # state не продвинулся → повторная попытка
     assert len(ok_s.sent) == 1
     assert "заверш" in ok_s.sent[0][1].lower() or "done" in ok_s.sent[0][1].lower()
+
+
+# --- кнопки гейта на уведомлении awaiting_user ---
+
+def _gate_task(db, pid):
+    """Задача с гейтом на analyze (done, не approved) и pending-этапом plan после."""
+    tr = TaskRepo(db)
+    tid = tr.add(project_id=pid, name="t", goal="g", plan="", constraints="", tests="")
+    stages = build_stages(["analyze", "plan"], gated_names=["analyze"])
+    for st in stages:
+        if st["name"] == "analyze":
+            st["status"] = "done"
+    tr.update(tid, stages_json=json.dumps(stages, ensure_ascii=False))
+    return tid
+
+
+def _callbacks(markup):
+    return [btn["callback_data"]
+            for row in markup["inline_keyboard"] for btn in row]
+
+
+@pytest.mark.asyncio
+async def test_awaiting_user_notification_carries_gate_buttons():
+    db = _db()
+    pid = _add_project(db)
+    tid = _gate_task(db, pid)
+    tr = TaskRepo(db)
+    tr.set_status(tid, "running")
+    s = _Sender()
+    n = TelegramNotifier(db, s.send, ["111"])
+    await n.tick()                       # baseline — молчим
+    assert s.sent == []
+
+    tr.set_status(tid, "awaiting_user")
+    await n.tick()                       # переход → уведомление с кнопками
+    assert len(s.sent) == 1
+    _chat, text, markup = s.sent[0]
+    assert "гейт" in text
+    assert markup is not None
+    cbs = _callbacks(markup)
+    assert f"gate:ok:{tid}:analyze" in cbs
+    assert f"gate:note:{tid}:analyze" in cbs
+
+
+@pytest.mark.asyncio
+async def test_non_gate_notification_has_no_buttons():
+    """Обычные переходы (running/done/...) идут без inline-клавиатуры."""
+    db = _db()
+    pid = _add_project(db)
+    tr = TaskRepo(db)
+    tid = tr.add(project_id=pid, name="t", goal="g", plan="", constraints="", tests="")
+    tr.set_status(tid, "running")
+    s = _Sender()
+    n = TelegramNotifier(db, s.send, ["111"])
+    await n.tick()                       # baseline
+    tr.set_status(tid, "done")
+    await n.tick()
+    assert len(s.sent) == 1
+    assert s.sent[0][2] is None
