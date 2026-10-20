@@ -425,11 +425,13 @@ def build_project_router(store, registry, monitor=None,
         монитора читает БД. Статусы `queued`/`stopped` — состояния стека, в файле
         их нет, поэтому `status` для них не перезаписываем (чтобы не выбить задачу
         из очереди); stage и отметки времени синхронизируем всегда.
+
+        Та же логика синка task.json → БД работает в фоновом стек-раннере на
+        завершении прогона (см. agentmon.env.task_sync) — чтобы гейты доезжали
+        до БД без ручного refresh.
         """
-        import json
-        from pathlib import Path
         from agentmon.store.tasks import TaskRepo
-        from .task_schema import task_folder_name
+        from .task_sync import sync_task_from_file
 
         project_repo, _ = get_repos()
         project = project_repo.get(pid)
@@ -437,32 +439,9 @@ def build_project_router(store, registry, monitor=None,
             raise HTTPException(status_code=404, detail=f"нет проекта с id={pid}")
 
         task_repo = TaskRepo(store)
-        protected = {"queued", "stopped"}
         updated = 0
         for task in task_repo.list(project_id=pid):
-            folder = task_folder_name(task["id"], task.get("identifier"))
-            tj = Path(project["path"]) / "tasks" / folder / "task.json"
-            if not tj.exists():
-                continue
-            try:
-                data = json.loads(tj.read_text(encoding="utf-8"))
-            except (ValueError, OSError):
-                continue
-
-            fields = {}
-            for key in ("stage", "started_at", "finished_at"):
-                if key in data:
-                    fields[key] = data.get(key)
-            file_status = data.get("status")
-            if file_status and task.get("status") not in protected:
-                fields["status"] = file_status
-            if "stages" in data:
-                fields["stages_json"] = json.dumps(data["stages"], ensure_ascii=False)
-            if "db_update" in data:
-                fields["db_update_json"] = json.dumps(data["db_update"],
-                                                       ensure_ascii=False)
-            if fields:
-                task_repo.update(task["id"], **fields)
+            if sync_task_from_file(store, project["path"], task):
                 updated += 1
 
         return {"ok": True, "updated": updated}

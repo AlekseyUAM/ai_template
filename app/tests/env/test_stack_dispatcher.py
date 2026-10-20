@@ -6,7 +6,9 @@
 - после завершения первой задачи — вторая стартует;
 - задача вида kind='test' → monitor.start вызван с cmd, содержащим 'time.sleep'.
 """
+import json
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 
 from agentmon.store.db import connect
@@ -15,6 +17,8 @@ from agentmon.store.projects import ProjectRepo
 from agentmon.store.tasks import TaskRepo
 from agentmon.store.stacks import StackRepo
 from agentmon.env.stack_dispatcher import StackDispatcher
+from agentmon.env.task_model import build_stages
+from agentmon.env.task_schema import task_folder_name
 
 
 # ─── фейковый монитор ─────────────────────────────────────────────────────────
@@ -275,6 +279,98 @@ def test_test_kind_task_uses_cmd(tmp_path):
     assert "time.sleep" in cmd_str, f"cmd должен содержать time.sleep, получили: {payload}"
     # используется sys.executable
     assert payload[0] == sys.executable, f"первый элемент cmd должен быть {sys.executable}"
+
+
+# ─── гейты: завершение прогона на гейте ───────────────────────────────────────
+
+def _write_task_json(project_path, task_id, status, stages, identifier=""):
+    """Пишет task.json как это делает оркестратор на хосте проекта."""
+    folder = task_folder_name(task_id, identifier)
+    d = Path(project_path) / "tasks" / folder
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "task.json").write_text(
+        json.dumps({"status": status, "stage": "analyze", "stages": stages},
+                   ensure_ascii=False),
+        encoding="utf-8")
+
+
+def _gate_stages():
+    """analyze (gate) done + develop pending → overall awaiting_user."""
+    stages = build_stages(["analyze", "develop"], gated_names=["analyze"])
+    for s in stages:
+        if s["name"] == "analyze":
+            s["status"] = "done"
+    return stages
+
+
+def test_gate_completion_marks_awaiting_user_and_pauses_stack(tmp_path):
+    """Процесс агента вышел на гейт (task.json=awaiting_user) и завершился:
+    задача должна стать awaiting_user (НЕ done), этапы — подтянуться из файла,
+    стек — встать на паузу (не idle, следующая задача не стартует)."""
+    db, proj_id, t1_id, t2_id, stack_id = _seed(tmp_path)
+    mon = FakeMonitor()
+    disp = StackDispatcher(db, mon)
+
+    disp.tick()                                   # task1 → running
+    _write_task_json(tmp_path / "proj", t1_id, "awaiting_user", _gate_stages())
+    mon.set_task_status(t1_id, "done")            # процесс агента вышел 0
+    mon.clear_alive(proj_id)
+
+    disp.tick()                                   # завершение прогона task1
+
+    tr = TaskRepo(db)
+    sr = StackRepo(db)
+    assert tr.get(t1_id)["status"] == "awaiting_user", \
+        "на гейте задача должна быть awaiting_user, а не done"
+    stages = json.loads(tr.get(t1_id)["stages_json"])
+    assert any(s["name"] == "analyze" and s["status"] == "done" for s in stages), \
+        "этапы должны подтянуться из task.json"
+    assert sr.get(stack_id)["status"] == "running", "стек не должен уходить в idle на гейте"
+    assert len(mon.started) == 1, "следующая задача не должна стартовать, пока task1 на гейте"
+
+
+def test_awaiting_user_task_keeps_stack_paused_on_next_tick(tmp_path):
+    """Повторный тик, пока задача на гейте, ничего не меняет и не перезапускает."""
+    db, proj_id, t1_id, t2_id, stack_id = _seed(tmp_path)
+    mon = FakeMonitor()
+    disp = StackDispatcher(db, mon)
+
+    disp.tick()
+    _write_task_json(tmp_path / "proj", t1_id, "awaiting_user", _gate_stages())
+    mon.set_task_status(t1_id, "done")
+    mon.clear_alive(proj_id)
+    disp.tick()                                   # → awaiting_user
+    disp.tick()                                   # ещё тик — по-прежнему пауза
+
+    tr = TaskRepo(db)
+    assert tr.get(t1_id)["status"] == "awaiting_user"
+    assert len(mon.started) == 1
+
+
+def test_gate_resume_after_approve_starts_next_stage(tmp_path):
+    """После одобрения гейта (approved=True → overall planned) стек возобновляет задачу."""
+    db, proj_id, t1_id, t2_id, stack_id = _seed(tmp_path)
+    mon = FakeMonitor()
+    disp = StackDispatcher(db, mon)
+
+    disp.tick()
+    _write_task_json(tmp_path / "proj", t1_id, "awaiting_user", _gate_stages())
+    mon.set_task_status(t1_id, "done")
+    mon.clear_alive(proj_id)
+    disp.tick()                                   # awaiting_user
+
+    # пользователь одобряет гейт: approved=True → overall_status = planned
+    tr = TaskRepo(db)
+    approved = _gate_stages()
+    for s in approved:
+        if s["name"] == "analyze":
+            s["approved"] = True
+    tr.update(t1_id, stages_json=json.dumps(approved, ensure_ascii=False))
+    tr.set_status(t1_id, "planned")
+
+    disp.tick()                                   # возобновление: task1 стартует снова
+    assert len(mon.started) == 2
+    assert mon.started[1][2] == t1_id
 
 
 def test_test_kind_task_full_lifecycle(tmp_path):

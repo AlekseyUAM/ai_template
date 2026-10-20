@@ -8,6 +8,7 @@ Project-lock: задачи одного проекта не выполняютс
 до следующего тика.
 """
 
+import json
 import logging
 import sys
 import time
@@ -16,7 +17,8 @@ from types import SimpleNamespace
 from agentmon.store.projects import ProjectRepo
 from agentmon.store.tasks import TaskRepo
 from agentmon.store.stacks import StackRepo
-from agentmon.env import task_schema
+from agentmon.env import task_schema, task_sync
+from agentmon.env.task_model import overall_status
 
 logger = logging.getLogger(__name__)
 
@@ -117,6 +119,12 @@ class StackDispatcher:
             task_id = active_task["id"]
             status = active_task["status"]
 
+            if status == "awaiting_user":
+                # Задача на гейте — ждёт решения пользователя. Стек на паузе:
+                # не запускаем и не трогаем, пока гейт не одобрят (approve
+                # пересчитает overall → planned, и задача возобновится ниже).
+                return
+
             if status in {"planned", "queued"}:
                 # project-lock: если для этого проекта уже есть живой прогон — ждём
                 if self._monitor.is_alive(proj):
@@ -140,19 +148,43 @@ class StackDispatcher:
                     continue
                 # задача запущена — проверяем, не завершилась ли
                 run_status = self._monitor.task_status(task_id)
-                if run_status == "done":
-                    tr.set_status(task_id, "done")
-                    logger.debug("задача id=%s помечена done", task_id)
-                    # продолжаем цикл — сдвигаемся к следующей задаче в этом же тике
-                    continue
-                elif run_status == "failed":
+                if run_status == "failed":
                     tr.set_status(task_id, "failed")
                     logger.debug("задача id=%s помечена failed", task_id)
                     # продолжаем цикл — сдвигаемся к следующей задаче в этом же тике
                     continue
+                elif run_status == "done":
+                    # Процесс агента завершил ход. Прежде чем решать судьбу
+                    # задачи, подтягиваем task.json → БД (этапы/гейт/время) и
+                    # вычисляем реальный статус: гейтированный этап мог оставить
+                    # задачу в awaiting_user — тогда её нельзя помечать done.
+                    final = self._settle_completed(proj, active_task, tr)
+                    if final == "awaiting_user":
+                        # вышли на гейт — стек ждёт пользователя
+                        return
+                    # done/failed/иное терминальное — двигаемся к следующей задаче
+                    continue
                 else:
                     # задача ещё выполняется — ждём следующего тика
                     return
+
+    def _settle_completed(self, proj, task, tr) -> str:
+        """Прогон задачи завершился (процесс вышел 0): синхронизируем task.json
+        в БД и выставляем статус по этапам (с учётом гейтов). Возвращает
+        итоговый статус."""
+        task_id = task["id"]
+        task_sync.sync_task_from_file(self._store, proj.path, task)
+        fresh = tr.get(task_id) or task
+        try:
+            stages = json.loads(fresh.get("stages_json") or "[]")
+        except (ValueError, TypeError):
+            stages = []
+        # overall_status([]) == 'done' — задачи без этапов (в т.ч. kind='test')
+        # завершаются обычным образом.
+        status = overall_status(stages)
+        tr.set_status(task_id, status)
+        logger.debug("задача id=%s завершила прогон → %s", task_id, status)
+        return status
 
     def _start_task(self, proj, task, tr) -> None:
         """Запускает задачу через monitor и обновляет её статус."""
