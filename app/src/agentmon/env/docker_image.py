@@ -3,8 +3,11 @@
 Образ содержит только платформу 1С (из указанного дистрибутива) и рантайм
 агента. Зависимостей от deps/docker_1c_sandbox нет.
 """
+import os
 import re
+import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 AGENT_IMAGE_PREFIX = "ai1c-agent"
@@ -33,3 +36,38 @@ def image_exists(tag: str, docker_host: str | None = None, run=subprocess.run) -
     r = run(_docker_argv(docker_host, ["images", "-q", tag]),
             capture_output=True, text=True)
     return r.returncode == 0 and bool((r.stdout or "").strip())
+
+
+def build_agent_image(distr_path, platform_version, docker_host=None,
+                      popen=subprocess.Popen):
+    """Собрать образ ai1c-agent:<версия> из дистрибутива платформы.
+
+    Генератор: построчно отдаёт вывод docker build. По завершении при
+    ненулевом коде — RuntimeError. Некорректный дистрибутив — ValueError.
+    """
+    if not distr_path or not os.path.isfile(distr_path):
+        raise ValueError(f"дистрибутив не найден: {distr_path!r}")
+    if not distr_path.lower().endswith(".zip"):
+        raise ValueError(f"дистрибутив должен быть .zip: {distr_path!r}")
+
+    tag = image_tag(platform_version)
+    ctx = tempfile.mkdtemp(prefix="ai1c-build-")
+    try:
+        staged = os.path.join(ctx, "distr.zip")
+        try:
+            os.link(distr_path, staged)      # дёшево: без копирования многогиг .zip
+        except OSError:
+            shutil.copy2(distr_path, staged)  # другой раздел (EXDEV) — копируем
+        argv = _docker_argv(docker_host, [
+            "build", "-t", tag, "-f", str(DOCKERFILE_PATH), ctx,
+        ])
+        proc = popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                     text=True)
+        if proc.stdout is not None:
+            for line in proc.stdout:
+                yield line
+        rc = proc.wait()
+        if rc != 0:
+            raise RuntimeError(f"docker build вернул код {rc} (образ {tag})")
+    finally:
+        shutil.rmtree(ctx, ignore_errors=True)
