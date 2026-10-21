@@ -190,6 +190,14 @@
         <div id="dockerFields" hidden>
           <label><span class="label-text">Образ контейнера</span>
             <input id="dockerImage" type="text" placeholder="ai1c-agent:latest"></label>
+          <!-- Дистрибутив платформы: показывается по check-image (нет образа нужной версии) -->
+          <div id="distrFields" style="display:none">
+            <label><span class="label-text">Путь к дистрибутиву платформы (.zip) <span class="req">*</span></span>
+              <input type="text" id="distrPath" placeholder="/путь/к/server64_8_3_27_1786.zip"></label>
+            <p id="distrHint" class="mcp-hint" style="margin-top:8px;">
+              Образа этой версии ещё нет — укажите дистрибутив, образ соберётся при создании проекта.
+            </p>
+          </div>
           <label><span class="label-text">Docker-хост (удалённый, необязательно)</span>
             <input id="dockerDaemonHost" type="text" placeholder="server.example.com"></label>
           <label><span class="label-text">Пользователь</span>
@@ -237,16 +245,6 @@
           <input id="licenseServer" type="text" placeholder="10.0.0.5 (NETHASP), необязательно">
         </label>
       </div>
-    </div>
-
-    <!-- Дистрибутив платформы (только для docker, показывается по check-image) -->
-    <div id="distrFields" style="display:none">
-      <label for="distrPath">
-        <span class="label-text">Путь к дистрибутиву платформы (.zip)</span>
-        <input type="text" id="distrPath"
-               placeholder="/путь/к/server64_8_3_27_1786.zip" />
-      </label>
-      <small id="distrHint" class="mcp-hint">Нужен только для первой сборки образа этой версии.</small>
     </div>
 
     <!-- База -->
