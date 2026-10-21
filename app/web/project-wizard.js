@@ -57,6 +57,19 @@ document.addEventListener("DOMContentLoaded", async () => {
         document.getElementById("platformGrid").appendChild(versionLabel);
       }
     }
+    // Для docker каталог проекта и путь к платформе — это пути ВНУТРИ контейнера;
+    // отражаем это в подписях (для local/ssh — пути на хосте, подпись исходная).
+    const inContainer = v === "docker";
+    const pathLbl = document.getElementById("projectPathLabelText");
+    if (pathLbl) {
+      pathLbl.textContent = inContainer ? "Каталог проекта в контейнере"
+                                        : "Каталог проекта";
+    }
+    const platLbl = document.getElementById("platformDirLabelText");
+    if (platLbl) {
+      platLbl.textContent = inContainer ? "Путь к платформе 1С в контейнере"
+                                        : "Путь к платформе 1С";
+    }
     // При переключении на docker предзаполняем пустые поля path и platformDir
     // разумными дефолтами для контейнера. Делаем это только здесь (при смене
     // бэкенда), не при каждом вводе, чтобы не затирать уже введённые значения.

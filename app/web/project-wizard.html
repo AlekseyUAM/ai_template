@@ -145,26 +145,6 @@
 
   <div class="wizard-container">
 
-    <!-- Проект -->
-    <div class="section">
-      <h2>Проект</h2>
-      <div class="field-group">
-        <label>
-          <span class="label-text">Имя проекта <span class="req">*</span></span>
-          <input id="name" type="text" placeholder="demo" required>
-        </label>
-        <div id="nameError"></div>
-        <label>
-          <span class="label-text">Каталог проекта <span class="req">*</span></span>
-          <input id="path" type="text" placeholder="/root/projects/demo или C:\work\demo" required>
-        </label>
-        <label>
-          <span class="label-text">Web-публикация</span>
-          <input id="webPublication" type="text" placeholder="https://example.com">
-        </label>
-      </div>
-    </div>
-
     <!-- Размещение -->
     <div class="section">
       <h2>Размещение</h2>
@@ -213,6 +193,26 @@
       </div>
     </div>
 
+    <!-- Проект -->
+    <div class="section">
+      <h2>Проект</h2>
+      <div class="field-group">
+        <label>
+          <span class="label-text">Имя проекта <span class="req">*</span></span>
+          <input id="name" type="text" placeholder="demo" required>
+        </label>
+        <div id="nameError"></div>
+        <label>
+          <span class="label-text"><span id="projectPathLabelText">Каталог проекта</span> <span class="req">*</span></span>
+          <input id="path" type="text" placeholder="/root/projects/demo или C:\work\demo" required>
+        </label>
+        <label>
+          <span class="label-text">Web-публикация</span>
+          <input id="webPublication" type="text" placeholder="https://example.com">
+        </label>
+      </div>
+    </div>
+
     <!-- Разработчик -->
     <div class="section">
       <h2>Разработчик</h2>
@@ -233,7 +233,7 @@
       <h2>Платформа</h2>
       <div id="platformGrid" class="field-group grid2">
         <label>
-          <span class="label-text">Путь к платформе 1С <span class="req">*</span></span>
+          <span class="label-text"><span id="platformDirLabelText">Путь к платформе 1С</span> <span class="req">*</span></span>
           <input id="platformDir" type="text" placeholder="/opt/1cv8 или C:\Program Files\1c\1cv8.exe" required>
         </label>
         <label id="platformVersionLabel">

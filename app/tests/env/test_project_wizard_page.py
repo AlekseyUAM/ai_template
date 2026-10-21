@@ -154,3 +154,23 @@ def test_js_relocates_version_into_docker_block():
     j = _js()
     assert "dockerVersionSlot" in j, "syncBackend не переносит версию в docker-блок"
     assert "platformVersionLabel" in j, "syncBackend не берёт label версии по id"
+
+
+# ── docker: порядок секций и контейнерные подписи ────────────────────────────
+
+def test_placement_section_before_project_section():
+    h = _html()
+    assert h.index("<!-- Размещение -->") < h.index("<!-- Проект -->"), \
+        "Секция «Размещение» должна идти выше «Проект»"
+
+
+def test_container_aware_label_spans_present():
+    h = _html()
+    assert 'id="projectPathLabelText"' in h, "Нет span подписи каталога проекта"
+    assert 'id="platformDirLabelText"' in h, "Нет span подписи пути к платформе"
+
+
+def test_js_sets_container_labels_for_docker():
+    j = _js()
+    assert "Каталог проекта в контейнере" in j
+    assert "Путь к платформе 1С в контейнере" in j
