@@ -394,6 +394,107 @@ def test_update_env_stream_404(tmp_path):
     assert r.status_code == 404
 
 
+# ─── docker create ────────────────────────────────────────────────────────────
+
+def _docker_client(tmp_path, *, exists, build_lines=None, build_rc_ok=True):
+    """TestClient с docker-бэкендом и инъекцией image/build функций.
+
+    Провиженинг docker идёт через RecordingProvisioner (без реального docker).
+    """
+    from agentmon.backends import RunResult
+
+    reg_db = open_db(tmp_path / "reg.sqlite")
+    registry = ProjectRegistry(reg_db)
+    queue = TaskQueue(reg_db)
+
+    class RecProv:
+        def __init__(self): self.runs = []
+        def write_text(self, p, c): pass
+        def write_bytes(self, p, d): pass
+        def put_tree(self, s, d, skip=None): pass
+        def mkdirs(self, paths): pass
+        def exists(self, p): return False
+        def is_file(self, p): return False
+        def is_empty_dir(self, p): return True
+        def read_text(self, p): return ""
+        def which(self, t): return "/usr/bin/" + t
+        def python_cmd(self): return ["python3"]
+        def venv_python(self, d): return d + "/.venv/bin/python"
+        def tempdir(self): return "/tmp"
+        def run(self, cmd, cwd=None, timeout=None):
+            self.runs.append(cmd); return RunResult(0, "", "")
+
+    prov = RecProv()
+
+    class Backends:
+        def get(self, project):
+            return SimpleNamespace(provisioner=prov)
+
+    mon = Monitor(registry, Backends(), generating_window=10.0, now_fn=lambda: 1.0)
+    store = connect(str(tmp_path / "store.db")); init_schema(store)
+
+    def fake_exists(tag, docker_host=None, run=None):
+        return exists
+
+    def fake_build(distr_path, platform_version, docker_host=None, popen=None):
+        for ln in (build_lines or []):
+            yield ln
+        if not build_rc_ok:
+            raise RuntimeError("build failed")
+
+    app = create_app(registry=registry, queue=queue, monitor=mon, store=store,
+                     image_exists_fn=fake_exists, build_image_fn=fake_build)
+    return TestClient(app), registry
+
+
+def _docker_body(tmp_path, **extra):
+    d = tmp_path / "proj"; d.mkdir(exist_ok=True)
+    body = {
+        "name": "dockerproj", "path": str(d),
+        "identifier": "dev", "email": "d@e.x",
+        "platform_version": "8.3.27",
+        "db_connection": "", "backend": "docker",
+        "conn": {}, "install_tools": False, "git_init": False,
+    }
+    body.update(extra)
+    return body
+
+
+def test_docker_create_requires_distr_when_no_image(tmp_path):
+    c, _ = _docker_client(tmp_path, exists=False)
+    r = c.post("/api/env/projects/create", json=_docker_body(tmp_path))
+    assert r.status_code == 400
+    assert "дистрибутив" in r.json()["detail"].lower()
+
+
+def test_docker_create_sets_image_in_conn(tmp_path):
+    c, registry = _docker_client(tmp_path, exists=True)
+    r = c.post("/api/env/projects/create", json=_docker_body(tmp_path))
+    assert r.status_code == 200
+    entry = next(p for p in registry.list() if p.name == "dockerproj")
+    assert (entry.conn or {}).get("image") == "ai1c-agent:8.3.27"
+
+
+def test_docker_create_stream_runs_build_when_missing(tmp_path):
+    c, _ = _docker_client(tmp_path, exists=False,
+                          build_lines=["Step 1/5\n", "Successfully built\n"])
+    body = _docker_body(tmp_path, distr_path="/tmp/server64_8_3_27.zip")
+    r = c.post("/api/env/projects/create/stream", json=body)
+    assert r.status_code == 200
+    text = r.text
+    assert "Step 1/5" in text
+    assert "Successfully built" in text
+    assert "✓ Проект создан" in text
+
+
+def test_docker_create_stream_build_failure_marks_error(tmp_path):
+    c, _ = _docker_client(tmp_path, exists=False, build_lines=["boom\n"],
+                          build_rc_ok=False)
+    body = _docker_body(tmp_path, distr_path="/tmp/server64_8_3_27.zip")
+    r = c.post("/api/env/projects/create/stream", json=body)
+    assert "✗" in r.text
+
+
 # ─── update-env backend-aware (ssh/docker) ────────────────────────────────────
 
 class _RecordingProvisioner:

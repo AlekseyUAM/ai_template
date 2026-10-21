@@ -109,8 +109,11 @@ def make_client(tmp_path, monitor):
     queue = TaskQueue(registry_db)
     store = connect(str(tmp_path / "store.db"))
     init_schema(store)
+    # Инжектируем стаб: образ всегда существует — тесты проверяют provisioner/flow,
+    # а не логику сборки образа (это покрыто test_project_api.py).
     app = create_app(registry=registry, queue=queue, monitor=monitor,
-                     store=store)
+                     store=store,
+                     image_exists_fn=lambda tag, docker_host=None, **kw: True)
     return TestClient(app), registry, store
 
 

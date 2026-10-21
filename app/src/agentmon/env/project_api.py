@@ -123,10 +123,26 @@ def build_project_router(store, registry, monitor=None,
 
         Возвращает (pid, config, prov, backend, conn). Бросает HTTPException при ошибке ввода.
         """
-        # Для docker-бэкенда платформа вшита в образ — применяем дефолтный путь,
-        # если мастер прислал пустое значение (single source of truth: docker.py).
-        if body.get("backend") == "docker" and not body.get("platform_dir"):
-            body = {**body, "platform_dir": DEFAULT_PLATFORM_DIR}
+        # Docker: образ тегируется версией платформы и переиспользуется.
+        # platform_dir вшит в образ (single source of truth: docker.py).
+        docker_build = None  # (distr_path, version, docker_host) если нужна сборка
+        if body.get("backend") == "docker":
+            if not body.get("platform_dir"):
+                body = {**body, "platform_dir": DEFAULT_PLATFORM_DIR}
+            tag = docker_image.image_tag(body.get("platform_version", ""))
+            conn = dict(body.get("conn") or {})
+            conn["image"] = tag
+            body = {**body, "conn": conn}
+            docker_host = docker_host_from_conn(conn)
+            if not image_exists_fn(tag, docker_host=docker_host):
+                if not body.get("distr_path"):
+                    raise HTTPException(
+                        status_code=400,
+                        detail=("для docker нужно указать путь к дистрибутиву "
+                                "платформы: образа %s ещё нет" % tag),
+                    )
+                docker_build = (body["distr_path"],
+                                body.get("platform_version", ""), docker_host)
 
         missing = [f for f in _REQUIRED_FIELDS if not body.get(f)]
         absent = [f for f in _PRESENT_FIELDS if f not in body]
@@ -188,7 +204,7 @@ def build_project_router(store, registry, monitor=None,
             agents=[AgentModel(**a) for a in body.get("agents", [])],
             license_server=body.get("license_server"),
         )
-        return pid, config, prov, backend, conn
+        return pid, config, prov, backend, conn, docker_build
 
     def _install_iter(config, body, prov, backend, conn):
         return install_environment(
@@ -208,7 +224,12 @@ def build_project_router(store, registry, monitor=None,
 
     @router.post("/api/env/projects/create")
     def create_project(body: dict):
-        pid, config, prov, backend, conn = _prepare_install(body)
+        pid, config, prov, backend, conn, docker_build = _prepare_install(body)
+        if docker_build is not None:
+            # собрать образ до установки окружения; лог не стримим (блокирующий путь)
+            for _ in build_image_fn(docker_build[0], docker_build[1],
+                                    docker_host=docker_build[2]):
+                pass
         events = list(_install_iter(config, body, prov, backend, conn))
         project_repo, _ = get_repos()
         project = project_repo.get(pid)
@@ -219,12 +240,17 @@ def build_project_router(store, registry, monitor=None,
     @router.post("/api/env/projects/create/stream")
     def create_project_stream(body: dict):
         # Валидация и запись в БД — до стрима (чтобы 400 возвращался статусом)
-        pid, config, prov, backend, conn = _prepare_install(body)
+        pid, config, prov, backend, conn, docker_build = _prepare_install(body)
 
         def gen():
             yield f"▶ Создание проекта «{config.project_name}» ({config.project_dir})\n"
             failed = False
             try:
+                if docker_build is not None:
+                    yield f"[образ] сборка ai1c-agent:{docker_build[1]} из дистрибутива\n"
+                    for line in build_image_fn(docker_build[0], docker_build[1],
+                                               docker_host=docker_build[2]):
+                        yield line
                 for ev in _install_iter(config, body, prov, backend, conn):
                     detail = f" {ev.detail}" if ev.detail else ""
                     yield f"[{ev.step}] {ev.status}{detail}\n"
