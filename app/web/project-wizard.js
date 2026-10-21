@@ -57,6 +57,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   }
   backendSel.addEventListener("change", syncBackend);
+  backendSel.addEventListener("change", refreshDistrField);
+  document.getElementById("platformVersion")
+    ?.addEventListener("change", refreshDistrField);
   syncBackend();
 });
 
@@ -156,6 +159,37 @@ function readConn() {
     return conn;
   }
   return null;
+}
+
+// ─── Проверка наличия docker-образа (check-image) ────────────────────────────
+
+async function refreshDistrField() {
+  const backend = document.getElementById("backend").value;
+  const distrFields = document.getElementById("distrFields");
+  const platformVersion =
+    (document.getElementById("platformVersion")?.value || "").trim();
+  if (backend !== "docker" || !platformVersion) {
+    distrFields.style.display = "none";
+    return;
+  }
+  try {
+    const resp = await fetch("/api/env/projects/check-image", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        platform_version: platformVersion,
+        backend: backend,
+        conn: readConn(),
+      }),
+    });
+    const data = await resp.json();
+    // образа нет → поле обязательно и видимо; есть → прячем
+    distrFields.style.display = data.exists ? "none" : "block";
+    document.getElementById("distrPath").required = !data.exists;
+  } catch (e) {
+    // при ошибке проверки показываем поле (безопаснее требовать дистрибутив)
+    distrFields.style.display = "block";
+  }
 }
 
 // ─── Проверка доступа к базе ───────────────────────────────────────────────────
@@ -379,6 +413,7 @@ async function createProject() {
     git_init: document.getElementById("gitInit").checked,
     update: false,
   };
+  body.distr_path = (document.getElementById("distrPath")?.value || "").trim();
   const conn = readConn();
   if (conn) body.conn = conn;
 

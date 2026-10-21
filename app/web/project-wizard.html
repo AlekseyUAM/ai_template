@@ -239,6 +239,16 @@
       </div>
     </div>
 
+    <!-- Дистрибутив платформы (только для docker, показывается по check-image) -->
+    <div id="distrFields" style="display:none">
+      <label for="distrPath">
+        <span class="label-text">Путь к дистрибутиву платформы (.zip)</span>
+        <input type="text" id="distrPath"
+               placeholder="/путь/к/server64_8_3_27_1786.zip" />
+      </label>
+      <small id="distrHint" class="mcp-hint">Нужен только для первой сборки образа этой версии.</small>
+    </div>
+
     <!-- База -->
     <div class="section">
       <h2>База</h2>

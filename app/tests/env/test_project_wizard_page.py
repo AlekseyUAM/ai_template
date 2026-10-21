@@ -118,3 +118,21 @@ def test_js_read_conn_docker_daemon_host():
     assert "conn.host" in js, (
         "readConn in project-wizard.js must set conn.host for remote daemon"
     )
+
+
+# ── distr / check-image (docker) ─────────────────────────────────────────────
+
+def test_html_has_distr_path_input():
+    assert 'id="distrPath"' in _html(), "Нет поля distrPath в project-wizard.html"
+
+
+def test_html_has_distr_fields_container():
+    assert 'id="distrFields"' in _html(), "Нет контейнера distrFields"
+
+
+def test_js_calls_check_image_endpoint():
+    assert "/api/env/projects/check-image" in _js()
+
+
+def test_js_sends_distr_path_on_create():
+    assert "distr_path" in _js()
