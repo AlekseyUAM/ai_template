@@ -745,3 +745,29 @@ def test_docker_create_stream_skips_empty_check_before_build(tmp_path):
     assert r.status_code == 200
     assert "Step 1/5" in r.text
     assert "✓ Проект создан" in r.text
+
+
+def test_create_duplicate_rejected_with_400(tmp_path):
+    """Повторное создание проекта с тем же именем/путём → понятный 400, не 500.
+
+    Проверяем на docker-бэкенде (exists=True → без сборки): там гейт пустоты
+    каталога пропущен, поэтому срабатывает именно проверка дубля.
+    """
+    c, _ = _docker_client(tmp_path, exists=True)
+    body = _docker_body(tmp_path)
+    assert c.post("/api/env/projects/create", json=body).status_code == 200
+    r = c.post("/api/env/projects/create", json=body)
+    assert r.status_code == 400
+    assert "уже существует" in r.json()["detail"]
+
+
+def test_docker_create_stream_rolls_back_project_on_failure(tmp_path):
+    """Провал сборки в стриме должен откатить стаб проекта из БД, иначе
+    повторная попытка упрётся в UNIQUE(name/path) → 500."""
+    c, _ = _docker_client(tmp_path, exists=False, build_lines=["boom\n"],
+                          build_rc_ok=False)
+    body = _docker_body(tmp_path, distr_path="/tmp/server64_8_3_27.zip")
+    r = c.post("/api/env/projects/create/stream", json=body)
+    assert "✗" in r.text
+    names = [p["name"] for p in c.get("/api/env/projects").json()["projects"]]
+    assert "dockerproj" not in names        # стаб откатан

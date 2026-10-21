@@ -176,6 +176,15 @@ def build_project_router(store, registry, monitor=None,
             )
 
         project_repo, mcp_repo = get_repos()
+        # Явная проверка дубля → понятный 400 вместо IntegrityError/500 (name и
+        # path в схеме UNIQUE). Ловит и стаб, оставшийся от прошлой ошибки создания.
+        for existing in project_repo.list():
+            if existing["name"] == body["name"] or existing["path"] == body["path"]:
+                raise HTTPException(
+                    status_code=400,
+                    detail=("проект с таким именем или каталогом уже существует: "
+                            f"{existing['name']} ({existing['path']})"),
+                )
         db_kind = body.get("db_kind") or infer_db_kind(body.get("db_connection", ""))
         pid = project_repo.add(
             name=body["name"], path=body["path"],
@@ -229,17 +238,42 @@ def build_project_router(store, registry, monitor=None,
             prov=prov,
         )
 
+    def _rollback_project(pid, path=""):
+        """Удалить незавершённый проект (стаб) при ошибке создания.
+
+        Иначе строка в БД (name/path UNIQUE) заблокирует повторную попытку —
+        следующий create того же проекта упрётся в дубль. Идемпотентно и тихо.
+        """
+        try:
+            project_repo, mcp_repo = get_repos()
+            try:
+                mcp_repo.set_for_project(pid, [])
+            except Exception:
+                pass
+            project_repo.delete(pid)
+            if path:
+                for p in registry.list():
+                    if p.path == path:
+                        registry.delete(p.id)
+                        break
+        except Exception:
+            pass
+
     # ── create project (блокирующе) ───────────────────────────────────────────
 
     @router.post("/api/env/projects/create")
     def create_project(body: dict):
         pid, config, prov, backend, conn, docker_build = _prepare_install(body)
-        if docker_build is not None:
-            # собрать образ до установки окружения; лог не стримим (блокирующий путь)
-            for _ in build_image_fn(docker_build[0], docker_build[1],
-                                    docker_host=docker_build[2]):
-                pass
-        events = list(_install_iter(config, body, prov, backend, conn))
+        try:
+            if docker_build is not None:
+                # собрать образ до установки окружения; лог не стримим
+                for _ in build_image_fn(docker_build[0], docker_build[1],
+                                        docker_host=docker_build[2]):
+                    pass
+            events = list(_install_iter(config, body, prov, backend, conn))
+        except Exception:
+            _rollback_project(pid, config.project_dir)
+            raise
         project_repo, _ = get_repos()
         project = project_repo.get(pid)
         return {"project": project, "events": [asdict(e) for e in events]}
@@ -268,6 +302,9 @@ def build_project_router(store, registry, monitor=None,
             except Exception as exc:                       # noqa: BLE001
                 failed = True
                 yield f"✗ Ошибка: {exc}\n"
+            if failed:
+                # откатить стаб проекта, иначе повторная попытка упрётся в UNIQUE
+                _rollback_project(pid, config.project_dir)
             yield ("\n✓ Проект создан\n" if not failed
                    else "\n✗ Установка завершилась с ошибкой\n")
 
