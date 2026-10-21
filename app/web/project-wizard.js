@@ -166,10 +166,23 @@ function readConn() {
 async function refreshDistrField() {
   const backend = document.getElementById("backend").value;
   const distrFields = document.getElementById("distrFields");
+  const distrPath = document.getElementById("distrPath");
+  // Не docker — поле не нужно; снимаем required, иначе скрытое required-поле
+  // заблокирует сабмит формы.
+  if (backend !== "docker") {
+    distrFields.style.display = "none";
+    distrPath.required = false;
+    return;
+  }
   const platformVersion =
     (document.getElementById("platformVersion")?.value || "").trim();
-  if (backend !== "docker" || !platformVersion) {
-    distrFields.style.display = "none";
+  // Версия ещё не задана — образ проверить нельзя (тег зависит от версии).
+  // Показываем поле и требуем дистрибутив: это безопасный дефолт, пользователь
+  // сразу видит, что для docker нужен дистрибутив. После ввода версии ниже
+  // сработает check-image и спрячет поле, если образ уже собран.
+  if (!platformVersion) {
+    distrFields.style.display = "block";
+    distrPath.required = true;
     return;
   }
   try {
