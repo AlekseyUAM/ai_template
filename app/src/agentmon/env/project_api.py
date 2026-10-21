@@ -11,7 +11,8 @@ from .project_checks import (validate_name, requirements, check_db,
                              current_env_version, is_empty_dir, infer_db_kind)
 from .task_schema import task_folder_name
 from ..backends.local import LocalProvisioner
-from ..backends.docker import DEFAULT_PLATFORM_DIR
+from ..backends.docker import DEFAULT_PLATFORM_DIR, docker_host_from_conn
+from . import docker_image
 
 
 _REQUIRED_FIELDS = ("name", "path", "identifier", "email",
@@ -21,7 +22,9 @@ _PRESENT_FIELDS = ("db_connection",)
 
 
 def build_project_router(store, registry, monitor=None,
-                         popen=subprocess.Popen) -> APIRouter:
+                         popen=subprocess.Popen,
+                         image_exists_fn=docker_image.image_exists,
+                         build_image_fn=docker_image.build_agent_image) -> APIRouter:
     """Строит APIRouter для /api/env/projects/* и /api/env/version.
 
     store — объект Db (P1.1) или None.
@@ -95,6 +98,19 @@ def build_project_router(store, registry, monitor=None,
             password=body.get("password", ""),
         )
         return result
+
+    # ── check-image ──────────────────────────────────────────────────────────
+
+    @router.post("/api/env/projects/check-image")
+    def check_image_route(body: dict):
+        """Есть ли уже образ ai1c-agent:<версия> на нужном docker-демоне."""
+        tag = docker_image.image_tag(body.get("platform_version", ""))
+        docker_host = docker_host_from_conn(body.get("conn"))
+        try:
+            exists = bool(image_exists_fn(tag, docker_host=docker_host))
+        except Exception:                                   # noqa: BLE001
+            exists = False
+        return {"exists": exists, "tag": tag}
 
     # ── version ──────────────────────────────────────────────────────────────
 

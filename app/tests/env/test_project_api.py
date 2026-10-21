@@ -542,6 +542,54 @@ def test_update_env_local_project_uses_local_provisioner(tmp_path):
     assert pr.get(pid)["env_version"] != "0.0.0"
 
 
+def test_check_image_true(tmp_path):
+    reg_db = open_db(tmp_path / "reg.sqlite")
+    registry = ProjectRegistry(reg_db)
+    queue = TaskQueue(reg_db)
+    mon = Monitor(registry, FakeBackends(None), generating_window=10.0,
+                  now_fn=lambda: 1.0)
+    store = connect(str(tmp_path / "store.db")); init_schema(store)
+    calls = {}
+
+    def fake_exists(tag, docker_host=None, run=None):
+        calls["tag"] = tag
+        calls["docker_host"] = docker_host
+        return True
+
+    app = create_app(registry=registry, queue=queue, monitor=mon, store=store,
+                     image_exists_fn=fake_exists)
+    c = TestClient(app)
+    r = c.post("/api/env/projects/check-image",
+               json={"platform_version": "8.3.27", "backend": "docker"})
+    assert r.status_code == 200
+    assert r.json() == {"exists": True, "tag": "ai1c-agent:8.3.27"}
+    assert calls["tag"] == "ai1c-agent:8.3.27"
+
+
+def test_check_image_false_passes_docker_host(tmp_path):
+    reg_db = open_db(tmp_path / "reg.sqlite")
+    registry = ProjectRegistry(reg_db)
+    queue = TaskQueue(reg_db)
+    mon = Monitor(registry, FakeBackends(None), generating_window=10.0,
+                  now_fn=lambda: 1.0)
+    store = connect(str(tmp_path / "store.db")); init_schema(store)
+    seen = {}
+
+    def fake_exists(tag, docker_host=None, run=None):
+        seen["docker_host"] = docker_host
+        return False
+
+    app = create_app(registry=registry, queue=queue, monitor=mon, store=store,
+                     image_exists_fn=fake_exists)
+    c = TestClient(app)
+    r = c.post("/api/env/projects/check-image", json={
+        "platform_version": "8.3.27", "backend": "docker",
+        "conn": {"host": "srv", "user": "u"},
+    })
+    assert r.json()["exists"] is False
+    assert seen["docker_host"] == "ssh://u@srv"
+
+
 def test_update_env_stream_ssh_uses_recording_provisioner(tmp_path):
     """update-env/stream для ssh-проекта разрешает provisioner из backend."""
     rec = _RecordingProvisioner()

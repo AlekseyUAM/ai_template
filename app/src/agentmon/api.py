@@ -20,7 +20,7 @@ class _NoCacheStatic(StaticFiles):
 
 
 def create_app(registry, queue, monitor, lifespan=None, store=None,
-               popen=None):
+               popen=None, image_exists_fn=None, build_image_fn=None):
     app = FastAPI(lifespan=lifespan)
     from .env.api import build_env_router
     app.include_router(build_env_router(registry))
@@ -30,6 +30,10 @@ def create_app(registry, queue, monitor, lifespan=None, store=None,
     router_kwargs = {}
     if popen is not None:
         router_kwargs["popen"] = popen
+    if image_exists_fn is not None:
+        router_kwargs["image_exists_fn"] = image_exists_fn
+    if build_image_fn is not None:
+        router_kwargs["build_image_fn"] = build_image_fn
     app.include_router(build_project_router(store, registry, monitor, **router_kwargs))
     from .env.task_api2 import build_task2_router
     app.include_router(build_task2_router(store))
