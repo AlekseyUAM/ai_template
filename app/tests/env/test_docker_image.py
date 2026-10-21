@@ -116,6 +116,7 @@ def test_build_streams_lines_and_builds_tag(tmp_path):
     argv = fake.calls[0]
     assert argv[0] == "docker"
     assert "build" in argv
+    assert "--progress=plain" in argv   # лог построчно, без ANSI-перерисовки
     assert "-t" in argv and "ai1c-agent:8.3.27" in argv
     assert "-f" in argv and str(di.DOCKERFILE_PATH) in argv
 

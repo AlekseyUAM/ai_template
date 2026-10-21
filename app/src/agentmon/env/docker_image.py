@@ -92,8 +92,10 @@ def build_agent_image(distr_path, platform_version, docker_host=None,
             os.link(distr_path, staged)      # дёшево: без копирования многогиг .zip
         except OSError:
             shutil.copy2(distr_path, staged)  # другой раздел (EXDEV) — копируем
+        # --progress=plain: buildkit отдаёт лог построчно (по событию), без
+        # ANSI/\r-перерисовки «на месте» — иначе стрим слипается в одну строку.
         argv = _docker_argv(docker_host, [
-            "build", "-t", tag, "-f", str(DOCKERFILE_PATH), ctx,
+            "build", "--progress=plain", "-t", tag, "-f", str(DOCKERFILE_PATH), ctx,
         ])
         for attempt in range(1, retries + 1):
             tail: list[str] = []
