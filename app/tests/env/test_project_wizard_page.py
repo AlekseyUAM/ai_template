@@ -136,3 +136,21 @@ def test_js_calls_check_image_endpoint():
 
 def test_js_sends_distr_path_on_create():
     assert "distr_path" in _js()
+
+
+# ── docker: версия платформы переносится в docker-блок ───────────────────────
+
+def test_html_has_docker_version_slot():
+    assert 'id="dockerVersionSlot"' in _html(), "Нет якоря dockerVersionSlot"
+
+
+def test_html_version_label_and_grid_have_ids():
+    h = _html()
+    assert 'id="platformVersionLabel"' in h, "Нет id у label версии платформы"
+    assert 'id="platformGrid"' in h, "Нет id у грида секции «Платформа»"
+
+
+def test_js_relocates_version_into_docker_block():
+    j = _js()
+    assert "dockerVersionSlot" in j, "syncBackend не переносит версию в docker-блок"
+    assert "platformVersionLabel" in j, "syncBackend не берёт label версии по id"

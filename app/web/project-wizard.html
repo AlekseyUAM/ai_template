@@ -188,6 +188,8 @@
             <input id="sshKeyPath" type="text" placeholder="~/.ssh/id_ed25519"></label>
         </div>
         <div id="dockerFields" hidden>
+          <!-- Версия платформы для docker — переносится сюда из секции «Платформа» (см. syncBackend) -->
+          <div id="dockerVersionSlot"></div>
           <label><span class="label-text">Образ контейнера</span>
             <input id="dockerImage" type="text" placeholder="ai1c-agent:latest"></label>
           <!-- Дистрибутив платформы: показывается по check-image (нет образа нужной версии) -->
@@ -229,12 +231,12 @@
     <!-- Платформа -->
     <div class="section">
       <h2>Платформа</h2>
-      <div class="field-group grid2">
+      <div id="platformGrid" class="field-group grid2">
         <label>
           <span class="label-text">Путь к платформе 1С <span class="req">*</span></span>
           <input id="platformDir" type="text" placeholder="/opt/1cv8 или C:\Program Files\1c\1cv8.exe" required>
         </label>
-        <label>
+        <label id="platformVersionLabel">
           <span class="label-text">Версия платформы <span class="req">*</span></span>
           <input id="platformVersion" type="text" placeholder="8.3.25" required>
         </label>

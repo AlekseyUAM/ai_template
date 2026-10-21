@@ -46,6 +46,17 @@ document.addEventListener("DOMContentLoaded", async () => {
     const v = backendSel.value;
     sshFields.hidden = v !== "ssh";
     dockerFields.hidden = v !== "docker";
+    // Версия платформы для docker живёт в начале docker-блока (она определяет
+    // тег образа ai1c-agent:<версия> и нужна для check-image); для local/ssh —
+    // в секции «Платформа». Переносим один и тот же инпут, без дублей/рассинхрона.
+    const versionLabel = document.getElementById("platformVersionLabel");
+    if (versionLabel) {
+      if (v === "docker") {
+        document.getElementById("dockerVersionSlot").appendChild(versionLabel);
+      } else {
+        document.getElementById("platformGrid").appendChild(versionLabel);
+      }
+    }
     // При переключении на docker предзаполняем пустые поля path и platformDir
     // разумными дефолтами для контейнера. Делаем это только здесь (при смене
     // бэкенда), не при каждом вводе, чтобы не затирать уже введённые значения.
