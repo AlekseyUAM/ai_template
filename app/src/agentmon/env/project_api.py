@@ -163,7 +163,13 @@ def build_project_router(store, registry, monitor=None,
         conn = body.get("conn")
         prov = _provisioner_for(backend, conn, body.get("path", ""))
 
-        if not is_empty_dir(prov, body["path"]):
+        # Для docker каталог проекта — это том внутри контейнера. Проверить его
+        # пустоту до сборки образа нельзя: is_empty_dir поднимает контейнер
+        # (_ensure → container.ensure), а образа ai1c-agent:<версия> ещё нет →
+        # хук _build бросает RuntimeError (→ 500). Том нового docker-проекта пуст
+        # по построению, образ соберётся следующим шагом — поэтому для docker
+        # предварительный гейт пустоты пропускаем.
+        if backend != "docker" and not is_empty_dir(prov, body["path"]):
             raise HTTPException(
                 status_code=400,
                 detail=f"каталог проекта должен быть пустым: {body['path']}",

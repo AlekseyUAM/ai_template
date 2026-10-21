@@ -396,10 +396,13 @@ def test_update_env_stream_404(tmp_path):
 
 # ─── docker create ────────────────────────────────────────────────────────────
 
-def _docker_client(tmp_path, *, exists, build_lines=None, build_rc_ok=True):
+def _docker_client(tmp_path, *, exists, build_lines=None, build_rc_ok=True,
+                   empty_raises=False):
     """TestClient с docker-бэкендом и инъекцией image/build функций.
 
     Провиженинг docker идёт через RecordingProvisioner (без реального docker).
+    empty_raises=True имитирует реальный DockerProvisioner.is_empty_dir, который
+    до сборки образа поднимает контейнер и падает (_build → RuntimeError).
     """
     from agentmon.backends import RunResult
 
@@ -415,7 +418,10 @@ def _docker_client(tmp_path, *, exists, build_lines=None, build_rc_ok=True):
         def mkdirs(self, paths): pass
         def exists(self, p): return False
         def is_file(self, p): return False
-        def is_empty_dir(self, p): return True
+        def is_empty_dir(self, p):
+            if empty_raises:
+                raise RuntimeError("образ не найден (контейнер не поднять без образа)")
+            return True
         def read_text(self, p): return ""
         def which(self, t): return "/usr/bin/" + t
         def python_cmd(self): return ["python3"]
@@ -726,3 +732,16 @@ def test_update_env_stream_ssh_uses_recording_provisioner(tmp_path):
         "RecordingProvisioner не получил обращений — update-env/stream не использовал ssh prov"
 
     assert pr.get(pid)["env_version"] != "0.0.0"
+
+
+def test_docker_create_stream_skips_empty_check_before_build(tmp_path):
+    """Регресс: для docker is_empty_dir поднял бы контейнер до сборки образа
+    (→ _build RuntimeError → 500). Гейт пустоты для docker должен пропускаться,
+    создание — доходить до сборки."""
+    c, _ = _docker_client(tmp_path, exists=False, empty_raises=True,
+                          build_lines=["Step 1/5\n", "Successfully built\n"])
+    body = _docker_body(tmp_path, distr_path="/tmp/server64_8_3_27.zip")
+    r = c.post("/api/env/projects/create/stream", json=body)
+    assert r.status_code == 200
+    assert "Step 1/5" in r.text
+    assert "✓ Проект создан" in r.text
