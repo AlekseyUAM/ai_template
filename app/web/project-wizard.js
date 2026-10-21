@@ -189,6 +189,7 @@ async function refreshDistrField() {
   } catch (e) {
     // при ошибке проверки показываем поле (безопаснее требовать дистрибутив)
     distrFields.style.display = "block";
+    document.getElementById("distrPath").required = true;
   }
 }
 
@@ -239,6 +240,7 @@ function setupPlatformAutoVersion() {
     const m = dirInput.value.match(/(\d+\.\d+\.\d+(?:\.\d+)?)/);
     if (m) {
       verInput.value = m[1];
+      refreshDistrField();
     }
   }
   dirInput.addEventListener("input", tryFillVersion);
