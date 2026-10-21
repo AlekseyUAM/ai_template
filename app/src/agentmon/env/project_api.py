@@ -121,7 +121,10 @@ def build_project_router(store, registry, monitor=None,
     def _prepare_install(body: dict):
         """Валидирует тело, сохраняет проект+MCP в БД, строит EnvConfig.
 
-        Возвращает (pid, config, prov, backend, conn). Бросает HTTPException при ошибке ввода.
+        Возвращает (pid, config, prov, backend, conn, docker_build). Бросает HTTPException при ошибке ввода.
+
+        docker_build — кортеж (distr_path, version, docker_host), если нужна сборка образа,
+        либо None, если образ уже существует или backend не docker.
         """
         # Docker: образ тегируется версией платформы и переиспользуется.
         # platform_dir вшит в образ (single source of truth: docker.py).
