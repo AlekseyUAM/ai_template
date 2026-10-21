@@ -133,3 +133,53 @@ def test_build_raises_on_nonzero_rc(tmp_path):
     fake = FakePopen(["boom\n"], returncode=1)
     with pytest.raises(RuntimeError):
         list(di.build_agent_image(distr, "8.3.27", popen=fake))
+
+
+# ── ретраи на транзиентных сетевых ошибках ───────────────────────────────────
+
+class FakePopenSeq:
+    """Popen, отдающий разные (lines, rc) по очереди вызовов.
+
+    Если результаты исчерпаны — повторяет последний (для «всегда падает»).
+    """
+
+    def __init__(self, results):
+        self._results = list(results)
+        self.calls = []
+
+    def __call__(self, cmd, **kw):
+        self.calls.append(list(cmd))
+        lines, rc = self._results[min(len(self.calls) - 1, len(self._results) - 1)]
+        return FakeProc(lines, rc)
+
+
+def test_build_retries_on_transient_then_succeeds(tmp_path):
+    distr = _make_distr(tmp_path)
+    fake = FakePopenSeq([
+        (["#2 load metadata\n", "dial tcp: i/o timeout\n"], 1),  # транзиентно
+        (["Successfully built\n"], 0),                           # успех
+    ])
+    slept = []
+    lines = list(di.build_agent_image(distr, "8.3.27", popen=fake,
+                                      sleep=lambda d: slept.append(d)))
+    assert len(fake.calls) == 2                       # была повторная сборка
+    assert any("повтор" in ln for ln in lines)
+    assert slept == [5]                               # один бэкофф (5*1)
+
+
+def test_build_retries_exhausted_raises(tmp_path):
+    distr = _make_distr(tmp_path)
+    fake = FakePopenSeq([(["EOF\n"], 1)])             # всегда транзиентный провал
+    with pytest.raises(RuntimeError):
+        list(di.build_agent_image(distr, "8.3.27", popen=fake, retries=3,
+                                  sleep=lambda d: None))
+    assert len(fake.calls) == 3                       # ровно retries попыток
+
+
+def test_build_no_retry_on_nontransient(tmp_path):
+    distr = _make_distr(tmp_path)
+    fake = FakePopenSeq([(["syntax error in Dockerfile\n"], 1)])
+    with pytest.raises(RuntimeError):
+        list(di.build_agent_image(distr, "8.3.27", popen=fake, retries=5,
+                                  sleep=lambda d: None))
+    assert len(fake.calls) == 1                       # без повторов
