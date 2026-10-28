@@ -8,6 +8,7 @@ from .mcp_catalog import CATALOG
 from .mcp_types import types_payload, get_type
 from .mcp_docker_recipes import recipe_for, launch_params, container_name
 from . import mcp_docker
+from . import code_index_local
 
 
 def build_mcp_router(store) -> APIRouter:
@@ -70,6 +71,8 @@ def build_mcp_router(store) -> APIRouter:
         db_name = body.get("db_name")
         catalog_dir = body.get("catalog_dir")
         platform_path = body.get("platform_path")
+        project_name = body.get("project_name")
+        code_index_dir = body.get("code_index_dir")
 
         # если standard_key передан и kind не указан — взять из каталога
         if standard_key and standard_key in CATALOG and not kind:
@@ -98,6 +101,8 @@ def build_mcp_router(store) -> APIRouter:
             db_name=db_name,
             catalog_dir=catalog_dir,
             platform_path=platform_path,
+            project_name=project_name,
+            code_index_dir=code_index_dir,
         )
         row = repo.get(mid)
         return {"mcp": row}
@@ -110,7 +115,8 @@ def build_mcp_router(store) -> APIRouter:
             raise HTTPException(status_code=404, detail=f"нет MCP с id={mid}")
         allowed = {"name", "purpose", "kind", "standard_key",
                    "connection_json", "port", "token_env",
-                   "mcp_name", "url", "db_name", "catalog_dir", "platform_path"}
+                   "mcp_name", "url", "db_name", "catalog_dir", "platform_path",
+                   "project_name", "code_index_dir"}
         fields = {k: v for k, v in body.items() if k in allowed}
         repo.update(mid, **fields)
         return {"mcp": repo.get(mid)}
@@ -165,6 +171,7 @@ def build_mcp_router(store) -> APIRouter:
                 type_key, port=port, token=body.get("token") or row.get("token_env"),
                 catalog_dir=row.get("catalog_dir"), state_dir=str(state_dir),
                 platform_path=row.get("platform_path"),
+                project_name=row.get("project_name"),
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc))
@@ -177,6 +184,28 @@ def build_mcp_router(store) -> APIRouter:
             "build_spec": recipe.build,
             "need_build": not mcp_docker.image_exists(params["image"]),
             "repo_root": repo_root,
+        }
+
+    def _resolve_local(mid: int) -> dict:
+        """Валидирует карточку локального code-index и собирает параметры."""
+        repo = require_repo()
+        row = repo.get(mid)
+        if row is None:
+            raise HTTPException(status_code=404, detail=f"нет MCP с id={mid}")
+        if row.get("standard_key") != "code-index-local":
+            raise HTTPException(status_code=400,
+                                detail="это не локальный code-index")
+        missing = [k for k in ("catalog_dir", "project_name",
+                               "code_index_dir", "port") if not row.get(k)]
+        if missing:
+            raise HTTPException(status_code=400,
+                                detail=f"не заданы поля: {', '.join(missing)}")
+        return {
+            "mid": mid,
+            "code_index_dir": row["code_index_dir"],
+            "catalog_dir": row["catalog_dir"],
+            "project_name": row["project_name"],
+            "port": int(row["port"]),
         }
 
     # ── подъём MCP (блокирующе, лог целиком) ──────────────────────────────────
@@ -255,6 +284,29 @@ def build_mcp_router(store) -> APIRouter:
                 yield f"\n✓ Контейнер запущен (http://127.0.0.1:{port})\n"
             else:
                 yield f"\n✗ Ошибка запуска (код {_stream.rc})\n"
+
+        return StreamingResponse(gen(), media_type="text/plain; charset=utf-8")
+
+    # ── локальное развёртывание (нативно, автозапуск) ─────────────────────────
+    @router.post("/api/mcp/{mid}/deploy-local")
+    def deploy_local_mcp(mid: int, body: dict):
+        ctx = _resolve_local(mid)
+        try:
+            log = list(code_index_local.deploy_local(**ctx))
+        except Exception as exc:
+            return {"ok": False, "log": str(exc)}
+        return {"ok": True, "log": "\n".join(log)}
+
+    @router.post("/api/mcp/{mid}/deploy-local/stream")
+    def deploy_local_mcp_stream(mid: int, body: dict):
+        ctx = _resolve_local(mid)
+
+        def gen():
+            try:
+                for line in code_index_local.deploy_local(**ctx):
+                    yield line + "\n"
+            except Exception as exc:
+                yield f"\n✗ Ошибка: {exc}\n"
 
         return StreamingResponse(gen(), media_type="text/plain; charset=utf-8")
 

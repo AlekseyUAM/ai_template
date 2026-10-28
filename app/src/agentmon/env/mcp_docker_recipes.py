@@ -86,15 +86,19 @@ RECIPES: dict[str, DockerRecipe] = {
     ),
 }
 
-_DAEMON_TOML = """# Сгенерировано автоматически при развёртывании code-index.
+def _daemon_toml(alias: str, path: str) -> str:
+    """Текст daemon.toml для code-index: alias репозитория = имя проекта,
+    path — каталог кодовой базы (в контейнере `/repos/src`, локально — реальный
+    путь на хосте). alias и `repo="..."` в подсказках агенту совпадают."""
+    return f"""# Сгенерировано автоматически при развёртывании code-index.
 [daemon]
 http_host = "127.0.0.1"
 http_port = 0
 log_level = "info"
 
 [[paths]]
-path = "/repos/src"
-alias = "src"
+path = "{path}"
+alias = "{alias}"
 language = "bsl"
 """
 
@@ -105,7 +109,8 @@ def recipe_for(type_key: str) -> DockerRecipe | None:
 
 
 def launch_params(type_key: str, *, port: int, token=None,
-                  catalog_dir=None, state_dir=None, platform_path=None) -> dict:
+                  catalog_dir=None, state_dir=None, platform_path=None,
+                  project_name=None) -> dict:
     """Считает параметры `mcp_docker.launch` из рецепта и данных карточки.
 
     Возвращает dict: image, internal_port, env, volumes, network.
@@ -131,9 +136,12 @@ def launch_params(type_key: str, *, port: int, token=None,
             raise ValueError("для code-index нужен каталог кодовой базы")
         if not state_dir:
             raise ValueError("для code-index нужен state_dir для daemon.toml")
+        if not project_name:
+            raise ValueError("для code-index нужно имя проекта (alias репозитория)")
         sp = Path(state_dir)
         sp.mkdir(parents=True, exist_ok=True)
-        (sp / "daemon.toml").write_text(_DAEMON_TOML, encoding="utf-8")
+        (sp / "daemon.toml").write_text(_daemon_toml(project_name, "/repos/src"),
+                                        encoding="utf-8")
         # каталог кодовой базы rw (демон пишет <repo>/.code-index/index.db рядом)
         volumes.append(f"{catalog_dir}:/repos/src")
         # state-том с daemon.toml и runtime демона

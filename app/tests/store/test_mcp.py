@@ -178,3 +178,15 @@ def test_set_for_project_atomic_rollback(tmp_path):
     except RuntimeError:
         pass
     assert {x["id"] for x in m.for_project(pid)} == {a}   # откат вернул прежний набор
+
+
+def test_add_persists_code_index_dir(tmp_path):
+    db = connect(str(tmp_path / "t.db"))
+    init_schema(db)
+    m = McpRepo(db)
+    mid = m.add(name="idx-local", kind="local",
+                standard_key="code-index-local",
+                catalog_dir="/code/cfg", project_name="proj",
+                code_index_dir="/opt/ci")
+    row = m.get(mid)
+    assert row["code_index_dir"] == "/opt/ci"

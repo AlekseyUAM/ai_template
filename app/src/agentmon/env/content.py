@@ -157,21 +157,29 @@ def deploy_content(prov, config, *, update: bool) -> None:
     project_dir = config.project_dir
     claude = f"{project_dir}/.claude"
     prov.put_tree(str(TEMPLATE_DIR), project_dir, skip=_is_special)
-    overrides = mcp_name_overrides(config.mcp) if not update else {}
-    _render_agents(prov, config, f"{claude}/agents", overrides=overrides or None)
-    py_json = '\\"' + prov.venv_python(project_dir) + '\\"'
+    # Имена MCP подставляем только при создании (пользователь мог их переименовать;
+    # на обновлении карточку не трогаем). Имя проекта → alias репозитория code-index
+    # в подсказках агенту: берётся из записи проекта, стабильно, поэтому подставляем
+    # ВСЕГДА — иначе put_tree на обновлении вернёт сырой {{CODE_INDEX_REPO}}.
+    mcp_subs = mcp_name_overrides(config.mcp) if not update else {}
+    subs = {**mcp_subs, "{{CODE_INDEX_REPO}}": config.project_name}
+    _render_agents(prov, config, f"{claude}/agents", overrides=subs)
+    # settings.json — это JSON, а путь к интерпретатору впечатывается прямо в его
+    # текст. На Windows путь содержит backslash (C:\...\python.exe), который внутри
+    # JSON-строки — недопустимая escape-последовательность, и файл перестаёт
+    # парситься. json.dumps экранирует backslash/кавычки; [1:-1] снимает внешние
+    # кавычки, оставляя готовую к вставке в JSON строку `\"<путь>\"`.
+    py_json = json.dumps('"' + prov.venv_python(project_dir) + '"')[1:-1]
     settings = _PY_INVOKE.sub(lambda m: py_json + " ", _render_settings())
-    if overrides:
-        for placeholder, actual in overrides.items():
-            settings = settings.replace(placeholder, actual)
+    for placeholder, actual in subs.items():
+        settings = settings.replace(placeholder, actual)
     write_preserving(prov, f"{claude}/settings.json", settings, update=update)
     _rewrite_python_invocations(prov, claude, _py_cmd(prov, project_dir))
     _deploy_vscode(prov, project_dir, update=update)
     if not update:
         write_preserving(prov, f"{project_dir}/README.md",
                          _project_readme(config.project_name), update=update)
-        if overrides:
-            _apply_mcp_names(prov, claude, overrides)
+    _apply_mcp_names(prov, claude, subs)
     from .nethasp import deploy_nethasp
     deploy_nethasp(prov, config)
 

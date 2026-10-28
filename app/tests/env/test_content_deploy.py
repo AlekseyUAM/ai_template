@@ -163,6 +163,26 @@ def test_mcp_rename_does_not_clobber_rendered_agent_model(prov, tmp_path):
     assert "mcp__bsl_ls__" not in text
 
 
+def test_code_index_repo_alias_substituted(prov, tmp_path):
+    """Плейсхолдер алиаса репозитория в mcp-usage заменяется на имя проекта."""
+    content.deploy_content(prov, cfg(tmp_path, []), update=False)
+    skill = (tmp_path / ".claude" / "skills" / "mcp-usage" / "SKILL.md"
+             ).read_text(encoding="utf-8")
+    assert "{{CODE_INDEX_REPO}}" not in skill
+    assert 'repo="demo"' in skill
+
+
+def test_code_index_repo_alias_substituted_on_update(prov, tmp_path):
+    """Имя проекта подставляется и при обновлении — put_tree не оставляет сырой
+    плейсхолдер (в отличие от имён MCP, которые на обновлении не трогаем)."""
+    content.deploy_content(prov, cfg(tmp_path, []), update=False)
+    content.deploy_content(prov, cfg(tmp_path, []), update=True)
+    skill = (tmp_path / ".claude" / "skills" / "mcp-usage" / "SKILL.md"
+             ).read_text(encoding="utf-8")
+    assert "{{CODE_INDEX_REPO}}" not in skill
+    assert 'repo="demo"' in skill
+
+
 def test_deploy_no_overrides_when_default_name(prov, tmp_path):
     config = cfg(tmp_path, [])
     config.mcp = [McpSelection(
@@ -186,6 +206,20 @@ def test_hook_command_points_to_project_venv(prov, tmp_path):
         cmd = data["hooks"][evt][0]["hooks"][0]["command"]
         assert cmd.startswith(f'"{py}" ')          # абсолютный путь, не голый python
         assert "python" not in cmd.replace(py, "")  # кроме как в составе пути venv
+
+
+def test_settings_valid_json_with_windows_venv_path(prov, tmp_path, monkeypatch):
+    # Регрессия: на Windows venv_python отдаёт путь с backslash
+    # (C:\...\python.exe). Если впечатать его в JSON как есть, backslash — битая
+    # escape-последовательность, и settings.json перестаёт парситься.
+    win_py = r"C:\projects\demo\.venv\Scripts\python.exe"
+    monkeypatch.setattr(prov, "venv_python", lambda project_dir: win_py)
+    content.deploy_content(prov, cfg(tmp_path, []), update=False)
+    # не бросает JSONDecodeError → путь корректно экранирован
+    data = json.loads((tmp_path / ".claude" / "settings.json").read_text(encoding="utf-8"))
+    cmd = data["hooks"]["PostToolUse"][0]["hooks"][0]["command"]
+    # в разобранном значении backslash сохранён (валиден для Windows-шелла)
+    assert cmd.startswith(f'"{win_py}" ')
 
 
 def test_skill_docs_use_venv_python(prov, tmp_path):

@@ -42,12 +42,12 @@ def test_launch_extension_rejected(tmp_path):
     assert r.status_code == 400
 
 
-def test_types_endpoint_lists_seven_with_custom_first(tmp_path):
+def test_types_endpoint_lists_eight_with_custom_first(tmp_path):
     data = make(tmp_path).get("/api/mcp/types").json()["types"]
     assert data[0]["key"] == "custom"
     keys = {t["key"] for t in data}
     assert keys == {"custom", "1c-md", "1c-md-queries", "bsl-ls",
-                    "1c-platform", "1c-naparnic", "code-index"}
+                    "1c-platform", "1c-naparnic", "code-index", "code-index-local"}
 
 
 def test_create_persists_new_fields(tmp_path):
@@ -55,7 +55,7 @@ def test_create_persists_new_fields(tmp_path):
     r = c.post("/api/mcp", json={
         "name": "idx", "kind": "docker", "standard_key": "code-index",
         "mcp_name": "code_index", "url": "localhost", "port": 8004,
-        "catalog_dir": "/src/cfg",
+        "catalog_dir": "/src/cfg", "project_name": "МойПроект",
         "connection_json": '"code_index": {"type":"http"}',
     })
     assert r.status_code == 200
@@ -63,6 +63,7 @@ def test_create_persists_new_fields(tmp_path):
     assert row["mcp_name"] == "code_index"
     assert row["url"] == "localhost"
     assert row["catalog_dir"] == "/src/cfg"
+    assert row["project_name"] == "МойПроект"
 
 
 def test_create_persists_db_name(tmp_path):
@@ -107,7 +108,7 @@ def test_launch_code_index_uses_recipe(tmp_path, monkeypatch):
     catalog = tmp_path / "cfg"; catalog.mkdir()
     mid = c.post("/api/mcp", json={
         "name": "idx", "kind": "docker", "standard_key": "code-index",
-        "port": 8004, "catalog_dir": str(catalog),
+        "port": 8004, "catalog_dir": str(catalog), "project_name": "proj",
     }).json()["mcp"]["id"]
     r = c.post(f"/api/mcp/{mid}/launch", json={"port": 8004})
     assert r.status_code == 200 and r.json()["ok"] is True
@@ -180,7 +181,7 @@ def test_launch_stream_streams_run_log(tmp_path, monkeypatch):
     catalog = tmp_path / "cfg"; catalog.mkdir()
     mid = c.post("/api/mcp", json={
         "name": "idx", "kind": "docker", "standard_key": "code-index",
-        "port": 8004, "catalog_dir": str(catalog),
+        "port": 8004, "catalog_dir": str(catalog), "project_name": "proj",
     }).json()["mcp"]["id"]
     r = c.post(f"/api/mcp/{mid}/launch/stream", json={"port": 8004})
     assert r.status_code == 200
@@ -228,6 +229,69 @@ def test_launch_prebuilt_only_missing_image_reports(tmp_path, monkeypatch):
     assert r.status_code == 200
     data = r.json()
     assert data["ok"] is False and "не найден" in data["log"]
+
+
+def test_create_local_code_index_persists_fields(tmp_path):
+    c = make(tmp_path)
+    r = c.post("/api/mcp", json={
+        "name": "idx-local", "kind": "local", "standard_key": "code-index-local",
+        "mcp_name": "code_index", "url": "localhost", "port": 8005,
+        "catalog_dir": "/code/cfg", "project_name": "proj",
+        "code_index_dir": "/opt/ci",
+    })
+    assert r.status_code == 200
+    row = r.json()["mcp"]
+    assert row["code_index_dir"] == "/opt/ci"
+    assert row["project_name"] == "proj"
+
+
+def test_deploy_local_stream(tmp_path, monkeypatch):
+    from agentmon.env import code_index_local
+    monkeypatch.setattr(
+        code_index_local, "deploy_local",
+        lambda **kw: iter([f"строка про {kw['project_name']}", "готово"]))
+    c = make(tmp_path)
+    ci = tmp_path / "ci"; ci.mkdir()
+    mid = c.post("/api/mcp", json={
+        "name": "idx-local", "kind": "local", "standard_key": "code-index-local",
+        "port": 8005, "catalog_dir": "/code/cfg", "project_name": "proj",
+        "code_index_dir": str(ci),
+    }).json()["mcp"]["id"]
+    r = c.post(f"/api/mcp/{mid}/deploy-local/stream", json={})
+    assert r.status_code == 200
+    assert "строка про proj" in r.text and "готово" in r.text
+
+
+def test_deploy_local_requires_code_index_dir(tmp_path):
+    c = make(tmp_path)
+    mid = c.post("/api/mcp", json={
+        "name": "idx-local2", "kind": "local", "standard_key": "code-index-local",
+        "port": 8005, "catalog_dir": "/code/cfg", "project_name": "proj",
+    }).json()["mcp"]["id"]
+    r = c.post(f"/api/mcp/{mid}/deploy-local", json={})
+    assert r.status_code == 400
+
+
+def test_deploy_local_reports_unexpected_error(tmp_path, monkeypatch):
+    from agentmon.env import code_index_local
+
+    def boom(**kw):
+        raise RuntimeError("boom")
+        yield  # делает функцию генератором (не достигается)
+
+    monkeypatch.setattr(code_index_local, "deploy_local", boom)
+    c = make(tmp_path)
+    ci = tmp_path / "ci"; ci.mkdir()
+    mid = c.post("/api/mcp", json={
+        "name": "idx-local", "kind": "local", "standard_key": "code-index-local",
+        "port": 8005, "catalog_dir": "/code/cfg", "project_name": "proj",
+        "code_index_dir": str(ci),
+    }).json()["mcp"]["id"]
+    r = c.post(f"/api/mcp/{mid}/deploy-local", json={})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["ok"] is False
+    assert "boom" in data["log"]
 
 
 def test_download_cfe_for_queries_type(tmp_path):

@@ -129,7 +129,7 @@ class TestEnvFileContents:
 # ---------------------------------------------------------------------------
 
 _SENTINEL_DSN = "postgresql://ai1c:ai1c@127.0.0.1:15432/ai1c"
-_SQLITE_PATH = str(bootstrap.ROOT / "app" / "agentmon.db")
+_SQLITE_PATH = str(bootstrap.ROOT / "app" / "store.db")
 
 
 def _make_pg_portable_stub(dsn: str) -> types.ModuleType:
