@@ -2,6 +2,7 @@
 import subprocess
 import sys
 from pathlib import Path
+from xml.sax.saxutils import escape as _xml_escape
 
 
 def _q(a):
@@ -20,7 +21,9 @@ def windows_wrapper(argv, env):
 
 def systemd_unit(argv, env, description):
     """Текст systemd user-unit."""
-    env_lines = "\n".join(f'Environment="{k}={v}"' for k, v in env.items())
+    def _esc_val(v):
+        return v.replace("\\", "\\\\").replace('"', '\\"')
+    env_lines = "\n".join(f'Environment="{k}={_esc_val(v)}"' for k, v in env.items())
     exec_start = " ".join(_q(a) for a in argv)
     return (f"[Unit]\nDescription={description}\n\n"
             f"[Service]\n{env_lines}\nExecStart={exec_start}\n"
@@ -30,8 +33,8 @@ def systemd_unit(argv, env, description):
 
 def launchd_plist(label, argv, env):
     """Текст LaunchAgent plist."""
-    args = "".join(f"    <string>{a}</string>\n" for a in argv)
-    envs = "".join(f"    <key>{k}</key><string>{v}</string>\n"
+    args = "".join(f"    <string>{_xml_escape(a)}</string>\n" for a in argv)
+    envs = "".join(f"    <key>{_xml_escape(k)}</key><string>{_xml_escape(v)}</string>\n"
                    for k, v in env.items())
     return ('<?xml version="1.0" encoding="UTF-8"?>\n'
             '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" '
@@ -76,7 +79,7 @@ def _install_windows(name, argv, env, state_dir, home, run):
     wrapper.write_text(windows_wrapper(argv, env), encoding="utf-8")
     log.append(f"Обёртка: {wrapper}")
     _run_logged(run, ["schtasks", "/Create", "/SC", "ONLOGON",
-                      "/TN", name, "/TR", str(wrapper), "/F"], log)
+                      "/TN", name, "/TR", f'"{wrapper}"', "/F"], log)
     _run_logged(run, ["schtasks", "/Run", "/TN", name], log)
     return log
 

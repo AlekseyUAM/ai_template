@@ -61,6 +61,10 @@ def test_install_and_start_windows(tmp_path, monkeypatch):
     assert (state / "ai1c-code-index-mcp-7.cmd").exists()
     assert any("schtasks" in c and "/Create" in c for c in calls)
     assert any("schtasks" in c and "/Run" in c for c in calls)
+    # Фикс 1: путь в /TR должен быть закавычен
+    create_cmd = next(c for c in calls if "schtasks" in c and "/Create" in c)
+    tr = create_cmd[create_cmd.index("/TR") + 1]
+    assert tr.startswith('"') and tr.endswith('"')
 
 
 def test_install_and_start_macos(tmp_path):
@@ -83,3 +87,18 @@ def test_install_and_start_unsupported(tmp_path):
     with pytest.raises(ValueError, match="платформ"):
         A.install_and_start("n", ["x"], env={}, state_dir=str(tmp_path),
                             run=lambda *a, **k: None, platform_name="sunos5")
+
+
+# Фикс 2: XML-экранирование в launchd_plist
+def test_launchd_plist_escapes_xml():
+    pl = A.launchd_plist("lbl", ["/bin/x", "a&b"], {"K<": "v&w"})
+    assert "a&amp;b" in pl
+    assert "v&amp;w" in pl
+    assert "K&lt;" in pl
+    assert "a&b" not in pl
+
+
+# Фикс 3: экранирование кавычек в systemd Environment=
+def test_systemd_unit_escapes_quotes():
+    unit = A.systemd_unit(["/bin/x"], {"K": 'a"b'}, "desc")
+    assert 'Environment="K=a\\"b"' in unit
