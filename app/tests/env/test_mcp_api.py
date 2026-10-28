@@ -245,6 +245,33 @@ def test_create_local_code_index_persists_fields(tmp_path):
     assert row["project_name"] == "proj"
 
 
+def test_deploy_local_stream(tmp_path, monkeypatch):
+    from agentmon.env import code_index_local
+    monkeypatch.setattr(
+        code_index_local, "deploy_local",
+        lambda **kw: iter([f"строка про {kw['project_name']}", "готово"]))
+    c = make(tmp_path)
+    ci = tmp_path / "ci"; ci.mkdir()
+    mid = c.post("/api/mcp", json={
+        "name": "idx-local", "kind": "local", "standard_key": "code-index-local",
+        "port": 8005, "catalog_dir": "/code/cfg", "project_name": "proj",
+        "code_index_dir": str(ci),
+    }).json()["mcp"]["id"]
+    r = c.post(f"/api/mcp/{mid}/deploy-local/stream", json={})
+    assert r.status_code == 200
+    assert "строка про proj" in r.text and "готово" in r.text
+
+
+def test_deploy_local_requires_code_index_dir(tmp_path):
+    c = make(tmp_path)
+    mid = c.post("/api/mcp", json={
+        "name": "idx-local2", "kind": "local", "standard_key": "code-index-local",
+        "port": 8005, "catalog_dir": "/code/cfg", "project_name": "proj",
+    }).json()["mcp"]["id"]
+    r = c.post(f"/api/mcp/{mid}/deploy-local", json={})
+    assert r.status_code == 400
+
+
 def test_download_cfe_for_queries_type(tmp_path):
     c = make(tmp_path)
     mid = c.post("/api/mcp", json={
