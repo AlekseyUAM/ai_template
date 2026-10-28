@@ -24,6 +24,7 @@ class McpRepo:
         catalog_dir=None,
         platform_path=None,
         project_name=None,
+        code_index_dir=None,
         now=None,
     ) -> int:
         """Создаёт запись MCP-сервера, возвращает id.
@@ -34,14 +35,14 @@ class McpRepo:
             "name", "purpose", "kind",
             "standard_key", "connection_json", "port", "token_env",
             "mcp_name", "url", "db_name", "catalog_dir", "platform_path",
-            "project_name",
+            "project_name", "code_index_dir",
             "created_at",
         ]
         params = [
             name, purpose, kind,
             standard_key, connection_json, port, token_env,
             mcp_name, url, db_name, catalog_dir, platform_path,
-            project_name,
+            project_name, code_index_dir,
             now,
         ]
         return self._db.returning_id("mcp_servers", columns, params)
