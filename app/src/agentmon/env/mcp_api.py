@@ -293,7 +293,7 @@ def build_mcp_router(store) -> APIRouter:
         ctx = _resolve_local(mid)
         try:
             log = list(code_index_local.deploy_local(**ctx))
-        except (ValueError, OSError) as exc:
+        except Exception as exc:
             return {"ok": False, "log": str(exc)}
         return {"ok": True, "log": "\n".join(log)}
 
@@ -305,7 +305,7 @@ def build_mcp_router(store) -> APIRouter:
             try:
                 for line in code_index_local.deploy_local(**ctx):
                     yield line + "\n"
-            except (ValueError, OSError) as exc:
+            except Exception as exc:
                 yield f"\n✗ Ошибка: {exc}\n"
 
         return StreamingResponse(gen(), media_type="text/plain; charset=utf-8")
