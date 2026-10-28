@@ -65,7 +65,7 @@ def test_code_index_requires_catalog_dir(tmp_path):
     daemon = state / "daemon.toml"
     assert daemon.exists()
     text = daemon.read_text(encoding="utf-8")
-    assert "/repos/src" in text
+    assert 'path = "/repos/src"' in text
     assert 'alias = "МойПроект"' in text
 
 

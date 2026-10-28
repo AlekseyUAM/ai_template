@@ -86,14 +86,10 @@ RECIPES: dict[str, DockerRecipe] = {
     ),
 }
 
-def _daemon_toml(alias: str) -> str:
-    """Текст daemon.toml для code-index с заданным alias репозитория.
-
-    Алиас = имя проекта (источник истины) — он же передаётся в вызовах
-    инструментов как `repo="<alias>"`. Путь внутри контейнера фиксирован
-    (`/repos/src` — точка монтирования каталога кодовой базы); меняется только
-    alias, поэтому daemon.toml и `repo=` в подсказках агенту совпадают.
-    """
+def _daemon_toml(alias: str, path: str) -> str:
+    """Текст daemon.toml для code-index: alias репозитория = имя проекта,
+    path — каталог кодовой базы (в контейнере `/repos/src`, локально — реальный
+    путь на хосте). alias и `repo="..."` в подсказках агенту совпадают."""
     return f"""# Сгенерировано автоматически при развёртывании code-index.
 [daemon]
 http_host = "127.0.0.1"
@@ -101,7 +97,7 @@ http_port = 0
 log_level = "info"
 
 [[paths]]
-path = "/repos/src"
+path = "{path}"
 alias = "{alias}"
 language = "bsl"
 """
@@ -144,7 +140,7 @@ def launch_params(type_key: str, *, port: int, token=None,
             raise ValueError("для code-index нужно имя проекта (alias репозитория)")
         sp = Path(state_dir)
         sp.mkdir(parents=True, exist_ok=True)
-        (sp / "daemon.toml").write_text(_daemon_toml(project_name),
+        (sp / "daemon.toml").write_text(_daemon_toml(project_name, "/repos/src"),
                                         encoding="utf-8")
         # каталог кодовой базы rw (демон пишет <repo>/.code-index/index.db рядом)
         volumes.append(f"{catalog_dir}:/repos/src")
