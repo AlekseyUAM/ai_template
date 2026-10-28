@@ -53,17 +53,28 @@ def test_code_index_requires_catalog_dir(tmp_path):
     catalog = tmp_path / "cfg"
     catalog.mkdir()
     p = R.launch_params("code-index", port=8004,
-                        catalog_dir=str(catalog), state_dir=str(state))
+                        catalog_dir=str(catalog), state_dir=str(state),
+                        project_name="МойПроект")
     assert p["env"]["MCP_HTTP_PORT"] == "8004"
     assert p["env"]["CODE_INDEX_HOME"] == "/data/code-index-home"
     # каталог кодовой базы и home-том смонтированы
     joined = " ".join(p["volumes"])
     assert f"{catalog}:/repos/src" in joined
     assert "/data/code-index-home" in joined
-    # сгенерирован daemon.toml с путём внутри контейнера
+    # сгенерирован daemon.toml с путём внутри контейнера и alias = имя проекта
     daemon = state / "daemon.toml"
     assert daemon.exists()
-    assert "/repos/src" in daemon.read_text(encoding="utf-8")
+    text = daemon.read_text(encoding="utf-8")
+    assert "/repos/src" in text
+    assert 'alias = "МойПроект"' in text
+
+
+def test_code_index_requires_project_name(tmp_path):
+    catalog = tmp_path / "cfg"
+    catalog.mkdir()
+    with pytest.raises(ValueError, match="имя проекта"):
+        R.launch_params("code-index", port=8004,
+                        catalog_dir=str(catalog), state_dir=str(tmp_path / "s"))
 
 
 def test_naparnic_host_network_on_linux(monkeypatch):
@@ -82,7 +93,8 @@ def test_code_index_no_host_network(tmp_path, monkeypatch):
     monkeypatch.setattr(R.sys, "platform", "linux")
     catalog = tmp_path / "c"; catalog.mkdir()
     p = R.launch_params("code-index", port=8004,
-                        catalog_dir=str(catalog), state_dir=str(tmp_path / "s"))
+                        catalog_dir=str(catalog), state_dir=str(tmp_path / "s"),
+                        project_name="proj")
     assert p["network"] is None
 
 

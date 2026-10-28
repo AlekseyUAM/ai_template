@@ -69,7 +69,8 @@ def test_naparnic_has_token_field():
 def test_code_index_requires_catalog_dir():
     t = get_type("code-index")
     assert "catalog_dir" in t.fields
-    assert t.required == ("catalog_dir",)
+    assert "project_name" in t.fields
+    assert t.required == ("catalog_dir", "project_name")
     assert t.defaults["mcp_name"] == "code_index"
     assert t.defaults["port"] == 8004
 

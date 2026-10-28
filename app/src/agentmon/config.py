@@ -2,7 +2,9 @@ import os
 from pathlib import Path
 
 DB_PATH = Path(os.environ.get("AGENTMON_DB", "agentmon.db"))
-DSN = os.environ.get("AGENTMON_DSN", str(DB_PATH))
+# Хранилище (store) по умолчанию — отдельный файл store.db рядом с реестром:
+# у таблиц projects в реестре и хранилище разные схемы, общий файл их ломает.
+DSN = os.environ.get("AGENTMON_DSN", str(DB_PATH.with_name("store.db")))
 
 # Сессия считается "generating", если журнал менялся не позже этого окна (сек).
 GENERATING_WINDOW = 10.0

@@ -135,7 +135,8 @@ MCP_TYPES: list[McpType] = [
     McpType(
         key="code-index",
         title="Индексированная кодовая база",
-        fields=("name", "mcp_name", "purpose", "url", "port", "catalog_dir", "connection"),
+        fields=("name", "mcp_name", "purpose", "url", "port",
+                "catalog_dir", "project_name", "connection"),
         connection_template=_HTTP_PORT,
         defaults={
             "mcp_name": "code_index",
@@ -146,7 +147,8 @@ MCP_TYPES: list[McpType] = [
                         "именам, синонимам и комментариям"),
         },
         action="docker",
-        required=("catalog_dir",),
+        required=("catalog_dir", "project_name"),
+        field_labels={"project_name": "Имя проекта (alias репозитория)"},
     ),
 ]
 

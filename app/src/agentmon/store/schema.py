@@ -13,6 +13,7 @@ def init_schema(db) -> None:
         id {pk}, name TEXT NOT NULL UNIQUE, purpose TEXT, kind TEXT NOT NULL,
         standard_key TEXT, connection_json TEXT, port INTEGER, token_env TEXT,
         mcp_name TEXT, url TEXT, db_name TEXT, catalog_dir TEXT, platform_path TEXT,
+        project_name TEXT,
         created_at {ts})""")
     db.execute(f"""CREATE TABLE IF NOT EXISTS project_mcp (
         id {pk}, project_id INTEGER NOT NULL, mcp_id INTEGER NOT NULL,
@@ -49,7 +50,7 @@ def init_schema(db) -> None:
     # Миграции существующих БД: добавляем недостающие колонки идемпотентно.
     _ensure_columns(db, "mcp_servers", {
         "mcp_name": "TEXT", "url": "TEXT", "db_name": "TEXT",
-        "catalog_dir": "TEXT", "platform_path": "TEXT",
+        "catalog_dir": "TEXT", "platform_path": "TEXT", "project_name": "TEXT",
     })
     _ensure_columns(db, "tasks", {
         "identifier": "TEXT",

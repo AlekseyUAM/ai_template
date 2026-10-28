@@ -153,7 +153,9 @@ def setup_database() -> tuple[str, str]:
       - «docker» → поднять контейнер ai1c-postgres (прежнее поведение)
     При любой ошибке PG → SQLite-фолбэк; psycopg[binary] ставится только для PG.
     """
-    _SQLITE_PATH = str(ROOT / "app" / "agentmon.db")
+    # Хранилище (store) держим в отдельном файле: реестр использует AGENTMON_DB
+    # (app/agentmon.db), и совмещать их нельзя — у таблиц projects разные схемы.
+    _SQLITE_PATH = str(ROOT / "app" / "store.db")
     raw_mode = os.environ.get("AI1C_PG_MODE", "host")
     pg_mode = raw_mode.strip().lower()
     if pg_mode not in ("host", "docker"):

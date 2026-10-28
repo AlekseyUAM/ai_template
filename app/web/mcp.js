@@ -12,6 +12,7 @@ const FIELD_LABELS = {
   port: "Порт",
   token: "Токен",
   catalog_dir: "Каталог кодовой базы",
+  project_name: "Имя проекта (alias репозитория)",
   platform_path: "Путь к платформе",
   connection: "Подключение",
 };
@@ -229,6 +230,7 @@ async function createMcp() {
   }
   if (t.fields.includes("token")) body.token_env = fieldVal("token") || null;
   if (t.fields.includes("catalog_dir")) body.catalog_dir = fieldVal("catalog_dir") || null;
+  if (t.fields.includes("project_name")) body.project_name = fieldVal("project_name") || null;
   if (t.fields.includes("platform_path")) body.platform_path = fieldVal("platform_path") || null;
   body.connection_json = fieldVal("connection") || null;
 
@@ -307,6 +309,7 @@ async function showMcpCard(mcpId) {
     mcp.port ? cardField("Порт", mcp.port) : "",
     mcp.token_env ? cardField("Токен", "••••••") : "",
     mcp.catalog_dir ? cardField("Каталог кодовой базы", mcp.catalog_dir) : "",
+    mcp.project_name ? cardField("Имя проекта (alias репозитория)", mcp.project_name) : "",
     mcp.platform_path ? cardField("Путь к платформе", mcp.platform_path) : "",
     mcp.connection_json ? cardField("Подключение", mcp.connection_json, true) : "",
   ].join("");

@@ -70,6 +70,7 @@ def build_mcp_router(store) -> APIRouter:
         db_name = body.get("db_name")
         catalog_dir = body.get("catalog_dir")
         platform_path = body.get("platform_path")
+        project_name = body.get("project_name")
 
         # если standard_key передан и kind не указан — взять из каталога
         if standard_key and standard_key in CATALOG and not kind:
@@ -98,6 +99,7 @@ def build_mcp_router(store) -> APIRouter:
             db_name=db_name,
             catalog_dir=catalog_dir,
             platform_path=platform_path,
+            project_name=project_name,
         )
         row = repo.get(mid)
         return {"mcp": row}
@@ -110,7 +112,8 @@ def build_mcp_router(store) -> APIRouter:
             raise HTTPException(status_code=404, detail=f"нет MCP с id={mid}")
         allowed = {"name", "purpose", "kind", "standard_key",
                    "connection_json", "port", "token_env",
-                   "mcp_name", "url", "db_name", "catalog_dir", "platform_path"}
+                   "mcp_name", "url", "db_name", "catalog_dir", "platform_path",
+                   "project_name"}
         fields = {k: v for k, v in body.items() if k in allowed}
         repo.update(mid, **fields)
         return {"mcp": repo.get(mid)}
@@ -165,6 +168,7 @@ def build_mcp_router(store) -> APIRouter:
                 type_key, port=port, token=body.get("token") or row.get("token_env"),
                 catalog_dir=row.get("catalog_dir"), state_dir=str(state_dir),
                 platform_path=row.get("platform_path"),
+                project_name=row.get("project_name"),
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc))

@@ -55,7 +55,7 @@ def test_create_persists_new_fields(tmp_path):
     r = c.post("/api/mcp", json={
         "name": "idx", "kind": "docker", "standard_key": "code-index",
         "mcp_name": "code_index", "url": "localhost", "port": 8004,
-        "catalog_dir": "/src/cfg",
+        "catalog_dir": "/src/cfg", "project_name": "МойПроект",
         "connection_json": '"code_index": {"type":"http"}',
     })
     assert r.status_code == 200
@@ -63,6 +63,7 @@ def test_create_persists_new_fields(tmp_path):
     assert row["mcp_name"] == "code_index"
     assert row["url"] == "localhost"
     assert row["catalog_dir"] == "/src/cfg"
+    assert row["project_name"] == "МойПроект"
 
 
 def test_create_persists_db_name(tmp_path):
@@ -107,7 +108,7 @@ def test_launch_code_index_uses_recipe(tmp_path, monkeypatch):
     catalog = tmp_path / "cfg"; catalog.mkdir()
     mid = c.post("/api/mcp", json={
         "name": "idx", "kind": "docker", "standard_key": "code-index",
-        "port": 8004, "catalog_dir": str(catalog),
+        "port": 8004, "catalog_dir": str(catalog), "project_name": "proj",
     }).json()["mcp"]["id"]
     r = c.post(f"/api/mcp/{mid}/launch", json={"port": 8004})
     assert r.status_code == 200 and r.json()["ok"] is True
@@ -180,7 +181,7 @@ def test_launch_stream_streams_run_log(tmp_path, monkeypatch):
     catalog = tmp_path / "cfg"; catalog.mkdir()
     mid = c.post("/api/mcp", json={
         "name": "idx", "kind": "docker", "standard_key": "code-index",
-        "port": 8004, "catalog_dir": str(catalog),
+        "port": 8004, "catalog_dir": str(catalog), "project_name": "proj",
     }).json()["mcp"]["id"]
     r = c.post(f"/api/mcp/{mid}/launch/stream", json={"port": 8004})
     assert r.status_code == 200
