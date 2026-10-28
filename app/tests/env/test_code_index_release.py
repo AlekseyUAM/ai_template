@@ -63,3 +63,37 @@ def test_download_binary_extracts_and_returns_path(tmp_path, monkeypatch):
 def test_download_binary_unsupported_platform(tmp_path):
     with pytest.raises(ValueError, match="платформ"):
         R.download_binary(str(tmp_path), fetch=lambda u: b"", platform_name="sunos5")
+
+
+def _targz_bytes(names):
+    buf = io.BytesIO()
+    import tarfile as _tf
+    with _tf.open(fileobj=buf, mode="w:gz") as tf:
+        for n in names:
+            data = b"BINDATA"
+            info = _tf.TarInfo(n)
+            info.size = len(data)
+            tf.addfile(info, io.BytesIO(data))
+    return buf.getvalue()
+
+
+def test_download_binary_linux_targz(tmp_path, monkeypatch):
+    """download_binary для linux скачивает .tar.gz и возвращает путь к бинарю."""
+    def fetch(url):
+        if url == R.GH_LATEST:
+            return json.dumps(_RELEASE).encode("utf-8")
+        return _targz_bytes(["bsl-indexer"])
+    dest = tmp_path / "ci"
+    path = R.download_binary(str(dest), fetch=fetch, platform_name="linux")
+    assert path.name == "bsl-indexer"
+    assert path.exists()
+
+
+def test_extract_zip_slip_raises(tmp_path):
+    """_extract должна бросать ValueError на путях-побегах в zip-архиве."""
+    buf = io.BytesIO()
+    import zipfile as _z
+    with _z.ZipFile(buf, "w") as zf:
+        zf.writestr("../evil.txt", b"pwned")
+    with pytest.raises(ValueError, match="небезопасн"):
+        R._extract(buf.getvalue(), "x.zip", tmp_path)

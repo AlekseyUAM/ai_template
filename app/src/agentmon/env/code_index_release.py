@@ -61,15 +61,30 @@ def _host_markers(platform_name):
     return None
 
 
+def _is_within(dest: Path, name: str) -> bool:
+    """True если разрешённый путь name остаётся внутри dest."""
+    target = (dest / name).resolve()
+    dest_r = dest.resolve()
+    return target == dest_r or dest_r in target.parents
+
+
 def _extract(blob, asset_name, dest):
-    """Распаковать архив ассета в dest."""
+    """Распаковать архив ассета в dest (с защитой от path traversal)."""
+    dest = Path(dest)
     low = asset_name.lower()
     if low.endswith(".zip"):
         with zipfile.ZipFile(io.BytesIO(blob)) as zf:
+            for name in zf.namelist():
+                if not _is_within(dest, name):
+                    raise ValueError(f"небезопасный путь в архиве: {name}")
             zf.extractall(dest)
     elif low.endswith((".tar.gz", ".tgz")):
         with tarfile.open(fileobj=io.BytesIO(blob), mode="r:gz") as tf:
-            tf.extractall(dest)
+            for member in tf.getmembers():
+                if not _is_within(dest, member.name):
+                    raise ValueError(f"небезопасный путь в архиве: {member.name}")
+            extra = {"filter": "data"} if hasattr(tarfile, "data_filter") else {}
+            tf.extractall(dest, **extra)
     else:
         raise ValueError(f"неизвестный формат архива: {asset_name}")
 
