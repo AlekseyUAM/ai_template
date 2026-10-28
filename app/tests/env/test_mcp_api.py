@@ -42,12 +42,12 @@ def test_launch_extension_rejected(tmp_path):
     assert r.status_code == 400
 
 
-def test_types_endpoint_lists_seven_with_custom_first(tmp_path):
+def test_types_endpoint_lists_eight_with_custom_first(tmp_path):
     data = make(tmp_path).get("/api/mcp/types").json()["types"]
     assert data[0]["key"] == "custom"
     keys = {t["key"] for t in data}
     assert keys == {"custom", "1c-md", "1c-md-queries", "bsl-ls",
-                    "1c-platform", "1c-naparnic", "code-index"}
+                    "1c-platform", "1c-naparnic", "code-index", "code-index-local"}
 
 
 def test_create_persists_new_fields(tmp_path):
