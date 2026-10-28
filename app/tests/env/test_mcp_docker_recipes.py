@@ -77,6 +77,14 @@ def test_code_index_requires_project_name(tmp_path):
                         catalog_dir=str(catalog), state_dir=str(tmp_path / "s"))
 
 
+def test_daemon_toml_interpolates_alias_and_path():
+    text = R._daemon_toml("мой-алиас", "/custom/code/path")
+    assert 'alias = "мой-алиас"' in text
+    assert 'path = "/custom/code/path"' in text
+    # дефолтный /repos/src не должен появляться, если его не передали
+    assert "/repos/src" not in text
+
+
 def test_naparnic_host_network_on_linux(monkeypatch):
     monkeypatch.setattr(R.sys, "platform", "linux")
     p = R.launch_params("1c-naparnic", port=8003, token="T")
