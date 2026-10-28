@@ -1,12 +1,31 @@
 from agentmon.env.mcp_types import MCP_TYPES, get_type, build_connection, types_payload
 
 
-def test_seven_types_present():
+def test_eight_types_present():
     keys = {t.key for t in MCP_TYPES}
     assert keys == {
         "custom", "1c-md", "1c-md-queries", "bsl-ls",
-        "1c-platform", "1c-naparnic", "code-index",
+        "1c-platform", "1c-naparnic", "code-index", "code-index-local",
     }
+
+
+def test_docker_code_index_retitled():
+    t = get_type("code-index")
+    assert t.title == "Индексированная кодовая база (в Docker локально)"
+    assert t.action == "docker"
+
+
+def test_code_index_local_type():
+    t = get_type("code-index-local")
+    assert t.title == "Индексированная кодовая база (локально)"
+    assert t.action == "local"
+    assert t.required == ("catalog_dir", "project_name", "code_index_dir", "port")
+    for f in ("catalog_dir", "project_name", "code_index_dir", "port"):
+        assert f in t.fields
+    assert t.field_labels["code_index_dir"] == "Каталог code_index"
+    assert t.field_labels["port"] == "Порт code_index"
+    assert t.defaults["mcp_name"] == "code_index"
+    assert t.defaults["port"] == 8005
 
 
 def test_custom_is_first_and_minimal():
