@@ -15,6 +15,7 @@ const FIELD_LABELS = {
   project_name: "Имя проекта (alias репозитория)",
   platform_path: "Путь к платформе",
   connection: "Подключение",
+  code_index_dir: "Каталог code_index",
 };
 
 async function initialize() {
@@ -121,6 +122,9 @@ function renderTypeFields() {
     if (t.action === "docker") {
       action.innerHTML =
         `<button type="button" onclick="deployFromForm()">Развернуть в Docker локально</button>`;
+    } else if (t.action === "local") {
+      action.innerHTML =
+        `<button type="button" onclick="deployLocalFromForm()">Развернуть локально</button>`;
     } else if (t.action === "cfe") {
       action.innerHTML =
         `<button type="button" onclick="downloadFromForm()">Скачать cfe</button>`;
@@ -217,7 +221,10 @@ async function createMcp() {
   }
 
   const kind =
-    t.action === "cfe" ? "extension" : t.action === "docker" ? "docker" : "custom";
+    t.action === "cfe" ? "extension"
+      : t.action === "docker" ? "docker"
+      : t.action === "local" ? "local"
+      : "custom";
   const body = { name, standard_key: t.key, kind };
 
   if (t.fields.includes("purpose")) body.purpose = fieldVal("purpose") || "";
@@ -230,6 +237,7 @@ async function createMcp() {
   }
   if (t.fields.includes("token")) body.token_env = fieldVal("token") || null;
   if (t.fields.includes("catalog_dir")) body.catalog_dir = fieldVal("catalog_dir") || null;
+  if (t.fields.includes("code_index_dir")) body.code_index_dir = fieldVal("code_index_dir") || null;
   if (t.fields.includes("project_name")) body.project_name = fieldVal("project_name") || null;
   if (t.fields.includes("platform_path")) body.platform_path = fieldVal("platform_path") || null;
   body.connection_json = fieldVal("connection") || null;
@@ -266,6 +274,20 @@ async function deployFromForm() {
   hideAddForm();
   await loadMcp();
   await streamLaunch(id, {}); // порт/токен/каталог берутся из сохранённого элемента
+}
+
+// Кнопка «Развернуть локально» в форме: сохранить элемент, затем развернуть нативно.
+async function deployLocalFromForm() {
+  const id = await createMcp();
+  if (id == null) return;
+  hideAddForm();
+  await loadMcp();
+  await streamDeployLocal(id);
+}
+
+// Стрим лога локального развёртывания в тот же вывод, что и docker-подъём.
+async function streamDeployLocal(id) {
+  await streamLaunch(id, {}, `/api/mcp/${id}/deploy-local/stream`);
 }
 
 // Кнопка «Скачать cfe» в форме: сохранить элемент, показать его карточку и
@@ -309,6 +331,7 @@ async function showMcpCard(mcpId) {
     mcp.port ? cardField("Порт", mcp.port) : "",
     mcp.token_env ? cardField("Токен", "••••••") : "",
     mcp.catalog_dir ? cardField("Каталог кодовой базы", mcp.catalog_dir) : "",
+    mcp.code_index_dir ? cardField("Каталог code_index", mcp.code_index_dir) : "",
     mcp.project_name ? cardField("Имя проекта (alias репозитория)", mcp.project_name) : "",
     mcp.platform_path ? cardField("Путь к платформе", mcp.platform_path) : "",
     mcp.connection_json ? cardField("Подключение", mcp.connection_json, true) : "",
@@ -318,11 +341,14 @@ async function showMcpCard(mcpId) {
   let controlsHtml = "";
   const isCfe = (type && type.has_cfe) || mcp.kind === "extension";
   const isDocker = (type && type.action === "docker") || mcp.kind === "docker";
+  const isLocal = (type && type.action === "local") || mcp.kind === "local";
 
   if (isCfe) {
     controlsHtml = `<button type="button" onclick="downloadCfe('${mcp.id}')">Скачать cfe</button>`;
   } else if (isDocker) {
     controlsHtml = `<button type="button" onclick="launchMcp('${mcp.id}')">Развернуть в Docker локально</button>`;
+  } else if (isLocal) {
+    controlsHtml = `<button type="button" onclick="deployLocal('${mcp.id}')">Развернуть локально</button>`;
   }
 
   cardPanel.innerHTML = `
@@ -359,14 +385,14 @@ function hideMcpCard(event) {
 }
 
 // Живой стриминг лога сборки образа и запуска контейнера в панель лога.
-async function streamLaunch(mcpId, body) {
+async function streamLaunch(mcpId, body, url = `/api/mcp/${mcpId}/launch/stream`) {
   const el = document.getElementById("log-text");
   el.textContent = "";
   const panel = document.getElementById("log-output");
   panel.style.display = "block";
   panel.scrollIntoView({ behavior: "smooth", block: "start" });
   try {
-    const res = await fetch(`/api/mcp/${mcpId}/launch/stream`, {
+    const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body || {}),
@@ -403,6 +429,10 @@ async function launchMcp(mcpId) {
   } finally {
     btns.forEach((b) => (b.disabled = false));
   }
+}
+
+async function deployLocal(id) {
+  await streamDeployLocal(id);
 }
 
 async function deleteMcp(mcpId) {
