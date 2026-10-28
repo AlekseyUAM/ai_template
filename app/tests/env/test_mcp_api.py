@@ -231,6 +231,20 @@ def test_launch_prebuilt_only_missing_image_reports(tmp_path, monkeypatch):
     assert data["ok"] is False and "не найден" in data["log"]
 
 
+def test_create_local_code_index_persists_fields(tmp_path):
+    c = make(tmp_path)
+    r = c.post("/api/mcp", json={
+        "name": "idx-local", "kind": "local", "standard_key": "code-index-local",
+        "mcp_name": "code_index", "url": "localhost", "port": 8005,
+        "catalog_dir": "/code/cfg", "project_name": "proj",
+        "code_index_dir": "/opt/ci",
+    })
+    assert r.status_code == 200
+    row = r.json()["mcp"]
+    assert row["code_index_dir"] == "/opt/ci"
+    assert row["project_name"] == "proj"
+
+
 def test_download_cfe_for_queries_type(tmp_path):
     c = make(tmp_path)
     mid = c.post("/api/mcp", json={

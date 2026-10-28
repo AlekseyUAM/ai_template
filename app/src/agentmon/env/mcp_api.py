@@ -71,6 +71,7 @@ def build_mcp_router(store) -> APIRouter:
         catalog_dir = body.get("catalog_dir")
         platform_path = body.get("platform_path")
         project_name = body.get("project_name")
+        code_index_dir = body.get("code_index_dir")
 
         # если standard_key передан и kind не указан — взять из каталога
         if standard_key and standard_key in CATALOG and not kind:
@@ -100,6 +101,7 @@ def build_mcp_router(store) -> APIRouter:
             catalog_dir=catalog_dir,
             platform_path=platform_path,
             project_name=project_name,
+            code_index_dir=code_index_dir,
         )
         row = repo.get(mid)
         return {"mcp": row}
@@ -113,7 +115,7 @@ def build_mcp_router(store) -> APIRouter:
         allowed = {"name", "purpose", "kind", "standard_key",
                    "connection_json", "port", "token_env",
                    "mcp_name", "url", "db_name", "catalog_dir", "platform_path",
-                   "project_name"}
+                   "project_name", "code_index_dir"}
         fields = {k: v for k, v in body.items() if k in allowed}
         repo.update(mid, **fields)
         return {"mcp": repo.get(mid)}
