@@ -24,6 +24,21 @@ import tempfile
 from pathlib import Path
 from typing import List
 
+def _force_utf8_output() -> None:
+    """Перевести stdout/stderr в UTF-8.
+
+    При перенаправлении вывода в файл (правило optimized-config-loading пишет лог)
+    Python на Windows берёт ANSI-кодировку локали (cp1251), в которой нет эмодзи
+    из print() — скрипт падал бы на «'charmap' codec can't encode character».
+    reconfigure доступен с Python 3.7; errors="replace" — чтобы вывод не ронял
+    загрузку даже на несовместимом символе.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+
 def get_project_root() -> Path:
     """Получи корень проекта"""
     script_dir = Path(__file__).parent
@@ -37,9 +52,10 @@ def batch_cmd() -> List[str]:
 def _object_root(rel: str) -> str:
     """Свести путь файла внутри src/cf к корневому файлу объекта метаданных.
 
-    Платформа в -listFile принимает только корневые файлы объектов
-    (<Вид>/<Имя>.xml), а не подфайлы (модули, формы, макеты). Любой изменённый
-    подфайл сводим к корню объекта.
+    Корневой файл объекта (<Вид>/<Имя>.xml) платформа в -listFile грузит вместе
+    с его дочерними объектами, но НЕ с их содержимым: формы, макеты и модули
+    нужно перечислять отдельными файлами (это делает get_changed_files). Здесь
+    по любому подфайлу вычисляется только корень объекта.
 
         Configuration.xml                           -> Configuration.xml
         Catalogs/Номенклатура.xml                   -> Catalogs/Номенклатура.xml
@@ -58,40 +74,50 @@ def _object_root(rel: str) -> str:
 
 
 def get_changed_files() -> List[str]:
-    """Список корневых файлов изменённых объектов конфигурации из git.
+    """Список файлов изменённых объектов конфигурации для -listFile (из git).
 
     Учитывает и отслеживаемые изменения (git diff), и новые untracked-файлы
-    (git ls-files --others). Каждый изменённый подфайл объекта сводится к
-    корневому файлу объекта. Пути — относительно src/cf.
+    (git ls-files --others). Пути — относительно src/cf. По образцу навыка
+    db-load-git в список попадают:
+      - корневой файл каждого изменённого объекта (<Вид>/<Имя>.xml);
+      - сам изменённый файл (XML вложенных объектов: Forms/<Ф>.xml,
+        Templates/<М>.xml; модули; Ext/*) — платформа по корню вложенные
+        объекты и их содержимое не грузит;
+      - для изменённого не-XML файла или файла внутри Ext — все файлы каталога
+        Ext объекта (как в db-load-git).
 
-    ConfigDumpInfo.xml исключается: это не объект метаданных, через -listFile он
-    даёт ошибку «URL ... не может быть преобразован в полное имя объекта
-    метаданных»; платформа обновит его сама по флагу -updateConfigDumpInfo.
+    Удалённые файлы пропускаются: платформа молча игнорирует отсутствующий файл
+    в -listFile. ConfigDumpInfo.xml (в т.ч. вложенный) исключается: это не объект
+    метаданных, через -listFile он даёт ошибку «URL ... не может быть
+    преобразован в полное имя объекта метаданных»; платформа обновит его сама по
+    флагу -updateConfigDumpInfo.
     """
     project_root = get_project_root()
     os.chdir(project_root)
 
-    # core.quotePath=false — чтобы кириллические имена не экранировались в \nnn
+    # core.quotePath=false — чтобы кириллические имена не экранировались в \nnn.
+    # encoding="utf-8" — git выводит UTF-8 (при quotePath=false); без явной
+    # кодировки text=True декодирует выводом локали (cp1251) и падает на кириллице.
     raw: List[str] = []
     try:
         diff = subprocess.run(
             ["git", "-c", "core.quotePath=false", "diff", "--name-only", "HEAD",
              "--", "src/cf/"],
-            capture_output=True, text=True, check=False,
+            capture_output=True, text=True, check=False, encoding="utf-8",
         )
         if diff.returncode != 0:
             # HEAD может не существовать (пустой репозиторий)
             diff = subprocess.run(
                 ["git", "-c", "core.quotePath=false", "diff", "--name-only",
                  "--", "src/cf/"],
-                capture_output=True, text=True, check=False,
+                capture_output=True, text=True, check=False, encoding="utf-8",
             )
         raw.extend(diff.stdout.splitlines())
 
         others = subprocess.run(
             ["git", "-c", "core.quotePath=false", "ls-files", "--others",
              "--exclude-standard", "--", "src/cf/"],
-            capture_output=True, text=True, check=False,
+            capture_output=True, text=True, check=False, encoding="utf-8",
         )
         raw.extend(others.stdout.splitlines())
     except Exception as e:
@@ -101,22 +127,51 @@ def get_changed_files() -> List[str]:
     cf_dir = project_root / "src" / "cf"
     seen = set()
     result: List[str] = []
+
+    def add(rel: str) -> None:
+        rel = rel.replace("\\", "/")
+        if rel in seen:
+            return
+        seen.add(rel)
+        result.append(rel)
+
     for f in raw:
-        f = f.strip()
+        f = f.strip().replace("\\", "/")
         if not f:
             continue
         rel = f.replace("src/cf/", "", 1)
-        if rel == "ConfigDumpInfo.xml":
+        # ConfigDumpInfo.xml (в т.ч. вложенный) — не объект метаданных.
+        if rel == "ConfigDumpInfo.xml" or rel.endswith("/ConfigDumpInfo.xml"):
             continue
+
+        # Корневой файл объекта грузим всегда, если он существует. Configuration.xml
+        # остаётся в списке и при удалении объекта — через него платформа подхватит
+        # изменённый состав.
         root = _object_root(rel)
-        if root in seen:
+        if root == "Configuration.xml" or (cf_dir / root).exists():
+            add(root)
+
+        # Удалённый файл платформа в -listFile молча пропускает — не добавляем.
+        if not (cf_dir / rel).exists():
             continue
-        # Грузим только существующие файлы; удалённые объекты подхватятся через
-        # изменённый Configuration.xml, который остаётся в списке.
-        if root != "Configuration.xml" and not (cf_dir / root).exists():
+
+        parts = rel.split("/")
+        # Файл верхнего уровня или сам корень объекта уже обработаны выше.
+        if len(parts) <= 2:
             continue
-        seen.add(root)
-        result.append(root)
+
+        # Сам изменённый подфайл: XML вложенных объектов (Forms/*.xml,
+        # Templates/*.xml), модули, Ext/*.
+        add(rel)
+
+        # Для не-XML файла или файла внутри Ext — все файлы каталога Ext объекта
+        # (как в db-load-git): отдельный изменённый модуль не несёт остального Ext.
+        if (not rel.endswith(".xml")) or "Ext" in parts:
+            ext_dir = cf_dir / parts[0] / parts[1] / "Ext"
+            if ext_dir.is_dir():
+                for p in sorted(ext_dir.rglob("*")):
+                    if p.is_file():
+                        add(str(p.relative_to(cf_dir)).replace("\\", "/"))
 
     return result
 
@@ -135,11 +190,14 @@ def run_optimized_load(files: List[str]) -> int:
         print(f"  - {f}")
     print()
 
-    # Создай временный файл со списком
+    # Создай временный файл со списком. encoding='utf-8' обязателен: конфигуратор
+    # читает -listFile как UTF-8, а без явной кодировки файл пишется в кодировке
+    # локали (cp1251 на Windows) и пути с кириллицей ломаются.
     with tempfile.NamedTemporaryFile(
         mode='w',
         suffix='.txt',
         delete=False,
+        encoding='utf-8',
         dir=os.path.dirname(os.path.abspath(__file__))
     ) as tmp:
         for f in files:
@@ -177,6 +235,7 @@ def run_optimized_load(files: List[str]) -> int:
 
 def main():
     """Главная функция"""
+    _force_utf8_output()
     print("📦 Загрузка конфигурации 1С (частичная, только изменённые файлы)")
     print()
 
