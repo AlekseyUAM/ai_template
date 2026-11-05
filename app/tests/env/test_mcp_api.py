@@ -363,9 +363,40 @@ def test_launch_stream_clone_failure_aborts_build(tmp_path, monkeypatch):
     assert "Сборка образа" not in body
 
 
+def test_launch_stream_clone_oserror_aborts_build(tmp_path, monkeypatch):
+    from agentmon.env import mcp_docker, mcp_sources
+    monkeypatch.setattr(mcp_docker, "image_exists", lambda t, **k: False)
+    monkeypatch.setattr(
+        mcp_sources, "clone_cmd",
+        lambda b, rr: ["git", "clone", "--depth", "1", "URL", "DEST"])
+
+    def fake_iter(cmd, **k):
+        if cmd[:2] == ["git", "clone"]:
+            raise FileNotFoundError("git not found")
+        yield "unexpected"
+        yield mcp_docker.rc_line(0)
+
+    monkeypatch.setattr(mcp_docker, "iter_output", fake_iter)
+
+    c = make(tmp_path)
+    catalog = tmp_path / "cfg"; catalog.mkdir()
+    mid = c.post("/api/mcp", json={
+        "name": "idx", "kind": "docker", "standard_key": "code-index",
+        "port": 8004, "catalog_dir": str(catalog), "project_name": "proj",
+    }).json()["mcp"]["id"]
+    body = c.post(f"/api/mcp/{mid}/launch/stream", json={"port": 8004}).text
+    assert "Не удалось запустить git: git not found" in body
+    assert "Сборка образа" not in body
+
+
 def test_launch_stream_skips_clone_when_image_exists(tmp_path, monkeypatch):
-    from agentmon.env import mcp_docker
+    from agentmon.env import mcp_docker, mcp_sources
     monkeypatch.setattr(mcp_docker, "image_exists", lambda t, **k: True)
+
+    def no_clone(*a, **k):
+        raise AssertionError("clone_cmd не должен вызываться")
+
+    monkeypatch.setattr(mcp_sources, "clone_cmd", no_clone)
 
     def fake_iter(cmd, **k):
         if cmd[:3] == ["docker", "rm", "-f"]:
