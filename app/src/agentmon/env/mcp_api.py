@@ -275,6 +275,21 @@ def build_mcp_router(store) -> APIRouter:
                 yield (f"✗ образ {image} не найден; для этого вида сборка недоступна — "
                        "соберите образ заранее\n")
                 return
+            if need_build:
+                clone_c = mcp_sources.clone_cmd(b, rr)
+                if clone_c is not None:
+                    yield "\n=== Скачивание исходников ===\n"
+                    yield f"$ {' '.join(clone_c)}\n"
+                    try:
+                        yield from _stream(clone_c)
+                    except OSError as exc:
+                        yield f"\n✗ Не удалось запустить git: {exc}\n"
+                        return
+                    if _stream.rc != 0:
+                        yield (f"\n✗ Ошибка скачивания исходников "
+                               f"(код {_stream.rc})\n")
+                        return
+                    yield "✓ Исходники скачаны\n"
             # снять прежний контейнер с тем же именем (тихо)
             for _ in mcp_docker.iter_output(["docker", "rm", "-f", name]):
                 pass

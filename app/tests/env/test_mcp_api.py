@@ -297,6 +297,96 @@ def test_launch_stream_builds_then_runs(tmp_path, monkeypatch):
     assert "Образ собран" in body and "Контейнер запущен" in body
 
 
+def test_launch_stream_clones_then_builds(tmp_path, monkeypatch):
+    from agentmon.env import mcp_docker, mcp_sources
+    monkeypatch.setattr(mcp_docker, "image_exists", lambda t, **k: False)
+    monkeypatch.setattr(
+        mcp_sources, "clone_cmd",
+        lambda b, rr: ["git", "clone", "--depth", "1", "URL", "DEST"])
+
+    def fake_iter(cmd, **k):
+        if cmd[:2] == ["git", "clone"]:
+            yield "Cloning into 'DEST'..."
+            yield mcp_docker.rc_line(0)
+            return
+        if cmd[:2] == ["docker", "build"]:
+            yield "Step 1/1"
+            yield mcp_docker.rc_line(0)
+            return
+        if cmd[:3] == ["docker", "rm", "-f"]:
+            yield mcp_docker.rc_line(0)
+            return
+        yield "cid"
+        yield mcp_docker.rc_line(0)
+
+    monkeypatch.setattr(mcp_docker, "iter_output", fake_iter)
+
+    c = make(tmp_path)
+    catalog = tmp_path / "cfg"; catalog.mkdir()
+    mid = c.post("/api/mcp", json={
+        "name": "idx", "kind": "docker", "standard_key": "code-index",
+        "port": 8004, "catalog_dir": str(catalog), "project_name": "proj",
+    }).json()["mcp"]["id"]
+    body = c.post(f"/api/mcp/{mid}/launch/stream", json={"port": 8004}).text
+    assert "=== Скачивание исходников ===" in body
+    assert "Cloning into" in body
+    assert body.index("Скачивание исходников") < body.index("Сборка образа")
+    assert "Контейнер запущен" in body
+
+
+def test_launch_stream_clone_failure_aborts_build(tmp_path, monkeypatch):
+    from agentmon.env import mcp_docker, mcp_sources
+    monkeypatch.setattr(mcp_docker, "image_exists", lambda t, **k: False)
+    monkeypatch.setattr(
+        mcp_sources, "clone_cmd",
+        lambda b, rr: ["git", "clone", "--depth", "1", "URL", "DEST"])
+
+    def fake_iter(cmd, **k):
+        if cmd[:2] == ["git", "clone"]:
+            yield "fatal: repository not found"
+            yield mcp_docker.rc_line(128)
+            return
+        yield "unexpected"
+        yield mcp_docker.rc_line(0)
+
+    monkeypatch.setattr(mcp_docker, "iter_output", fake_iter)
+
+    c = make(tmp_path)
+    catalog = tmp_path / "cfg"; catalog.mkdir()
+    mid = c.post("/api/mcp", json={
+        "name": "idx", "kind": "docker", "standard_key": "code-index",
+        "port": 8004, "catalog_dir": str(catalog), "project_name": "proj",
+    }).json()["mcp"]["id"]
+    body = c.post(f"/api/mcp/{mid}/launch/stream", json={"port": 8004}).text
+    assert "fatal: repository not found" in body
+    assert "Ошибка скачивания исходников" in body
+    assert "Сборка образа" not in body
+
+
+def test_launch_stream_skips_clone_when_image_exists(tmp_path, monkeypatch):
+    from agentmon.env import mcp_docker
+    monkeypatch.setattr(mcp_docker, "image_exists", lambda t, **k: True)
+
+    def fake_iter(cmd, **k):
+        if cmd[:3] == ["docker", "rm", "-f"]:
+            yield mcp_docker.rc_line(0)
+            return
+        yield "cid"
+        yield mcp_docker.rc_line(0)
+
+    monkeypatch.setattr(mcp_docker, "iter_output", fake_iter)
+
+    c = make(tmp_path)
+    catalog = tmp_path / "cfg"; catalog.mkdir()
+    mid = c.post("/api/mcp", json={
+        "name": "idx", "kind": "docker", "standard_key": "code-index",
+        "port": 8004, "catalog_dir": str(catalog), "project_name": "proj",
+    }).json()["mcp"]["id"]
+    body = c.post(f"/api/mcp/{mid}/launch/stream", json={"port": 8004}).text
+    assert "Скачивание исходников" not in body
+    assert "Контейнер запущен" in body
+
+
 def test_launch_prebuilt_only_missing_image_reports(tmp_path, monkeypatch):
     from agentmon.env import mcp_docker
     monkeypatch.setattr(mcp_docker, "image_exists", lambda tag, **k: False)
