@@ -2,7 +2,8 @@
 
 Для каждого docker-вида задаёт: образ, как собрать его из `deps/` (если можно),
 имя env-переменной порта сервера, статические env, нужен ли токен и его env,
-монтирование каталога кодовой базы. Чистые функции (`launch_params`) считают
+монтирование каталога кодовой базы. Если каталога исходников нет, он клонируется
+перед сборкой (см. `mcp_sources`). Чистые функции (`launch_params`) считают
 параметры запуска из сохранённой карточки MCP и легко тестируются.
 """
 import re
@@ -28,6 +29,8 @@ class BuildSpec:
     dockerfile: str     # путь относительно корня репозитория
     context: str        # контекст сборки относительно корня репозитория
     build_args: dict = field(default_factory=dict)
+    repo_dir: str | None = None   # каталог исходников относительно корня репозитория
+    repo_url: str | None = None   # HTTPS-URL для git clone, если каталога нет
 
 
 @dataclass(frozen=True)
@@ -62,6 +65,8 @@ RECIPES: dict[str, DockerRecipe] = {
         build=BuildSpec(
             dockerfile="deps/docker_1c_sandbox/mcp-bsl-context/Dockerfile",
             context="deps/docker_1c_sandbox/mcp-bsl-context",
+            repo_dir="deps/docker_1c_sandbox",
+            repo_url="https://github.com/AlekseyUAM/docker_1c_sandbox.git",
         ),
     ),
     # 1С:Напарник — spring-mcp-1c-copilot (Dockerfile в апстриме; только готовый образ).
@@ -82,6 +87,8 @@ RECIPES: dict[str, DockerRecipe] = {
         build=BuildSpec(
             dockerfile="deps/code-index-mcp/deploy/docker/Dockerfile",
             context="deps/code-index-mcp",
+            repo_dir="deps/code-index-mcp",
+            repo_url="https://github.com/Regsorm/code-index-mcp.git",
         ),
     ),
 }

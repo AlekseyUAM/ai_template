@@ -114,3 +114,21 @@ def test_platform_requires_platform_path():
     assert p["env"]["ONEC_PLATFORM_PATH"] == "/opt/1cv8/x"
     assert any("/opt/1cv8/x:/opt/1cv8/x:ro" in v for v in p["volumes"])
     assert p["internal_port"] == 8002
+
+
+def test_platform_build_knows_source_repo():
+    b = R.recipe_for("1c-platform").build
+    assert b.repo_dir == "deps/docker_1c_sandbox"
+    assert b.repo_url == "https://github.com/AlekseyUAM/docker_1c_sandbox.git"
+
+
+def test_code_index_build_knows_source_repo():
+    b = R.recipe_for("code-index").build
+    assert b.repo_dir == "deps/code-index-mcp"
+    assert b.repo_url == "https://github.com/Regsorm/code-index-mcp.git"
+
+
+def test_bsl_ls_build_has_no_source_repo():
+    b = R.recipe_for("bsl-ls").build
+    assert b.repo_dir is None
+    assert b.repo_url is None
