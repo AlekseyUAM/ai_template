@@ -8,6 +8,7 @@ from .mcp_catalog import CATALOG
 from .mcp_types import types_payload, get_type
 from .mcp_docker_recipes import recipe_for, launch_params, container_name
 from . import mcp_docker
+from . import mcp_sources
 from . import code_index_local
 
 
@@ -221,6 +222,12 @@ def build_mcp_router(store) -> APIRouter:
                         "log": f"образ {ctx['image']} не найден; сборка недоступна — "
                                "соберите образ заранее"}
             rr = ctx["repo_root"]
+            res_c = mcp_sources.clone(b, rr)
+            log_parts.append(res_c.get("log", ""))
+            if not res_c["ok"]:
+                return {"ok": False,
+                        "log": "\n".join(x for x in log_parts if x)
+                               + "\n✗ Не удалось скачать исходники"}
             res_b = mcp_docker.build(ctx["image"], str(rr / b.dockerfile),
                                      str(rr / b.context), build_args=b.build_args)
             log_parts.append(res_b.get("log", ""))

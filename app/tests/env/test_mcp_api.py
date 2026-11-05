@@ -137,6 +137,85 @@ def test_launch_builds_image_when_missing(tmp_path, monkeypatch):
     assert built["tag"] == "ai1c/mcp-bsl-ls:local"
 
 
+def test_launch_clones_deps_before_build(tmp_path, monkeypatch):
+    from agentmon.env import mcp_docker, mcp_sources
+    order = []
+    monkeypatch.setattr(mcp_docker, "image_exists", lambda tag, **k: False)
+
+    def fake_clone(build, repo_root, **kw):
+        order.append("clone")
+        return {"ok": True, "cloned": True, "log": "Cloning into 'repo'..."}
+
+    def fake_build(tag, dockerfile, context, **k):
+        order.append("build")
+        return {"ok": True, "log": "built"}
+
+    monkeypatch.setattr(mcp_sources, "clone", fake_clone)
+    monkeypatch.setattr(mcp_docker, "build", fake_build)
+    monkeypatch.setattr(mcp_docker, "launch",
+                        lambda **kw: {"ok": True, "container": kw["name"], "log": "run"})
+
+    c = make(tmp_path)
+    catalog = tmp_path / "cfg"; catalog.mkdir()
+    mid = c.post("/api/mcp", json={
+        "name": "idx", "kind": "docker", "standard_key": "code-index",
+        "port": 8004, "catalog_dir": str(catalog), "project_name": "proj",
+    }).json()["mcp"]["id"]
+    r = c.post(f"/api/mcp/{mid}/launch", json={"port": 8004})
+    assert r.status_code == 200 and r.json()["ok"] is True
+    assert order == ["clone", "build"]
+    assert "Cloning into" in r.json()["log"]
+
+
+def test_launch_clone_failure_aborts_build(tmp_path, monkeypatch):
+    from agentmon.env import mcp_docker, mcp_sources
+    monkeypatch.setattr(mcp_docker, "image_exists", lambda tag, **k: False)
+    monkeypatch.setattr(
+        mcp_sources, "clone",
+        lambda build, repo_root, **kw: {
+            "ok": False, "cloned": True,
+            "log": "fatal: repository not found",
+        })
+
+    def fake_build(*a, **k):
+        raise AssertionError("docker build не должен вызываться")
+
+    monkeypatch.setattr(mcp_docker, "build", fake_build)
+
+    c = make(tmp_path)
+    catalog = tmp_path / "cfg"; catalog.mkdir()
+    mid = c.post("/api/mcp", json={
+        "name": "idx", "kind": "docker", "standard_key": "code-index",
+        "port": 8004, "catalog_dir": str(catalog), "project_name": "proj",
+    }).json()["mcp"]["id"]
+    r = c.post(f"/api/mcp/{mid}/launch", json={"port": 8004})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["ok"] is False
+    assert "fatal: repository not found" in data["log"]
+
+
+def test_launch_skips_clone_when_image_exists(tmp_path, monkeypatch):
+    from agentmon.env import mcp_docker, mcp_sources
+    monkeypatch.setattr(mcp_docker, "image_exists", lambda tag, **k: True)
+    called = []
+    monkeypatch.setattr(
+        mcp_sources, "clone",
+        lambda *a, **k: called.append(1) or {"ok": True, "log": ""})
+    monkeypatch.setattr(mcp_docker, "launch",
+                        lambda **kw: {"ok": True, "container": kw["name"], "log": "run"})
+
+    c = make(tmp_path)
+    catalog = tmp_path / "cfg"; catalog.mkdir()
+    mid = c.post("/api/mcp", json={
+        "name": "idx", "kind": "docker", "standard_key": "code-index",
+        "port": 8004, "catalog_dir": str(catalog), "project_name": "proj",
+    }).json()["mcp"]["id"]
+    r = c.post(f"/api/mcp/{mid}/launch", json={"port": 8004})
+    assert r.status_code == 200 and r.json()["ok"] is True
+    assert called == []
+
+
 def test_delete_docker_mcp_keeps_container(tmp_path, monkeypatch):
     # удаление карточки docker-вида не должно трогать контейнер
     from agentmon.env import mcp_docker
