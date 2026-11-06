@@ -5,39 +5,14 @@
 """
 
 import logging
-import re
 
 from . import config
 from .jsonl_cursor import JsonlCursor
 from .models import SessionSnapshot
+from .paths import normalize_path
 from .pricing import cost_for
 
 logger = logging.getLogger(__name__)
-
-_DRIVE_RE = re.compile(r"^[A-Za-z]:")
-
-
-def normalize_path(path: str) -> str:
-    """Привести путь к виду, пригодному для сопоставления журнала с проектом.
-
-    Ключи журналов — это сырые cwd, записанные Claude Code, а ищут по ним
-    путь, набранный пользователем в форме. Расхождение в стиле слэшей,
-    хвостовой слэш или регистр буквы диска не должны означать «журнала нет»:
-    иначе агент работает, панель показывает «idle · 0 tok», а диспетчер
-    через no_log_seconds помечает все задачи проекта проваленными.
-
-    Нормализация нужна только для сопоставления: наружу пути отдаются
-    в том виде, в каком их задал вызывающий.
-    """
-    if not path:
-        return path
-    norm = path.replace("\\", "/")
-    # Пустая строка ключом быть не может: "/" схлопывать нельзя.
-    norm = norm.rstrip("/") or norm[:1]
-    if _DRIVE_RE.match(norm):
-        # Windows не различает регистр — и буквы диска, и остального пути.
-        norm = norm.casefold()
-    return norm
 
 
 class Observer:

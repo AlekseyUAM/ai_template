@@ -30,6 +30,21 @@ def test_duplicate_key_is_rejected(tmp_path):
         reg.add(name="b", path="/srv/x", backend="local")
 
 
+def test_same_path_in_other_notation_is_rejected(tmp_path):
+    """Windows-путь в другом стиле (слэши/регистр/хвостовой слэш) — тот же проект."""
+    reg = ProjectRegistry(open_db(tmp_path / "db.sqlite"))
+    reg.add(name="a", path=r"C:\Work\Demo", backend="local")
+    with pytest.raises(ValueError, match="уже есть"):
+        reg.add(name="b", path="c:/work/demo/", backend="local")
+
+
+def test_equivalent_path_update_keeps_key_normalized(tmp_path):
+    reg = ProjectRegistry(open_db(tmp_path / "db.sqlite"))
+    p = reg.add(name="a", path=r"C:\Work\Demo", backend="local")
+    upd = reg.update(p.id, path="c:/work/demo/")
+    assert upd.key == "local||c:/work/demo"
+
+
 def test_same_path_on_different_hosts_is_allowed(tmp_path):
     reg = ProjectRegistry(open_db(tmp_path / "db.sqlite"))
     reg.add(name="a", path="/srv/x", backend="ssh", conn={"host": "h1"})
@@ -170,7 +185,8 @@ def test_migration_keeps_new_schema_untouched(tmp_path):
 
     db2 = open_db(path)
     assert [t.text for t in TaskQueue(db2).list(p.id)] == ["t"]
-    assert db2.execute("PRAGMA user_version").fetchone()[0] == 1
+    assert (db2.execute("PRAGMA user_version").fetchone()[0]
+            == registry_module.SCHEMA_VERSION)
 
 
 def test_migration_is_idempotent(tmp_path):
@@ -180,7 +196,55 @@ def test_migration_is_idempotent(tmp_path):
     db.close()
     db2 = open_db(path)
     assert [p.path for p in ProjectRegistry(db2).list()] == ["/srv/x"]
-    assert db2.execute("PRAGMA user_version").fetchone()[0] == 1
+    assert (db2.execute("PRAGMA user_version").fetchone()[0]
+            == registry_module.SCHEMA_VERSION)
+
+
+def _write_v1_db_with_raw_keys(path):
+    """БД версии 1: ключи хранят путь как есть, есть дубли по стилю записи."""
+    raw = sqlite3.connect(path)
+    raw.execute(
+        """CREATE TABLE tasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, project TEXT,
+            text TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'queued',
+            created_at REAL NOT NULL, started_at REAL, finished_at REAL,
+            session_id TEXT, project_id INTEGER)"""
+    )
+    raw.execute(
+        """CREATE TABLE projects (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL,
+            path TEXT NOT NULL, backend TEXT NOT NULL, conn TEXT,
+            claude_cmd TEXT, key TEXT NOT NULL UNIQUE, created_at REAL NOT NULL)"""
+    )
+    raw.execute(
+        "INSERT INTO projects (id, name, path, backend, conn, claude_cmd, key, created_at) "
+        "VALUES (1, 'a', ?, 'local', NULL, NULL, ?, 1)",
+        (r"C:\Work\Demo", r"local||C:\Work\Demo"))
+    # Ключ второй строки уже совпадает с целевым — при слиянии её нужно удалить
+    # раньше, чем канонической строке назначить этот ключ (UNIQUE).
+    raw.execute(
+        "INSERT INTO projects (id, name, path, backend, conn, claude_cmd, key, created_at) "
+        "VALUES (2, 'a2', ?, 'local', NULL, NULL, ?, 2)",
+        ("c:/work/demo/", "local||c:/work/demo"))
+    raw.execute(
+        "INSERT INTO tasks (project_id, text, status, created_at) "
+        "VALUES (2, 't', 'queued', 1)")
+    raw.execute("PRAGMA user_version = 1")
+    raw.commit()
+    raw.close()
+    return path
+
+
+def test_migration_v2_normalizes_keys_and_merges_duplicates(tmp_path):
+    """Ключи v1 с разным стилем пути схлопываются; задачи переходят на оставшийся."""
+    db = open_db(_write_v1_db_with_raw_keys(tmp_path / "v1.sqlite"))
+    projects = ProjectRegistry(db).list()
+    assert len(projects) == 1
+    assert projects[0].key == "local||c:/work/demo"
+    rows = db.execute("SELECT project_id FROM tasks").fetchall()
+    assert [r["project_id"] for r in rows] == [projects[0].id]
+    assert (db.execute("PRAGMA user_version").fetchone()[0]
+            == registry_module.SCHEMA_VERSION)
 
 
 # --- Оборвавшаяся миграция не должна хоронить БД (регрессия) ---
@@ -199,7 +263,8 @@ def test_migration_recovers_from_an_orphan_tasks_new(tmp_path):
     raw.close()
 
     db = open_db(path)
-    assert db.execute("PRAGMA user_version").fetchone()[0] == 1
+    assert (db.execute("PRAGMA user_version").fetchone()[0]
+            == registry_module.SCHEMA_VERSION)
     assert "tasks_new" not in _table_names(db)
 
     reg = ProjectRegistry(db)
@@ -230,7 +295,8 @@ def test_failed_migration_rolls_back_whole(tmp_path, monkeypatch):
 
     monkeypatch.undo()
     db = open_db(path)                # повтор проходит начисто
-    assert db.execute("PRAGMA user_version").fetchone()[0] == 1
+    assert (db.execute("PRAGMA user_version").fetchone()[0]
+            == registry_module.SCHEMA_VERSION)
     reg = ProjectRegistry(db)
     p = reg.add(name="a", path="/srv/a", backend="local")
     TaskQueue(db).enqueue(p.id, "после повтора")

@@ -43,3 +43,17 @@ def test_create_environment_registers_project(tmp_path):
     assert r.json()["ok"] is True
     assert (proj_dir / ".1c-devbase.json").exists()
     assert [p.path for p in reg.list()] == [str(proj_dir)]
+
+
+def test_create_environment_dedupes_path_notation(tmp_path, monkeypatch):
+    """Другой стиль записи пути — тот же проект: вторая запись не создаётся."""
+    client, reg = make_client(tmp_path)
+
+    def fake_install(config, **kwargs):
+        kwargs["register"](config)
+        return []
+
+    monkeypatch.setattr("agentmon.env.api.install_environment", fake_install)
+    client.post("/api/environment/create", json=payload(r"C:\work\demo"))
+    client.post("/api/environment/create", json=payload("c:/work/demo/"))
+    assert [p.path for p in reg.list()] == [r"C:\work\demo"]

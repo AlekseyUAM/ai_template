@@ -4,8 +4,9 @@ import threading
 import time
 
 from .models import Project
+from .paths import normalize_path
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 BACKENDS = ("local", "ssh", "docker")
 
 
@@ -109,7 +110,10 @@ def _migrate(conn: sqlite3.Connection) -> None:
     # иначе уже смигрированная БД оставалась бы с открытой транзакцией.
     conn.execute("BEGIN")
     try:
-        _apply_v1(conn)
+        if version < 1:
+            _apply_v1(conn)
+        if version < 2:
+            _apply_v2(conn)
         conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
     except Exception:
         conn.rollback()               # незавершённая миграция не должна осесть в БД
@@ -156,7 +160,7 @@ def _apply_v1(conn: sqlite3.Connection) -> None:
         now = time.time()
         for row in rows:
             path = row["project"]
-            key = f"local||{path}"
+            key = _key_for("local", None, path)
             conn.execute(
                 "INSERT OR IGNORE INTO projects "
                 "(name, path, backend, conn, claude_cmd, key, created_at) "
@@ -173,6 +177,31 @@ def _apply_v1(conn: sqlite3.Connection) -> None:
 
     if _project_is_not_null(conn):
         _rebuild_tasks_without_not_null(conn)
+
+
+def _apply_v2(conn: sqlite3.Connection) -> None:
+    """Нормализовать ключи проектов до SCHEMA_VERSION = 2.
+
+    Ключ — идентичность проекта в реестре. Пока путь входил в него как есть,
+    `C:\\proj` и `c:/proj/` заводили две строки на один и тот же каталог.
+    Пересчитываем ключи по нормализованному пути; строки, схлопнувшиеся в один
+    ключ, сливаем — задачи переводим на оставшуюся.
+    """
+    rows = conn.execute(
+        "SELECT id, backend, conn, path FROM projects ORDER BY id").fetchall()
+    groups: dict[str, list[int]] = {}
+    for row in rows:
+        data = json.loads(row["conn"]) if row["conn"] else None
+        key = _key_for(row["backend"], data, row["path"])
+        groups.setdefault(key, []).append(row["id"])
+
+    for key, ids in groups.items():
+        canonical, duplicates = ids[0], ids[1:]
+        for pid in duplicates:
+            conn.execute("UPDATE tasks SET project_id=? WHERE project_id=?",
+                         (canonical, pid))
+            conn.execute("DELETE FROM projects WHERE id=?", (pid,))
+        conn.execute("UPDATE projects SET key=? WHERE id=?", (key, canonical))
 
 
 def _project_is_not_null(conn: sqlite3.Connection) -> bool:
@@ -262,7 +291,7 @@ def _basename(path: str) -> str:
 
 def _key_for(backend: str, conn: dict | None, path: str) -> str:
     host = (conn or {}).get("host") or ""
-    return f"{backend}|{host}|{path}"
+    return f"{backend}|{host}|{normalize_path(path)}"
 
 
 def _validate(backend: str, conn: dict | None) -> None:

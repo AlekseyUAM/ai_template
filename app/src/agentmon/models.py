@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 
+from .paths import normalize_path
+
 
 @dataclass(frozen=True)
 class FileRef:
@@ -31,8 +33,12 @@ class Project:
 
     @property
     def key(self) -> str:
-        """Уникальный ключ проекта; он же id агента и часть ключа бэкенда."""
-        return f"{self.backend}|{self.host or ''}|{self.path}"
+        """Уникальный ключ проекта; он же id агента и часть ключа бэкенда.
+
+        Путь нормализуется так же, как в реестре: `C:\\work\\d` и `c:/work/d`
+        — один проект, а не два агента.
+        """
+        return f"{self.backend}|{self.host or ''}|{normalize_path(self.path)}"
 
 
 @dataclass

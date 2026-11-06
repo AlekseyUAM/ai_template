@@ -12,6 +12,7 @@ from .project_checks import (validate_name, requirements, check_db,
 from .task_schema import task_folder_name
 from ..backends.local import LocalProvisioner
 from ..backends.docker import DEFAULT_PLATFORM_DIR, docker_host_from_conn
+from ..paths import same_path
 from . import docker_image
 
 
@@ -58,7 +59,7 @@ def build_project_router(store, registry, monitor=None,
     def _register(config: EnvConfig, backend="local", conn=None) -> None:
         """Идемпотентная регистрация в registry при создании проекта."""
         for p in registry.list():
-            if p.path == config.project_dir:
+            if same_path(p.path, config.project_dir):
                 return
         try:
             registry.add(
@@ -253,7 +254,7 @@ def build_project_router(store, registry, monitor=None,
             project_repo.delete(pid)
             if path:
                 for p in registry.list():
-                    if p.path == path:
+                    if same_path(p.path, path):
                         registry.delete(p.id)
                         break
         except Exception:
@@ -378,7 +379,7 @@ def build_project_router(store, registry, monitor=None,
         # снять регистрацию в registry по совпадению пути (каталог не удаляем)
         try:
             for p in registry.list():
-                if p.path == row["path"]:
+                if same_path(p.path, row["path"]):
                     registry.delete(p.id)
                     break
         except Exception:
@@ -439,7 +440,7 @@ def build_project_router(store, registry, monitor=None,
 
         backend, conn = "local", None
         for p in registry.list():
-            if p.path == project["path"]:
+            if same_path(p.path, project["path"]):
                 backend, conn = p.backend, p.conn
                 break
         prov = _provisioner_for(backend, conn, project["path"])
@@ -468,7 +469,7 @@ def build_project_router(store, registry, monitor=None,
 
         backend, conn = "local", None
         for p in registry.list():
-            if p.path == project["path"]:
+            if same_path(p.path, project["path"]):
                 backend, conn = p.backend, p.conn
                 break
         prov = _provisioner_for(backend, conn, project["path"])

@@ -3,6 +3,7 @@ from dataclasses import asdict
 
 from fastapi import APIRouter, HTTPException
 
+from ..paths import same_path
 from .config_schema import EnvConfig
 from .installer import install_environment
 
@@ -12,7 +13,7 @@ def build_env_router(registry) -> APIRouter:
 
     def register(config: EnvConfig) -> None:
         for p in registry.list():
-            if p.path == config.project_dir:
+            if same_path(p.path, config.project_dir):
                 return                  # уже зарегистрирован — идемпотентно
         registry.add(name=config.project_name, path=config.project_dir,
                      backend="local", conn=None, claude_cmd=None)

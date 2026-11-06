@@ -619,6 +619,37 @@ def test_update_env_ssh_uses_recording_provisioner(tmp_path):
     assert pr.get(pid)["env_version"] != "0.0.0"
 
 
+def test_update_env_matches_registry_path_in_other_style(tmp_path, monkeypatch):
+    """Registry хранит путь в другом стиле — backend всё равно находится (ssh)."""
+    rec_ssh = _RecordingProvisioner()
+    rec_local = _RecordingProvisioner()
+    monkeypatch.setattr("agentmon.env.project_api.LocalProvisioner",
+                        lambda: rec_local)
+    backends = BackendRegistry(
+        "claude",
+        ssh_factory=lambda conn: SimpleNamespace(provisioner=rec_ssh),
+    )
+    monitor = SimpleNamespace(backends=backends)
+    client, registry, store = _make_client_with_monitor(tmp_path, monitor)
+
+    from agentmon.store.projects import ProjectRepo
+    pr = ProjectRepo(store)
+    pid = pr.add(
+        name="sshupd", path=r"C:\srv\sshupd",
+        identifier="dev", email="dev@example.com",
+        platform_dir="/opt/1c", platform_version="8.3",
+        db_kind="file", db_connection="",
+        env_version="0.0.0",
+    )
+    registry.add(name="sshupd", path="c:/srv/sshupd/", backend="ssh",
+                 conn={"host": "h", "user": "u", "port": 22, "key_path": None})
+
+    r = client.post(f"/api/env/projects/{pid}/update-env", json={})
+    assert r.status_code == 200, r.text
+    assert rec_ssh.writes or rec_ssh.runs
+    assert not rec_local.writes and not rec_local.runs
+
+
 def test_update_env_local_project_uses_local_provisioner(tmp_path):
     """update-env для local-проекта (или отсутствующего в registry) — LocalProvisioner.
 

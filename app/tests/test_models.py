@@ -8,10 +8,10 @@ def test_project_key_built_from_backend_host_and_path():
     assert p.key == "ssh|srv|/srv/demo"
 
 
-def test_local_project_key_has_empty_host():
+def test_local_project_key_has_empty_host_and_normalized_path():
     p = Project(id=2, name="d", path="C:\\work\\d", backend="local", conn=None,
                 claude_cmd=None, created_at=0.0)
-    assert p.key == "local||C:\\work\\d"
+    assert p.key == "local||c:/work/d"
 
 
 def test_project_host_is_none_without_conn():
