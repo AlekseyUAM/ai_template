@@ -208,18 +208,31 @@ def test_hook_command_points_to_project_venv(prov, tmp_path):
         assert "python" not in cmd.replace(py, "")  # кроме как в составе пути venv
 
 
-def test_settings_valid_json_with_windows_venv_path(prov, tmp_path, monkeypatch):
+def test_settings_windows_venv_path_uses_forward_slashes(prov, tmp_path, monkeypatch):
     # Регрессия: на Windows venv_python отдаёт путь с backslash
-    # (C:\...\python.exe). Если впечатать его в JSON как есть, backslash — битая
-    # escape-последовательность, и settings.json перестаёт парситься.
+    # (C:\...\python.exe). Claude Code исполняет хуки через Git Bash, который
+    # съедает литеральные backslash в тексте команды (claude-code#26759).
+    # В команде путь должен быть с прямыми слэшами; JSON при этом валиден.
     win_py = r"C:\projects\demo\.venv\Scripts\python.exe"
     monkeypatch.setattr(prov, "venv_python", lambda project_dir: win_py)
     content.deploy_content(prov, cfg(tmp_path, []), update=False)
-    # не бросает JSONDecodeError → путь корректно экранирован
+    # не бросает JSONDecodeError → файл остался валидным JSON
     data = json.loads((tmp_path / ".claude" / "settings.json").read_text(encoding="utf-8"))
-    cmd = data["hooks"]["PostToolUse"][0]["hooks"][0]["command"]
-    # в разобранном значении backslash сохранён (валиден для Windows-шелла)
-    assert cmd.startswith(f'"{win_py}" ')
+    for evt in ("PostToolUse", "UserPromptSubmit"):
+        cmd = data["hooks"][evt][0]["hooks"][0]["command"]
+        assert cmd.startswith('"C:/projects/demo/.venv/Scripts/python.exe" ')
+        assert "\\" not in cmd.split('"')[1]
+
+
+def test_skill_docs_use_forward_slashes_on_windows(prov, tmp_path, monkeypatch):
+    """Команды в SKILL.md тоже исполняет Git Bash — путь venv без backslash."""
+    win_py = r"C:\projects\demo\.venv\Scripts\python.exe"
+    monkeypatch.setattr(prov, "venv_python", lambda project_dir: win_py)
+    content.deploy_content(prov, cfg(tmp_path, []), update=False)
+    text = (tmp_path / ".claude" / "skills" / "task-orchestration" / "SKILL.md"
+            ).read_text(encoding="utf-8")
+    assert '"C:/projects/demo/.venv/Scripts/python.exe"' in text
+    assert "C:\\projects" not in text
 
 
 def test_skill_docs_use_venv_python(prov, tmp_path):

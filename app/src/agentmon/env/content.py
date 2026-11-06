@@ -93,8 +93,19 @@ def venv_python(prov, project_dir) -> str:
     return prov.venv_python(project_dir)
 
 
+def _shell_path(path: str) -> str:
+    """Путь для текста команды оболочки: Windows-backslash → прямой слэш.
+
+    Хуки и команды в доках исполняет Git Bash (на Windows — тоже). Литеральный
+    backslash в тексте команды Bash съедает как escape-символ ещё до запуска
+    (claude-code#26759), поэтому в команды путь впечатываем через `/`: Windows
+    понимает прямые слэши, а Bash их не трогает.
+    """
+    return path.replace("\\", "/")
+
+
 def _py_cmd(prov, project_dir) -> str:
-    return '"' + prov.venv_python(project_dir) + '"'
+    return '"' + _shell_path(prov.venv_python(project_dir)) + '"'
 
 
 def _deploy_vscode(prov, project_dir, *, update: bool) -> None:
@@ -164,12 +175,12 @@ def deploy_content(prov, config, *, update: bool) -> None:
     mcp_subs = mcp_name_overrides(config.mcp) if not update else {}
     subs = {**mcp_subs, "{{CODE_INDEX_REPO}}": config.project_name}
     _render_agents(prov, config, f"{claude}/agents", overrides=subs)
-    # settings.json — это JSON, а путь к интерпретатору впечатывается прямо в его
-    # текст. На Windows путь содержит backslash (C:\...\python.exe), который внутри
-    # JSON-строки — недопустимая escape-последовательность, и файл перестаёт
-    # парситься. json.dumps экранирует backslash/кавычки; [1:-1] снимает внешние
-    # кавычки, оставляя готовую к вставке в JSON строку `\"<путь>\"`.
-    py_json = json.dumps('"' + prov.venv_python(project_dir) + '"')[1:-1]
+    # settings.json — текст JSON, а путь к интерпретатору впечатывается прямо в
+    # него. Слэши — прямые: Git Bash на Windows съедает литеральный backslash в
+    # команде (claude-code#26759), а JSON-строка требует экранировать кавычки.
+    # json.dumps делает и то и другое; [1:-1] снимает внешние кавычки, оставляя
+    # готовую к вставке JSON-строку `\"C:/.../python.exe\"`.
+    py_json = json.dumps('"' + _shell_path(prov.venv_python(project_dir)) + '"')[1:-1]
     settings = _PY_INVOKE.sub(lambda m: py_json + " ", _render_settings())
     for placeholder, actual in subs.items():
         settings = settings.replace(placeholder, actual)
