@@ -17,6 +17,14 @@ def test_task_prompt_routes_to_orchestrator():
     assert "task-orchestration" in out["hookSpecificOutput"]["additionalContext"]
 
 
+def test_windows_task_prompt_routes_to_orchestrator():
+    """Windows-путь с обратными слэшами — тот же каталог задачи."""
+    m = _load()
+    out = m.build_output(
+        {"prompt": r"Выполни задачу C:\work\proj\tasks\task#100001 по task.json"})
+    assert "task-orchestration" in out["hookSpecificOutput"]["additionalContext"]
+
+
 def test_other_prompt_silent():
     m = _load()
     assert m.build_output({"prompt": "просто вопрос"}) == {}

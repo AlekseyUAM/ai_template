@@ -1,12 +1,17 @@
 #!/usr/bin/env python
-"""UserPromptSubmit-хук: задачи вида tasks/task# маршрутизируются оркестратору."""
+"""UserPromptSubmit-хук: задачи вида tasks/task# (на Windows — tasks\\task#)
+маршрутизируются оркестратору."""
 import json
+import re
 import sys
+
+# Разделитель в пути зависит от ОС: пользователь на Windows наберёт `tasks\task#`.
+_TASK_PROMPT_RE = re.compile(r"tasks[\\/]task#")
 
 
 def build_output(event: dict) -> dict:
     prompt = event.get("prompt") or ""
-    if "tasks/task#" in prompt:
+    if _TASK_PROMPT_RE.search(prompt):
         return {"hookSpecificOutput": {
             "hookEventName": "UserPromptSubmit",
             "additionalContext": (

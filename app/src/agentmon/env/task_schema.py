@@ -132,7 +132,7 @@ def task_folder_name(task_id, identifier=None) -> str:
     """Имя каталога задачи: task#{identifier} (v2) или task#{id} (файловые/старые).
 
     Префикс `task#` обязателен — по нему хук route_to_orchestrator распознаёт
-    выполнение задачи (ищет `tasks/task#` в промпте).
+    выполнение задачи (ищет `tasks/task#` или `tasks\\task#` в промпте).
     """
     ident = (identifier or "").strip()
     return f"task#{ident}" if ident else f"task#{task_id}"
