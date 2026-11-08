@@ -260,21 +260,6 @@ Docker-демоне; файлы проекта живут в контейнер�
 - Поле **Образ контейнера** — необязательное (`placeholder="ai1c-agent:latest"`);
   пустое значение означает «взять дефолтный образ-тулкит».
 
-**Упаковка монитора в Docker (опциональный режим).**
-Монитор (control plane AgentMon) можно запустить в Docker-контейнере — это опциональный
-режим; по умолчанию монитор работает на хосте. Включается переменной
-`AI1C_MONITOR_MODE=docker` в `.ai1c.env` (значение по умолчанию: `host`);
-после этого `python run.py` поднимает `docker compose -f app/docker-compose.yml up --build`.
-
-Что монтируется: корень репо (`../:/opt/ai1c`) — чтобы резолвились `template/`/`web/`
-внутри контейнера; `/var/run/docker.sock` — монитор запускает MCP- и docker-бэкенд-
-контейнеры; именованный том `agentmon_claude` → `~/.claude` — авторизация агента
-переживает рестарт. Postgres (`ai1c-postgres`) живёт на хосте и доступен из контейнера
-через `host.docker.internal` (прописан через `extra_hosts: host.docker.internal:host-gateway`;
-`run.py` сам переписывает loopback в DSN). `local`-проекты исполняются внутри контейнера
-монитора; для реальной 1С-разработки следует использовать ssh/docker execution-бэкенды.
-Подробности — в `docs/DEPLOY-DOCKER.md`.
-
 **Удалённые операции окружения (cf/cfe, tools-install, update-env).**
 Выгрузка `cf`/`cfe` (`platform_dump.dump`), установка инструментов
 (`tools_install.install_tools`) и обновление окружения (`update-env`) теперь идут

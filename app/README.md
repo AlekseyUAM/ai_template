@@ -83,58 +83,6 @@ ssh -L 8765:127.0.0.1:8765 user@server
 картинки как seed. Если это нежелательно, аватарки отключаются правкой
 `avatarUrl` в `web/app.js`.
 
-## Прогон в Docker (Debian)
-
-Поднять Debian-контейнер с python, реальным `claude` и заглушкой `claude-fake`:
-
-```bash
-cd agent-monitor
-docker compose build
-docker compose up -d
-docker compose exec agentmon bash        # зайти внутрь
-```
-
-Внутри контейнера:
-
-```bash
-mkdir -p /root/projects/test1            # создать проект
-python -m agentmon                       # сервер на 0.0.0.0:8765
-```
-
-С хоста открыть в браузере: `http://127.0.0.1:8765` (порт проброшен из контейнера).
-На странице «Проекты» добавить проект с путём внутри контейнера (например
-`/root/projects/test1`), бэкенд `local`, запустить агента, добавлять задачи в очередь, писать в чат.
-
-По умолчанию агент — это `claude-fake` (заглушка, **0 токенов**): пишет реалистичные
-`~/.claude/projects/*.jsonl` (модель, токены, фаза) и отвечает в терминал.
-
-### Боевой прогон на реальном claude
-
-Реальный `claude` CLI уже установлен в образе. Шаги:
-
-1. **Авторизоваться внутри контейнера** (делается один раз — `~/.claude` изолирован и
-   сохраняется в volume, переживает перезапуск):
-
-   ```bash
-   docker compose exec agentmon bash
-   claude            # интерактивно -> /login: откроется URL,
-                     # открой его в браузере хоста, подтверди, вставь код обратно
-   # проверка:
-   claude -p "привет"
-   ```
-
-   Альтернатива — API-ключ: добавь в `docker-compose.yml` env `ANTHROPIC_API_KEY: "sk-ant-…"`
-   и `docker compose up -d`.
-
-2. **Переключить монитор на реальный агент**: в `docker-compose.yml` поменяй
-   `AGENTMON_CLAUDE_CMD` на `"claude --dangerously-skip-permissions ."`, затем
-   `docker compose up -d`.
-
-`IS_SANDBOX=1` в compose уже выставлен — без него `claude --dangerously-skip-permissions`
-отказывается работать под root в контейнере.
-
-Сброс до чистого состояния (удалит и авторизацию): `docker compose down -v && docker compose up -d`.
-
 ## Тесты
 
 ```bash

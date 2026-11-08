@@ -15,7 +15,7 @@
 Docker.
 
 Новая настройка **`AI1C_PG_MODE=host|docker`** (в `.ai1c.env`), **дефолт `host`**
-(портативная PG), независима от `AI1C_MONITOR_MODE` (не путать: та — про сам монитор).
+(портативная PG).
 
 > **Важно (ограничение проверки):** живой прогон (особенно на Windows) в этой среде
 > невозможен. Весь слой работает через **инъектируемые** `download`/`run`/`opener` →
@@ -26,10 +26,10 @@ Docker.
 ## Текущее состояние
 
 - `bootstrap.py` (stdlib, системный python): `setup_database()` → docker-PG или
-  SQLite; `main()` → `write_env(dsn)`; `env_file_contents(dsn, db, mode)` пишет
-  `AGENTMON_DSN`/`AGENTMON_DB`/`AI1C_MONITOR_MODE`. `free_port()` есть.
-- `run.py` (stdlib): host-режим монитора `os.execve`/subprocess; docker-режим
-  `compose up`. Про БД run.py сейчас ничего не делает (docker держит PG сам).
+  SQLite; `main()` → `write_env(dsn)`; `env_file_contents(dsn, db)` пишет
+  `AGENTMON_DSN`/`AGENTMON_DB`. `free_port()` есть.
+- `run.py` (stdlib): запуск монитора `os.execve`/subprocess. Про БД run.py сейчас
+  ничего не делает (docker держит PG сам).
 - `.ai1c/` — в `.gitignore` (портативная PG туда и ляжет).
 - `deploy/postgres/docker-compose.yml` — docker-PG (остаётся для `AI1C_PG_MODE=docker`).
 
@@ -79,17 +79,17 @@ Docker.
     при успехе вернуть портативный DSN. При ЛЮБОМ сбое (нет сети, initdb/pg_ctl
     упал) — `warn(...)` + **фолбэк на SQLite** (setup не должен бриковаться).
   - Поставить драйвер `psycopg[binary]` в venv (как сейчас для docker).
-- `write_env`/`env_file_contents` — добавить `AI1C_PG_MODE=<mode>` (+ оставить
-  `AI1C_MONITOR_MODE`). Записать выбранный DSN.
+- `write_env`/`env_file_contents` — добавить `AI1C_PG_MODE=<mode>`. Записать
+  выбранный DSN.
 
-### `run.py` — поднять портативную PG перед монитором (host-режим)
+### `run.py` — поднять портативную PG перед запуском монитора
 
-- В host-режиме монитора, если `AI1C_PG_MODE=host` и каталог `.ai1c/pgdata` существует:
+- При запуске монитора, если `AI1C_PG_MODE=host` и каталог `.ai1c/pgdata` существует:
   перед запуском монитора гарантировать, что портативная PG запущена
   (`pg_portable.status` → при простое `pg_portable.start`). Вынести в тестируемую
   функцию `ensure_host_pg(env)` (stdlib, инъекция run). Ошибку старта логировать, но не
   блокировать (монитор поднимется, БД-операции дадут понятную ошибку).
-- docker-режим монитора и `AI1C_PG_MODE=docker`/sqlite — run.py БД не трогает.
+- `AI1C_PG_MODE=docker`/sqlite — run.py БД не трогает.
 - Портативная PG — долгоживущий процесс (как docker unless-stopped); при выходе
   монитора не останавливаем (документируем; остановка — `pg_ctl stop` вручную/CLI).
 
@@ -119,18 +119,16 @@ Docker.
   провал provision → SQLite-фолбэк + warn; `AI1C_PG_MODE=docker` → старое поведение;
   `env_file_contents` содержит `AI1C_PG_MODE`.
 - `run.py`: `ensure_host_pg` — при mode=host и наличии pgdata зовёт status→start;
-  при docker/sqlite/отсутствии pgdata — ничего; host-режим монитора вызывает её,
-  docker-режим — нет; ошибка старта не прерывает запуск.
-- Регрессия: docker-PG путь и SQLite-фолбэк, `AI1C_MONITOR_MODE` — без изменений.
+  при docker/sqlite/отсутствии pgdata — ничего; ошибка старта не прерывает запуск.
+- Регрессия: docker-PG путь и SQLite-фолбэк — без изменений.
 
 ## Единицы
 
 - `pg_portable.py` — **новый** (корень, stdlib): весь портативный-PG слой.
 - `bootstrap.py` — ветка `AI1C_PG_MODE`; `env_file_contents(+AI1C_PG_MODE)`.
-- `run.py` — `ensure_host_pg(env)` + вызов в host-режиме монитора.
+- `run.py` — `ensure_host_pg(env)` + вызов при запуске.
 - `.ai1c.env.example` — `AI1C_PG_MODE=host` + комментарий (host=портативная PG,
   docker=контейнер); пометка про Windows без Docker.
-- `docs/DEPLOY-DOCKER.md` (или новый краткий раздел) — режимы БД: портативная vs docker.
 - Тесты: `app/tests/test_pg_portable.py`, обновить `test_bootstrap_env.py`/
   `test_run_launcher.py`.
 

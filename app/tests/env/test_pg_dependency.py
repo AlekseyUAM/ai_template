@@ -13,14 +13,14 @@ def test_pyproject_contains_psycopg():
 
 
 def test_requirements_contains_psycopg():
-    """Прод-образ ставит requirements.txt — psycopg обязан быть и там (иначе
-    контейнер против postgres падает ModuleNotFoundError при первом connect)."""
+    """requirements.txt — runtime-зависимости; psycopg обязан быть и там
+    (иначе при первом connect к postgres будет ModuleNotFoundError)."""
     req = pathlib.Path(__file__).parents[2] / "requirements.txt"
     assert "psycopg" in req.read_text(encoding="utf-8")
 
 
 def test_requirements_has_no_test_only_deps():
-    """pytest/httpx — тестовые зависимости, не должны попадать в прод-образ."""
+    """pytest/httpx — тестовые зависимости, не должны попадать в runtime-зависимости."""
     req = pathlib.Path(__file__).parents[2] / "requirements.txt"
     lines = [ln.strip() for ln in req.read_text(encoding="utf-8").splitlines()
              if ln.strip() and not ln.strip().startswith("#")]

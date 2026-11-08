@@ -4,13 +4,13 @@
 
 **Goal:** Дать `bootstrap.py` возможность развернуть PostgreSQL **портативно на хосте** (скачать zip-сборку, initdb, pg_ctl, создать роль/БД) — без Docker и админ-прав, для Windows. Настройка `AI1C_PG_MODE=host|docker`, дефолт `host`. docker-путь и SQLite-фолбэк сохраняются.
 
-**Architecture:** Новый stdlib-модуль `pg_portable.py` (корень репо, импортируется bootstrap.py и run.py) со всем портативным-PG слоем; ввод-вывод (download/extract/run) инъектируется → юнит-тесты без сети и реальной PG. bootstrap ветвится по `AI1C_PG_MODE`; run.py в host-режиме монитора поднимает портативную PG перед стартом.
+**Architecture:** Новый stdlib-модуль `pg_portable.py` (корень репо, импортируется bootstrap.py и run.py) со всем портативным-PG слоем; ввод-вывод (download/extract/run) инъектируется → юнит-тесты без сети и реальной PG. bootstrap ветвится по `AI1C_PG_MODE`; run.py поднимает портативную PG перед стартом.
 
 **Tech Stack:** Python stdlib (urllib, zipfile, subprocess), pytest. Живой прогон (Windows) — за пользователем; здесь только инъекции + юниты.
 
 ## Global Constraints
 - `pg_portable.py`/`bootstrap.py`/`run.py` — **stdlib-only** (системный python, вне venv). Никаких импортов из agentmon.
-- **Регрессии нет**: docker-PG путь (`AI1C_PG_MODE=docker`), SQLite-фолбэк и `AI1C_MONITOR_MODE` не меняются.
+- **Регрессии нет**: docker-PG путь (`AI1C_PG_MODE=docker`) и SQLite-фолбэк не меняются.
 - Весь внешний I/O (скачивание, распаковка, initdb/pg_ctl/psql) через инъектируемые callable — тесты НЕ ходят в сеть и НЕ запускают реальную PG.
 - Идемпотентность: повторный bootstrap/run переиспользует бинарники/datadir/роль/БД.
 - Данные/бинарники в `.ai1c/` (уже в .gitignore). Слушать только 127.0.0.1, auth trust.
@@ -20,8 +20,8 @@
 ## Файлы
 - `pg_portable.py` — новый (корень).
 - `bootstrap.py` — ветка AI1C_PG_MODE + env_file_contents.
-- `run.py` — ensure_host_pg + вызов в host-режиме.
-- `.ai1c.env.example`, `docs/DEPLOY-DOCKER.md`.
+- `run.py` — ensure_host_pg + вызов при запуске.
+- `.ai1c.env.example`.
 - Тесты: `app/tests/test_pg_portable.py`, `app/tests/test_bootstrap_env.py`, `app/tests/test_run_launcher.py`.
 
 ---
@@ -58,7 +58,7 @@
 
 **Interfaces:**
 - `setup_database()`: читать `AI1C_PG_MODE` (env, дефолт `host`). `docker` → текущее. `host` → `pg_portable.provision(ROOT, download=..., run=...)`; при исключении/сбое — `warn` + SQLite-путь (вернуть sqlite DSN/путь, как сейчас при отсутствии docker). Поставить `psycopg[binary]` при PG-DSN.
-- `env_file_contents(dsn, db, monitor_mode="host", pg_mode="host")` — добавить `AI1C_PG_MODE=<pg_mode>`; `write_env` прокинуть выбранный pg_mode.
+- `env_file_contents(dsn, db, pg_mode="host")` — добавить `AI1C_PG_MODE=<pg_mode>`; `write_env` прокинуть выбранный pg_mode.
 
 **Steps:**
 - [ ] Step 1: ветвление `setup_database` по AI1C_PG_MODE (host=provision+fallback, docker=как есть).
@@ -69,11 +69,11 @@
 
 ---
 
-## Task 3: `run.py` — поднять портативную PG в host-режиме монитора
+## Task 3: `run.py` — поднять портативную PG при запуске монитора
 
 **Files:** Modify `run.py`; Test `app/tests/test_run_launcher.py`.
 
-**Interfaces:** `ensure_host_pg(env, *, run=subprocess.run) -> None` — если `resolve `AI1C_PG_MODE`(env, дефолт host)==host И существует `.ai1c/pgdata`: `pg_portable.status`→при простое `pg_portable.start` (bin dir из `.ai1c/pg`). Ошибку логировать, не прерывать. В `main()` host-ветке монитора вызвать `ensure_host_pg(env)` перед запуском. docker-режим монитора / pg_mode!=host / нет pgdata — ничего.
+**Interfaces:** `ensure_host_pg(env, *, run=subprocess.run) -> None` — если `resolve `AI1C_PG_MODE`(env, дефолт host)==host И существует `.ai1c/pgdata`: `pg_portable.status`→при простое `pg_portable.start` (bin dir из `.ai1c/pg`). Ошибку логировать, не прерывать. В `main()` вызвать `ensure_host_pg(env)` перед запуском. pg_mode!=host / нет pgdata — ничего.
 
 **Steps:**
 - [ ] Step 1: `ensure_host_pg` (stdlib, инъекция run; импорт pg_portable).
@@ -86,9 +86,8 @@
 
 ## Task 4: Документация
 
-**Files:** Modify `.ai1c.env.example`, `docs/DEPLOY-DOCKER.md`.
-- [ ] `.ai1c.env.example`: добавить `AI1C_PG_MODE=host` с комментарием (host=портативная PG на хосте, скачивается bootstrap-ом; docker=контейнер ai1c-postgres); пометка «актуально для Windows без Docker».
-- [ ] `docs/DEPLOY-DOCKER.md` (или раздел): режимы БД — портативная (host, дефолт) vs docker; где лежит (`.ai1c/pg`, `.ai1c/pgdata`); что процесс долгоживущий, run.py поднимает при старте; SQLite-фолбэк.
+**Files:** Modify `.ai1c.env.example`.
+- [ ] `.ai1c.env.example`: добавить `AI1C_PG_MODE=host` с комментарием (host=портативная PG на хосте, скачивается bootstrap-ом; docker=контейнер ai1c-postgres); где лежит (`.ai1c/pg`, `.ai1c/pgdata`); что процесс долгоживущий, run.py поднимает при старте; SQLite-фолбэк; пометка «актуально для Windows без Docker».
 
 **Verification:** полный фильтрованный прогон зелёный.
 
@@ -96,5 +95,5 @@
 
 ## Финал
 - [ ] Полный `… pytest -q -k "not install_stops_on_dump_error"` зелёный.
-- [ ] Финальное ревью (opus): stdlib-only; docker-PG/SQLite/AI1C_MONITOR_MODE не задеты; весь I/O инъектируем (тесты без сети/реальной PG); идемпотентность; фолбэк на SQLite при сбое; явно отражено, что живая проверка на Windows — за пользователем.
+- [ ] Финальное ревью (opus): stdlib-only; docker-PG/SQLite не задеты; весь I/O инъектируем (тесты без сети/реальной PG); идемпотентность; фолбэк на SQLite при сбое; явно отражено, что живая проверка на Windows — за пользователем.
 - [ ] Коммиты в master по задаче после двухстадийного ревью.

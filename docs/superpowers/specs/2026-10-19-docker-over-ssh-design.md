@@ -133,8 +133,8 @@ docker-команде**. Контейнер, `docker exec`, чтение JSONL, 
   host.
 - `env/project_api.py` — проверить, что удалённый docker проходит (вероятно без правок).
 - `app/web/project-wizard.html`/`.js` — поля удалённого демона в docker-разделе.
-- `docs/PHASES.md` — «Docker-поверх-SSH» → «Реализовано»; `docs/DEPLOY-DOCKER.md` —
-  заметка про удалённый демон (`docker_host`/host, образ на удалённом демоне, ssh-agent).
+- `docs/PHASES.md` — «Docker-поверх-SSH» → «Реализовано»; заметка про удалённый
+  демон (`docker_host`/host, образ на удалённом демоне, ssh-agent).
 - Тесты: `test_backend_docker.py`, `test_backend_factory.py`/registry, wizard-тест.
 
 ## Открытые вопросы

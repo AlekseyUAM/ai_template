@@ -222,26 +222,19 @@ def setup_database() -> tuple[str, str]:
 def env_file_contents(
     dsn: str,
     db: str,
-    mode: str = "host",
     *,
-    monitor_mode: str | None = None,
     pg_mode: str = "host",
 ) -> str:
     """Возвращает текст файла .ai1c.env — чистая функция, без I/O.
 
-    dsn          — строка подключения к БД (postgresql://... или путь sqlite)
-    db           — путь к файлу agentmon.db (для SQLite fallback)
-    mode         — режим монитора (устаревш. позиционный, совместимость); перекрывается monitor_mode
-    monitor_mode — режим монитора: «host» (по умолчанию) или «docker»
-    pg_mode      — режим БД: «host» (портативная PG на хосте) или «docker» (контейнер ai1c-postgres)
+    dsn     — строка подключения к БД (postgresql://... или путь sqlite)
+    db      — путь к файлу agentmon.db (для SQLite fallback)
+    pg_mode — режим БД: «host» (портативная PG на хосте) или «docker» (контейнер ai1c-postgres)
     """
-    _monitor = monitor_mode if monitor_mode is not None else mode
     return (
         "# Сгенерировано bootstrap.py — используется run.py\n"
         f"AGENTMON_DSN={dsn}\n"
         f"AGENTMON_DB={db}\n"
-        "# AI1C_MONITOR_MODE: host (по умолчанию, монитор на хосте) | docker (монитор в контейнере)\n"
-        f"AI1C_MONITOR_MODE={_monitor}\n"
         "# AI1C_PG_MODE: host (портативная PG на хосте) | docker (контейнер ai1c-postgres)\n"
         f"AI1C_PG_MODE={pg_mode}\n"
     )
@@ -249,10 +242,10 @@ def env_file_contents(
 
 def write_env(dsn: str, pg_mode: str = "host") -> None:
     ENV_FILE.write_text(
-        env_file_contents(dsn, str(ROOT / "app" / "agentmon.db"), "host", pg_mode=pg_mode),
+        env_file_contents(dsn, str(ROOT / "app" / "agentmon.db"), pg_mode=pg_mode),
         encoding="utf-8",
     )
-    say(f"конфиг записан: .ai1c.env (AGENTMON_DSN={dsn}, AI1C_MONITOR_MODE=host, AI1C_PG_MODE={pg_mode})")
+    say(f"конфиг записан: .ai1c.env (AGENTMON_DSN={dsn}, AI1C_PG_MODE={pg_mode})")
 
 
 def check_tools() -> None:

@@ -19,7 +19,7 @@
 - `app/src/agentmon/backends/docker.py` — `_argv`/`docker_host`/замена 8 сайтов/image-check/runner `-H`/DockerBackend docker_host+key/conn→docker_host.
 - `app/src/agentmon/backends/factory.py` — docker_factory docker_host; key_for docker с host.
 - `app/web/project-wizard.html`/`.js` — поля удалённого демона.
-- `docs/PHASES.md`, `docs/DEPLOY-DOCKER.md`.
+- `docs/PHASES.md`.
 - Тесты: `test_backend_docker.py`, `test_backend_factory.py`, wizard-тест.
 
 ---
@@ -96,12 +96,11 @@
 
 ## Task 5: Документация + финальная чистка
 
-**Files:** Modify `docs/PHASES.md`, `docs/DEPLOY-DOCKER.md`; cleanup `env/project_api.py`+`api.py`+тесты.
+**Files:** Modify `docs/PHASES.md`; cleanup `env/project_api.py`+`api.py`+тесты.
 
 **Steps:**
 - [ ] Step 1: PHASES — «Docker-поверх-SSH» → «Реализовано» (из «Следующих шагов»); описать `conn.docker_host`/`host`, образ на удалённом демоне, ssh-agent.
-- [ ] Step 2: DEPLOY-DOCKER.md — краткая заметка про удалённый демон.
-- [ ] Step 3: **Отложенная чистка серии** (из финального ревью спеки 1): убрать мёртвый параметр `run=` из `build_project_router` + `create_app` router_kwargs + его передачу (и из тестов, если передают); при желании дедуп `_RecordingProvisioner`/нормализация ssh-таймаут-маркера — опционально.
+- [ ] Step 2: **Отложенная чистка серии** (из финального ревью спеки 1): убрать мёртвый параметр `run=` из `build_project_router` + `create_app` router_kwargs + его передачу (и из тестов, если передают); при желании дедуп `_RecordingProvisioner`/нормализация ssh-таймаут-маркера — опционально.
 
 **Verification:** `… pytest -q -k "not install_stops_on_dump_error"` зелёный.
 

@@ -50,30 +50,17 @@ class TestEnvFileContents:
         text = bootstrap.env_file_contents(_DSN, _DB)
         assert f"AGENTMON_DB={_DB}" in text
 
-    def test_default_mode_is_host(self):
-        text = bootstrap.env_file_contents(_DSN, _DB)
-        assert "AI1C_MONITOR_MODE=host" in text
-
-    def test_explicit_mode_docker(self):
-        text = bootstrap.env_file_contents(_DSN, _DB, mode="docker")
-        assert "AI1C_MONITOR_MODE=docker" in text
-
     def test_ends_with_newline(self):
         text = bootstrap.env_file_contents(_DSN, _DB)
         assert text.endswith("\n")
 
-    def test_round_trip_parse_three_keys(self):
-        """Текст корректно разбирается парсером KEY=value — все три ключа присутствуют."""
-        text = bootstrap.env_file_contents(_DSN, _DB, mode="host")
+    def test_round_trip_parse_keys(self):
+        """Текст корректно разбирается парсером KEY=value — ключи присутствуют."""
+        text = bootstrap.env_file_contents(_DSN, _DB)
         env = _parse_env(text)
         assert env["AGENTMON_DSN"] == _DSN
         assert env["AGENTMON_DB"] == _DB
-        assert env["AI1C_MONITOR_MODE"] == "host"
-
-    def test_round_trip_parse_docker_mode(self):
-        text = bootstrap.env_file_contents(_DSN, _DB, mode="docker")
-        env = _parse_env(text)
-        assert env["AI1C_MONITOR_MODE"] == "docker"
+        assert env["AI1C_PG_MODE"] == "host"
 
     def test_no_spaces_around_equals(self):
         """KEY=value без пробелов вокруг '=' для совместимости с run.load_env."""
@@ -95,32 +82,18 @@ class TestEnvFileContents:
         text = bootstrap.env_file_contents(_DSN, _DB, pg_mode="docker")
         assert "AI1C_PG_MODE=docker" in text
 
-    def test_round_trip_parse_four_keys(self):
-        """Round-trip: парсер находит все четыре ключа, включая AI1C_PG_MODE."""
-        text = bootstrap.env_file_contents(_DSN, _DB, mode="host", pg_mode="host")
+    def test_round_trip_parse_pg_mode(self):
+        """Round-trip: парсер находит все ключи, включая AI1C_PG_MODE."""
+        text = bootstrap.env_file_contents(_DSN, _DB, pg_mode="host")
         env = _parse_env(text)
         assert env["AGENTMON_DSN"] == _DSN
         assert env["AGENTMON_DB"] == _DB
-        assert env["AI1C_MONITOR_MODE"] == "host"
         assert env["AI1C_PG_MODE"] == "host"
 
     def test_round_trip_parse_pg_mode_docker(self):
         """Round-trip для pg_mode=docker."""
         text = bootstrap.env_file_contents(_DSN, _DB, pg_mode="docker")
         env = _parse_env(text)
-        assert env["AI1C_PG_MODE"] == "docker"
-
-    def test_monitor_mode_kwarg_overrides_positional(self):
-        """monitor_mode=kwarg перекрывает позиционный mode."""
-        text = bootstrap.env_file_contents(_DSN, _DB, mode="host", monitor_mode="docker")
-        env = _parse_env(text)
-        assert env["AI1C_MONITOR_MODE"] == "docker"
-
-    def test_pg_mode_does_not_affect_monitor_mode(self):
-        """AI1C_PG_MODE и AI1C_MONITOR_MODE независимы."""
-        text = bootstrap.env_file_contents(_DSN, _DB, mode="host", pg_mode="docker")
-        env = _parse_env(text)
-        assert env["AI1C_MONITOR_MODE"] == "host"
         assert env["AI1C_PG_MODE"] == "docker"
 
 
