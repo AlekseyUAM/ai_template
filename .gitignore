@@ -8,6 +8,7 @@
 __pycache__/
 *.pyc
 /.ai1c.env
+/.mcp.json
 /.venv
 /.ai1c/
 *.db
