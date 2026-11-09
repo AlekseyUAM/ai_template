@@ -32,9 +32,17 @@ def deploy_local(*, mid, code_index_dir, catalog_dir, project_name, port,
         yield s
 
     yield "=== Автозапуск: MCP-сервер (serve) ==="
-    serve_env = {**home_env, "MCP_HTTP_HOST": "127.0.0.1",
+    host = "127.0.0.1"
+    serve_env = {**home_env, "MCP_HTTP_HOST": host,
                  "MCP_HTTP_PORT": str(port)}
-    for s in install(f"ai1c-code-index-mcp-{mid}", [str(binary), "serve"],
+    # Транспорт/порт/конфиг задаём явными флагами CLI: `serve` не читает
+    # MCP_HTTP_HOST/MCP_HTTP_PORT из окружения (это делает только entrypoint
+    # docker-образа), без флагов он запустится в stdio-режиме.
+    serve_argv = [str(binary), "serve",
+                  "--transport", "http",
+                  "--host", host, "--port", str(port),
+                  "--config", str(toml_path)]
+    for s in install(f"ai1c-code-index-mcp-{mid}", serve_argv,
                      env=serve_env, state_dir=code_index_dir):
         yield s
 

@@ -31,7 +31,13 @@ def test_deploy_local_writes_daemon_toml_and_autostarts(tmp_path):
     daemon_i, serve_i = captured["installs"]
     assert daemon_i[1][-2:] == ("daemon", "run")
     assert daemon_i[2]["CODE_INDEX_HOME"] == str(ci)
-    assert serve_i[1][-1] == "serve"
+    # serve запускается явным HTTP-транспортом: env MCP_HTTP_* он не читает
+    serve_argv = serve_i[1]
+    assert serve_argv[1] == "serve"
+    assert serve_argv[serve_argv.index("--transport") + 1] == "http"
+    assert serve_argv[serve_argv.index("--host") + 1] == "127.0.0.1"
+    assert serve_argv[serve_argv.index("--port") + 1] == "8005"
+    assert serve_argv[serve_argv.index("--config") + 1] == str(ci / "daemon.toml")
     assert serve_i[2]["MCP_HTTP_PORT"] == "8005"
     assert serve_i[2]["MCP_HTTP_HOST"] == "127.0.0.1"
     assert "proj" in text and "8005" in text
