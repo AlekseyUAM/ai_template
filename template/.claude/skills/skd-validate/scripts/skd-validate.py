@@ -1,4 +1,4 @@
-# skd-validate v1.7 — Validate 1C DCS structure (Python port)
+# skd-validate v1.8 — Validate 1C DCS structure (Python port; semantic TZ checks)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import os
@@ -38,12 +38,16 @@ parser.add_argument("-TemplatePath", "-Path", required=True)
 parser.add_argument("-Detailed", action="store_true")
 parser.add_argument("-MaxErrors", type=int, default=20)
 parser.add_argument("-OutFile", default="")
+# Ожидаемый состав полей отчёта по ТЗ (через запятую/точку с запятой). Задаёт
+# дополнительную смысловую проверку: выборка должна ссылаться ровно на эти поля.
+parser.add_argument("-ExpectedFields", default="")
 args = ci_parse_args(parser)
 
 template_path = args.TemplatePath
 detailed = args.Detailed
 max_errors = args.MaxErrors
 out_file = args.OutFile
+expected_fields_raw = args.ExpectedFields
 
 # ── resolve path ─────────────────────────────────────────────
 
@@ -898,7 +902,192 @@ if stopped:
     finalize()
     sys.exit(1)
 
-# ── 18. XSD (schemas of the platform, /v8-xsd-fetch) ──────────
+# ── 18. Смысловые проверки: состав полей, ТЗ и GROUP BY по ВТ ──
+# Структурная валидация не видит, соответствует ли выборка ТЗ и не является ли
+# группировка по виртуальной таблице лишней. Эти проверки дополняют её:
+#   - -ExpectedFields задаёт колонки ТЗ; выборка должна ссылаться ровно на них;
+#   - выбранное вычисляемое поле не должно подменять поле ТЗ с тем же заголовком;
+#   - запрос к ВТ «Обороты»/«Остатки»/«Остатки и обороты» не должен содержать
+#     СГРУППИРОВАТЬ ПО без обоснования (ВТ уже агрегирует).
+
+import re as _re_sem
+
+expected_fields = [f.strip() for f in _re_sem.split(r"[,;]", expected_fields_raw) if f.strip()]
+
+
+def _ml_title(node):
+    """Заголовок элемента (title) или пустая строка."""
+    title = find(node, "s:title")
+    if title is None:
+        return ""
+    content = find(title, "v8:item/v8:content")
+    if content is not None and text_of(content):
+        return text_of(content)
+    return text_of(title)
+
+
+def _field_title(node, path):
+    return _ml_title(node) or path
+
+
+# Заголовки полей набора данных (по dataPath) и вычисляемых полей.
+dataset_titles = {}
+for f in find_all(root, "//s:dataSet//s:field"):
+    dp = find(f, "s:dataPath")
+    if dp is None or not inner_text(dp):
+        continue
+    path = inner_text(dp)
+    dataset_titles[path] = _field_title(f, path)
+
+calc_titles = {}
+for cf in calc_field_nodes:
+    dp = find(cf, "s:dataPath")
+    if dp is None or not inner_text(dp):
+        continue
+    path = inner_text(dp)
+    calc_titles[path] = _field_title(cf, path)
+
+
+def _collect_selection(settings_node):
+    """Поля, выводимые в выборке (включая вложенные группировки и папки)."""
+    result = []
+    # Собираем выборку на всех уровнях: колонки отчёта могут быть заданы как в
+    # варианте, так и в группировках. Условное оформление сюда не входит — его
+    # selection перечисляет поля для форматирования, а не колонки отчёта.
+    selection_items = settings_node.xpath(
+        "./dcsset:selection/dcsset:item | ./dcsset:item//dcsset:selection/dcsset:item",
+        namespaces=NS,
+    )
+    for si in selection_items:
+        xsi_type = si.get(XSI_TYPE, "")
+        if "SelectedItemAuto" in xsi_type:
+            result.append("Auto")
+        elif "SelectedItemField" in xsi_type:
+            f = find(si, "dcsset:field")
+            if f is not None and inner_text(f):
+                result.append(inner_text(f))
+        elif "SelectedItemFolder" in xsi_type:
+            for f in si.xpath(".//dcsset:field", namespaces=NS):
+                if inner_text(f):
+                    result.append(inner_text(f))
+    return result
+
+
+def _collect_variant_selections():
+    selections = []
+    for v in variant_nodes:
+        v_name_node = find(v, "dcsset:name")
+        v_name = inner_text(v_name_node) if v_name_node is not None else "(unnamed)"
+        settings = find(v, "dcsset:settings")
+        if settings is None:
+            continue
+        selections.append((v_name, _collect_selection(settings)))
+    return selections
+
+
+sem_ok = True
+selections = _collect_variant_selections()
+
+# 18.1. Состав выборки = поля ТЗ (если список ТЗ передан).
+if expected_fields:
+    for v_name, selected in selections:
+        # Явные поля важнее Auto: Auto во вложенной группировке не означает, что
+        # состав отчёта не задан на другом уровне.
+        visible = []
+        seen_fields = set()
+        for f in selected:
+            if f == "Auto" or f in seen_fields:
+                continue
+            seen_fields.add(f)
+            visible.append(f)
+        if not visible:
+            report_warn(
+                f"Variant '{v_name}': selection uses Auto — cannot verify TZ fields; "
+                f"list fields explicitly for the check"
+            )
+            continue
+
+        for expected in expected_fields:
+            if expected not in visible:
+                report_error(f"Variant '{v_name}': TZ field '{expected}' is missing from selection")
+                sem_ok = False
+
+        for path in visible:
+            if path in expected_fields:
+                continue
+            title = calc_titles.get(path) or dataset_titles.get(path) or path
+            if title in expected_fields:
+                report_error(
+                    f"Variant '{v_name}': selection references '{path}' displayed as '{title}', "
+                    f"but TZ expects field '{title}' — use the TZ field, not a renamed calculated field"
+                )
+            else:
+                report_error(f"Variant '{v_name}': selected field '{path}' is not in TZ fields")
+            sem_ok = False
+
+        if visible != expected_fields:
+            report_warn(
+                f"Variant '{v_name}': selection order differs from TZ fields "
+                f"({', '.join(visible) or 'empty'} vs {', '.join(expected_fields)})"
+            )
+
+# 18.2. Поля набора данных сверх ТЗ — повод для обоснования, а не ошибка структуры.
+if expected_fields:
+    extra_fields = [p for p in sorted(dataset_titles) if p not in expected_fields]
+    if extra_fields:
+        report_warn(
+            "DataSet field(s) not in TZ fields: " + ", ".join(extra_fields) +
+            " — service fields/joins must be justified and must not be selected"
+        )
+
+# 18.3. Подмена поля ТЗ вычисляемым полем с тем же заголовком (без -ExpectedFields).
+for v_name, selected in selections:
+    for path in selected:
+        if path == "Auto" or path in dataset_titles:
+            continue
+        title = calc_titles.get(path)
+        if not title or title == path:
+            continue
+        if title in dataset_titles or title in calc_titles:
+            report_warn(
+                f"Variant '{v_name}': selected calculated field '{path}' is displayed as '{title}', "
+                f"which collides with field '{title}' — use the TZ field in selection"
+            )
+
+# 18.4. GROUP BY по виртуальной таблице регистра накопления.
+_vt_re = _re_sem.compile(
+    r"ИЗ\s+РегистрНакопления\s*\.\s*([A-Za-zА-Яа-яЁё0-9_]+)\s*\.\s*"
+    r"(Обороты|Остатки|ОстаткиИОбороты)\s*\(",
+    _re_sem.IGNORECASE,
+)
+for ds in data_set_nodes:
+    q = find(ds, "s:query")
+    if q is None:
+        continue
+    query_text = text_of(q)
+    if not query_text:
+        continue
+    vt_match = _vt_re.search(query_text)
+    if vt_match and _re_sem.search(r"СГРУППИРОВАТЬ\s+ПО", query_text, _re_sem.IGNORECASE):
+        ds_name_node = find(ds, "s:name")
+        ds_name = inner_text(ds_name_node) if ds_name_node is not None else "(unnamed)"
+        report_warn(
+            f"DataSet '{ds_name}': query reads virtual table "
+            f"'{vt_match.group(1)}.{vt_match.group(2)}' and contains GROUP BY — "
+            f"the virtual table already aggregates by dimensions; remove the redundant "
+            f"GROUP BY unless a join multiplies rows"
+        )
+
+if sem_ok and expected_fields:
+    report_ok(f"Semantic checks: selection matches TZ fields ({len(expected_fields)})")
+elif sem_ok:
+    report_ok("Semantic checks: selection/TZ not compared (no -ExpectedFields)")
+
+if stopped:
+    finalize()
+    sys.exit(1)
+
+# ── 19. XSD (schemas of the platform, /v8-xsd-fetch) ──────────
 # Порядок элементов, типы и значения — по XSD платформы, если они есть в проекте. Нет схем —
 # нет проверки. Схемы XDTO совпадают с выгрузкой конфигуратора только в СКД, и то кроме
 # нескольких мест, которые платформа пишет иначе, — они отсекаются ниже (xsd_platform_noise).

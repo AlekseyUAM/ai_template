@@ -29,6 +29,16 @@ python "${CLAUDE_SKILL_DIR}/scripts/skd-compile.py" -DefinitionFile "<json>" -Ou
 python "${CLAUDE_SKILL_DIR}/scripts/skd-compile.py" -Value '<json-string>' -OutputPath "<Template.xml>"
 ```
 
+## Перед созданием отчёта
+
+Перед созданием отчёта на СКД прочитай целиком:
+[особенности СКД](../bsl-coding-standards/reference/skd-specifics.md),
+[регистры накопления](../bsl-coding-standards/reference/accumulation-registers.md),
+[регистры сведений](../bsl-coding-standards/reference/information-registers.md).
+
+Состав полей и выборки — строго по ТЗ; собственную форму отчёта не добавляй без требования ТЗ.
+После компиляции прогони `skd-validate -ExpectedFields "<колонки ТЗ>"` и `skd-info -Mode variant`.
+
 ## JSON DSL — краткий справочник
 
 Справочник ниже. Все примеры компилируемы как есть.

@@ -30,8 +30,12 @@ effort: {{EFFORT}}
    подстановкой токенов через `СтрЗаменить`; запрос к табличной части документа
    напрямую вместо выгрузки её в таблицу значений) и переиспользую готовые функции
    БСП вместо ручных реализаций (`bsp-reuse`). Навыки доступны через инструмент Skill.
-   **СКД** — при работе со схемами компоновки учитываю
-   [особенности СКД](../skills/bsl-coding-standards/reference/skd-specifics.md).
+   **СКД и отчёты** — перед правкой схемы/отчёта прочитай целиком
+   [особенности СКД](../skills/bsl-coding-standards/reference/skd-specifics.md) и справки
+   [регистры накопления](../skills/bsl-coding-standards/reference/accumulation-registers.md),
+   [регистры сведений](../skills/bsl-coding-standards/reference/information-registers.md).
+   Реализуй по ТЗ и этим правилам; перед сдачей выполни проверки из `skd-specifics.md`
+   (`skd-validate -ExpectedFields`, `skd-info -Mode variant`).
 3. После правок прогоняю статический анализ (правило verify-with-syntax-checker);
    по изменённым модулям и текстам запросов прогоняю `code-analyze` и `query-analyze`
    и устраняю находки до передачи на ревью.

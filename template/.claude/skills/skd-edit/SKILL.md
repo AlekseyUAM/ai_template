@@ -38,6 +38,17 @@ python "${CLAUDE_SKILL_DIR}/scripts/skd-edit.py" -TemplatePath "<path>" -Operati
 
 Работает для всех операций кроме `set-query`, `set-structure` и `add-dataSet`.
 
+## Правила правки отчёта
+
+Перед правкой отчёта на СКД прочитай целиком:
+[особенности СКД](../bsl-coding-standards/reference/skd-specifics.md),
+[регистры накопления](../bsl-coding-standards/reference/accumulation-registers.md),
+[регистры сведений](../bsl-coding-standards/reference/information-registers.md).
+
+Помни: `add-field` и `add-calculated-field` по умолчанию добавляют поле в выборку варианта;
+для служебного поля, нужного только формуле, передавай `-NoSelection`.
+После правок — `skd-validate -ExpectedFields "<колонки ТЗ>"` и `skd-info -Mode variant`.
+
 ## Операции
 
 ### add-field — добавить поле в набор данных

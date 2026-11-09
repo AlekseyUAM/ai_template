@@ -24,6 +24,12 @@ effort: {{EFFORT}}
    - блокировки — [правило](../skills/bsl-coding-standards/reference/locks.md);
    - границу и момент времени — [правило](../skills/bsl-coding-standards/reference/boundary-and-moment.md);
    - удаление движений — [правило](../skills/bsl-coding-standards/reference/movements-deletion.md).
+   **Отчёты на СКД** — если задача про отчёт, прочитай целиком
+   [особенности СКД](../skills/bsl-coding-standards/reference/skd-specifics.md) и справки
+   [регистры накопления](../skills/bsl-coding-standards/reference/accumulation-registers.md),
+   [регистры сведений](../skills/bsl-coding-standards/reference/information-registers.md).
+   В спецификации зафиксируй состав колонок строго по ТЗ; всё, что требует служебных
+   полей/соединений сверх ТЗ, вынеси в открытые вопросы.
 2. **Поиск существующих метаданных (обязательно)** — прежде чем предлагать новые объекты
    метаданных, ищу существующие аналоги через `code_index`, чтобы не создавать дублирующие;
    переиспользую или расширяю существующее, где это уместно.
