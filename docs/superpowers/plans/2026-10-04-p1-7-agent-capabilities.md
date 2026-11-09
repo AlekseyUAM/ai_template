@@ -2,7 +2,7 @@
 
 > REQUIRED SUB-SKILL: superpowers:subagent-driven-development.
 
-**Goal:** В каждом субагенте `template/agents/*.md` прописать возможности стандартных MCP (считаем все поднятыми) и скилов `template/skills` (по `tmp/NOTE.md`).
+**Goal:** В каждом субагенте `template/agents/*.md` прописать возможности стандартных MCP (считаем все поднятыми) и скилов `template/skills`.
 
 ## Global Constraints
 - 6 агентов: orchestrator, analyst, architect, developer, tester, reviewer.

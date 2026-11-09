@@ -26,7 +26,7 @@
 - DSN задаётся переменной `AGENTMON_DSN`: `postgresql://user:pass@host:5432/db` →
   Postgres; иначе путь/`sqlite://…` → sqlite-файл (дефолт для обратной совместимости).
 - Продукт запускается с Postgres (docker-compose, см. ниже). Тесты — на sqlite в
-  tmp/in-memory, без Docker и без psycopg.
+  памяти, без Docker и без psycopg.
 - `psycopg[binary]` — необязательная зависимость (нужна только при postgres-DSN).
 
 ## Компоненты (`app/src/agentmon/store/`)

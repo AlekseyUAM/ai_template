@@ -1,8 +1,8 @@
 # План: завершение Фазы 1
 
-Источники требований: `docs/PHASES.md` (раздел «## Фаза 1»), `tmp/NOTE.md`,
-`tmp/NOTE1.md` (справочник MCP). Канонические имена стандартных MCP («Имя в .mcp.json»,
-т.е. ключ в `.mcp.json`) — из NOTE1 / `app/src/agentmon/env/mcp_types.py`:
+Источник требований: `docs/PHASES.md` (раздел «## Фаза 1»). Канонические имена
+стандартных MCP («Имя в .mcp.json», т.е. ключ в `.mcp.json`) — из
+`app/src/agentmon/env/mcp_types.py`:
 `1c-md`, `bsl_ls`, `1c_platform`, `1c_naparnic`, `code_index` (+ вид
 `1c-md-queries` с `mcp_name` `1c-md`).
 

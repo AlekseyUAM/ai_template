@@ -94,6 +94,10 @@ PostgreSQL в Docker (если докер доступен; иначе испо�
 блокирующий `POST /api/mcp/{id}/launch` (лог целиком). На Linux сборка идёт с
 `--network=host`. Проверено вживую на `code-index` и `bsl-ls`.
 
+Инструкции по развёртыванию каждого вида — кнопкой, вручную и на отдельном
+сервере, включая локальный (без Docker) code-index и его alias проекта, —
+в [docs/mcp/](docs/mcp/README.md).
+
 ### Система задач
 
 - Структура `tasks/task#<id>/`: `task.json` + `TASK.md` + артефакты этапов

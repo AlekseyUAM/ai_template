@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- Алиас репозитория = имя проекта; `daemon.toml` `alias` и строка подключения берут одну и ту же строку (см. `docs/mcp/code_index/ALIAS.md`). Нормализацию/slug НЕ применять.
+- Алиас репозитория = имя проекта; `daemon.toml` `alias` и строка подключения берут одну и ту же строку. Нормализацию/slug НЕ применять.
 - Автозапуск — **user-level** (без root/admin): Windows Scheduled Task `/SC ONLOGON`, Linux `systemd --user`, macOS LaunchAgent. Кнопка регистрирует автозапуск **и** стартует процессы сразу.
 - Поддерживаемые платформы ровно как в релизах upstream: Windows x64, Linux x64, macOS arm64; иначе — внятная ошибка.
 - GitHub: репозиторий `Regsorm/code-index-mcp`, релиз `releases/latest` (API `https://api.github.com/repos/Regsorm/code-index-mcp/releases/latest`).
