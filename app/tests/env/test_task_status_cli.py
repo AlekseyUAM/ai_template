@@ -161,3 +161,58 @@ def test_cli_db_update_start_and_done(tmp_path):
     data = json.loads((d / "task.json").read_text(encoding="utf-8"))
     assert data["db_update"]["finished_at"] is not None
     assert data["db_update"]["finished_at"] >= data["db_update"]["started_at"]
+
+
+def _task_with_update_db(tmp_path):
+    """Задача с update_db=true — загрузка в ИБ обязательна для develop done."""
+    s = ts.create_task(tmp_path, title="a", goal="", plan="", constraints="",
+                       enabled_stages=["develop"])
+    d = ts.task_dir(tmp_path, s.id)
+    data = json.loads((d / "task.json").read_text(encoding="utf-8"))
+    data["update_db"] = True
+    (d / "task.json").write_text(json.dumps(data, ensure_ascii=False, indent=2),
+                                 encoding="utf-8")
+    return d
+
+
+def test_cli_develop_done_blocked_without_db_update(tmp_path):
+    """Падение/отсутствие загрузки не должно давать статус «готово»."""
+    mod = _load()
+    d = _task_with_update_db(tmp_path)
+    mod.main([str(d), "develop", "running"])
+    with pytest.raises(SystemExit) as exc:
+        mod.main([str(d), "develop", "done", "--files", "Module.bsl"])
+    assert "db-update" in str(exc.value)
+    data = json.loads((d / "task.json").read_text(encoding="utf-8"))
+    dev = next(s for s in data["stages"] if s["name"] == "develop")
+    assert dev["status"] == "running"          # этап не закрыт
+    assert data["status"] == "running"         # задача не стала done
+
+
+def test_cli_develop_done_allowed_after_db_update_done(tmp_path):
+    mod = _load()
+    d = _task_with_update_db(tmp_path)
+    mod.main([str(d), "develop", "running"])
+    mod.main([str(d), "db-update", "start"])
+    mod.main([str(d), "db-update", "done"])
+    mod.main([str(d), "develop", "done", "--files", "Module.bsl"])
+    data = json.loads((d / "task.json").read_text(encoding="utf-8"))
+    dev = next(s for s in data["stages"] if s["name"] == "develop")
+    assert dev["status"] == "done"
+    assert data["status"] == "done"
+
+
+def test_cli_db_update_reset_when_develop_reopened(tmp_path):
+    """Новый прогон develop требует новой загрузки, а не старой отметки."""
+    mod = _load()
+    d = _task_with_update_db(tmp_path)
+    mod.main([str(d), "develop", "running"])
+    mod.main([str(d), "db-update", "start"])
+    mod.main([str(d), "db-update", "done"])
+    mod.main([str(d), "develop", "done"])
+    mod.main([str(d), "develop", "pending"])
+    data = json.loads((d / "task.json").read_text(encoding="utf-8"))
+    assert data["db_update"]["finished_at"] is None
+    mod.main([str(d), "develop", "running"])
+    with pytest.raises(SystemExit):
+        mod.main([str(d), "develop", "done"])

@@ -22,9 +22,12 @@ description: Циклический workflow develop → [testing] → review д
 
 ### 0. Загрузка в ИБ после `develop` (если `update_db` включён)
 ```
+develop остаётся running, пока загрузка не завершится успехом: task_status.py
+не даст поставить develop done без db-update done (загрузка — часть этапа).
 После develop оркестратор грузит конфигурацию в ИБ (см. task-orchestration,
 правило optimized-config-loading); лог — logs/task#<id>/load-config.log:
-├─ Ошибка загрузки (в «грязную» базу грузить нельзя):
+├─ Ошибка загрузки (в «грязную» базу грузить нельзя; db-update done и develop done
+│  не вызывать):
 │  ├─ Если iteration этапа develop ≥ 10: отметить develop как failed, остановиться
 │  ├─ Иначе: архивировать DEVELOP.md → DEVELOP.<n>.md, где <n> — текущее значение
 │  │  iteration в task.json на момент архивирования (до следующего running)
@@ -32,6 +35,8 @@ description: Циклический workflow develop → [testing] → review д
 │  │  (разработчик читает load-config.log и чинит исходники/метаданные)
 │  │  iteration инкрементируется автоматически при следующем переводе в running
 └─ Успех:
+   ├─ task_status.py ... db-update done
+   ├─ task_status.py ... develop done --files <изменённые>
    └─ Перейти к следующему включённому этапу (testing/review/docs)
 ```
 

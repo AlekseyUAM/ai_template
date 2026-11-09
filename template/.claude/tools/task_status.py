@@ -45,6 +45,28 @@ def _gate_block(data: dict, target_stage: str):
     return None
 
 
+def _db_update_block(data: dict, stage: str, status: str):
+    """Сообщение-ошибка, если нельзя закрыть develop без успешной загрузки в ИБ.
+
+    При `update_db: true` загрузка конфигурации — часть завершения этапа
+    `develop`. Если она не подтверждена (`db_update.finished_at` пуст), этап
+    нельзя переводить в `done`: иначе падение загрузки маскируется статусом
+    «готово» (в task.json и в мониторе). None — если закрывать можно."""
+    if stage != "develop" or status != "done":
+        return None
+    if not _truthy(data.get("update_db")):
+        return None
+    db_update = data.get("db_update") or {}
+    if db_update.get("finished_at") is None:
+        return (
+            "этап 'develop' нельзя перевести в 'done': включён update_db, но "
+            "загрузка в ИБ не подтверждена. Выполните загрузку (правило "
+            "optimized-config-loading) и отметьте её завершение:\n"
+            "  python .claude/tools/task_status.py <task_dir> db-update done\n"
+            "При ошибке загрузки этап не закрывайте — верните develop в pending.")
+    return None
+
+
 def _overall_status(stages) -> str:
     """Общий статус задачи по статусам этапов. Зеркало task_model.overall_status
     (приоритет: failed → awaiting_user → done → running → planned), но с
@@ -96,12 +118,21 @@ def update(task_dir: str, stage: str, status: str, files) -> None:
                     msg = _gate_block(data, stage)
                     if msg:
                         raise SystemExit("ОШИБКА (гейт): " + msg)
+                if status == "done":
+                    msg = _db_update_block(data, stage, status)
+                    if msg:
+                        raise SystemExit("ОШИБКА (БД): " + msg)
                 s["status"] = status
                 data["stage"] = stage
                 changed = s.setdefault("changed_files", [])
                 for f in (files or []):
                     if f not in changed:
                         changed.append(f)
+                # Новый прогон develop при update_db: прежняя загрузка его не
+                # закрывает — для done снова потребуется db-update done.
+                if stage == "develop" and status in ("pending", "running") \
+                        and _truthy(data.get("update_db")):
+                    data["db_update"] = {"started_at": None, "finished_at": None}
                 # Тайминги этапа и номер итерации
                 now_stage = time.time()
                 if status == "running":
