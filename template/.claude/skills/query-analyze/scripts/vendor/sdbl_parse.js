@@ -3830,7 +3830,7 @@ function renderSource(t, bodyTabs = 1) {
     return `${t.fullName}(${v.period ? normalizeLeafCase(v.period) : ""})`;
   }
   if (kind === "\u0420\u0435\u0433\u0438\u0441\u0442\u0440\u0411\u0443\u0445\u0433\u0430\u043B\u0442\u0435\u0440\u0438\u0438") {
-    let positions2 = accountingPositions(slice, v);
+    let positions2 = [...accountingPositions(slice, v), ...v.extraArgs ?? []];
     if (!positions2.some((p) => p !== "") && !v.hadParens) return t.fullName;
     const dcsStateAcc = { k: 0 };
     positions2 = positions2.map((p) => p ? aliasDcsBraceExprs(wrapDcsBraceParam(p), dcsStateAcc) : p);
@@ -3841,11 +3841,11 @@ function renderSource(t, bodyTabs = 1) {
     return `${t.fullName}(${positions2.map((p) => p ? normalizeLeafCase(p) : p).join(", ")})`;
   }
   if (slice === "\u041E\u0431\u043E\u0440\u043E\u0442\u044B" || slice === "\u041E\u0441\u0442\u0430\u0442\u043A\u0438\u0418\u041E\u0431\u043E\u0440\u043E\u0442\u044B") {
-    const positions2 = slice === "\u041E\u0431\u043E\u0440\u043E\u0442\u044B" ? [v.startPeriod ?? "", v.endPeriod ?? "", v.periodicity ?? "", v.condition ?? ""] : [v.startPeriod ?? "", v.endPeriod ?? "", v.periodicity ?? "", v.fillMethod ?? "", v.condition ?? ""];
+    const positions2 = (slice === "\u041E\u0431\u043E\u0440\u043E\u0442\u044B" ? [v.startPeriod ?? "", v.endPeriod ?? "", v.periodicity ?? "", v.condition ?? ""] : [v.startPeriod ?? "", v.endPeriod ?? "", v.periodicity ?? "", v.fillMethod ?? "", v.condition ?? ""]).concat(v.extraArgs ?? []);
     if (!positions2.some((p) => p !== "") && !v.hadParens) return t.fullName;
     return renderVirtualParams(t.fullName, positions2, v.condition ?? "", bodyTabs);
   }
-  const positions = [v.period ?? "", v.condition ?? ""];
+  const positions = [v.period ?? "", v.condition ?? "", ...v.extraArgs ?? []];
   if (!positions.some((p) => p !== "") && !v.hadParens) return t.fullName;
   return renderVirtualParams(t.fullName, positions, v.condition ?? "", bodyTabs);
 }
@@ -8616,6 +8616,25 @@ function parseDottedName(cur) {
 function arg(args, n) {
   return args[n] ?? "";
 }
+var ACCUMULATION_VT_MAX_ARGS = {
+  \u041E\u0441\u0442\u0430\u0442\u043A\u0438: 2,
+  \u041E\u0431\u043E\u0440\u043E\u0442\u044B: 4,
+  \u041E\u0441\u0442\u0430\u0442\u043A\u0438\u0418\u041E\u0431\u043E\u0440\u043E\u0442\u044B: 5
+};
+var INFORMATION_VT_MAX_ARGS = {
+  \u0421\u0440\u0435\u0437\u041F\u043E\u0441\u043B\u0435\u0434\u043D\u0438\u0445: 2,
+  \u0421\u0440\u0435\u0437\u041F\u0435\u0440\u0432\u044B\u0445: 2
+};
+var ACCOUNTING_VT_MAX_ARGS = {
+  \u041E\u0441\u0442\u0430\u0442\u043A\u0438: 4,
+  \u041E\u0431\u043E\u0440\u043E\u0442\u044B: 8,
+  \u041E\u0431\u043E\u0440\u043E\u0442\u044B\u0414\u0442\u041A\u0442: 8,
+  \u041E\u0441\u0442\u0430\u0442\u043A\u0438\u0418\u041E\u0431\u043E\u0440\u043E\u0442\u044B: 7,
+  \u0414\u0432\u0438\u0436\u0435\u043D\u0438\u044F\u0421\u0421\u0443\u0431\u043A\u043E\u043D\u0442\u043E: 5
+};
+function setExtraArgs(v, args, max) {
+  if (args.length > max) v.extraArgs = args.slice(max);
+}
 function parseVirtualParams(cur, fullName) {
   const args = parsePositionalArgs(cur);
   const parts = fullName.split(".");
@@ -8629,6 +8648,8 @@ function parseVirtualParams(cur, fullName) {
   if (kind === "\u0420\u0435\u0433\u0438\u0441\u0442\u0440\u0411\u0443\u0445\u0433\u0430\u043B\u0442\u0435\u0440\u0438\u0438") {
     v.accountingArgs = args;
     fillAccounting(v, slice, args, set);
+    const maxArgs2 = ACCOUNTING_VT_MAX_ARGS[slice];
+    if (maxArgs2 !== void 0) setExtraArgs(v, args, maxArgs2);
     return v;
   }
   if (slice === "\u041E\u0431\u043E\u0440\u043E\u0442\u044B") {
@@ -8636,6 +8657,7 @@ function parseVirtualParams(cur, fullName) {
     set("endPeriod", arg(args, 1));
     set("periodicity", arg(args, 2));
     set("condition", arg(args, 3));
+    setExtraArgs(v, args, 4);
     return v;
   }
   if (slice === "\u041E\u0441\u0442\u0430\u0442\u043A\u0438\u0418\u041E\u0431\u043E\u0440\u043E\u0442\u044B") {
@@ -8644,10 +8666,13 @@ function parseVirtualParams(cur, fullName) {
     set("periodicity", arg(args, 2));
     set("fillMethod", arg(args, 3));
     set("condition", arg(args, 4));
+    setExtraArgs(v, args, 5);
     return v;
   }
   set("period", arg(args, 0));
   set("condition", arg(args, 1));
+  const maxArgs = kind === "\u0420\u0435\u0433\u0438\u0441\u0442\u0440\u041D\u0430\u043A\u043E\u043F\u043B\u0435\u043D\u0438\u044F" ? ACCUMULATION_VT_MAX_ARGS[slice] : kind === "\u0420\u0435\u0433\u0438\u0441\u0442\u0440\u0421\u0432\u0435\u0434\u0435\u043D\u0438\u0439" ? INFORMATION_VT_MAX_ARGS[slice] : void 0;
+  if (maxArgs !== void 0) setExtraArgs(v, args, maxArgs);
   return v;
 }
 function fillAccounting(v, slice, args, set) {
@@ -10563,7 +10588,7 @@ function augmentResolverWithTempTables(base, tempTables, inferred) {
   };
 }
 
-// ../../../../tmp/tmp.Q5PgKXQI6O/entry.ts
+// ../../../../tmp/tmp.kOfGiBEyWd/entry.ts
 var text = "";
 process.stdin.setEncoding("utf8");
 process.stdin.on("data", (d) => text += d);

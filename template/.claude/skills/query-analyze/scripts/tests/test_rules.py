@@ -72,6 +72,13 @@ def test_not_parseable_flagged():
 
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
+def test_bom_stripped_before_parse():
+    """Файлы 1С-выгрузки часто с BOM — он не должен давать query-not-parseable."""
+    q = "﻿ВЫБРАТЬ Т.Код КАК Код ИЗ Справочник.Товары КАК Т"
+    assert "query-not-parseable" not in _codes(q)
+
+
+@pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test_parseable_not_flagged():
     assert "query-not-parseable" not in _codes("ВЫБРАТЬ Т.Код КАК Код ИЗ Справочник.Товары КАК Т")
 
@@ -1159,6 +1166,102 @@ def test__buh_ostatok_with_period_flagged():
         "    РегистрБухгалтерии.Хозрасчетный.Остатки(&Дата) КАК О"
     )
     assert "ostatok-with-period" in _codes(q)
+
+
+# ── Число параметров виртуальных таблиц ─────────────────
+
+# Сигнатуры ВТ фиксированы: у РН.Остатки — (Период, Условие), у РН.Обороты — 4,
+# у РН.ОстаткиИОбороты — 5, у РС.СрезПоследних/СрезПервых — 2. Опущенные хвостовые
+# параметры допустимы (значения по умолчанию), лишние — ошибка платформы.
+
+@pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
+def test__vt_ostatki_too_many_params_flagged():
+    """РН.Остатки: фильтр по измерению передан ТРЕТЬИМ аргументом, а сигнатура —
+    (Период, Условие). Платформа такой запрос не скомпилирует."""
+    q = (
+        "ВЫБРАТЬ\n"
+        "    О.Номенклатура КАК Номенклатура\n"
+        "ИЗ\n"
+        "    РегистрНакопления.Товары.Остатки(\n"
+        "        ДОБАВИТЬКДАТЕ(КОНЕЦПЕРИОДА(&Дата, ДЕНЬ), СЕКУНДА, 1),\n"
+        "        ,\n"
+        "        Организация = &Организация) КАК О"
+    )
+    findings = rules.run_all(rules.QueryContext(q))
+    found = [f for f in findings if f.code == "vt-too-many-params"]
+    assert found and found[0].severity == "error"
+
+
+@pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
+def test__vt_ostatki_condition_in_second_param_not_flagged():
+    """Правильная форма: фильтр по измерению — во ВТОРОМ параметре (Условие)."""
+    q = (
+        "ВЫБРАТЬ\n"
+        "    О.Номенклатура КАК Номенклатура\n"
+        "ИЗ\n"
+        "    РегистрНакопления.Товары.Остатки(&Дата, Организация = &Организация) КАК О"
+    )
+    assert "vt-too-many-params" not in _codes(q)
+
+
+@pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
+def test__vt_ostatki_fewer_params_not_flagged():
+    """Опущенные хвостовые параметры ВТ допустимы (берутся значения по умолчанию)."""
+    q = "ВЫБРАТЬ О.Номенклатура ИЗ РегистрНакопления.Товары.Остатки(&Дата) КАК О"
+    assert "vt-too-many-params" not in _codes(q)
+
+
+@pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
+def test__vt_oboroty_four_params_not_flagged():
+    q = (
+        "ВЫБРАТЬ О.Номенклатура ИЗ "
+        "РегистрНакопления.Товары.Обороты(&Нач, &Кон, , Склад = &Склад) КАК О"
+    )
+    assert "vt-too-many-params" not in _codes(q)
+
+
+@pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
+def test__vt_oboroty_five_params_flagged():
+    q = (
+        "ВЫБРАТЬ О.Номенклатура ИЗ "
+        "РегистрНакопления.Товары.Обороты(&Нач, &Кон, , Склад = &Склад, Лишний = 1) КАК О"
+    )
+    assert "vt-too-many-params" in _codes(q)
+
+
+@pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
+def test__vt_ostatki_oboroty_six_params_flagged():
+    q = (
+        "ВЫБРАТЬ О.Номенклатура ИЗ "
+        "РегистрНакопления.Товары.ОстаткиИОбороты(&Нач, &Кон, , , Склад = &Склад, Лишний = 1) КАК О"
+    )
+    assert "vt-too-many-params" in _codes(q)
+
+
+@pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
+def test__vt_srez_poslednih_three_params_flagged():
+    q = (
+        "ВЫБРАТЬ К.Курс ИЗ "
+        "РегистрСведений.Курсы.СрезПоследних(&Дата, Валюта = &Валюта, Лишний = 1) КАК К"
+    )
+    assert "vt-too-many-params" in _codes(q)
+
+
+@pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
+def test__vt_buh_ostatki_too_many_params_flagged():
+    """РБ.Остатки: максимум — 4 параметра (период, условие счёта, виды субконто,
+    условие). 5-й аргумент — ошибка независимо от состава метаданных."""
+    q = (
+        "ВЫБРАТЬ О.Счет ИЗ "
+        "РегистрБухгалтерии.Хозрасчетный.Остатки(&Дата, УсловиеСчета, , , Лишний = 1) КАК О"
+    )
+    assert "vt-too-many-params" in _codes(q)
+
+
+@pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
+def test__vt_no_parens_not_flagged():
+    q = "ВЫБРАТЬ К.Курс ИЗ РегистрСведений.Курсы.СрезПоследних КАК К"
+    assert "vt-too-many-params" not in _codes(q)
 
 
 # ── Использование временных таблиц ──────────────────────
