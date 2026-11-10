@@ -38,7 +38,8 @@ def init_schema(db) -> None:
         UNIQUE(task_id))""")
     db.execute(f"""CREATE TABLE IF NOT EXISTS runs (
         id {pk}, project_id INTEGER NOT NULL, task_id INTEGER, pid INTEGER NOT NULL,
-        log_file TEXT, exit_file TEXT, status TEXT NOT NULL DEFAULT 'running',
+        pid_start {ts}, log_file TEXT, exit_file TEXT,
+        status TEXT NOT NULL DEFAULT 'running',
         started_at {ts}, finished_at {ts}, exit_code INTEGER)""")
     db.execute(f"""CREATE TABLE IF NOT EXISTS tg_notify_state (
         id {pk}, scope TEXT NOT NULL, ref_id INTEGER NOT NULL,
@@ -52,6 +53,9 @@ def init_schema(db) -> None:
         "mcp_name": "TEXT", "url": "TEXT", "db_name": "TEXT",
         "catalog_dir": "TEXT", "platform_path": "TEXT", "project_name": "TEXT",
         "code_index_dir": "TEXT",
+    })
+    _ensure_columns(db, "runs", {
+        "pid_start": "DOUBLE PRECISION",
     })
     _ensure_columns(db, "tasks", {
         "identifier": "TEXT",

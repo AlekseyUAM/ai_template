@@ -58,8 +58,48 @@ def launch(cmd: list, cwd: str, log_file: str, exit_file: str) -> int:
         log.close()
 
 
-def is_running(pid: int) -> bool:
+def process_start_time(pid: int) -> float | None:
+    """Время старта процесса (поле 22 /proc/<pid>/stat) или None.
+
+    Нужно, чтобы отличить «наш» PID от переиспользованного чужим процессом
+    после перезапуска монитора. На Windows — None (проверка недоступна).
+    """
+    if IS_WIN or not pid or pid <= 0:
+        return None
+    try:
+        text = Path(f"/proc/{pid}/stat").read_text()
+    except OSError:
+        return None
+    close_paren = text.rfind(")")
+    if close_paren == -1:
+        return None
+    fields = text[close_paren + 2:].split()
+    # fields[0] — состояние (поле 3), значит starttime (поле 22) — fields[19].
+    try:
+        return float(fields[19])
+    except (IndexError, ValueError):
+        return None
+
+
+def _start_matches(pid: int, pid_start: float | None) -> bool:
+    """Совпадает ли сохранённое время старта с текущим.
+
+    pid_start=None — запись старая (до появления колонки); не блокируем
+    прежнее поведение. Если время сохранено, но прочитать его сейчас нельзя,
+    процесс считается чужим: убивать наугад опаснее, чем не убить.
+    """
+    if pid_start is None:
+        return True
+    current = process_start_time(pid)
+    if current is None:
+        return False
+    return current == pid_start
+
+
+def is_running(pid: int, pid_start: float | None = None) -> bool:
     if not pid or pid <= 0:
+        return False
+    if not _start_matches(pid, pid_start):
         return False
     if IS_WIN:
         import ctypes
@@ -105,8 +145,8 @@ def is_running(pid: int) -> bool:
     return True
 
 
-def terminate(pid: int) -> None:
-    if not is_running(pid):
+def terminate(pid: int, pid_start: float | None = None) -> None:
+    if not is_running(pid, pid_start):
         return
     if IS_WIN:
         subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True)

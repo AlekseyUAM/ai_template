@@ -36,10 +36,10 @@ class FakeDetachedRunner:
         self.calls.append(("launch", pid, cmd, cwd))
         return pid
 
-    def is_running(self, pid):
+    def is_running(self, pid, pid_start=None):
         return pid in self.alive
 
-    def terminate(self, pid):
+    def terminate(self, pid, pid_start=None):
         self.calls.append(("terminate", pid))
         self.alive.discard(pid)
 

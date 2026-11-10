@@ -14,6 +14,7 @@
 import logging
 import os
 import shlex
+import tempfile
 import threading
 import time
 import uuid
@@ -110,8 +111,54 @@ class Monitor:
 
     def _run_paths(self, project):
         token = uuid.uuid4().hex
-        d = Path(project.path) / ".agentmon" / "runs"
+        if project.backend == "local":
+            d = Path(project.path) / ".agentmon" / "runs"
+        else:
+            # Для ssh/docker project.path — путь на цели; локально его может не
+            # быть. Логи и exit-файлы detached-обёртки живут на мониторе.
+            d = Path(config.RUNS_DIR)
         return str(d / f"{token}.log"), str(d / f"{token}.exit")
+
+    def _launch_spec(self, project, cmd: list) -> tuple[list, str]:
+        """Команда локального процесса, который запускает агента на цели.
+
+        local — сам claude; ssh — ssh-клиент с PTY (SIGHUP при kill закрывает
+        удалённую сессию); docker — docker exec с TTY. Возвращает (cmd, cwd)
+        для runner_detached.launch; cwd обязан существовать на мониторе.
+        """
+        if project.backend == "local":
+            return cmd, project.path
+        # Проверяем доступность цели до старта (контейнер поднят, ssh отвечает).
+        self.backends.get(project).check()
+        if project.backend == "ssh":
+            conn = project.conn or {}
+            port = int(conn.get("port") or 22)
+            strict = conn.get("strict_host_key", True) is not False
+            ssh = ["ssh", "-tt", "-o", "BatchMode=yes", "-o",
+                   "StrictHostKeyChecking=" + ("yes" if strict else "accept-new"),
+                   "-p", str(port)]
+            key_path = conn.get("key_path")
+            if key_path:
+                ssh += ["-i", os.path.expanduser(str(key_path))]
+            user = conn.get("user")
+            host = conn["host"]
+            ssh.append(f"{user}@{host}" if user else host)
+            ssh.append(
+                f"cd {shlex.quote(project.path)} && exec {shlex.join(cmd)}")
+            return ssh, tempfile.gettempdir()
+        if project.backend == "docker":
+            from .backends.docker import (
+                DEFAULT_WORKDIR, container_name, docker_host_from_conn)
+            conn = project.conn or {}
+            docker_host = docker_host_from_conn(conn)
+            argv = ["docker"]
+            if docker_host:
+                argv += ["-H", docker_host]
+            argv += ["exec", "-t", "-w",
+                     conn.get("workdir") or DEFAULT_WORKDIR,
+                     container_name(project.path), *cmd]
+            return argv, tempfile.gettempdir()
+        raise ValueError(f"неизвестный backend: {project.backend!r}")
 
     def start(self, project, prompt="", task_id=None, cmd=None) -> str:
         """Запустить агента отдельным процессом (`claude -p "<prompt>"`).
@@ -124,18 +171,23 @@ class Monitor:
         try:
             log_file, exit_file = self._run_paths(project)
             actual_cmd = cmd if cmd is not None else self._cmd_for(project, prompt)
-            pid = self.runner.launch(actual_cmd,
-                                     cwd=project.path, log_file=log_file,
-                                     exit_file=exit_file)
+            launch_cmd, cwd = self._launch_spec(project, actual_cmd)
+            pid = self.runner.launch(launch_cmd, cwd=cwd,
+                                     log_file=log_file, exit_file=exit_file)
         except Exception as exc:
             self._fail(project, exc)
             raise
+        # Время старта защищает от переиспользования PID после рестарта монитора.
+        pid_start = None
+        if self.runner is runner_detached:
+            pid_start = runner_detached.process_start_time(pid)
         try:
             run_id = self.store.add(project.id, pid, task_id=task_id,
-                                    log_file=log_file, exit_file=exit_file)
+                                    log_file=log_file, exit_file=exit_file,
+                                    pid_start=pid_start)
         except Exception as exc:
             try:
-                self.runner.terminate(pid)
+                self.runner.terminate(pid, pid_start)
             except Exception:
                 pass
             self._fail(project, exc)
@@ -148,7 +200,7 @@ class Monitor:
             return
         try:
             for run in self.store.running(project.id):
-                self.runner.terminate(run["pid"])
+                self.runner.terminate(run["pid"], run.get("pid_start"))
                 self.store.finish(run["id"], "failed")
         except Exception as exc:
             self._fail(project, exc)
@@ -159,7 +211,7 @@ class Monitor:
         if self.store is None:
             return False
         try:
-            return any(self.runner.is_running(r["pid"])
+            return any(self.runner.is_running(r["pid"], r.get("pid_start"))
                        for r in self.store.running(project.id))
         except Exception as exc:
             self._fail(project, exc)
@@ -178,7 +230,7 @@ class Monitor:
         if self.store is None:
             return
         for run in self.store.running():
-            if self.runner.is_running(run["pid"]):
+            if self.runner.is_running(run["pid"], run.get("pid_start")):
                 continue
             code = self._read_exit(run.get("exit_file"))
             self.store.finish(run["id"], "done" if code == 0 else "failed",
@@ -206,7 +258,7 @@ class Monitor:
         # Превышен лимит: снимаем процесс и фиксируем провал даже если
         # terminate бросит — прогон не должен остаться «вечно running».
         try:
-            self.runner.terminate(run["pid"])
+            self.runner.terminate(run["pid"], run.get("pid_start"))
         finally:
             self.store.finish(run["id"], "failed")
         logger.warning("задача id=%s прервана по таймауту (%s мин)",
@@ -310,7 +362,7 @@ class Monitor:
         now = self.now_fn()
         live_projects = set()
         for run in self.store.running():
-            if self.runner.is_running(run["pid"]):
+            if self.runner.is_running(run["pid"], run.get("pid_start")):
                 live_projects.add(run["project_id"])
         out = []
         for project in self.registry.list():

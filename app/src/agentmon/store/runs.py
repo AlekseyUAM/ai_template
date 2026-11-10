@@ -22,6 +22,7 @@ class RunRepo:
         task_id=None,
         log_file=None,
         exit_file=None,
+        pid_start=None,
         now=None,
     ) -> int:
         """Создаёт запись о прогоне со статусом 'running', возвращает run_id.
@@ -34,9 +35,9 @@ class RunRepo:
         )
         return self._db.returning_id(
             "runs",
-            ["project_id", "task_id", "pid", "log_file", "exit_file",
-             "status", "started_at"],
-            [project_id, task_id, pid, log_file, exit_file,
+            ["project_id", "task_id", "pid", "pid_start", "log_file",
+             "exit_file", "status", "started_at"],
+            [project_id, task_id, pid, pid_start, log_file, exit_file,
              "running", started_at],
         )
 

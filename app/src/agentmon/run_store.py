@@ -7,6 +7,7 @@ _SCHEMA = """CREATE TABLE IF NOT EXISTS runs (
     project_id INTEGER NOT NULL,
     task_id INTEGER,
     pid INTEGER NOT NULL,
+    pid_start REAL,
     log_file TEXT,
     exit_file TEXT,
     status TEXT NOT NULL DEFAULT 'running',
@@ -16,19 +17,29 @@ _SCHEMA = """CREATE TABLE IF NOT EXISTS runs (
 )"""
 
 
+def _ensure_pid_start(conn) -> None:
+    """Добавить pid_start в старую БД (защита от переиспользования PID)."""
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(runs)")}
+    if "pid_start" not in cols:
+        conn.execute("ALTER TABLE runs ADD COLUMN pid_start REAL")
+
+
 class RunStore:
     def __init__(self, conn, clock=time.time):
         self.conn = conn
         self.clock = clock
         conn.row_factory = sqlite3.Row
         conn.execute(_SCHEMA)
+        _ensure_pid_start(conn)
         conn.commit()
 
-    def add(self, project_id, pid, *, task_id=None, log_file=None, exit_file=None):
+    def add(self, project_id, pid, *, task_id=None, log_file=None, exit_file=None,
+            pid_start=None):
         cur = self.conn.execute(
-            "INSERT INTO runs (project_id, task_id, pid, log_file, exit_file, "
-            "status, started_at) VALUES (?,?,?,?,?,'running',?)",
-            (project_id, task_id, pid, log_file, exit_file, self.clock()))
+            "INSERT INTO runs (project_id, task_id, pid, pid_start, log_file, "
+            "exit_file, status, started_at) VALUES (?,?,?,?,?,?,'running',?)",
+            (project_id, task_id, pid, pid_start, log_file, exit_file,
+             self.clock()))
         self.conn.commit()
         return cur.lastrowid
 
