@@ -159,3 +159,23 @@ def test_platform_path_binary_file(tmp_path):
     devbase.write_devbase(LocalProvisioner(), c)
     data = json.loads((tmp_path / ".1c-devbase.json").read_text(encoding="utf-8"))
     assert data["platform_path"] == str(tmp_path / "1cv8")
+
+
+def test_gitignore_covers_devbase_secret(tmp_path):
+    """Пароль 1С/BД не должен попадать в git add ."""
+    import subprocess
+    devbase.git_init_project(LocalProvisioner(), str(tmp_path))
+    devbase.write_devbase(LocalProvisioner(), cfg(tmp_path), user="u", password="secret")
+    ignored = subprocess.run(
+        ["git", "check-ignore", "-q", ".1c-devbase.json"],
+        cwd=str(tmp_path), capture_output=True)
+    assert ignored.returncode == 0, ".1c-devbase.json должен быть в .gitignore"
+
+
+def test_gitignore_appends_rule_without_duplicates(tmp_path):
+    (tmp_path / ".gitignore").write_text("custom/\n", encoding="utf-8")
+    devbase.git_init_project(LocalProvisioner(), str(tmp_path))
+    devbase.git_init_project(LocalProvisioner(), str(tmp_path))
+    lines = (tmp_path / ".gitignore").read_text(encoding="utf-8").splitlines()
+    assert lines.count(".1c-devbase.json") == 1
+    assert "custom/" in lines

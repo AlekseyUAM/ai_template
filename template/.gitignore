@@ -1,5 +1,6 @@
 /tmp
 /logs
+.1c-devbase.json
 /src/cf/.code-index
 /.venv
 /.agentmon

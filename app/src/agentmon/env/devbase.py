@@ -2,6 +2,29 @@ import json
 
 from .project_checks import infer_db_kind
 
+# Файл содержит пароль 1С/BД в открытом виде. Он нужен 1c-batch, но не должен
+# попадать в git: git_init_project дописывает правило в существующий .gitignore
+# (template/.gitignore тоже его содержит — для новых проектов).
+_REQUIRED_IGNORES = (".1c-devbase.json",)
+
+
+def _ensure_gitignore(prov, root: str) -> None:
+    """Создать .gitignore или дописать недостающие правила, не плодя дубли."""
+    path = f"{root}/.gitignore"
+    if not prov.exists(path):
+        prov.write_text(path, "\n".join(("logs/", "*.log", *_REQUIRED_IGNORES)) + "\n")
+        return
+    try:
+        current = prov.read_text(path)
+    except Exception:
+        return
+    existing = {line.strip() for line in current.splitlines()}
+    missing = [rule for rule in _REQUIRED_IGNORES if rule not in existing]
+    if not missing:
+        return
+    suffix = "" if current.endswith("\n") or not current else "\n"
+    prov.write_text(path, current + suffix + "\n".join(missing) + "\n")
+
 
 def git_init_project(prov, project_dir, *, config=None) -> None:
     """Инициализирует git в КОРНЕ каталога проекта.
@@ -20,8 +43,7 @@ def git_init_project(prov, project_dir, *, config=None) -> None:
             prov.run(["git", "config", "user.name", config.developer_id], cwd=root)
         if getattr(config, "developer_email", ""):
             prov.run(["git", "config", "user.email", config.developer_email], cwd=root)
-    if not prov.exists(f"{root}/.gitignore"):
-        prov.write_text(f"{root}/.gitignore", "logs/\n*.log\n")
+    _ensure_gitignore(prov, root)
 
 
 def git_commit_all(prov, project_dir, message="init", *, config=None) -> None:
