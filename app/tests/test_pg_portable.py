@@ -177,7 +177,8 @@ class TestBinExe:
 class TestEnsureBinaries:
     def test_skip_when_initdb_present(self, tmp_path):
         """Если initdb уже существует — download/extract не вызываются."""
-        version_dir = tmp_path / pg_portable.PG_DIR / pg_portable.PG_VERSION / "pgsql" / "bin"
+        version_dir = (pg_portable.version_dir(tmp_path, "Linux", "x86_64")
+                       / "pgsql" / "bin")
         version_dir.mkdir(parents=True)
         (version_dir / _initdb_exe()).write_bytes(b"fake")
 
@@ -224,9 +225,8 @@ class TestEnsureBinaries:
             download=fake_download([]),
             extract=fake_extract_factory(True),
         )
-        expected_bin = (
-            tmp_path / pg_portable.PG_DIR / pg_portable.PG_VERSION / "pgsql" / "bin"
-        )
+        expected_bin = (pg_portable.version_dir(tmp_path, "Linux", "x86_64")
+                        / "pgsql" / "bin")
         assert expected_bin.exists()
 
     def test_download_url_matches_platform(self, tmp_path):
@@ -527,7 +527,7 @@ class TestPaths:
 
     def test_bin_dir_structure(self, tmp_path):
         bin_dir, _, _ = pg_portable.paths(tmp_path)
-        expected = tmp_path / pg_portable.PG_DIR / pg_portable.PG_VERSION / "pgsql" / "bin"
+        expected = pg_portable.version_dir(tmp_path) / "pgsql" / "bin"
         assert bin_dir == expected
 
     def test_datadir_structure(self, tmp_path):
@@ -782,9 +782,7 @@ class TestProvision:
         (datadir / "ai1c.port").write_text("5440")
 
         # ensure_binaries: initdb.exe уже есть
-        bin_dir = (
-            tmp_path / pg_portable.PG_DIR / pg_portable.PG_VERSION / "pgsql" / "bin"
-        )
+        bin_dir = pg_portable.version_dir(tmp_path) / "pgsql" / "bin"
         bin_dir.mkdir(parents=True, exist_ok=True)
         (bin_dir / _initdb_exe()).write_bytes(b"fake")
 
@@ -811,3 +809,76 @@ class TestProvision:
         )
         # Порт из файла 5440
         assert "5440" in result
+
+
+class TestChecksum:
+    def test_checksum_mismatch_aborts_before_extract(self, tmp_path):
+        extracted = []
+        with pytest.raises(RuntimeError, match="контрольная сумма"):
+            pg_portable.ensure_binaries(
+                tmp_path, system="Linux", arch="x86_64",
+                download=fake_download([]),
+                extract=lambda z, d: extracted.append(d),
+                sha256="0" * 64,
+            )
+        assert extracted == []
+
+    def test_checksum_match_allows_extract(self, tmp_path):
+        import hashlib
+        digest = hashlib.sha256(b"FAKE_ZIP").hexdigest()
+        bin_dir = pg_portable.ensure_binaries(
+            tmp_path, system="Linux", arch="x86_64",
+            download=fake_download([]),
+            extract=fake_extract_factory(True),
+            sha256=digest,
+        )
+        assert Path(bin_dir).name == "bin"
+
+
+class TestPlatformCache:
+    def test_cache_differs_between_platforms(self, tmp_path):
+        win = pg_portable.version_dir(tmp_path, "Windows", "AMD64")
+        linux = pg_portable.version_dir(tmp_path, "Linux", "x86_64")
+        assert win != linux
+        assert "windows" in str(win) and "linux" in str(linux)
+
+
+class TestProvisionPort:
+    def _bin(self, tmp_path):
+        bin_dir = pg_portable.version_dir(tmp_path) / "pgsql" / "bin"
+        bin_dir.mkdir(parents=True)
+        (bin_dir / _initdb_exe()).write_bytes(b"fake")
+        datadir = tmp_path / pg_portable.PGDATA
+        datadir.mkdir(parents=True)
+        (datadir / "PG_VERSION").write_text("16\n")
+        return bin_dir, datadir
+
+    def test_running_server_uses_actual_port(self, tmp_path, monkeypatch):
+        _, datadir = self._bin(tmp_path)
+        (datadir / "ai1c.port").write_text("5440")
+        (datadir / "postmaster.pid").write_text(
+            "1\n/pgdata\n123\n5599\n/tmp\n127.0.0.1\n\n", encoding="utf-8")
+        monkeypatch.setattr(pg_portable, "status", lambda *a, **k: True)
+        calls = []
+        def fake_run(cmd, **kw):
+            calls.append(list(cmd))
+            return subprocess.CompletedProcess(cmd, 0, stdout=b"1", stderr=b"")
+        dsn = pg_portable.provision(tmp_path, run=fake_run)
+        assert dsn == "postgresql://ai1c:ai1c@127.0.0.1:5599/ai1c"
+
+    def test_start_uses_free_port_when_saved_is_busy(self, tmp_path, monkeypatch):
+        _, datadir = self._bin(tmp_path)
+        (datadir / "ai1c.port").write_text("5440")
+        monkeypatch.setattr(pg_portable, "status", lambda *a, **k: False)
+        monkeypatch.setattr(pg_portable, "port_available", lambda p: False)
+        started = []
+        monkeypatch.setattr(pg_portable, "start",
+                            lambda b, d, p, l, run=None: started.append(p))
+        calls = []
+        def fake_run(cmd, **kw):
+            calls.append(list(cmd))
+            return subprocess.CompletedProcess(cmd, 0, stdout=b"1", stderr=b"")
+        dsn = pg_portable.provision(tmp_path, run=fake_run, free_port_fn=lambda: 5555)
+        assert started == [5555]
+        assert dsn.endswith(":5555/ai1c")
+        assert (datadir / "ai1c.port").read_text() == "5555"

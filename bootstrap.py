@@ -174,11 +174,19 @@ def setup_database() -> tuple[str, str]:
         else:
             # Контейнера нет/поднялся частично: убрать остатки (volume с данными
             # сохраняется) и поднять заново. free_port() после down → порт стабилен.
-            compose(["down", "--remove-orphans"], env={**os.environ},
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            try:
+                compose(["down", "--remove-orphans"], env={**os.environ},
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except Exception:
+                pass          # остатков может не быть — это не ошибка
             port = free_port()
             say(f"поднимаю PostgreSQL в Docker (deploy/postgres) на порту {port}")
-            compose(["up", "-d"], env={**os.environ, "AI1C_PG_PORT": str(port)}, check=True)
+            try:
+                compose(["up", "-d"],
+                        env={**os.environ, "AI1C_PG_PORT": str(port)}, check=True)
+            except subprocess.CalledProcessError as exc:
+                warn(f"docker compose up не удался ({exc}) — использую локальный SQLite")
+                return _SQLITE_PATH, pg_mode
 
         say("устанавливаю драйвер psycopg")
         run([str(venv_python()), "-m", "pip", "install", "psycopg[binary]"],
@@ -197,7 +205,8 @@ def setup_database() -> tuple[str, str]:
                 break
             time.sleep(1)
         if not ready:
-            warn("PostgreSQL не ответил за 30с — проверьте контейнер ai1c-postgres")
+            warn("PostgreSQL не ответил за 30с — использую локальный SQLite")
+            return _SQLITE_PATH, pg_mode
         return f"postgresql://ai1c:ai1c@127.0.0.1:{port}/ai1c", pg_mode
 
     # pg_mode == "host": портативная PostgreSQL
@@ -240,11 +249,51 @@ def env_file_contents(
     )
 
 
+MANAGED_ENV_KEYS = ("AGENTMON_DSN", "AGENTMON_DB", "AI1C_PG_MODE")
+
+
+def merge_env_text(existing: str, managed: dict[str, str]) -> str:
+    """Обновить управляемые ключи, сохранив остальные строки и комментарии.
+
+    .ai1c.env документирован как файл, куда пользователь добавляет
+    AGENTMON_TG_TOKEN/AGENTMON_CLAUDE_CMD. Повторный bootstrap не должен их
+    стирать.
+    """
+    out: list[str] = []
+    seen: set[str] = set()
+    for line in existing.splitlines():
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#") and "=" in stripped:
+            key = stripped.split("=", 1)[0].strip()
+            if key in managed:
+                out.append(f"{key}={managed[key]}")
+                seen.add(key)
+                continue
+        out.append(line)
+    missing = [k for k in MANAGED_ENV_KEYS if k not in seen]
+    if missing:
+        if out and out[-1].strip():
+            out.append("")
+        if not any(line.startswith("# Управляемые") for line in out):
+            out.append("# Управляемые ключи обновляются bootstrap.py")
+        out.extend(f"{k}={managed[k]}" for k in missing)
+    return "\n".join(out).rstrip("\n") + "\n"
+
+
 def write_env(dsn: str, pg_mode: str = "host") -> None:
-    ENV_FILE.write_text(
-        env_file_contents(dsn, str(ROOT / "app" / "agentmon.db"), pg_mode=pg_mode),
-        encoding="utf-8",
-    )
+    db = str(ROOT / "app" / "agentmon.db")
+    managed = {"AGENTMON_DSN": dsn, "AGENTMON_DB": db,
+               "AI1C_PG_MODE": pg_mode}
+    if ENV_FILE.exists():
+        try:
+            existing = ENV_FILE.read_text(encoding="utf-8")
+        except OSError:
+            existing = ""
+        text = merge_env_text(existing, managed) if existing else \
+            env_file_contents(dsn, db, pg_mode=pg_mode)
+    else:
+        text = env_file_contents(dsn, db, pg_mode=pg_mode)
+    ENV_FILE.write_text(text, encoding="utf-8")
     say(f"конфиг записан: .ai1c.env (AGENTMON_DSN={dsn}, AI1C_PG_MODE={pg_mode})")
 
 

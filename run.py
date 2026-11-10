@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -48,16 +49,18 @@ def host_plan(env: dict, extra_args: list) -> tuple:
     return argv, env
 
 
+def _with_port(dsn: str, port: int) -> str:
+    """Заменить порт в DSN PostgreSQL, сохранив пользователя/пароль/базу."""
+    return re.sub(r"^(postgres(?:ql)?://[^/]*?):\d+/",
+                  rf"\g<1>:{port}/", dsn, count=1)
+
+
 def ensure_host_pg(env: dict, *, run=subprocess.run) -> None:
     """Поднять портативную PostgreSQL при запуске монитора (если нужно).
 
-    Условия для запуска:
-    - AI1C_PG_MODE == "host" (или не задан — дефолт host).
-    - Каталог данных <ROOT>/.ai1c/pgdata существует (portable PG была provisioned).
-    - pg_portable доступен (мягкий import — при отсутствии модуля no-op).
-
-    Если PostgreSQL не запущена — вызывает pg_portable.start().
-    Ошибки start логируются в stderr, но НЕ прерывают запуск монитора.
+    Если сервер уже запущен — сверяет фактический порт (postmaster.pid) с DSN
+    и правит DSN. Если старт не удался — переводит DSN на SQLite, чтобы монитор
+    не подключился к чужому процессу на старом порту.
     """
     if _pg_portable is None:
         return
@@ -72,21 +75,28 @@ def ensure_host_pg(env: dict, *, run=subprocess.run) -> None:
         return
 
     if _pg_portable.status(bin_dir, datadir, run=run):
-        return  # уже запущена
+        actual = _pg_portable.running_port(datadir)
+        dsn = env.get("AGENTMON_DSN") or ""
+        if actual is not None and dsn.startswith("postgres"):
+            env["AGENTMON_DSN"] = _with_port(dsn, actual)
+        return
 
     port = _pg_portable.read_port(datadir)
-    if port is None:
-        # Файл порта потерян/повреждён (при нормальном provision не случается);
-        # берём дефолт, но предупреждаем — DSN в .ai1c.env может указывать на другой порт.
-        port = 5432
-        print("[run] WARNING: .ai1c/pgdata/ai1c.port не найден — старт PG на 5432",
-              file=sys.stderr)
+    if port is None or not _pg_portable.port_available(port):
+        port = _pg_portable.free_port()
 
     try:
         logfile.parent.mkdir(parents=True, exist_ok=True)
         _pg_portable.start(bin_dir, datadir, port, logfile, run=run)
     except Exception as exc:  # noqa: BLE001
-        print(f"[run] WARNING: не удалось запустить портативную PostgreSQL: {exc}", file=sys.stderr)
+        print(f"[run] WARNING: не удалось запустить портативную PostgreSQL: {exc}. "
+              f"Монитор стартует на SQLite.", file=sys.stderr)
+        env["AGENTMON_DSN"] = str(ROOT / "app" / "store.db")
+        return
+
+    dsn = env.get("AGENTMON_DSN") or ""
+    if dsn.startswith("postgres"):
+        env["AGENTMON_DSN"] = _with_port(dsn, port)
 
 
 def main() -> None:

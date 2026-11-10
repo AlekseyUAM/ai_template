@@ -212,3 +212,83 @@ class TestSetupDatabaseDockerMode:
 
         assert dsn == "postgresql://ai1c:ai1c@127.0.0.1:5499/ai1c"
         assert pg_mode == "docker"
+
+
+# ---------------------------------------------------------------------------
+# write_env: пользовательские ключи не теряются
+# ---------------------------------------------------------------------------
+
+class TestWriteEnvMerge:
+    def test_preserves_user_keys(self, tmp_path, monkeypatch):
+        env_file = tmp_path / ".ai1c.env"
+        env_file.write_text(
+            "# комментарий пользователя\n"
+            "AGENTMON_DSN=sqlite:///old.db\n"
+            "AGENTMON_TG_TOKEN=secret-token\n"
+            "AGENTMON_CLAUDE_CMD=/opt/claude --flag\n",
+            encoding="utf-8")
+        monkeypatch.setattr(bootstrap, "ENV_FILE", env_file)
+        monkeypatch.setattr(bootstrap, "say", lambda msg: None)
+
+        bootstrap.write_env("postgresql://u@h/db", "host")
+
+        text = env_file.read_text(encoding="utf-8")
+        assert "AGENTMON_DSN=postgresql://u@h/db" in text
+        assert "AGENTMON_TG_TOKEN=secret-token" in text
+        assert "AGENTMON_CLAUDE_CMD=/opt/claude --flag" in text
+        assert "# комментарий пользователя" in text
+        assert text.count("AGENTMON_DSN=") == 1
+
+    def test_adds_missing_managed_keys(self, tmp_path, monkeypatch):
+        env_file = tmp_path / ".ai1c.env"
+        env_file.write_text("AGENTMON_TG_TOKEN=t\n", encoding="utf-8")
+        monkeypatch.setattr(bootstrap, "ENV_FILE", env_file)
+        monkeypatch.setattr(bootstrap, "say", lambda msg: None)
+
+        bootstrap.write_env("sqlite:///x.db", "docker")
+
+        env = _parse_env(env_file.read_text(encoding="utf-8"))
+        assert env["AGENTMON_TG_TOKEN"] == "t"
+        assert env["AGENTMON_DSN"] == "sqlite:///x.db"
+        assert env["AI1C_PG_MODE"] == "docker"
+
+
+def test_docker_health_timeout_falls_back_to_sqlite(monkeypatch):
+    """Контейнер не ответил за 30 с → SQLite, а не DSN на мёртвую БД."""
+    monkeypatch.setenv("AI1C_PG_MODE", "docker")
+    monkeypatch.setattr(bootstrap, "docker_available", MagicMock(return_value=True))
+    monkeypatch.setattr(bootstrap, "pg_container_port", MagicMock(return_value=5499))
+    monkeypatch.setattr(bootstrap, "run", MagicMock())
+    monkeypatch.setattr(bootstrap, "venv_python", MagicMock(return_value="/fake/python"))
+    monkeypatch.setattr(bootstrap.time, "sleep", lambda s: None)
+    import subprocess as _sp
+    fake_proc = MagicMock()
+    fake_proc.returncode = 1             # pg_isready всегда не готов
+    monkeypatch.setattr(_sp, "run", MagicMock(return_value=fake_proc))
+    warned = []
+    monkeypatch.setattr(bootstrap, "warn", lambda msg: warned.append(msg))
+
+    dsn, pg_mode = bootstrap.setup_database()
+
+    assert dsn == _SQLITE_PATH
+    assert any("SQLite" in w for w in warned)
+
+
+def test_docker_compose_failure_falls_back_to_sqlite(monkeypatch):
+    import subprocess as _sp
+    monkeypatch.setenv("AI1C_PG_MODE", "docker")
+    monkeypatch.setattr(bootstrap, "docker_available", MagicMock(return_value=True))
+    monkeypatch.setattr(bootstrap, "pg_container_port", MagicMock(return_value=None))
+    monkeypatch.setattr(bootstrap, "free_port", MagicMock(return_value=5500))
+    def fake_compose(args, **kwargs):
+        if "up" in args:
+            raise _sp.CalledProcessError(1, ["docker", "compose"])
+        return MagicMock(returncode=0)
+    monkeypatch.setattr(bootstrap, "compose", fake_compose)
+    warned = []
+    monkeypatch.setattr(bootstrap, "warn", lambda msg: warned.append(msg))
+
+    dsn, pg_mode = bootstrap.setup_database()
+
+    assert dsn == _SQLITE_PATH
+    assert any("SQLite" in w for w in warned)

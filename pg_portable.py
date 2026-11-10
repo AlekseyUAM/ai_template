@@ -16,6 +16,8 @@
 """
 from __future__ import annotations
 
+import hashlib
+import hmac
 import os
 import platform
 import re
@@ -109,10 +111,42 @@ def _default_download(url: str, dest: str) -> None:
     urllib.request.urlretrieve(url, dest)
 
 
+def _default_checksum(url: str) -> str | None:
+    """Попытаться скачать <url>.sha256 (EDB публикует не для всех сборок)."""
+    import urllib.request  # pylint: disable=import-outside-toplevel
+    try:
+        with urllib.request.urlopen(url + ".sha256", timeout=10) as resp:
+            text = resp.read().decode("utf-8", "replace")
+    except Exception:
+        return None
+    token = text.strip().split()[0] if text.strip() else ""
+    return token.lower() if re.fullmatch(r"[0-9a-fA-F]{64}", token) else None
+
+
+def _sha256_file(path: str) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
 def _default_extract(zip_path: str, dest: str) -> None:
     """Реальная распаковка через zipfile (используется только в «живом» режиме)."""
     with zipfile.ZipFile(zip_path) as zf:
         zf.extractall(dest)
+
+
+def platform_tag(system: str | None = None, arch: str | None = None) -> str:
+    """Тег кэша бинарников: linux-x86_64, windows-amd64, …"""
+    system = (system or platform.system()).lower()
+    arch = (arch or platform.machine()).lower()
+    return re.sub(r"[^a-z0-9_.-]+", "-", f"{system}-{arch}")
+
+
+def version_dir(root, system: str | None = None, arch: str | None = None) -> Path:
+    """Каталог бинарников версии с учётом платформы (кэш не переносится между ОС)."""
+    return Path(root) / PG_DIR / PG_VERSION / platform_tag(system, arch)
 
 
 def ensure_binaries(
@@ -122,6 +156,8 @@ def ensure_binaries(
     arch: str | None = None,
     download: Callable[[str, str], None] = _default_download,
     extract: Callable[[str, str], None] = _default_extract,
+    sha256: str | None = None,
+    checksum_fetch: Callable[[str], str | None] | None = _default_checksum,
 ) -> str:
     """Гарантирует наличие портативных бинарников PostgreSQL.
 
@@ -137,7 +173,7 @@ def ensure_binaries(
     system = system or platform.system()
     arch = arch or platform.machine()
 
-    dest_dir = root / PG_DIR / PG_VERSION
+    dest_dir = version_dir(root, system, arch)
     bin_dir = dest_dir / "pgsql" / "bin"
     initdb_exe = bin_dir / bin_exe("initdb")
 
@@ -149,6 +185,23 @@ def ensure_binaries(
     zip_path = dest_dir / f"postgresql-{PG_VERSION}-binaries.zip"
     url = binaries_url(system, arch)
     download(url, str(zip_path))
+
+    # Проверить контрольную сумму до распаковки и запуска бинарников.
+    expected = sha256 or os.environ.get("AI1C_PG_SHA256")
+    if expected is None and download is _default_download and checksum_fetch:
+        try:
+            expected = checksum_fetch(url)
+        except Exception:
+            expected = None
+    if expected:
+        actual = _sha256_file(str(zip_path))
+        if not hmac.compare_digest(actual, expected.strip().lower()):
+            raise RuntimeError(
+                f"контрольная сумма архива PostgreSQL не совпала: "
+                f"ожидалось {expected}, получено {actual}")
+    else:
+        print("[pg] WARNING: контрольная сумма архива PostgreSQL не проверена "
+              "(задайте AI1C_PG_SHA256)", file=sys.stderr)
 
     # Распаковать
     extract(str(zip_path), str(dest_dir))
@@ -400,12 +453,12 @@ def paths(root) -> tuple:
     Единое место разрешения путей — используется как provision, так и run.py,
     чтобы исключить расхождения при изменении констант PG_DIR / PGDATA.
 
-    bin_dir  — Path к <root>/.ai1c/pg/<PG_VERSION>/pgsql/bin
+    bin_dir  — Path к <root>/.ai1c/pg/<PG_VERSION>/<platform>/pgsql/bin
     datadir  — Path к <root>/.ai1c/pgdata
     logfile  — Path к <root>/.ai1c/pg.log
     """
     root = Path(root)
-    bin_dir = root / PG_DIR / PG_VERSION / "pgsql" / "bin"
+    bin_dir = version_dir(root) / "pgsql" / "bin"
     datadir = root / PGDATA
     logfile = root / ".ai1c" / "pg.log"
     return bin_dir, datadir, logfile
@@ -422,6 +475,29 @@ def read_port(datadir) -> int | None:
         return int(port_file.read_text(encoding="utf-8").strip())
     except (OSError, ValueError):
         return None
+
+
+def running_port(datadir) -> int | None:
+    """Фактический порт запущенного кластера из postmaster.pid (строка 4).
+
+    Авторитетнее сохранённого ai1c.port: если файл порта устарел, DSN не должен
+    указывать на чужой процесс.
+    """
+    try:
+        lines = (Path(datadir) / "postmaster.pid").read_text(
+            encoding="utf-8").splitlines()
+        return int(lines[3].strip())
+    except (OSError, IndexError, ValueError):
+        return None
+
+
+def port_available(port: int) -> bool:
+    with socket.socket() as s:
+        try:
+            s.bind(("127.0.0.1", port))
+            return True
+        except OSError:
+            return False
 
 
 # ---------------------------------------------------------------------------
@@ -468,19 +544,28 @@ def provision(
     # 3. initdb (пропустит, если datadir/PG_VERSION уже есть)
     initdb(bin_dir, datadir, run=run)
 
-    # 4. Разрешить порт
+    # 4. Разрешить порт: запущенный сервер авторитетнее файла ai1c.port.
     port_file = datadir / "ai1c.port"
-    if port is not None:
+    running = status(bin_dir, datadir, run=run)
+    actual = running_port(datadir) if running else None
+    if running:
+        if port is not None and actual is not None and port != actual:
+            raise RuntimeError(
+                f"портативная PostgreSQL уже запущена на порту {actual}, "
+                f"а запрошен {port}; остановите её или не задавайте port")
+        chosen_port = actual or port or read_port(datadir) or free_port_fn()
+    elif port is not None:
         chosen_port = port
     else:
         saved = read_port(datadir)
-        chosen_port = saved if saved is not None else free_port_fn()
+        chosen_port = (saved if saved is not None and port_available(saved)
+                       else free_port_fn())
 
     # Сохранить выбранный порт
     port_file.write_text(str(chosen_port), encoding="utf-8")
 
     # 5. Запустить (если ещё не запущен)
-    if not status(bin_dir, datadir, run=run):
+    if not running:
         logfile.parent.mkdir(parents=True, exist_ok=True)
         start(bin_dir, datadir, chosen_port, logfile, run=run)
 
