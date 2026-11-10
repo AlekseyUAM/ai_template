@@ -88,3 +88,73 @@ async def test_gate_note_flow_saves_and_approves(tmp_path):
     from agentmon.store.telegram_store import FeedbackRepo
     assert FeedbackRepo(db).list_for_task(tid)[0]["text"] == "учти Y"
     assert f"/api/env/tasks/{tid}/approve" in caps.posted
+
+
+def _gate_task(db, tmp_path):
+    import json
+    from agentmon.store.tasks import TaskRepo
+    pid = db.returning_id("projects", ["name", "path"], ["p", str(tmp_path)])
+    tr = TaskRepo(db)
+    tid = tr.add(project_id=pid, name="t", goal="g", plan="", constraints="", tests="")
+    tr.update(tid, identifier="001",
+              stages_json=json.dumps([{"name": "analyze", "artifact": "ANALYZE.md",
+                                       "enabled": True, "gate": True}]))
+    (tmp_path / "tasks" / "task#001").mkdir(parents=True)
+    return tid
+
+
+@pytest.mark.asyncio
+async def test_command_cancels_pending_feedback(tmp_path):
+    """'/tasks' после «Замечание» — команда, а не текст замечания."""
+    from agentmon.store.telegram_store import FeedbackRepo
+    db = _db()
+    tid = _gate_task(db, tmp_path)
+    caps = _Caps()
+    h = _handlers(db, caps)
+    h._base_path_of = lambda pid: str(tmp_path)
+
+    await h.handle_update({"callback_query": {
+        "id": "cq", "message": {"chat": {"id": 111}},
+        "data": f"gate:note:{tid}:analyze"}})
+    await h.handle_update({"message": {"chat": {"id": 111}, "text": "/tasks"}})
+
+    assert FeedbackRepo(db).list_for_task(tid) == []
+    assert f"/api/env/tasks/{tid}/approve" not in caps.posted
+
+
+@pytest.mark.asyncio
+async def test_pending_feedback_expires(tmp_path):
+    import time
+    from agentmon.store.telegram_store import FeedbackRepo
+    db = _db()
+    tid = _gate_task(db, tmp_path)
+    caps = _Caps()
+    h = _handlers(db, caps)
+    h._base_path_of = lambda pid: str(tmp_path)
+    h._pending_feedback["111"] = (tid, "analyze", time.time() - 601)
+
+    await h.handle_update({"message": {"chat": {"id": 111}, "text": "поздний текст"}})
+
+    assert FeedbackRepo(db).list_for_task(tid) == []
+    assert any("истекло" in text for _, text, _ in caps.sent)
+
+
+class _FailingPost(_Caps):
+    async def api_post(self, path, json=None):
+        raise RuntimeError("500 Internal Server Error")
+
+
+@pytest.mark.asyncio
+async def test_approve_error_is_reported(tmp_path):
+    db = _db()
+    tid = _gate_task(db, tmp_path)
+    caps = _FailingPost()
+    h = Handlers(db, caps.send, caps.answer, caps.api_post, ["111"],
+                 base_path_of=lambda p: str(tmp_path))
+
+    await h.handle_update({"callback_query": {
+        "id": "cq", "message": {"chat": {"id": 111}},
+        "data": f"gate:note:{tid}:analyze"}})
+    await h.handle_update({"message": {"chat": {"id": 111}, "text": "замечание"}})
+
+    assert any("не одобрен" in text for _, text, _ in caps.sent)

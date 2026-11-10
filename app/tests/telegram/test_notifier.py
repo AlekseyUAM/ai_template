@@ -247,3 +247,40 @@ async def test_non_gate_notification_has_no_buttons():
     await n.tick()
     assert len(s.sent) == 1
     assert s.sent[0][2] is None
+
+
+class _FlakySender:
+    """Падает один раз на второй части, затем работает."""
+
+    def __init__(self):
+        self.sent = []
+        self.calls = 0
+        self.failed = False
+
+    async def send(self, chat_id, text, reply_markup=None):
+        self.calls += 1
+        if self.calls == 2 and not self.failed:
+            self.failed = True
+            raise RuntimeError("429 Too Many Requests")
+        self.sent.append(text)
+
+
+@pytest.mark.asyncio
+async def test_partial_send_resumes_without_duplicates():
+    db = _db()
+    s = _FlakySender()
+    n = TelegramNotifier(db, s.send, ["111"])
+    labels = {"running": "start", "done": "done"}
+    events = {"running", "done"}
+
+    await n._handle("task", 1, "running", events, labels, {})   # baseline
+    msgs = [("part-1", None), ("part-2", None), ("part-3", None)]
+
+    await n._handle("task", 1, "done", events, labels, {}, messages=msgs)
+    assert s.sent == ["part-1"]          # part-2 упала, part-3 не отправлялась
+
+    await n._handle("task", 1, "done", events, labels, {}, messages=msgs)
+    assert s.sent == ["part-1", "part-2", "part-3"]   # без дубля part-1
+
+    await n._handle("task", 1, "done", events, labels, {}, messages=msgs)
+    assert s.sent == ["part-1", "part-2", "part-3"]   # статус уже доставлен

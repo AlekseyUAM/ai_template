@@ -1,5 +1,6 @@
 """Разбор апдейтов Telegram: команды и callback-кнопки."""
 import logging
+import time
 
 from agentmon.store.tasks import TaskRepo
 from agentmon.store.stacks import StackRepo
@@ -22,7 +23,10 @@ class Handlers:
         self._tasks = TaskRepo(db)
         self._stacks = StackRepo(db)
         self._projects = ProjectRepo(db)
-        self._pending_feedback = {}          # chat_id(str) -> (task_id, stage)
+        # chat_id(str) -> (task_id, stage, ts). TTL не даёт «зависшему» ожиданию
+        # замечания перехватить следующую команду пользователя через час.
+        self._pending_feedback = {}
+        self._pending_ttl = 600.0
 
     def _authorized(self, chat_id) -> bool:
         return str(chat_id) in self._chat_ids
@@ -41,10 +45,20 @@ class Handlers:
             return
         text = (msg.get("text") or "").strip()
 
-        if chat_id in self._pending_feedback:          # ждём текст замечания
-            task_id, stage = self._pending_feedback.pop(chat_id)
-            await self._accept_feedback(chat_id, task_id, stage, text)
+        pending = self._pending_feedback.get(chat_id)
+        if pending and not text.startswith("/"):        # ждём текст замечания
+            task_id, stage, ts = pending
+            self._pending_feedback.pop(chat_id, None)
+            if time.time() - ts <= self._pending_ttl:
+                await self._accept_feedback(chat_id, task_id, stage, text)
+                return
+            await self._send(chat_id, "Время на замечание истекло — нажмите "
+                                      "«Замечание» ещё раз")
             return
+        if pending:
+            # Команда всегда сильнее незавершённого замечания: /tasks не должен
+            # превращаться в текст замечания и автоматически одобрять гейт.
+            self._pending_feedback.pop(chat_id, None)
 
         if text.startswith("/start"):
             await self._send(chat_id, "AgentMon на связи. Команды: /projects /tasks /stacks")
@@ -80,6 +94,8 @@ class Handlers:
         cq_id = cq.get("id")
         if not self._authorized(chat_id):
             return
+        # Нажатие любой кнопки отменяет ожидание текста замечания.
+        self._pending_feedback.pop(chat_id, None)
         data = cq.get("data") or ""
         try:
             await self._route_callback(chat_id, data)
@@ -116,10 +132,16 @@ class Handlers:
                 return
             action, task_id, stage = parts[1], int(parts[2]), parts[3]
             if action == "ok":
-                await self._api_post(f"/api/env/tasks/{task_id}/approve", json={"stage": stage})
-                await self._send(chat_id, "Гейт одобрен")
+                try:
+                    await self._api_post(f"/api/env/tasks/{task_id}/approve",
+                                         json={"stage": stage})
+                except Exception as exc:               # noqa: BLE001
+                    logger.warning("approve из Telegram не удался: %s", exc)
+                    await self._send(chat_id, f"Не удалось одобрить гейт: {exc}")
+                else:
+                    await self._send(chat_id, "Гейт одобрен")
             elif action == "note":
-                self._pending_feedback[chat_id] = (task_id, stage)
+                self._pending_feedback[chat_id] = (task_id, stage, time.time())
                 await self._send(chat_id, "Пришлите текст замечания одним сообщением")
         else:
             await self._send(chat_id, "неизвестная команда")
@@ -150,5 +172,11 @@ class Handlers:
             await self._send(chat_id, "Задача не найдена")
             return
         save_feedback(self._db, path, task, chat_id, text)
-        await self._api_post(f"/api/env/tasks/{task_id}/approve", json={"stage": stage})
+        try:
+            await self._api_post(f"/api/env/tasks/{task_id}/approve",
+                                 json={"stage": stage})
+        except Exception as exc:                       # noqa: BLE001
+            logger.warning("approve после замечания не удался: %s", exc)
+            await self._send(chat_id, f"Замечание сохранено, но гейт не одобрен: {exc}")
+            return
         await self._send(chat_id, "Замечание сохранено, гейт одобрен")

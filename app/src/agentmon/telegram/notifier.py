@@ -63,6 +63,10 @@ class TelegramNotifier:
         self._tasks = TaskRepo(db)
         self._stacks = StackRepo(db)
         self._projects = ProjectRepo(db)
+        # Сколько частей сообщения уже доставлено: (scope, ref_id, status,
+        # chat_id) → count. Без этого сбой на N-й части заставлял следующий тик
+        # заново слать все предыдущие (дубли в чате раз в 3 секунды).
+        self._sent_parts: dict[tuple, int] = {}
 
     async def tick(self) -> None:
         await self._diff_tasks()
@@ -128,20 +132,39 @@ class TelegramNotifier:
         if status == prev or status not in events:
             if status != prev:
                 self._state.set(scope, ref_id, status)
+                self._drop_parts(scope, ref_id)
             return
+        if status != prev:
+            # Смена статуса: недоотправленные части прошлого статуса больше
+            # не нужны.
+            self._drop_parts(scope, ref_id, keep_status=status)
         # messages: список (текст, клавиатура). По умолчанию — одно сообщение
         # из метки статуса без клавиатуры.
         msgs = messages if messages is not None else [(labels[status].format(**fmt), None)]
-        if await self._emit(msgs):
+        if await self._emit(scope, ref_id, status, msgs):
             self._state.set(scope, ref_id, status)
+            self._drop_parts(scope, ref_id, keep_status=status, clear=True)
 
-    async def _emit(self, messages) -> bool:
+    def _drop_parts(self, scope, ref_id, keep_status=None, clear=False) -> None:
+        for key in list(self._sent_parts):
+            k_scope, k_ref, k_status, _chat = key
+            if k_scope != scope or k_ref != ref_id:
+                continue
+            if clear or (keep_status is not None and k_status != keep_status):
+                self._sent_parts.pop(key, None)
+
+    async def _emit(self, scope, ref_id, status, messages) -> bool:
         ok = True
         for chat_id in self._chat_ids:
-            for text, reply_markup in messages:
+            key = (scope, ref_id, status, str(chat_id))
+            sent = self._sent_parts.get(key, 0)
+            for index in range(sent, len(messages)):
+                text, reply_markup = messages[index]
                 try:
                     await self._send(chat_id, text, reply_markup=reply_markup)
+                    self._sent_parts[key] = index + 1
                 except Exception:
                     logger.exception("не удалось отправить уведомление в чат %s", chat_id)
                     ok = False
+                    break            # порядок частей важен — дальше не шлём
         return ok

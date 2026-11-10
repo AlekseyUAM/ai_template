@@ -1,7 +1,7 @@
 import json
 import httpx
 import pytest
-from agentmon.telegram.client import BotClient, inline_keyboard
+from agentmon.telegram.client import BotClient, TelegramError, inline_keyboard
 
 
 def _transport(capture):
@@ -42,3 +42,32 @@ async def test_send_message_includes_markup():
     assert body["chat_id"] == "111"
     assert body["text"] == "привет"
     assert body["reply_markup"]["inline_keyboard"][0][0]["text"] == "A"
+
+
+@pytest.mark.asyncio
+async def test_ok_false_raises_and_hides_token():
+    def handler(request):
+        return httpx.Response(200, json={
+            "ok": False, "error_code": 403,
+            "description": "Forbidden: bot was kicked from the chat"})
+    client = BotClient("SECRET_TOKEN", "https://api.telegram.org",
+                       transport=httpx.MockTransport(handler))
+    with pytest.raises(TelegramError) as ei:
+        await client.send_message("111", "x")
+    await client.aclose()
+    assert "403" in str(ei.value)
+    assert "SECRET_TOKEN" not in str(ei.value)
+
+
+@pytest.mark.asyncio
+async def test_http_error_hides_token_in_url():
+    def handler(request):
+        return httpx.Response(500, text="boom")
+    client = BotClient("SECRET_TOKEN", "https://api.telegram.org",
+                       transport=httpx.MockTransport(handler))
+    with pytest.raises(TelegramError) as ei:
+        await client.send_message("111", "x")
+    await client.aclose()
+    assert "500" in str(ei.value)
+    assert "SECRET_TOKEN" not in str(ei.value)
+    assert ei.value.__cause__ is None
