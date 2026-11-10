@@ -163,7 +163,13 @@ def build_mcp_router(store) -> APIRouter:
                 port = None
         if not port:
             raise HTTPException(status_code=400, detail="не задан порт")
-        port = int(port)
+        try:
+            port = int(port)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="порт должен быть числом")
+        if not 1 <= port <= 65535:
+            raise HTTPException(status_code=400,
+                                detail="порт должен быть в диапазоне 1..65535")
 
         repo_root = Path(__file__).resolve().parents[4]  # app/ -> ai_template/
         state_dir = repo_root / ".ai1c" / "mcp-state" / str(mid)

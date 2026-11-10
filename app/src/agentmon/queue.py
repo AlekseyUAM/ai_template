@@ -88,10 +88,46 @@ class TaskQueue:
     def requeue(self, task_id) -> None:
         """Вернуть одну задачу в очередь — агент, которому её отдали, мёртв."""
         self.conn.execute(
-            "UPDATE tasks SET status='queued', started_at=NULL, session_id=NULL "
-            "WHERE id=?", (task_id,),
+            "UPDATE tasks SET status='queued', started_at=NULL, session_id=NULL, "
+            "requeues=requeues+1 WHERE id=?", (task_id,),
         )
         self.conn.commit()
+
+    def requeues_for(self, task_id) -> int:
+        """Сколько раз задачу возвращали в очередь (переживает рестарт)."""
+        row = self.conn.execute(
+            "SELECT requeues FROM tasks WHERE id=?", (task_id,)).fetchone()
+        if row is None:
+            return 0
+        try:
+            return int(row["requeues"] or 0)
+        except (IndexError, KeyError, TypeError):
+            return int(row[0] or 0)
+
+    def reset_requeues(self, task_id) -> None:
+        self.conn.execute("UPDATE tasks SET requeues=0 WHERE id=?", (task_id,))
+        self.conn.commit()
+
+    def fail_orphans(self, valid_project_ids) -> int:
+        """Пометить failed задачи проектов, которых больше нет в реестре.
+
+        Такие строки не обходит ни один тик диспетчера (цикл идёт по
+        registry.list()), и без этого они навсегда висят в /api/queue.
+        """
+        ids = list(valid_project_ids)
+        now = time.time()
+        if ids:
+            placeholders = ",".join("?" for _ in ids)
+            sql = ("UPDATE tasks SET status='failed', finished_at=? "
+                   "WHERE status IN ('queued','running') "
+                   f"AND project_id NOT IN ({placeholders})")
+            cur = self.conn.execute(sql, (now, *ids))
+        else:
+            cur = self.conn.execute(
+                "UPDATE tasks SET status='failed', finished_at=? "
+                "WHERE status IN ('queued','running')", (now,))
+        self.conn.commit()
+        return cur.rowcount
 
     def requeue_running(self) -> int:
         """Вернуть зависшие running-задачи в очередь.

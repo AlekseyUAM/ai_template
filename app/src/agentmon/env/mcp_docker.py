@@ -29,6 +29,15 @@ def launch_cmd(name, image, port, *, internal_port=None, token_env=None,
     внешний DNS/доступ в интернет; при этом публикация портов `-p` не нужна).
     """
     internal_port = internal_port or port
+    try:
+        port_num = int(port)
+        internal_num = int(internal_port)
+    except (TypeError, ValueError):
+        raise ValueError(f"порт должен быть числом: {port!r}, {internal_port!r}")
+    for value in (port_num, internal_num):
+        if not 1 <= value <= 65535:
+            raise ValueError(f"порт вне диапазона 1..65535: {value}")
+    port, internal_port = port_num, internal_num
     # restart=unless-stopped — контейнер переживает перезагрузку хоста/докера,
     # но не поднимается после явной остановки пользователем.
     cmd = ["docker", "run", "-d", "--restart", "unless-stopped", "--name", name]

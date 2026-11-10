@@ -28,7 +28,11 @@ class Dispatcher:
 
     def tick(self) -> None:
         self.monitor.refresh()      # сверяет прогоны с реальными PID (reconcile)
-        for project in self.registry.list():
+        projects = self.registry.list()
+        orphans = self.queue.fail_orphans(p.id for p in projects)
+        if orphans:
+            logger.warning("помечено failed %d задач удалённых проектов", orphans)
+        for project in projects:
             try:
                 self._tick_project(project)
             except (OSError, RuntimeError, KeyError, ValueError) as exc:
@@ -39,9 +43,14 @@ class Dispatcher:
     def _tick_project(self, project) -> None:
         running = self.queue.running_for(project.id)
         if running is not None:
+            # Счётчик ретраев живёт в БД: рестарт монитора не должен сбрасывать
+            # попытки и превращать лимит в бесконечность.
+            if running.id not in self._requeues:
+                self._requeues[running.id] = self.queue.requeues_for(running.id)
             status = self.monitor.task_status(running.id)
             if status == "done":
                 self.queue.mark_done(running.id)
+                self.queue.reset_requeues(running.id)
                 self._requeues.pop(running.id, None)
             elif status == "failed":
                 # Прогон завершился неуспешно (ненулевой код или был убит).

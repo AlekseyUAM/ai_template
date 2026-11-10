@@ -15,6 +15,9 @@ class FileRef:
     session_id: str
     size: int
     mtime: float
+    # Идентичность файла (POSIX): ловит пересоздание с тем же mtime/размером.
+    st_dev: int | None = None
+    st_ino: int | None = None
 
 
 @dataclass

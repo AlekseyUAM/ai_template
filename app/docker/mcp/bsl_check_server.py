@@ -27,6 +27,12 @@ _SEVERITY_BY_STR = {
     "hint": "Hint",
 }
 
+# Лимиты одного вызова: защита MCP-сервера от гигантского ввода и зависшей java.
+MAX_CODE_BYTES = 5 * 1024 * 1024
+MAX_CONFIG_BYTES = 1 * 1024 * 1024
+ANALYZE_TIMEOUT_SECONDS = 300
+_RESERVED_FILENAMES = {".bsl-language-server.json"}
+
 
 def _severity_name(raw) -> str:
     """Привести severity (int или строку) к имени уровня.
@@ -118,7 +124,17 @@ def run_check(code: str, filename: str, jar: str, config: str | None = None,
     код и настройки. Возвращает `{ok, count, diagnostics, summary}`; при ошибке
     запуска или отсутствии отчёта — `ok=False` и текст ошибки/stderr в `summary`.
     """
+    code = code if isinstance(code, str) else str(code or "")
+    if len(code.encode("utf-8")) > MAX_CODE_BYTES:
+        return {"ok": False, "count": 0, "diagnostics": [],
+                "summary": f"код слишком большой (> {MAX_CODE_BYTES} байт)"}
+    if config and len(config.encode("utf-8")) > MAX_CONFIG_BYTES:
+        return {"ok": False, "count": 0, "diagnostics": [],
+                "summary": f"config слишком большой (> {MAX_CONFIG_BYTES} байт)"}
     filename = Path(filename or "Module.bsl").name or "Module.bsl"
+    if filename in _RESERVED_FILENAMES:
+        return {"ok": False, "count": 0, "diagnostics": [],
+                "summary": f"имя файла {filename!r} зарезервировано под настройки анализа"}
     tmp = tempfile.mkdtemp(prefix="bsl-check-")
     try:
         srcdir = Path(tmp) / "src"
@@ -136,7 +152,11 @@ def run_check(code: str, filename: str, jar: str, config: str | None = None,
                "--reporter", "json"]
 
         try:
-            proc = run(cmd, capture_output=True, text=True)
+            proc = run(cmd, capture_output=True, text=True,
+                       timeout=ANALYZE_TIMEOUT_SECONDS)
+        except subprocess.TimeoutExpired:
+            return {"ok": False, "count": 0, "diagnostics": [],
+                    "summary": f"BSL LS не завершился за {ANALYZE_TIMEOUT_SECONDS} с"}
         except Exception as exc:  # java не найдена и т.п.
             return {"ok": False, "count": 0, "diagnostics": [],
                     "summary": f"Не удалось запустить BSL LS: {exc}"}

@@ -31,6 +31,7 @@ class BuildSpec:
     build_args: dict = field(default_factory=dict)
     repo_dir: str | None = None   # каталог исходников относительно корня репозитория
     repo_url: str | None = None   # HTTPS-URL для git clone, если каталога нет
+    repo_sha: str | None = None   # пин коммита: HEAD не должен уезжать сам
 
 
 @dataclass(frozen=True)
@@ -67,6 +68,7 @@ RECIPES: dict[str, DockerRecipe] = {
             context="deps/docker_1c_sandbox/mcp-bsl-context",
             repo_dir="deps/docker_1c_sandbox",
             repo_url="https://github.com/AlekseyUAM/docker_1c_sandbox.git",
+            repo_sha="ac73e52e1fa609d0036cf55068d5dc697ac0ab97",
         ),
     ),
     # 1С:Напарник — spring-mcp-1c-copilot (Dockerfile в апстриме; только готовый образ).
@@ -89,6 +91,7 @@ RECIPES: dict[str, DockerRecipe] = {
             context="deps/code-index-mcp",
             repo_dir="deps/code-index-mcp",
             repo_url="https://github.com/Regsorm/code-index-mcp.git",
+            repo_sha="4f55d0d44b4b2789a426a2d2096d6051c0de9c4b",
         ),
     ),
 }

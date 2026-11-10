@@ -85,3 +85,40 @@ def test_clone_catches_missing_git(tmp_path):
     res = mcp_sources.clone(SPEC, tmp_path, run=fake_run)
     assert res["ok"] is False
     assert "git not found" in res["log"]
+
+
+PINNED = BuildSpec(
+    dockerfile="deps/repo/docker/Dockerfile",
+    context="deps/repo",
+    repo_dir="deps/repo",
+    repo_url="https://github.com/example/repo.git",
+    repo_sha="a" * 40,
+)
+
+
+def test_clone_checks_out_pinned_sha(tmp_path):
+    calls = []
+
+    def fake_run(cmd, **kw):
+        calls.append(cmd)
+        if cmd[:2] == ["git", "clone"]:
+            (tmp_path / "deps" / "repo").mkdir(parents=True, exist_ok=True)
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    res = mcp_sources.clone(PINNED, tmp_path, run=fake_run)
+    assert res["ok"] is True
+    checkout = calls[1]
+    assert checkout[:2] == ["git", "-C"]
+    assert checkout[-2:] == ["--detach", "a" * 40]
+
+
+def test_clone_removes_dest_on_checkout_failure(tmp_path):
+    def fake_run(cmd, **kw):
+        if cmd[:2] == ["git", "clone"]:
+            (tmp_path / "deps" / "repo").mkdir(parents=True, exist_ok=True)
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+        return SimpleNamespace(returncode=1, stdout="", stderr="unknown revision")
+
+    res = mcp_sources.clone(PINNED, tmp_path, run=fake_run)
+    assert res["ok"] is False
+    assert not (tmp_path / "deps" / "repo").exists()

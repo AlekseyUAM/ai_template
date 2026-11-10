@@ -132,3 +132,20 @@ def test_types_payload_is_json_serialisable():
     assert md["fields"] == ["name", "mcp_name", "purpose", "url", "db_name", "connection"]
     custom = next(p for p in payload if p["key"] == "custom")
     assert custom["has_cfe"] is False
+
+
+def test_connection_escapes_quotes_and_backslashes():
+    import json
+    conn = build_connection("bsl-ls", mcp_name='a"b\\c')
+    data = json.loads("{" + conn + "}")
+    assert 'a"b\\c' in data
+
+
+def test_docker_launch_validates_port():
+    import pytest
+    from agentmon.env.mcp_docker import launch_cmd
+    for bad in ("abc", 0, 70000, None):
+        with pytest.raises(ValueError, match="порт"):
+            launch_cmd("name", "img", bad)
+    cmd = launch_cmd("name", "img", 8000)
+    assert "127.0.0.1:8000:8000" in " ".join(cmd)

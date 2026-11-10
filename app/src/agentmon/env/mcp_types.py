@@ -180,6 +180,12 @@ def get_type(key: str) -> McpType:
     return _BY_KEY[key]
 
 
+def _json_escape(value) -> str:
+    """Экранировать значение для подстановки внутрь JSON-строки."""
+    import json
+    return json.dumps(str(value), ensure_ascii=False)[1:-1]
+
+
 def build_connection(key: str, *, mcp_name=None, url=None, port=None,
                      db_name=None) -> str:
     """Формирует текст поля «Подключение» из шаблона вида и значений полей.
@@ -192,11 +198,12 @@ def build_connection(key: str, *, mcp_name=None, url=None, port=None,
     eff_port = port if port is not None else t.defaults.get("port", "")
     eff_db = db_name or t.defaults.get("db_name", "my_database")
     # Плейсхолдеры заменяем по токенам, чтобы не трогать литеральные JSON-скобки.
+    # Значения экранируем: кавычка/обратный слэш иначе ломают connection_json.
     return (t.connection_template
-            .replace("{mcp_name}", str(eff_name))
-            .replace("{url}", str(eff_url))
-            .replace("{port}", str(eff_port))
-            .replace("{db_name}", str(eff_db)))
+            .replace("{mcp_name}", _json_escape(eff_name))
+            .replace("{url}", _json_escape(eff_url))
+            .replace("{port}", _json_escape(eff_port))
+            .replace("{db_name}", _json_escape(eff_db)))
 
 
 def types_payload() -> list[dict]:

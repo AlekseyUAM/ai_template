@@ -3,6 +3,7 @@
 Репозитории из `deps/` не входят в состав ai_template (см. `.gitignore`),
 поэтому перед сборкой образа нужный исходник клонируется, если его ещё нет.
 """
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -24,7 +25,11 @@ def clone_cmd(build: BuildSpec | None, repo_root) -> list[str] | None:
 
 
 def clone(build: BuildSpec | None, repo_root, run=subprocess.run) -> dict:
-    """Клонирует источник (блокирующе); возвращает {ok, cloned, log}."""
+    """Клонирует источник (блокирующе); возвращает {ok, cloned, log}.
+
+    Если задан repo_sha, после клона переключаемся на этот коммит. Сборка идёт
+    из pinned-состояния: компрометация main не подменяет контекст docker build.
+    """
     cmd = clone_cmd(build, repo_root)
     if cmd is None:
         return {"ok": True, "cloned": False, "log": ""}
@@ -34,4 +39,20 @@ def clone(build: BuildSpec | None, repo_root, run=subprocess.run) -> dict:
     except OSError as exc:
         return {"ok": False, "cloned": True, "log": log + f"{exc}\n"}
     log += (getattr(r, "stdout", "") or "") + (getattr(r, "stderr", "") or "")
-    return {"ok": r.returncode == 0, "cloned": True, "log": log}
+    if getattr(r, "returncode", 1) != 0:
+        return {"ok": False, "cloned": True, "log": log}
+
+    sha = getattr(build, "repo_sha", None)
+    if sha:
+        dest = Path(repo_root) / build.repo_dir
+        checkout = ["git", "-C", str(dest), "checkout", "--detach", sha]
+        log += f"$ {' '.join(checkout)}\n"
+        try:
+            rc = run(checkout, capture_output=True, text=True)
+        except OSError as exc:
+            return {"ok": False, "cloned": True, "log": log + f"{exc}\n"}
+        log += (getattr(rc, "stdout", "") or "") + (getattr(rc, "stderr", "") or "")
+        if getattr(rc, "returncode", 1) != 0:
+            shutil.rmtree(dest, ignore_errors=True)   # не собирать чужой HEAD
+            return {"ok": False, "cloned": True, "log": log}
+    return {"ok": True, "cloned": True, "log": log}

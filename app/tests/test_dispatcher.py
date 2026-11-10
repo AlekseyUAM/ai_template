@@ -306,3 +306,43 @@ def _run(disp, error):
         disp.tick()
     except Exception as exc:              # pragma: no cover — диагностика
         error.append(exc)
+
+
+def test_orphan_tasks_of_deleted_project_are_failed(tmp_path):
+    """Проект исчез из реестра, а задача осталась queued — не висеть вечно."""
+    mon = FakeMonitor()
+    reg, q, disp = make(tmp_path, mon)
+    p = reg.add(name="a", path="/srv/a", backend="local")
+    tid = q.enqueue(p.id, "первая")
+    # Имитируем реестр, потерявший проект (например, миграция/ручная правка).
+    q.conn.execute("DELETE FROM projects WHERE id=?", (p.id,))
+    q.conn.commit()
+
+    disp.tick()
+
+    assert q.list(p.id)[0].status == "failed"
+
+
+def test_requeue_counter_survives_dispatcher_restart(tmp_path):
+    mon = FakeMonitor()
+    reg, q, disp = make(tmp_path, mon, max_requeues=2)
+    p = reg.add(name="a", path="/srv/a", backend="local")
+    tid = q.enqueue(p.id, "first")
+
+    disp.tick()
+    mon.set_status(tid, "failed")
+    disp.tick()                               # requeue #1
+    assert q.requeues_for(tid) == 1
+
+    disp2 = Dispatcher(registry=reg, queue=q, monitor=mon, max_requeues=2)
+    disp2.tick()
+    mon.set_status(tid, "failed")
+    disp2.tick()                              # requeue #2
+    assert q.requeues_for(tid) == 2
+
+    disp3 = Dispatcher(registry=reg, queue=q, monitor=mon, max_requeues=2)
+    disp3.tick()
+    mon.set_status(tid, "failed")
+    disp3.tick()                              # лимит исчерпан → failed
+
+    assert q.list(p.id)[0].status == "failed"

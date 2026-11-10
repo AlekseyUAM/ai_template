@@ -9,6 +9,8 @@ class CursorState:
     """Накопленное состояние одного журнала сессии."""
     size: int = 0
     mtime: float = 0.0
+    st_dev: int | None = None
+    st_ino: int | None = None
     offset: int = 0
     tail: bytes = b""              # незавершённая последняя строка
     model: str | None = None
@@ -48,7 +50,10 @@ class JsonlCursor:
 
     def update(self, ref: FileRef) -> CursorState:
         st = self._states.get(ref.path)
-        if st is None or ref.size < st.size or ref.mtime < st.mtime:
+        recreated = (
+            st is not None and ref.st_ino is not None and st.st_ino is not None
+            and (ref.st_ino != st.st_ino or ref.st_dev != st.st_dev))
+        if st is None or recreated or ref.size < st.size or ref.mtime < st.mtime:
             st = CursorState()
             self._states[ref.path] = st
         elif ref.size == st.size and ref.mtime == st.mtime:
@@ -63,6 +68,8 @@ class JsonlCursor:
         st.offset = new_offset
         st.size = ref.size
         st.mtime = ref.mtime
+        st.st_dev = ref.st_dev
+        st.st_ino = ref.st_ino
         return st
 
     def forget(self, path: str) -> None:

@@ -126,3 +126,23 @@ def test_current_phase_survives_until_next_assistant_record():
     ).encode()
     st = JsonlCursor(f).update(ref_for(f))
     assert st.current_phase == "architect"
+
+
+def test_new_inode_with_same_mtime_resets_cursor():
+    """Пересоздание файла с тем же mtime и большим размером не даёт чужой хвост."""
+    f = FakeFiles()
+    f.data["/log/a.jsonl"] = (ASSISTANT % (10, 5, "old")).encode()
+    cur = JsonlCursor(f)
+    cur.update(FileRef(path="/log/a.jsonl", dir_name="log", session_id="a",
+                       size=len(f.data["/log/a.jsonl"]), mtime=1.0,
+                       st_dev=1, st_ino=100))
+
+    # Новый файл (другой inode), тот же mtime, больше по размеру.
+    f.data["/log/a.jsonl"] = ((ASSISTANT % (1, 1, "new-one")) +
+                              (ASSISTANT % (2, 2, "new-two"))).encode()
+    st = cur.update(FileRef(path="/log/a.jsonl", dir_name="log", session_id="a",
+                            size=len(f.data["/log/a.jsonl"]), mtime=1.0,
+                            st_dev=1, st_ino=200))
+
+    assert [m["text"] for m in st.messages] == ["new-one", "new-two"]
+    assert (st.input_tokens, st.output_tokens) == (3, 3)

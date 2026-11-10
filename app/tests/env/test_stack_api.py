@@ -560,3 +560,20 @@ def test_enrich_item_exposes_stage_details(tmp_path):
     assert analyze["artifact_exists"] is True
     plan = next(s for s in item["stages"] if s["name"] == "plan")
     assert plan["artifact_exists"] is False
+
+
+def test_remove_item_from_another_stack_is_404(tmp_path):
+    """item_id чужого стека нельзя удалить через этот стек."""
+    from agentmon.store.tasks import TaskRepo
+    client, store, mon = make_client(tmp_path)
+    pid, tid1 = seed_project_and_task(store, tmp_path)
+    tid2 = TaskRepo(store).add(project_id=pid, name="t2")
+    sr = StackRepo(store)
+    s1 = sr.add(name="s1")
+    s2 = sr.add(name="s2")
+    item2 = sr.add_item(s2, tid2)
+
+    r = client.delete(f"/api/env/stacks/{s1}/items/{item2}")
+
+    assert r.status_code == 404
+    assert len(sr.items(s2)) == 1

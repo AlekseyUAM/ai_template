@@ -10,13 +10,15 @@ MCP-серверов с разворачиванием в Docker.
 
 Кроссплатформенно (Linux / macOS / Windows), нужен Python 3.10+:
 ```bash
-python bootstrap.py   # venv, установка приложения, PostgreSQL в Docker (или SQLite), конфиг
+python bootstrap.py   # venv, установка приложения, PostgreSQL (host или Docker) / SQLite, конфиг
 python run.py         # Web UI  →  http://127.0.0.1:8765
 ```
 
 `bootstrap.py` создаёт `.venv`, ставит приложение (`app`, editable) и зависимости, поднимает
-PostgreSQL в Docker (если докер доступен; иначе использует локальный SQLite) и пишет
-`.ai1c.env` с `AGENTMON_DSN`. `run.py` поднимает Web UI на `http://127.0.0.1:8765`.
+PostgreSQL и пишет `.ai1c.env` с `AGENTMON_DSN`. По умолчанию (`AI1C_PG_MODE=host`) это
+портативная PostgreSQL на хосте; `AI1C_PG_MODE=docker` поднимает контейнер `ai1c-postgres`.
+При недоступности PostgreSQL используется локальный SQLite. `run.py` поднимает Web UI на
+`http://127.0.0.1:8765`.
 
 Подробности и переменные окружения — в [docs/running-web-ui.md](docs/running-web-ui.md).
 Фазы развития — в [docs/PHASES.md](docs/PHASES.md).
@@ -39,17 +41,22 @@ PostgreSQL в Docker (если докер доступен; иначе испо�
 
 ### AgentMon — мониторинг и оркестрация агентов
 
-- **Монитор сессий Claude Code**: статус, модель, токены, стоимость, текущая фаза.
-  Приложение само держит агента в псевдотерминале (POSIX PTY / Windows ConPTY) и
-  читает его JSONL-журналы, не полагаясь на внешний мультиплексор терминала.
+- **Монитор сессий Claude Code**: статус, модель, токены, стоимость, текущая фаза;
+  журналы JSONL читаются напрямую (локальная ФС, SFTP или `docker exec`).
 - **Detached-раннер**: агенты запускаются отдельными процессами (`claude -p`),
-  слежение ведётся по PID, коду выхода, JSONL и `task.json`. Устойчивость к
-  перезапуску монитора: `running`-задачи при следующем старте возвращаются в очередь.
-- **Бэкенды подключения**: `local` (PTY на этой машине) и `ssh` (PTY по SSH + чтение
-  журналов по SFTP). Выбираются при добавлении проекта. SSH-бэкенд поддерживает не
-  только запуск агентов, но и **создание проекта на удалённом хосте**: scaffold,
-  шаблон окружения, `.venv`, `.1c-devbase.json`, git init и `conf/nethasp.ini`
-  разворачиваются по SFTP/exec на удалённой машине.
+  слежение ведётся по PID, коду выхода, JSONL и `task.json`. Логи и exit-файлы
+  лежат на машине монитора. Устойчивость к перезапуску: `running`-задачи
+  сверяются с реальными PID и возвращаются в очередь.
+- **Бэкенды подключения**: `local` (локальный процесс), `ssh` (запуск через
+  `ssh -tt`, журналы по SFTP) и `docker` (агент в контейнере через
+  `docker exec -t`, журналы через `docker exec`). Выбираются при добавлении
+  проекта. SSH/Docker-бэкенды поддерживают и **создание проекта на цели**:
+  scaffold, шаблон окружения, `.venv`, `.1c-devbase.json`, git init и
+  `nethasp.ini` разворачиваются по SFTP/exec/`docker cp`.
+  SSH по умолчанию проверяет host key по `~/.ssh/known_hosts`; для доверенного
+  контура незнакомый ключ можно разрешить явно: `conn.strict_host_key=false`.
+  Кэш портативной PostgreSQL версионируется с учётом ОС/архитектуры, а архив
+  проверяется по SHA256 (`AI1C_PG_SHA256` или `<url>.sha256`).
 - **Расчёт стоимости** по токенам (`pricing.py`), подсчёт фазы и прогресса из журналов.
 
 ### Стартовая страница и панели
@@ -189,11 +196,26 @@ PostgreSQL в Docker (если докер доступен; иначе испо�
 |------------|------------|--------------|
 | `AGENTMON_HOST` | адрес прослушивания | `127.0.0.1` |
 | `AGENTMON_PORT` | порт | `8765` |
+| `AGENTMON_TOKEN` | токен доступа к API; **обязателен** при не-loopback bind | — |
+| `AGENTMON_ALLOWED_HOSTS` | дополнительные разрешённые `Host` через запятую | — |
+| `AGENTMON_RUNS_DIR` | каталог логов/exit-файлов detached-прогонов (ssh/docker) | рядом с `AGENTMON_DB` |
 | `AGENTMON_DSN` | DSN PostgreSQL (из `setup`) | — |
 | `AGENTMON_DB` | путь к SQLite-реестру | `agentmon.db` |
+| `AI1C_PG_MODE` | `host` (портативная PG) или `docker` (контейнер) | `host` |
+| `AI1C_PG_SHA256` | ожидаемый SHA256 архива PostgreSQL | — |
 | `AGENTMON_CLAUDE_CMD` | команда запуска агента | `claude --dangerously-skip-permissions .` |
 | `AGENTMON_TG_TOKEN` | токен Telegram-бота (пусто → интеграция выключена) | — |
 | `AGENTMON_TG_CHAT_IDS` | разрешённые chat_id через запятую | — |
+
+### Доступ к API
+
+При `AGENTMON_HOST=0.0.0.0` (например, в Docker) сервер **не стартует** без
+`AGENTMON_TOKEN`. Токен передаётся заголовком `X-Agentmon-Token` (или
+`Authorization: Bearer ...`); веб-интерфейс принимает его один раз в URL
+(`http://host:8765/?token=...`), сохраняет в `localStorage` и дальше добавляет
+сам. Для доступа по имени за reverse-proxy перечислите имена в
+`AGENTMON_ALLOWED_HOSTS`; проверка `Origin` не даёт использовать API с чужой
+страницы (DNS-rebinding).
 
 ## Тесты
 

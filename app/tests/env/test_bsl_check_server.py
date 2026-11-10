@@ -214,3 +214,34 @@ def test_run_check_no_config_writes_no_settings_file(tmp_path):
 
     mod.run_check("Код", "Module.bsl", jar="/opt/x.jar", config=None, run=fake_run)
     assert captured["has_config"] is False
+
+
+def test_oversized_code_rejected_before_java():
+    calls = []
+    res = mod.run_check("x" * (mod.MAX_CODE_BYTES + 1), "Module.bsl",
+                        jar="/opt/x.jar", run=lambda *a, **k: calls.append(1))
+    assert res["ok"] is False and "слишком большой" in res["summary"]
+    assert calls == []
+
+
+def test_oversized_config_rejected():
+    res = mod.run_check("код", "Module.bsl", jar="/opt/x.jar",
+                        config="y" * (mod.MAX_CONFIG_BYTES + 1),
+                        run=lambda *a, **k: None)
+    assert res["ok"] is False and "config" in res["summary"]
+
+
+def test_reserved_filename_rejected():
+    res = mod.run_check("код", ".bsl-language-server.json", jar="/opt/x.jar",
+                        run=lambda *a, **k: None)
+    assert res["ok"] is False and "зарезервировано" in res["summary"]
+
+
+def test_timeout_returns_error():
+    import subprocess
+    def fake_run(cmd, **kwargs):
+        raise subprocess.TimeoutExpired(cmd, kwargs.get("timeout"))
+    res = mod.run_check("код", "Module.bsl", jar="/opt/x.jar", run=fake_run)
+    assert res["ok"] is False
+    assert "таймаут" not in res["summary"]  # текст с "не завершился"
+    assert "не завершился" in res["summary"]

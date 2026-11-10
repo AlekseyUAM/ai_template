@@ -88,10 +88,23 @@ python -m agentmon
 |------------|------------|--------------|
 | `AGENTMON_HOST` | адрес прослушивания | `127.0.0.1` |
 | `AGENTMON_PORT` | порт | `8765` |
+| `AGENTMON_TOKEN` | токен API (обязателен при не-loopback bind) | — |
+| `AGENTMON_ALLOWED_HOSTS` | дополнительные `Host` через запятую | — |
+| `AGENTMON_RUNS_DIR` | логи/exit-файлы detached-прогонов ssh/docker | рядом с БД |
 | `AGENTMON_DB` | путь к SQLite-реестру проектов/очереди | `agentmon.db` |
-| `AGENTMON_CLAUDE_CMD` | команда запуска агента | `claude --dangerously-skip-permissions .` |
+| `AI1C_PG_MODE` | `host` или `docker` | `host` |
+| `AI1C_PG_SHA256` | SHA256 архива PostgreSQL | — |
+| `AGENTMON_CLAUDE_CMD` | команда запуска агента (только `claude`) | `claude --dangerously-skip-permissions .` |
 | `AGENTMON_TG_TOKEN` | токен Telegram-бота (пусто → интеграция выключена) | — |
 | `AGENTMON_TG_CHAT_IDS` | разрешённые chat_id через запятую | — |
+
+> Безопасность: при `AGENTMON_HOST=0.0.0.0` без `AGENTMON_TOKEN` сервер не
+> запускается. Токен передаётся в `X-Agentmon-Token`; UI принимает его из
+> `?token=` и хранит в `localStorage`. Проверяются `Host` и `Origin`.
+>
+> Известное ограничение 1С: пароль базы передаётся конфигуратору аргументом
+> `/P`, поэтому виден в `ps` на машине, где идёт команда. Платформа не умеет
+> читать его из stdin/файла; не используйте общий хост для чувствительных баз.
 
 Пример (Linux):
 
