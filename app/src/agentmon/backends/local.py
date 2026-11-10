@@ -50,7 +50,12 @@ class LocalProvisioner:
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         Path(path).write_bytes(data)
 
-    def put_tree(self, local_src, dst, skip=None) -> None:
+    def backup(self, path) -> None:
+        p = Path(path)
+        if p.is_file():
+            shutil.copy2(p, p.with_name(p.name + ".bak"))
+
+    def put_tree(self, local_src, dst, skip=None, backup=False) -> None:
         src, dstp = Path(local_src), Path(dst)
         for item in sorted(src.rglob("*")):
             rel = item.relative_to(src)
@@ -63,6 +68,8 @@ class LocalProvisioner:
                 target.mkdir(parents=True, exist_ok=True)
             else:
                 target.parent.mkdir(parents=True, exist_ok=True)
+                if backup and target.exists():
+                    self.backup(target)
                 target.write_bytes(item.read_bytes())
 
     def run(self, cmd, cwd=None, timeout=None) -> RunResult:
@@ -218,6 +225,8 @@ class LocalFiles:
                     path=f.path, dir_name=entry.name,
                     session_id=f.name[: -len(".jsonl")],
                     size=st.st_size, mtime=st.st_mtime,
+                    st_dev=getattr(st, "st_dev", None),
+                    st_ino=getattr(st, "st_ino", None),
                 ))
         return refs
 

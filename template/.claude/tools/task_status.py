@@ -6,11 +6,67 @@
 Подтверждение ставится командой со статусом `approve`.
 """
 import argparse
+import contextlib
 import json
+import os
 import time
 from pathlib import Path
 
 VALID = ("pending", "running", "done", "failed", "skipped", "approve")
+
+LOCK_TIMEOUT = 5.0
+STALE_LOCK_SECONDS = 30.0
+
+
+@contextlib.contextmanager
+def _locked(path: Path):
+    """Межпроцессный lock рядом с task.json.
+
+    Файл пишут и оркестратор, и приложение (approve из UI/Telegram). Без lock'а
+    два read-modify-write теряют правки друг друга.
+    """
+    lock = path.with_name(path.name + ".lock")
+    deadline = time.monotonic() + LOCK_TIMEOUT
+    fd = None
+    while fd is None:
+        try:
+            fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            try:
+                if time.time() - lock.stat().st_mtime > STALE_LOCK_SECONDS:
+                    lock.unlink()
+                    continue
+            except OSError:
+                continue
+            if time.monotonic() >= deadline:
+                raise SystemExit(f"task.json занят другим процессом: {lock}")
+            time.sleep(0.05)
+    try:
+        yield
+    finally:
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+        try:
+            lock.unlink()
+        except OSError:
+            pass
+
+
+def _atomic_write_json(path: Path, data: dict) -> None:
+    """temp в том же каталоге + os.replace: читатель видит старый или новый файл."""
+    tmp = path.with_name(f"{path.name}.tmp.{os.getpid()}")
+    try:
+        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+                       encoding="utf-8")
+        os.replace(tmp, path)
+    finally:
+        try:
+            if tmp.exists():
+                tmp.unlink()
+        except OSError:
+            pass
 
 TRUTHY = {"1", "true", "yes", "да", "истина", "on"}
 
@@ -37,7 +93,10 @@ def _gate_block(data: dict, target_stage: str):
             return None
         if not _truthy(s.get("enabled")):
             continue
-        if _truthy(s.get("gate")) and not _truthy(s.get("approved")):
+        # Гейт стережёт переход ПОСЛЕ выполненного этапа. Пока этап pending или
+        # running, одобрять нечего — иначе не стартует ни один следующий этап.
+        if (s.get("status") == "done" and _truthy(s.get("gate"))
+                and not _truthy(s.get("approved"))):
             return (
                 f"гейт не пройден: этап '{s['name']}' требует подтверждения перед "
                 f"запуском '{target_stage}'. Подтвердите командой:\n"
@@ -93,22 +152,20 @@ def set_db_update(task_dir: str, phase: str) -> None:
     if phase not in ("start", "done"):
         raise SystemExit(f"db-update: ожидается start|done, получено {phase!r}")
     path = Path(task_dir) / "task.json"
-    data = json.loads(path.read_text(encoding="utf-8"))
-    now = time.time()
-    du = data.get("db_update") or {}
-    if phase == "start":
-        du = {"started_at": now, "finished_at": None}
-    else:
-        du.setdefault("started_at", now)
-        du["finished_at"] = now
-    data["db_update"] = du
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n",
-                    encoding="utf-8")
+    with _locked(path):
+        data = json.loads(path.read_text(encoding="utf-8"))
+        now = time.time()
+        du = data.get("db_update") or {}
+        if phase == "start":
+            du = {"started_at": now, "finished_at": None}
+        else:
+            du.setdefault("started_at", now)
+            du["finished_at"] = now
+        data["db_update"] = du
+        _atomic_write_json(path, data)
 
 
-def update(task_dir: str, stage: str, status: str, files) -> None:
-    path = Path(task_dir) / "task.json"
-    data = json.loads(path.read_text(encoding="utf-8"))
+def _apply_update(data: dict, stage: str, status: str, files) -> None:
     for s in data.get("stages", []):
         if s["name"] == stage:
             if status == "approve":
@@ -161,10 +218,16 @@ def update(task_dir: str, stage: str, status: str, files) -> None:
                 data["finished_at"] = now
             elif data.get("finished_at"):
                 data["finished_at"] = None
-            path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n",
-                            encoding="utf-8")
             return
     raise SystemExit(f"неизвестный этап: {stage}")
+
+
+def update(task_dir: str, stage: str, status: str, files=None) -> None:
+    path = Path(task_dir) / "task.json"
+    with _locked(path):
+        data = json.loads(path.read_text(encoding="utf-8"))
+        _apply_update(data, stage, status, files)
+        _atomic_write_json(path, data)
 
 
 def main(argv=None) -> None:

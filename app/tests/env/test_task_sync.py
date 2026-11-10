@@ -101,3 +101,25 @@ def test_write_stage_approval_sets_flag_and_recomputes_status(tmp_path):
 def test_write_stage_approval_no_file_is_noop(tmp_path):
     db, tr, tid = _setup(tmp_path)
     assert write_stage_approval(str(tmp_path), tr.get(tid), "analyze") is False
+
+
+def test_unknown_file_status_ignored(tmp_path):
+    """Опечатка в task.json не должна попадать в БД."""
+    import json
+    from agentmon.store.db import connect
+    from agentmon.store.schema import init_schema
+    from agentmon.store.tasks import TaskRepo
+    from agentmon.env import task_sync
+
+    db = connect(str(tmp_path / "db.sqlite"))
+    init_schema(db)
+    tr = TaskRepo(db)
+    tid = tr.add(project_id=1, name="t", identifier="001", status="planned")
+    folder = tmp_path / "proj" / "tasks" / "task#001"
+    folder.mkdir(parents=True)
+    (folder / "task.json").write_text(json.dumps({"status": "awaiting_userr"}),
+                                      encoding="utf-8")
+
+    task = tr.get(tid)
+    task_sync.sync_task_from_file(db, str(tmp_path / "proj"), task)
+    assert tr.get(tid)["status"] == "planned"

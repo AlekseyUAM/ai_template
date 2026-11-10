@@ -214,3 +214,17 @@ def test_install_stops_on_dump_error(tmp_path):
 
     assert events[-1].status == "error"
     assert "нет платформы" in events[-1].detail
+
+
+def test_install_refuses_nonempty_dir_at_install_time(tmp_path):
+    """TOCTOU: каталог заполнили после валидации — не перетираем файлы."""
+    import pytest
+    (tmp_path / "user-file.txt").write_text("не трогать", encoding="utf-8")
+    registered = []
+    with pytest.raises(RuntimeError, match="не пуст"):
+        list(installer.install_environment(
+            cfg(tmp_path), update=False, register=registered.append,
+            dump_cf=False, dump_cfe=False))
+    assert (tmp_path / "user-file.txt").read_text(encoding="utf-8") == "не трогать"
+    assert not (tmp_path / ".claude").exists()
+    assert registered == []

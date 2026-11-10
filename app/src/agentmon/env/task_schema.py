@@ -1,5 +1,5 @@
 import json
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field, fields
 from pathlib import Path
 
 # Единый источник этапов — task_model (живая DB-модель). Файловая система задач
@@ -11,38 +11,58 @@ ID_BASE = 100001
 
 @dataclass
 class Stage:
+    """Этап task.json.
+
+    Поля gate/approved — часть v2-контракта, который пишет app
+    (task_model.build_stages) и читает task_status.py. Без них загрузка
+    реального файла падала с TypeError: unexpected keyword argument.
+    """
     name: str
-    enabled: bool
-    subagent: str
-    artifact: str
-    status: str
-    changed_files: list
+    enabled: bool = True
+    subagent: str = ""
+    artifact: str = ""
+    status: str = "pending"
+    changed_files: list = field(default_factory=list)
+    gate: bool = False
+    approved: bool = False
     started_at: float | None = None
     finished_at: float | None = None
     iteration: int = 1
 
+    @classmethod
+    def from_dict(cls, data: dict) -> "Stage":
+        known = {f.name for f in fields(cls)}
+        return cls(**{k: v for k, v in data.items() if k in known})
+
 
 @dataclass
 class TaskSpec:
-    id: str
-    title: str
-    goal: str
-    plan: str
-    constraints: str
-    created_at: float | None
-    stages: list
+    id: str = ""
+    title: str = ""
+    goal: str = ""
+    plan: str = ""
+    constraints: str = ""
+    created_at: float | None = None
+    stages: list = field(default_factory=list)
+    status: str = ""
 
     def to_dict(self) -> dict:
         base = {k: getattr(self, k) for k in
-                ("id", "title", "goal", "plan", "constraints", "created_at")}
+                ("id", "title", "goal", "plan", "constraints", "created_at",
+                 "status")}
         base["stages"] = [asdict(s) for s in self.stages]
         return base
 
     @classmethod
     def from_dict(cls, data: dict) -> "TaskSpec":
-        data = dict(data)
-        data["stages"] = [Stage(**s) for s in data.get("stages", [])]
-        return cls(**data)
+        """Терпимо читает и v1-файл, и v2-дамп из БД (лишние поля игнорируются)."""
+        known = {f.name for f in fields(cls)}
+        values = {k: v for k, v in data.items() if k in known}
+        if "title" not in values and "name" in data:
+            values["title"] = data["name"]
+        values["stages"] = [Stage.from_dict(s)
+                            for s in data.get("stages", [])]
+        return cls(**values)
 
 
 def build_stages(enabled_names) -> list:
@@ -53,7 +73,7 @@ def build_stages(enabled_names) -> list:
         stages.append(Stage(name=d["name"], enabled=on, subagent=d["subagent"],
                             artifact=d["artifact"],
                             status="pending" if on else "skipped",
-                            changed_files=[],
+                            changed_files=[], gate=False, approved=False,
                             started_at=None, finished_at=None, iteration=1))
     return stages
 

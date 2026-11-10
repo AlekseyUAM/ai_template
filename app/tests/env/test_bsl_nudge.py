@@ -26,3 +26,21 @@ def test_non_bsl_is_silent():
 def test_missing_input_is_silent():
     mod = _load()
     assert mod.build_output({}) == {}
+
+
+def test_bad_tool_input_does_not_crash(monkeypatch):
+    import io
+    mod = _load()
+    monkeypatch.setattr(mod.sys, "stdin", io.StringIO('{"tool_input": 42}'))
+    monkeypatch.setattr(mod.sys, "stdout", io.StringIO())
+    mod.main()
+    assert mod.sys.stdout.getvalue() == ""
+
+
+def test_broken_json_does_not_crash(monkeypatch):
+    import io
+    mod = _load()
+    monkeypatch.setattr(mod.sys, "stdin", io.StringIO("{not json"))
+    monkeypatch.setattr(mod.sys, "stdout", io.StringIO())
+    mod.main()
+    assert mod.sys.stdout.getvalue() == ""

@@ -14,7 +14,9 @@ def _paths(tool_input: dict) -> list:
 
 
 def build_output(event: dict) -> dict:
-    tool_input = event.get("tool_input") or {}
+    tool_input = event.get("tool_input")
+    if not isinstance(tool_input, dict):
+        return {}
     if any(p.lower().endswith(".bsl") for p in _paths(tool_input)):
         return {"hookSpecificOutput": {
             "hookEventName": "PostToolUse",
@@ -26,13 +28,14 @@ def build_output(event: dict) -> dict:
 
 
 def main() -> None:
+    # Ошибка хука не должна ломать PostToolUse: молча выходим с кодом 0.
     try:
         event = json.load(sys.stdin)
-    except (json.JSONDecodeError, ValueError):
+        out = build_output(event) if isinstance(event, dict) else {}
+        if out:
+            json.dump(out, sys.stdout, ensure_ascii=False)
+    except Exception:
         return
-    out = build_output(event)
-    if out:
-        json.dump(out, sys.stdout, ensure_ascii=False)
 
 
 if __name__ == "__main__":

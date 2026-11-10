@@ -171,6 +171,10 @@ class _DockerContainer:
         self._docker_host = docker_host
         self._broken_at: float | None = None
         self._ready = False
+        self._checked_at = 0.0
+        # Не дёргать docker inspect на каждый exec: liveness перепроверяется
+        # не чаще раза в 2 секунды.
+        self._ready_ttl = 2.0
 
     @property
     def name(self) -> str:
@@ -205,6 +209,7 @@ class _DockerContainer:
             return
         self._broken_at = self._clock()
         self._ready = False
+        self._checked_at = 0.0
 
     @property
     def broken(self) -> bool:
@@ -270,7 +275,9 @@ class _DockerContainer:
         4. running → контейнер уже поднят, но Xvfb всё ещё гарантируется ниже.
         При ненулевом коде docker run/start → ``mark_broken()`` + ``RuntimeError``.
         """
-        if self._ready and not self.broken:
+        now = time.monotonic()
+        if (self._ready and not self.broken
+                and now - self._checked_at < self._ready_ttl):
             return
 
         if self.broken and self._within_retry_window():
@@ -287,6 +294,9 @@ class _DockerContainer:
             self._build()
 
         state = self.status()
+        if self._ready and state != "running":
+            # Контейнер остановили/удалили извне после прошлого успеха.
+            self._ready = False
         if state == "absent":
             cmd = self._argv([
                 "run", "-d",
@@ -329,6 +339,7 @@ class _DockerContainer:
         )
         self._broken_at = None
         self._ready = True
+        self._checked_at = time.monotonic()
 
     # ------------------------------------------------------------------
     # Запуск команд внутри контейнера
@@ -432,11 +443,28 @@ class DockerProvisioner:
     # Файловые операции
     # ------------------------------------------------------------------
 
+    def _raise_if_down(self, result: RunResult, what: str) -> None:
+        """Отличить аварию контейнера (→ mark_broken) от обычного ненулевого rc."""
+        if _is_container_down(result.returncode, result.stderr or ""):
+            mark = getattr(self._container, "mark_broken", None)
+            if mark is not None:
+                mark()
+            raise RuntimeError(
+                f"{what}: контейнер/демон недоступен (rc={result.returncode})")
+        raise RuntimeError(
+            f"{what}: rc={result.returncode} {(result.stderr or '').strip()}")
+
+    def _exec_checked(self, argv: list[str], what: str) -> RunResult:
+        r = self._container.exec_run(argv)
+        if r.returncode != 0:
+            self._raise_if_down(r, what)
+        return r
+
     def mkdirs(self, paths: list[str]) -> None:
         """Создать каталоги (рекурсивно) внутри контейнера."""
         self._ensure()
         for p in paths:
-            self._container.exec_run(["mkdir", "-p", p])
+            self._exec_checked(["mkdir", "-p", p], f"mkdir {p}")
 
     def exists(self, path: str) -> bool:
         """True если путь существует внутри контейнера."""
@@ -467,6 +495,8 @@ class DockerProvisioner:
         if self.is_file(path):
             return False
         r = self._container.exec_run(["sh", "-c", f"ls -A {shlex.quote(path)}"])
+        if r.returncode != 0 and _is_container_down(r.returncode, r.stderr or ""):
+            self._raise_if_down(r, f"ls {path}")
         return r.returncode == 0 and r.stdout.strip() == ""
 
     def read_text(self, path: str) -> str:
@@ -482,22 +512,29 @@ class DockerProvisioner:
         """
         self._ensure()
         self.mkdirs([posixpath.dirname(path)])
-        self._container.exec_input(
+        r = self._container.exec_input(
             ["sh", "-c", f"cat > {shlex.quote(path)}"],
             data,
         )
+        if r.returncode != 0:
+            self._raise_if_down(r, f"запись {path}")
 
     def write_text(self, path: str, content: str) -> None:
         """Записать текстовый файл внутри контейнера (UTF-8)."""
         self.write_bytes(path, content.encode("utf-8"))
 
-    def put_tree(self, local_src: str, dst: str, skip=None) -> None:
+    def backup(self, path: str) -> None:
+        self._ensure()
+        self._exec_checked(["cp", "-p", path, path + ".bak"], f"backup {path}")
+
+    def put_tree(self, local_src: str, dst: str, skip=None,
+                 backup: bool = False) -> None:
         """Перенести дерево каталогов с хоста в контейнер.
 
         Обходит ``local_src`` через ``rglob("*")``, пропускает служебные
         каталоги (``is_cruft``) и пути, для которых ``skip(rel)`` вернёт True.
         Каталоги создаются через ``mkdirs``, файлы — через ``write_bytes``.
-        Симметрично ``SshProvisioner.put_tree``.
+        backup=True (обновление окружения) сохраняет прежнюю версию в .bak.
         """
         self._ensure()
         src = Path(local_src)
@@ -511,6 +548,8 @@ class DockerProvisioner:
             if item.is_dir():
                 self.mkdirs([target])
             else:
+                if backup and self.exists(target):
+                    self.backup(target)
                 self.write_bytes(target, item.read_bytes())
 
     # ------------------------------------------------------------------

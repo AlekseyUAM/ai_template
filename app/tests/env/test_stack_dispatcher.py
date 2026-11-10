@@ -444,3 +444,65 @@ def test_test_kind_task_full_lifecycle(tmp_path):
     assert sr.get(stack_id)["status"] == "idle", (
         f"после тик-2 стек должен быть idle, получен: {sr.get(stack_id)['status']}"
     )
+
+
+def _set_stages(db, task_id, names):
+    tr = TaskRepo(db)
+    tr.update(task_id, stages_json=json.dumps(build_stages(names)))
+
+
+def test_exit_zero_without_progress_marks_failed(tmp_path):
+    """Агент выходит 0, но этапы не двигаются → после двух прогонов failed."""
+    db, proj_id, t1_id, t2_id, stack_id = _seed(tmp_path)
+    _set_stages(db, t1_id, ["analyze", "develop"])
+    mon = FakeMonitor()
+    disp = StackDispatcher(db, mon)
+
+    disp.tick()                                  # старт t1
+    assert TaskRepo(db).get(t1_id)["status"] == "running"
+
+    for _ in range(2):
+        mon.set_task_status(t1_id, "done")
+        mon.clear_alive(proj_id)
+        disp.tick()
+
+    assert TaskRepo(db).get(t1_id)["status"] == "failed"
+    t1_starts = [c for c in mon.started if c[2] == t1_id]
+    assert len(t1_starts) == 2, "должен быть ровно один перезапуск, затем failed"
+
+
+def test_progress_between_runs_resets_counter(tmp_path):
+    """Этапы изменились между прогонами — это прогресс, failed не ставим."""
+    db, proj_id, t1_id, t2_id, stack_id = _seed(tmp_path)
+    _set_stages(db, t1_id, ["analyze", "develop"])
+    mon = FakeMonitor()
+    disp = StackDispatcher(db, mon)
+
+    disp.tick()
+    mon.set_task_status(t1_id, "done")
+    mon.clear_alive(proj_id)
+
+    stages = build_stages(["analyze", "develop"])
+    stages[0]["status"] = "done"
+    TaskRepo(db).update(t1_id, stages_json=json.dumps(stages))
+
+    disp.tick()                                  # фиксирует прогресс и стартует снова
+    assert TaskRepo(db).get(t1_id)["status"] == "running"
+    assert len([c for c in mon.started if c[2] == t1_id]) == 2
+
+
+class _FailingMonitor(FakeMonitor):
+    def start(self, project, prompt="", task_id=None, cmd=None):
+        raise RuntimeError("ssh недоступен")
+
+
+def test_three_start_failures_mark_failed(tmp_path):
+    db, proj_id, t1_id, t2_id, stack_id = _seed(tmp_path)
+    _set_stages(db, t1_id, ["analyze"])
+    mon = _FailingMonitor()
+    disp = StackDispatcher(db, mon)
+
+    for _ in range(3):
+        disp.tick()
+
+    assert TaskRepo(db).get(t1_id)["status"] == "failed"

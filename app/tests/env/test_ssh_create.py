@@ -44,7 +44,7 @@ class RecordingProvisioner:
     def write_bytes(self, path, data) -> None:
         self.writes[path] = data
 
-    def put_tree(self, local_src, dst, skip=None) -> None:
+    def put_tree(self, local_src, dst, skip=None, backup=False) -> None:
         """Обходит реальный шаблон на мониторе; записывает целевые пути в writes."""
         from agentmon.backends import is_cruft
         src_path = Path(local_src)

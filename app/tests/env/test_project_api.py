@@ -414,7 +414,7 @@ def _docker_client(tmp_path, *, exists, build_lines=None, build_rc_ok=True,
         def __init__(self): self.runs = []
         def write_text(self, p, c): pass
         def write_bytes(self, p, d): pass
-        def put_tree(self, s, d, skip=None): pass
+        def put_tree(self, s, d, skip=None, backup=False): pass
         def mkdirs(self, paths): pass
         def exists(self, p): return False
         def is_file(self, p): return False
@@ -516,7 +516,7 @@ class _RecordingProvisioner:
     def write_bytes(self, path, data) -> None:
         self.writes[path] = data
 
-    def put_tree(self, local_src, dst, skip=None) -> None:
+    def put_tree(self, local_src, dst, skip=None, backup=False) -> None:
         from pathlib import Path as _Path
         from agentmon.backends import is_cruft
         src_path = _Path(local_src)
@@ -802,3 +802,58 @@ def test_docker_create_stream_rolls_back_project_on_failure(tmp_path):
     assert "✗" in r.text
     names = [p["name"] for p in c.get("/api/env/projects").json()["projects"]]
     assert "dockerproj" not in names        # стаб откатан
+
+
+def test_create_stream_disconnect_rolls_back_stub(tmp_path, monkeypatch):
+    """GeneratorExit (клиент закрыл вкладку) не оставляет стаб проекта в БД."""
+    from agentmon.env import project_api as project_api_module
+    from agentmon.env.installer import ProgressEvent
+    from agentmon.store.projects import ProjectRepo
+
+    project_dir = tmp_path / "dropme"
+    project_dir.mkdir()
+    client, registry, store = make_client(tmp_path)
+    body = {
+        "name": "dropme", "path": str(project_dir),
+        "identifier": "dev", "email": "dev@example.com",
+        "platform_dir": "/opt/1c", "platform_version": "8.3",
+        "db_connection": "", "mcp_ids": [], "agents": [],
+        "dump_cf": False, "dump_cfe": False, "install_tools": False,
+        "git_init": False,
+    }
+
+    def install_then_disconnect(config, **kwargs):
+        yield ProgressEvent("layout", "start")
+        raise GeneratorExit()
+
+    monkeypatch.setattr(project_api_module, "install_environment",
+                        install_then_disconnect)
+    try:
+        client.post("/api/env/projects/create/stream", json=body)
+    except BaseException:
+        pass
+
+    assert ProjectRepo(store).list() == [], "стаб проекта должен быть удалён"
+    assert registry.list() == [], "запись в реестре должна быть удалена"
+
+
+def test_open_report_rejects_path_traversal(tmp_path):
+    """artifact из task.json не должен открывать файлы вне tasks/."""
+    import json
+    from agentmon.store.projects import ProjectRepo
+    from agentmon.store.tasks import TaskRepo
+
+    c, registry, store = make_client(tmp_path)
+    proj_dir = tmp_path / "proj"
+    proj_dir.mkdir()
+    pid = ProjectRepo(store).add(name="p", path=str(proj_dir))
+    tr = TaskRepo(store)
+    tid = tr.add(project_id=pid, name="t", identifier="001",
+                 stages_json=json.dumps([{"name": "analyze",
+                                          "artifact": "../../../../etc/passwd",
+                                          "enabled": True}]))
+    (proj_dir / "tasks" / "task#001").mkdir(parents=True)
+
+    r = c.post(f"/api/env/tasks/{tid}/open-report", json={"stage": "analyze"})
+    assert r.status_code == 400
+    assert "вне каталога" in r.json()["detail"]

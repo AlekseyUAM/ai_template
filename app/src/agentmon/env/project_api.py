@@ -237,6 +237,7 @@ def build_project_router(store, registry, monitor=None,
             db_user=body.get("user", ""),
             db_password=body.get("password", ""),
             prov=prov,
+            check_empty=(backend != "docker"),
         )
 
     def _rollback_project(pid, path=""):
@@ -272,7 +273,8 @@ def build_project_router(store, registry, monitor=None,
                                         docker_host=docker_build[2]):
                     pass
             events = list(_install_iter(config, body, prov, backend, conn))
-        except Exception:
+        except BaseException:
+            # Включая KeyboardInterrupt: стаб не должен остаться в БД.
             _rollback_project(pid, config.project_dir)
             raise
         project_repo, _ = get_repos()
@@ -287,27 +289,47 @@ def build_project_router(store, registry, monitor=None,
         pid, config, prov, backend, conn, docker_build = _prepare_install(body)
 
         def gen():
-            yield f"▶ Создание проекта «{config.project_name}» ({config.project_dir})\n"
-            failed = False
+            created = False
+            rolled_back = False
+
+            def rollback_once():
+                nonlocal rolled_back
+                if not rolled_back:
+                    rolled_back = True
+                    # откатить стаб проекта, иначе повторная попытка упрётся
+                    # в UNIQUE (name/path)
+                    _rollback_project(pid, config.project_dir)
+
             try:
-                if docker_build is not None:
-                    yield f"[образ] сборка ai1c-agent:{docker_build[1]} из дистрибутива\n"
-                    for line in build_image_fn(docker_build[0], docker_build[1],
-                                               docker_host=docker_build[2]):
-                        yield line
-                for ev in _install_iter(config, body, prov, backend, conn):
-                    detail = f" {ev.detail}" if ev.detail else ""
-                    yield f"[{ev.step}] {ev.status}{detail}\n"
-                    if ev.status == "error":
-                        failed = True
-            except Exception as exc:                       # noqa: BLE001
-                failed = True
-                yield f"✗ Ошибка: {exc}\n"
-            if failed:
-                # откатить стаб проекта, иначе повторная попытка упрётся в UNIQUE
-                _rollback_project(pid, config.project_dir)
-            yield ("\n✓ Проект создан\n" if not failed
-                   else "\n✗ Установка завершилась с ошибкой\n")
+                yield (f"▶ Создание проекта «{config.project_name}» "
+                       f"({config.project_dir})\n")
+                failed = False
+                try:
+                    if docker_build is not None:
+                        yield (f"[образ] сборка ai1c-agent:{docker_build[1]} "
+                               f"из дистрибутива\n")
+                        for line in build_image_fn(docker_build[0], docker_build[1],
+                                                   docker_host=docker_build[2]):
+                            yield line
+                    for ev in _install_iter(config, body, prov, backend, conn):
+                        detail = f" {ev.detail}" if ev.detail else ""
+                        yield f"[{ev.step}] {ev.status}{detail}\n"
+                        if ev.status == "error":
+                            failed = True
+                except Exception as exc:                   # noqa: BLE001
+                    failed = True
+                    yield f"✗ Ошибка: {exc}\n"
+                if failed:
+                    rollback_once()
+                    yield "\n✗ Установка завершилась с ошибкой\n"
+                else:
+                    created = True
+                    yield "\n✓ Проект создан\n"
+            finally:
+                # Сюда попадаем и при GeneratorExit (клиент закрыл вкладку):
+                # без отката стаб проекта заблокирует повторную попытку.
+                if not created:
+                    rollback_once()
 
         return StreamingResponse(gen(), media_type="text/plain; charset=utf-8")
 
@@ -582,7 +604,16 @@ def build_project_router(store, registry, monitor=None,
         if project is None:
             raise HTTPException(status_code=404, detail="проект задачи не найден")
         folder = task_folder_name(task["id"], task.get("identifier"))
-        artifact_path = Path(project["path"]) / "tasks" / folder / stage["artifact"]
+        tasks_root = (Path(project["path"]) / "tasks").resolve()
+        artifact_path = (tasks_root / folder / stage["artifact"]).resolve()
+        # artifact приходит из task.json (его может править агент/пользователь):
+        # не даём открыть произвольный файл хоста через ../../..
+        try:
+            artifact_path.relative_to(tasks_root)
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"артефакт вне каталога задач: {stage['artifact']!r}")
         if not artifact_path.exists():
             raise HTTPException(status_code=404,
                                 detail=f"файл отчёта не найден: {stage['artifact']}")

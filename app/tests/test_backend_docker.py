@@ -2862,3 +2862,37 @@ class TestDockerHostToken:
     def test_full_url_complex(self):
         """ssh://admin@myserver.example.com:2222 → myserver.example.com."""
         assert docker_host_token("ssh://admin@myserver.example.com:2222") == "myserver.example.com"
+
+
+class TestContainerLiveness:
+    def test_stopped_container_detected_after_ttl(self, monkeypatch):
+        """ensure() перепроверяет контейнер после короткого TTL, а не верит кэшу."""
+        import agentmon.backends.docker as docker_module
+        fake = FakeRun(routes=[("docker images -q", 0, "abc123\n", "")])
+        c = _make_container(fake, name="ai1c-live")
+        now = [0.0]
+        monkeypatch.setattr(docker_module.time, "monotonic", lambda: now[0])
+
+        c.ensure()
+        fake.calls.clear()
+        c.ensure()                         # в пределах TTL — без docker-вызовов
+        assert fake.calls == []
+
+        c.status = lambda: "exited"        # контейнер остановили извне
+        now[0] = 10.0
+        c.ensure()
+        assert any("start" in " ".join(call) for call in fake.calls)
+
+
+class TestProvisionerErrors:
+    def test_mkdir_failure_raises(self):
+        p, c = _make_provisioner(default_rc=1, default_stderr="нельзя создать")
+        with pytest.raises(RuntimeError, match="mkdir"):
+            p.mkdirs(["/workspace/x"])
+
+    def test_write_bytes_failure_is_not_silent(self):
+        p, c = _make_provisioner()
+        c.set_result(RunResult(0))                       # mkdir
+        c.set_result(RunResult(1, "", "No such container"))
+        with pytest.raises(RuntimeError, match="недоступен"):
+            p.write_bytes("/workspace/f", b"data")

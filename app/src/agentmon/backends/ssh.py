@@ -1,3 +1,4 @@
+import codecs
 import logging
 import os
 import posixpath
@@ -24,8 +25,15 @@ def _real_connect(conn: dict):
     import paramiko
 
     client = paramiko.SSHClient()
+    # load_system_host_keys() читает ~/.ssh/known_hosts (и системный файл).
     client.load_system_host_keys()
-    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    if conn.get("strict_host_key", True) is False:
+        # Явный opt-out для доверенного контура: принимаем незнакомый ключ.
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    else:
+        # По умолчанию неизвестный host key — отказ: иначе первый контакт
+        # с подменённым хостом отдаёт ему шаблон и запуск claude.
+        client.set_missing_host_key_policy(paramiko.RejectPolicy())
     # paramiko тильду не разворачивает, а форма ввода предлагает именно
     # "~/.ssh/id_ed25519" — без expanduser такой путь заведомо не найдётся.
     key_path = conn.get("key_path") or None
@@ -207,7 +215,10 @@ class SshProvisioner:
         with self._c.sftp().open(path, "w") as fh:
             fh.write(data)
 
-    def put_tree(self, local_src, dst, skip=None) -> None:
+    def backup(self, path) -> None:
+        self.run(["cp", "-p", path, path + ".bak"])
+
+    def put_tree(self, local_src, dst, skip=None, backup=False) -> None:
         from pathlib import Path
         src = Path(local_src)
         for item in sorted(src.rglob("*")):
@@ -220,6 +231,8 @@ class SshProvisioner:
             if item.is_dir():
                 self.mkdirs([target])
             else:
+                if backup and self.exists(target):
+                    self.backup(target)
                 self.write_bytes(target, item.read_bytes())
 
     # --- выполнение команд (exec) ---
@@ -273,6 +286,8 @@ class SshRunner:
         self.claude_cmd = claude_cmd
         self._channels: dict[str, object] = {}
         self._buffers: dict[str, str] = {}
+        # Инкрементальный декодер: utf-8 символ может разрезаться между recv().
+        self._decoders: dict[str, object] = {}
 
     def start(self, project) -> str:
         agent_id = project.key
@@ -290,6 +305,8 @@ class SshRunner:
             raise SshUnavailable(f"не удалось запустить агента: {exc}") from exc
         self._channels[agent_id] = chan
         self._buffers[agent_id] = ""
+        self._decoders[agent_id] = codecs.getincrementaldecoder(
+            "utf-8")("replace")
         return agent_id
 
     def _require(self, agent_id):
@@ -299,9 +316,10 @@ class SshRunner:
         return chan
 
     def _forget(self, agent_id) -> None:
-        """Убрать агента из обоих словарей: канал непригоден, забываем его."""
+        """Убрать агента из словарей: канал непригоден, забываем его."""
         self._channels.pop(agent_id, None)
         self._buffers.pop(agent_id, None)
+        self._decoders.pop(agent_id, None)
 
     def _channel_failed(self, agent_id) -> None:
         """Канал агента отказал: забыть его, а соединение — только если оно и
@@ -331,7 +349,11 @@ class SshRunner:
             self._channel_failed(agent_id)
             return
         if chunks:
-            text = b"".join(chunks).decode("utf-8", "replace")
+            decoder = self._decoders.get(agent_id)
+            if decoder is None:
+                decoder = codecs.getincrementaldecoder("utf-8")("replace")
+                self._decoders[agent_id] = decoder
+            text = decoder.decode(b"".join(chunks))
             self._buffers[agent_id] = (self._buffers.get(agent_id, "") + text)[-BUFFER_LIMIT:]
 
     def send_input(self, agent_id, text) -> None:
@@ -393,6 +415,7 @@ class SshRunner:
                 pass
         self._channels.clear()
         self._buffers.clear()
+        self._decoders.clear()
 
 
 class SshFiles:
@@ -462,6 +485,8 @@ class SshFiles:
                     path=f"{sub}/{f.filename}", dir_name=entry.filename,
                     session_id=f.filename[: -len(".jsonl")],
                     size=int(f.st_size), mtime=float(f.st_mtime),
+                    st_dev=getattr(f, "st_dev", None),
+                    st_ino=getattr(f, "st_ino", None),
                 ))
         return refs
 

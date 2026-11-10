@@ -167,12 +167,15 @@ def provision_venv(prov, config, *, update: bool) -> str | None:
 def deploy_content(prov, config, *, update: bool) -> None:
     project_dir = config.project_dir
     claude = f"{project_dir}/.claude"
-    prov.put_tree(str(TEMPLATE_DIR), project_dir, skip=_is_special)
-    # Имена MCP подставляем только при создании (пользователь мог их переименовать;
-    # на обновлении карточку не трогаем). Имя проекта → alias репозитория code-index
-    # в подсказках агенту: берётся из записи проекта, стабильно, поэтому подставляем
-    # ВСЕГДА — иначе put_tree на обновлении вернёт сырой {{CODE_INDEX_REPO}}.
-    mcp_subs = mcp_name_overrides(config.mcp) if not update else {}
+    # backup=True: обновление не должно молча стирать правки пользователя в
+    # .claude/skills|rules|hooks|tools — прежняя версия остаётся рядом в .bak.
+    prov.put_tree(str(TEMPLATE_DIR), project_dir, skip=_is_special,
+                  backup=update)
+    # Имя проекта → alias репозитория code-index в подсказках агенту: берётся из
+    # записи проекта, стабильно, поэтому подставляем ВСЕГДА. Имена MCP берём из
+    # карточки проекта и на обновлении — иначе хук останется с прежним именем
+    # сервера после переименования.
+    mcp_subs = mcp_name_overrides(config.mcp)
     subs = {**mcp_subs, "{{CODE_INDEX_REPO}}": config.project_name}
     _render_agents(prov, config, f"{claude}/agents", overrides=subs)
     # settings.json — текст JSON, а путь к интерпретатору впечатывается прямо в

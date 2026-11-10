@@ -49,3 +49,36 @@ def test_roundtrip_and_list(tmp_path):
     assert len(tasks) == 1
     d = ts.task_dir(tmp_path, tasks[0].id)
     assert ts.load_task(d).title == "a"
+
+
+def test_loads_v2_stage_with_gates_and_extra_fields(tmp_path):
+    import json
+    d = tmp_path / "task#001"
+    d.mkdir()
+    (d / "task.json").write_text(json.dumps({
+        "id": "001", "name": "Задача", "title": "Задача",
+        "goal": "g", "plan": "p", "constraints": "c", "status": "awaiting_user",
+        "identifier": "001", "project_id": 5, "update_db": True,
+        "unknown_from_future": 1,
+        "stages": [
+            {"name": "analyze", "enabled": True, "subagent": "analyst",
+             "artifact": "ANALYZE.md", "status": "done", "changed_files": [],
+             "gate": True, "approved": False, "started_at": 1.0,
+             "finished_at": 2.0, "iteration": 1, "new_field": "x"},
+            {"name": "testing", "enabled": True, "subagent": "",
+             "artifact": "TESTING.md", "status": "pending",
+             "changed_files": [], "gate": False, "approved": False},
+        ],
+    }, ensure_ascii=False), encoding="utf-8")
+
+    spec = ts.load_task(d)
+    assert spec.title == "Задача"
+    assert spec.status == "awaiting_user"
+    assert spec.stages[0].gate is True and spec.stages[0].approved is False
+    assert spec.stages[1].subagent == ""
+
+    ts.save_task(d, spec)
+    saved = json.loads((d / "task.json").read_text(encoding="utf-8"))
+    assert saved["status"] == "awaiting_user"
+    assert saved["stages"][0]["gate"] is True
+    assert saved["stages"][1]["name"] == "testing"

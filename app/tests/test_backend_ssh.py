@@ -492,12 +492,15 @@ def test_key_path_is_tilde_expanded(monkeypatch):
         class AutoAddPolicy:
             pass
 
+        class RejectPolicy:
+            pass
+
         class SSHClient:
             def load_system_host_keys(self):
                 pass
 
             def set_missing_host_key_policy(self, policy):
-                pass
+                captured["policy"] = policy
 
             def connect(self, **kw):
                 captured.update(kw)
@@ -506,3 +509,70 @@ def test_key_path_is_tilde_expanded(monkeypatch):
     monkeypatch.setenv("HOME", "/home/tester")
     ssh_module._real_connect({"host": "srv", "key_path": "~/.ssh/id_ed25519"})
     assert captured["key_filename"] == "/home/tester/.ssh/id_ed25519"
+
+
+def _fake_paramiko():
+    class FakeParamiko:
+        class AutoAddPolicy:
+            pass
+
+        class RejectPolicy:
+            pass
+
+        class SSHClient:
+            def load_system_host_keys(self):
+                pass
+
+            def set_missing_host_key_policy(self, policy):
+                self.policy = policy
+
+            def connect(self, **kw):
+                pass
+
+    return FakeParamiko
+
+
+def test_unknown_host_key_rejected_by_default(monkeypatch):
+    import sys
+    import agentmon.backends.ssh as ssh_module
+    FakeParamiko = _fake_paramiko()
+    monkeypatch.setitem(sys.modules, "paramiko", FakeParamiko)
+    captured = {}
+    orig_init = FakeParamiko.SSHClient.__init__
+
+    def fake_init(self):
+        orig_init(self)
+        captured["client"] = self
+
+    FakeParamiko.SSHClient.__init__ = fake_init
+    ssh_module._real_connect({"host": "srv"})
+    assert isinstance(captured["client"].policy, FakeParamiko.RejectPolicy)
+
+
+def test_insecure_host_key_opt_out(monkeypatch):
+    import sys
+    import agentmon.backends.ssh as ssh_module
+    FakeParamiko = _fake_paramiko()
+    monkeypatch.setitem(sys.modules, "paramiko", FakeParamiko)
+    captured = {}
+
+    def fake_init(self):
+        captured["client"] = self
+
+    FakeParamiko.SSHClient.__init__ = fake_init
+    ssh_module._real_connect({"host": "srv", "strict_host_key": False})
+    assert isinstance(captured["client"].policy, FakeParamiko.AutoAddPolicy)
+
+
+def test_runner_decodes_utf8_split_between_chunks():
+    """Кириллица, разрезанная между recv(), не превращается в U+FFFD."""
+    backend, client, _ = make_backend()
+    agent_id = backend.runner.start(project("/srv/x"))
+    chan = client.channels[0]
+    data = "Привет".encode("utf-8")
+    chan.pending = data[:2]
+    backend.runner.tail_output(agent_id)
+    chan.pending = data[2:]
+    out = backend.runner.tail_output(agent_id)
+    assert "Привет" in out
+    assert "�" not in out

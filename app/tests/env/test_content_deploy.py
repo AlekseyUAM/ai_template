@@ -133,13 +133,14 @@ def test_deploy_leaves_unselected_placeholder(prov, tmp_path):
     assert "mcp__code_index__" in dev
 
 
-def test_deploy_update_skips_mcp_substitution(prov, tmp_path):
+def test_deploy_update_applies_mcp_substitution(prov, tmp_path):
+    """Обновление тоже переподставляет имя MCP: карточка проекта — источник истины."""
     config = cfg(tmp_path, [])
     config.mcp = _bsl_renamed()
     content.deploy_content(prov, config, update=True)
     dev = (tmp_path / ".claude" / "agents" / "developer.md").read_text(encoding="utf-8")
-    assert "mcp__bsl_ls__" in dev
-    assert "bsl_checker" not in dev
+    assert "mcp__bsl_checker" in dev
+    assert "mcp__bsl_ls__" not in dev
 
 
 def test_mcp_rename_does_not_clobber_rendered_agent_model(prov, tmp_path):
@@ -339,3 +340,27 @@ def test_provision_venv_warns_on_pip_failure(tmp_path):
     # не бросает (создание проекта не блокируется), а возвращает текст предупреждения
     msg = content.provision_venv(prov, cfg(tmp_path, []), update=False)
     assert msg and "setup-venv.py" in msg
+
+
+def test_update_backs_up_overwritten_template_file(tmp_path):
+    """Правка пользователя в .claude не исчезает бесследно при update-env."""
+    from agentmon.env.content import deploy_content
+    from agentmon.env.config_schema import EnvConfig, SCHEMA_VERSION
+
+    project = tmp_path / "proj"
+    project.mkdir()
+    cfg = EnvConfig(
+        schema_version=SCHEMA_VERSION, project_name="proj",
+        project_dir=str(project), developer_id="i", developer_email="i@e.ru",
+        platform_dir="", platform_version="", db_kind="file",
+        db_connection="", web_publication="", mcp=[], agents=[])
+    deploy_content(LocalProvisioner(), cfg, update=False)
+    skill = project / ".claude" / "skills" / "1c-batch" / "SKILL.md"
+    assert skill.exists()
+    skill.write_text("моя правка\n", encoding="utf-8")
+
+    deploy_content(LocalProvisioner(), cfg, update=True)
+
+    bak = skill.with_name("SKILL.md.bak")
+    assert bak.exists() and "моя правка" in bak.read_text(encoding="utf-8")
+    assert skill.read_text(encoding="utf-8") != "моя правка\n"

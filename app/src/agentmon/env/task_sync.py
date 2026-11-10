@@ -12,12 +12,16 @@ import time
 from pathlib import Path
 
 from agentmon.store.tasks import TaskRepo
+from agentmon.env.task_json import update_json
 from agentmon.env.task_schema import task_folder_name
 from agentmon.env.task_model import overall_status
 
 # Статусами queued/stopped владеет стек/очередь — в task.json их нет, поэтому
 # status из файла для них не перезаписываем (иначе выбьем задачу из очереди).
 PROTECTED_STATUSES = {"queued", "stopped"}
+# Файл — источник истины по прогрессу, но только в рамках известного набора:
+# опечатка/чужой статус не должны попасть в БД.
+ALLOWED_FILE_STATUSES = {"planned", "running", "awaiting_user", "done", "failed"}
 
 
 def _apply_stage_timings(file_stages, prev_by_name, now) -> list:
@@ -70,7 +74,8 @@ def sync_task_from_file(store, project_path, task, now_fn=time.time,
         if key in data:
             fields[key] = data.get(key)
     file_status = data.get("status")
-    if sync_status and file_status and task.get("status") not in PROTECTED_STATUSES:
+    if (sync_status and file_status in ALLOWED_FILE_STATUSES
+            and task.get("status") not in PROTECTED_STATUSES):
         fields["status"] = file_status
     if "stages" in data:
         prev_by_name = {}
@@ -100,19 +105,17 @@ def write_stage_approval(project_path, task, stage_name) -> bool:
     tj = Path(project_path) / "tasks" / folder / "task.json"
     if not tj.exists():
         return False
+
+    def approve(data):
+        for s in data.get("stages", []):
+            if s.get("name") == stage_name:
+                s["approved"] = True
+                data["status"] = overall_status(data.get("stages", []))
+                return True
+        return False
+
     try:
-        data = json.loads(tj.read_text(encoding="utf-8"))
-    except (ValueError, OSError):
+        # lock+os.replace: параллельный task_status.py не потеряет правку.
+        return bool(update_json(tj, approve))
+    except (OSError, ValueError, TimeoutError):
         return False
-    found = False
-    for s in data.get("stages", []):
-        if s.get("name") == stage_name:
-            s["approved"] = True
-            found = True
-            break
-    if not found:
-        return False
-    data["status"] = overall_status(data.get("stages", []))
-    tj.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n",
-                  encoding="utf-8")
-    return True

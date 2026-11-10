@@ -25,6 +25,7 @@ run-tests.py
     0    штатное завершение
     1    ошибка запуска
     2    ошибка компиляции модулей (предприятие не запускалось)
+    3    ошибка среды/лицензии (платформа не запустилась, база недоступна)
     124  таймаут сеанса предприятия
 """
 
@@ -45,6 +46,7 @@ DEFAULT_TIMEOUT = 3600
 RC_OK = 0
 RC_LAUNCH_ERROR = 1
 RC_COMPILE_ERROR = 2
+RC_ENV_ERROR = 3
 RC_TIMEOUT = 124
 
 # Маркеры ошибки компиляции в выводе конфигуратора (/CheckModules). Нужны на случай,
@@ -54,6 +56,25 @@ COMPILE_ERROR_MARKERS = (
     "ОшибкаКомпиляцииВстроенногоЯзыка",
     "Ошибка компиляции модуля",
     "Процедура или функция с указанным именем уже определена",
+)
+
+# Маркеры того, что проблема не в коде, а в среде: нет бинарника платформы,
+# не подхватилась лицензия, нет доступа к базе/файлам. Такой rc нельзя отдавать
+# агенту как «ошибка компиляции» — он пойдёт править рабочий код.
+ENV_ERROR_MARKERS = (
+    "Traceback (most recent call last)",
+    "No such file or directory",
+    "not found",
+    "cannot execute",
+    "Permission denied",
+    "лицензи",
+    "License",
+    "не найден",
+    "не удалось запустить",
+    "Не удалось подключиться",
+    "ошибка подключения",
+    "platform_path",
+    "не задан путь к платформе",
 )
 
 
@@ -128,8 +149,17 @@ def check_modules(project_root: Path, extension: str) -> int:
         print(output.rstrip())
         print()
 
-    markers = [m for m in COMPILE_ERROR_MARKERS if m in output]
-    if result.returncode != 0 or markers:
+    compile_markers = [m for m in COMPILE_ERROR_MARKERS if m in output]
+    env_markers = [m for m in ENV_ERROR_MARKERS if m in output]
+    if result.returncode != 0 or compile_markers:
+        # Ошибка компиляции важнее env-маркеров: конфигуратор мог написать и то,
+        # и другое, но чинить надо код.
+        if not compile_markers and env_markers:
+            print(f"❌ Не удалось запустить проверку модулей "
+                  f"(код {result.returncode}): проблема среды/лицензии.")
+            print("   Это НЕ ошибка компиляции: проверьте platform_path, "
+                  "лицензию и доступ к базе.")
+            return RC_ENV_ERROR
         print(f"❌ Ошибка компиляции модулей (код конфигуратора {result.returncode}).")
         print("   Предприятие не запускается. Исправьте ошибки компиляции и повторите.")
         return RC_COMPILE_ERROR

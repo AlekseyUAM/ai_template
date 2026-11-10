@@ -216,3 +216,43 @@ def test_cli_db_update_reset_when_develop_reopened(tmp_path):
     mod.main([str(d), "develop", "running"])
     with pytest.raises(SystemExit):
         mod.main([str(d), "develop", "done"])
+
+
+def _gated_task(tmp_path, analyze_status):
+    s = ts.create_task(tmp_path, title="g", goal="", plan="", constraints="",
+                       enabled_stages=ts.STAGE_NAMES)
+    d = ts.task_dir(tmp_path, s.id)
+    data = json.loads((d / "task.json").read_text(encoding="utf-8"))
+    for st in data["stages"]:
+        if st["name"] == "analyze":
+            st["gate"] = True
+            st["approved"] = False
+            st["status"] = analyze_status
+        elif st["name"] == "plan":
+            st["status"] = "pending"
+    (d / "task.json").write_text(json.dumps(data, ensure_ascii=False),
+                                 encoding="utf-8")
+    return d
+
+
+def test_pending_gate_does_not_block_next_stage(tmp_path):
+    mod = _load()
+    d = _gated_task(tmp_path, "pending")
+    mod.update(str(d), "develop", "running")        # не должно бросить
+    data = json.loads((d / "task.json").read_text(encoding="utf-8"))
+    dev = next(s for s in data["stages"] if s["name"] == "develop")
+    assert dev["status"] == "running"
+
+
+def test_done_unapproved_gate_blocks_next_stage(tmp_path):
+    mod = _load()
+    d = _gated_task(tmp_path, "done")
+    with pytest.raises(SystemExit, match="гейт"):
+        mod.update(str(d), "develop", "running")
+
+
+def test_overall_status_awaiting_user(tmp_path):
+    mod = _load()
+    d = _gated_task(tmp_path, "done")
+    data = json.loads((d / "task.json").read_text(encoding="utf-8"))
+    assert mod._overall_status(data["stages"]) == "awaiting_user"

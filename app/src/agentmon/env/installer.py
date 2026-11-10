@@ -27,9 +27,21 @@ def install_environment(
     db_user: str = "",
     db_password: str = "",
     prov=None,
+    check_empty: bool = True,
 ) -> Iterator[ProgressEvent]:
     prov = prov or LocalProvisioner()
     base = Path(config.project_dir)
+    # Повторная проверка перед записью: между валидацией мастера и установкой
+    # каталог могли заполнить (другой запрос/пользователь). Молча перетирать
+    # чужие файлы put_tree'ом нельзя. Для docker гейт пропускаем: том нового
+    # проекта пуст по построению, а is_empty_dir поднял бы контейнер до сборки
+    # образа.
+    already_ours = check_empty and prov.exists(
+        f"{config.project_dir}/.claude/VERSION")
+    if (check_empty and not update and not already_ours
+            and not prov.is_empty_dir(config.project_dir)):
+        raise RuntimeError(
+            f"каталог проекта {config.project_dir} не пуст — установка отменена")
 
     def step(name, fn):
         yield ProgressEvent(name, "start")

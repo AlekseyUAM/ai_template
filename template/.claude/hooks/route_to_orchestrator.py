@@ -10,7 +10,9 @@ _TASK_PROMPT_RE = re.compile(r"tasks[\\/]task#")
 
 
 def build_output(event: dict) -> dict:
-    prompt = event.get("prompt") or ""
+    prompt = event.get("prompt")
+    if not isinstance(prompt, str):
+        return {}
     if _TASK_PROMPT_RE.search(prompt):
         return {"hookSpecificOutput": {
             "hookEventName": "UserPromptSubmit",
@@ -25,13 +27,15 @@ def build_output(event: dict) -> dict:
 
 
 def main() -> None:
+    # Хук не должен блокировать отправку промпта: любая ошибка разбора/вывода
+    # трактуется как «нет дополнительного контекста», exit 0.
     try:
         event = json.load(sys.stdin)
-    except (json.JSONDecodeError, ValueError):
+        out = build_output(event) if isinstance(event, dict) else {}
+        if out:
+            json.dump(out, sys.stdout, ensure_ascii=False)
+    except Exception:
         return
-    out = build_output(event)
-    if out:
-        json.dump(out, sys.stdout, ensure_ascii=False)
 
 
 if __name__ == "__main__":

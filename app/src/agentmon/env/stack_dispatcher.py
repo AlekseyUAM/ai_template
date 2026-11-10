@@ -58,6 +58,16 @@ class StackDispatcher:
         self._store = store
         self._monitor = monitor
         self._now_fn = now_fn
+        # Защита от бесконечных перезапусков: агент может выходить с кодом 0,
+        # не сдвинув ни одного этапа (не вызвал task_status.py / сдался).
+        # Считаем такие прогоны подряд; после _MAX_NO_PROGRESS — failed.
+        self._no_progress: dict[int, int] = {}
+        self._start_failures: dict[int, int] = {}
+        # Снимок stages_json на момент старта прогона — с ним сравниваем
+        # результат, чтобы отличить «агент поработал» от «ничего не сделал».
+        self._last_stages: dict[int, str] = {}
+        self._MAX_NO_PROGRESS = 2
+        self._MAX_START_FAILURES = 3
 
     def tick(self) -> None:
         """Один проход по всем running-стекам.
@@ -134,7 +144,22 @@ class StackDispatcher:
                     )
                     return
                 # запускаем задачу и выходим — один старт за тик
-                self._start_task(proj, active_task, tr)
+                self._last_stages.setdefault(
+                    task_id, active_task.get("stages_json") or "[]")
+                try:
+                    self._start_task(proj, active_task, tr)
+                except Exception:
+                    logger.exception("не удалось запустить задачу id=%s", task_id)
+                    failures = self._start_failures.get(task_id, 0) + 1
+                    self._start_failures[task_id] = failures
+                    if failures >= self._MAX_START_FAILURES:
+                        tr.set_status(task_id, "failed")
+                        logger.error(
+                            "задача id=%s помечена failed: %d ошибок старта подряд",
+                            task_id, failures)
+                        self._start_failures.pop(task_id, None)
+                else:
+                    self._start_failures.pop(task_id, None)
                 return
 
             else:  # running
@@ -158,11 +183,36 @@ class StackDispatcher:
                     # задачи, подтягиваем task.json → БД (этапы/гейт/время) и
                     # вычисляем реальный статус: гейтированный этап мог оставить
                     # задачу в awaiting_user — тогда её нельзя помечать done.
+                    baseline = self._last_stages.get(
+                        task_id, active_task.get("stages_json") or "[]")
                     final = self._settle_completed(proj, active_task, tr)
+                    fresh = tr.get(task_id) or active_task
+                    after = fresh.get("stages_json") or "[]"
                     if final == "awaiting_user":
                         # вышли на гейт — стек ждёт пользователя
+                        self._no_progress.pop(task_id, None)
                         return
-                    # done/failed/иное терминальное — двигаемся к следующей задаче
+                    if final in {"planned", "running"} and after == baseline:
+                        # Прогон закончился, но прогресса нет — следующий старт
+                        # даст то же самое. После двух таких — сдаёмся.
+                        count = self._no_progress.get(task_id, 0) + 1
+                        self._no_progress[task_id] = count
+                        if count >= self._MAX_NO_PROGRESS:
+                            tr.set_status(task_id, "failed")
+                            logger.error(
+                                "задача id=%s помечена failed: %d прогонов подряд "
+                                "без прогресса этапов", task_id, count)
+                            self._no_progress.pop(task_id, None)
+                            self._last_stages.pop(task_id, None)
+                            continue
+                    else:
+                        # Этапы изменились — это прогресс, счётчик сбрасываем,
+                        # а новый снимок становится базой для следующего прогона.
+                        self._no_progress.pop(task_id, None)
+                        self._last_stages[task_id] = after
+                    if final in _DONE_STATUSES:
+                        self._last_stages.pop(task_id, None)
+                    # progress/done/failed — двигаемся к следующей задаче
                     continue
                 else:
                     # задача ещё выполняется — синкаем живой прогресс этапов из
