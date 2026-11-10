@@ -130,4 +130,5 @@ def build(db_path=None):
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
+    config.ensure_secure_bind()
     uvicorn.run(build(), host=config.HOST, port=config.PORT)

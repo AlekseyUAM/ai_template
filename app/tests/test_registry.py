@@ -316,3 +316,37 @@ def test_migration_keeps_the_autoincrement_high_water(tmp_path):
     pid = {p.path: p.id for p in reg.list()}["/p/a"]
     task_id = TaskQueue(db).enqueue(pid, "новая задача")
     assert task_id == 101             # счёт продолжается, а не начинается с 4
+
+
+def test_claude_cmd_accepts_claude_only(tmp_path):
+    reg = ProjectRegistry(open_db(tmp_path / "db.sqlite"))
+    for i, cmd in enumerate((
+            None, "", "claude --dangerously-skip-permissions .",
+            "/opt/tools/claude -p", "C:\\tools\\claude.exe --flag")):
+        p = reg.add(name=f"p{i}", path=f"/srv/{i}", backend="local",
+                    claude_cmd=cmd)
+        assert p.claude_cmd == cmd
+
+
+def test_claude_cmd_rejects_arbitrary_binary(tmp_path):
+    reg = ProjectRegistry(open_db(tmp_path / "db.sqlite"))
+    for i, cmd in enumerate((
+            "sh -c id", "/bin/bash -c id", "python -c 'print(1)'",
+            "cmd.exe /c whoami", "powershell -Command id", "/usr/bin/evil")):
+        with pytest.raises(ValueError, match="claude_cmd"):
+            reg.add(name=f"bad{i}", path=f"/srv/bad{i}", backend="local",
+                    claude_cmd=cmd)
+
+
+def test_claude_cmd_rejects_bad_quoting(tmp_path):
+    reg = ProjectRegistry(open_db(tmp_path / "db.sqlite"))
+    with pytest.raises(ValueError, match="claude_cmd"):
+        reg.add(name="q", path="/srv/q", backend="local",
+                claude_cmd="claude 'unterminated")
+
+
+def test_claude_cmd_validated_on_update(tmp_path):
+    reg = ProjectRegistry(open_db(tmp_path / "db.sqlite"))
+    p = reg.add(name="a", path="/srv/a", backend="local")
+    with pytest.raises(ValueError, match="claude_cmd"):
+        reg.update(p.id, claude_cmd="sh -c id")

@@ -1,13 +1,31 @@
 import asyncio
 from dataclasses import asdict
 from pathlib import Path
+from urllib.parse import urlsplit
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
-from . import version
+from . import config, version
+
+
+def _request_token(request) -> str | None:
+    """Токен из заголовков или query (query — для WebSocket и ссылок)."""
+    token = request.headers.get("x-agentmon-token")
+    auth = request.headers.get("authorization") or ""
+    if not token and auth.lower().startswith("bearer "):
+        token = auth[7:].strip()
+    if not token:
+        token = request.query_params.get("token")
+    return token
+
+
+def _origin_matches_host(origin: str, host: str) -> bool:
+    if not origin or origin == "null" or not host:
+        return False
+    return urlsplit(origin).netloc.lower() == urlsplit("//" + host).netloc.lower()
 
 
 class _NoCacheStatic(StaticFiles):
@@ -22,6 +40,23 @@ class _NoCacheStatic(StaticFiles):
 def create_app(registry, queue, monitor, lifespan=None, store=None,
                popen=None, image_exists_fn=None, build_image_fn=None):
     app = FastAPI(lifespan=lifespan)
+
+    @app.middleware("http")
+    async def _guard(request: Request, call_next):
+        """Host/Origin/токен: приложение запускает процессы, наружу без пароля нельзя."""
+        host = request.headers.get("host")
+        if not config.host_allowed(host):
+            return JSONResponse({"detail": "Host не разрешён"}, status_code=400)
+        origin = request.headers.get("origin")
+        if origin is not None and not _origin_matches_host(origin, host or ""):
+            return JSONResponse({"detail": "Origin не разрешён"}, status_code=403)
+        if request.url.path.startswith("/api/") and not config.token_matches(
+                _request_token(request)):
+            return JSONResponse(
+                {"detail": "неверный или отсутствующий AGENTMON_TOKEN"},
+                status_code=401)
+        return await call_next(request)
+
     from .env.api import build_env_router
     app.include_router(build_env_router(registry))
     from .env.mcp_api import build_mcp_router
@@ -176,6 +211,12 @@ def create_app(registry, queue, monitor, lifespan=None, store=None,
 
     @app.websocket("/ws/sessions")
     async def ws_sessions(ws: WebSocket):
+        if not config.host_allowed(ws.headers.get("host")):
+            await ws.close(code=1008)
+            return
+        if not config.token_matches(_request_token(ws)):
+            await ws.close(code=1008)
+            return
         await ws.accept()
         try:
             while True:

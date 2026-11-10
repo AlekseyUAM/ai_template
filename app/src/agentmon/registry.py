@@ -1,4 +1,6 @@
 import json
+import os
+import shlex
 import sqlite3
 import threading
 import time
@@ -6,7 +8,7 @@ import time
 from .models import Project
 from .paths import normalize_path
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 BACKENDS = ("local", "ssh", "docker")
 
 
@@ -114,6 +116,8 @@ def _migrate(conn: sqlite3.Connection) -> None:
             _apply_v1(conn)
         if version < 2:
             _apply_v2(conn)
+        if version < 3:
+            _apply_v3(conn)
         conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
     except Exception:
         conn.rollback()               # незавершённая миграция не должна осесть в БД
@@ -202,6 +206,14 @@ def _apply_v2(conn: sqlite3.Connection) -> None:
                          (canonical, pid))
             conn.execute("DELETE FROM projects WHERE id=?", (pid,))
         conn.execute("UPDATE projects SET key=? WHERE id=?", (key, canonical))
+
+
+def _apply_v3(conn: sqlite3.Connection) -> None:
+    """Счётчик возвратов задачи в очередь переживает перезапуск диспетчера."""
+    cols = {row["name"] for row in conn.execute("PRAGMA table_info(tasks)")}
+    if "requeues" not in cols:
+        conn.execute(
+            "ALTER TABLE tasks ADD COLUMN requeues INTEGER NOT NULL DEFAULT 0")
 
 
 def _project_is_not_null(conn: sqlite3.Connection) -> bool:
@@ -294,11 +306,40 @@ def _key_for(backend: str, conn: dict | None, path: str) -> str:
     return f"{backend}|{host}|{normalize_path(path)}"
 
 
-def _validate(backend: str, conn: dict | None) -> None:
+_CLAUDE_BASENAMES = {"claude", "claude.exe", "claude.cmd", "claude.bat"}
+
+
+def _validate_claude_cmd(claude_cmd: str | None) -> None:
+    """Не дать API запустить произвольный бинарник через claude_cmd.
+
+    Строка всё равно режется shlex (без shell), но первый токен должен быть
+    именно claude (в любом каталоге) — иначе ручка /api/projects превращается
+    в универсальный запуск процессов.
+    """
+    if not claude_cmd:
+        return
+    try:
+        # Backslash-путь (Windows) на POSIX shlex съел бы как escape.
+        argv = shlex.split(claude_cmd,
+                           posix=(os.name != "nt" and "\\" not in claude_cmd))
+    except ValueError as exc:
+        raise ValueError(f"claude_cmd: некорректная командная строка: {exc}")
+    if not argv:
+        raise ValueError("claude_cmd: пустая команда")
+    executable = argv[0]
+    base = executable.replace("\\", "/").rsplit("/", 1)[-1].lower()
+    if base not in _CLAUDE_BASENAMES:
+        raise ValueError(
+            "claude_cmd: разрешён только claude/claude.exe "
+            f"(получено {executable!r})")
+
+
+def _validate(backend: str, conn: dict | None, claude_cmd: str | None = None) -> None:
     if backend not in BACKENDS:
         raise ValueError(f"неизвестный backend: {backend!r}")
     if backend == "ssh" and not (conn or {}).get("host"):
         raise ValueError("для backend=ssh требуется host в conn")
+    _validate_claude_cmd(claude_cmd)
 
 
 class ProjectRegistry:
@@ -316,7 +357,7 @@ class ProjectRegistry:
         )
 
     def add(self, name, path, backend, conn=None, claude_cmd=None) -> Project:
-        _validate(backend, conn)
+        _validate(backend, conn, claude_cmd)
         key = _key_for(backend, conn, path)
         if self.get_by_key(key) is not None:
             raise ValueError(f"проект уже есть в реестре: {key}")
@@ -361,7 +402,7 @@ class ProjectRegistry:
         backend = fields.get("backend", cur.backend)
         conn = fields.get("conn", cur.conn)
         claude_cmd = fields.get("claude_cmd", cur.claude_cmd)
-        _validate(backend, conn)
+        _validate(backend, conn, claude_cmd)
         key = _key_for(backend, conn, path)
         other = self.get_by_key(key)
         if other is not None and other.id != project_id:
