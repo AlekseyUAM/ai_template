@@ -11,6 +11,15 @@ def test_each_agent_lists_mcp_and_skills():
             assert m in t, f"{name}:{m}"
         assert "1c-batch" in t and ".claude/skills" in t
 
+def test_each_agent_can_write_its_artifact():
+    # У каждого агента этап заканчивается артефактом (<ARTIFACT>.md) — без Write
+    # его невозможно создать, как бы ни требовало определение агента.
+    for name in ("analyst", "architect", "developer-tests", "developer",
+                 "reviewer", "technical-writer"):
+        t = (A / f"{name}.md").read_text(encoding="utf-8")
+        tools = next(line for line in t.splitlines() if line.startswith("tools:"))
+        assert "Write" in tools, f"{name}: нет Write в tools — артефакт не записать"
+
 def test_orchestrator_handles_db_load():
     # Загрузку в ИБ / обновление БД ведёт оркестратор (после develop, по флагу
     # update_db), а не разработчик.
