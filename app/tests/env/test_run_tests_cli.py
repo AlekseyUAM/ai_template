@@ -53,3 +53,36 @@ def test_ok_is_rc0(monkeypatch):
     mod = _load()
     _patch(monkeypatch, mod, _Result(0, "Модули скомпилированы"))
     assert mod.check_modules(Path("."), "ЮнитТесты") == mod.RC_OK
+
+
+def test_main_config_check_has_no_extension_flag(monkeypatch):
+    mod = _load()
+    calls = []
+
+    def fake_run(cmd, *args, **kwargs):
+        calls.append(cmd)
+        return _Result(0, "Модули скомпилированы")
+
+    monkeypatch.setattr(mod, "batch_cmd", lambda: ["dummy"])
+    monkeypatch.setattr(mod.subprocess, "run", fake_run)
+
+    assert mod.check_modules(Path("."), None) == mod.RC_OK
+    assert "--extension" not in calls[0]
+
+
+def test_timeout_with_config_compile_error_is_rc2(monkeypatch):
+    mod = _load()
+    _patch(monkeypatch, mod, _Result(1, "Ошибка компиляции модуля: X"))
+    assert mod.diagnose_timeout(Path(".")) == mod.RC_COMPILE_ERROR
+
+
+def test_timeout_without_config_compile_error_stays_rc124(monkeypatch):
+    mod = _load()
+    _patch(monkeypatch, mod, _Result(0, "Модули скомпилированы"))
+    assert mod.diagnose_timeout(Path(".")) == mod.RC_TIMEOUT
+
+
+def test_timeout_with_env_failure_stays_rc124(monkeypatch):
+    mod = _load()
+    _patch(monkeypatch, mod, _Result(1, "Traceback (most recent call last):"))
+    assert mod.diagnose_timeout(Path(".")) == mod.RC_TIMEOUT
