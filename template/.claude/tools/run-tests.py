@@ -17,12 +17,18 @@ run-tests.py
 Использование:
     python .claude/tools/run-tests.py [КОНФИГ] [--extension ИМЯ]
                                       [--timeout СЕК] [--no-check]
+                                      [--test СЦЕНАРИИ]
 
 КОНФИГ         путь к JSON-файлу конфигурации тестов (по умолчанию configs/test.json),
               передаётся в конфигурацию как абсолютный путь.
 --extension   имя расширения с тестами для компиляции (по умолчанию ЮнитТесты).
 --timeout     таймаут сеанса предприятия в секундах (по умолчанию 600).
+              Для отладочного прогона (--test) задавайте короткий таймаут явно,
+              например `--timeout 60` — значение определяет вызывающий.
 --no-check    пропустить предварительную компиляцию модулей.
+--test        имена сценариев через запятую для отладочного прогона
+              (например, `--test СебестоимостьФИФО,ПроверкаСклада`);
+              остальные сценарии модуля не выполняются.
 
 Коды возврата:
     0    штатное завершение
@@ -34,6 +40,7 @@ run-tests.py
 """
 
 import argparse
+import json
 import os
 import signal
 import subprocess
@@ -274,7 +281,47 @@ def diagnose_timeout(project_root: Path) -> int:
     return RC_TIMEOUT
 
 
-def run_tests(config_arg: str, extension: str, timeout: int, no_check: bool) -> int:
+def make_effective_config(project_root: Path, config_path: Path,
+                          scenarios: str | None) -> Path | None:
+    """Создать временный конфиг с отбором сценариев для отладочного прогона.
+
+    Временный конфиг пишется в каталог logs проекта (он не попадает в git) и
+    отличается от исходного только полем "Сценарии" — имена через запятую.
+    Возвращает путь к конфигу для запуска; None — если исходный конфиг не
+    удалось прочитать.
+    """
+    if not scenarios:
+        return config_path
+
+    try:
+        data = json.loads(config_path.read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError) as err:
+        print(f"❌ Не удалось прочитать конфиг для --test: {err}", file=sys.stderr)
+        return None
+
+    if not isinstance(data, dict):
+        print("❌ Конфиг тестов должен быть JSON-объектом.", file=sys.stderr)
+        return None
+
+    data["Сценарии"] = scenarios
+
+    logs_dir = project_root / "logs"
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    effective = logs_dir / f"run-{config_path.stem}.json"
+    effective.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    print(f"🎯 Отладочный прогон сценариев: {scenarios}")
+    print(f"   Временный конфиг: {effective}")
+    print("   Для локализации зависания задайте короткий --timeout (например, 60–120 c).")
+    print()
+    return effective
+
+
+def run_tests(config_arg: str, extension: str, timeout: int, no_check: bool,
+              scenarios: str | None = None) -> int:
     """Скомпилируй модули и запусти предприятие для прогона тестов."""
     project_root = get_project_root()
 
@@ -293,8 +340,12 @@ def run_tests(config_arg: str, extension: str, timeout: int, no_check: bool) -> 
         print(f"⚠️  Файл конфигурации тестов пуст: {config_path}")
         print("   Прогон может ничего не выполнить — проверьте содержимое.")
 
+    effective_config = make_effective_config(project_root, config_path, scenarios)
+    if effective_config is None:
+        return RC_LAUNCH_ERROR
+
     print("🧪 Запуск юнит-тестов 1С")
-    print(f"   Конфиг: {config_path}")
+    print(f"   Конфиг: {effective_config}")
     print()
 
     # Предварительная компиляция — чтобы ошибка не всплыла модальным окном в предприятии.
@@ -306,7 +357,7 @@ def run_tests(config_arg: str, extension: str, timeout: int, no_check: bool) -> 
         print("ℹ️  Предварительная компиляция пропущена (--no-check).")
         print()
 
-    c_value = f"{LAUNCH_PARAM}={config_path}"
+    c_value = f"{LAUNCH_PARAM}={effective_config}"
     rc = run_enterprise(project_root, c_value, timeout)
 
     if rc == RC_TIMEOUT:
@@ -330,9 +381,13 @@ def main() -> int:
                         help=f"таймаут сеанса предприятия в секундах (по умолчанию {DEFAULT_TIMEOUT})")
     parser.add_argument("--no-check", action="store_true",
                         help="пропустить предварительную компиляцию модулей")
+    parser.add_argument("--test", metavar="СЦЕНАРИИ",
+                        help="имена сценариев через запятую для отладочного прогона; "
+                             "остальные сценарии модуля не выполняются")
     args = parser.parse_args()
 
-    return run_tests(args.config, args.extension, args.timeout, args.no_check)
+    return run_tests(args.config, args.extension, args.timeout, args.no_check,
+                     args.test)
 
 
 if __name__ == "__main__":

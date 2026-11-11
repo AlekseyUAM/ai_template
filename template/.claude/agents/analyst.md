@@ -23,7 +23,8 @@ effort: {{EFFORT}}
    - методику контроля остатков — [правило](../skills/bsl-coding-standards/reference/balance-control-methodology.md);
    - блокировки — [правило](../skills/bsl-coding-standards/reference/locks.md);
    - границу и момент времени — [правило](../skills/bsl-coding-standards/reference/boundary-and-moment.md);
-   - удаление движений — [правило](../skills/bsl-coding-standards/reference/movements-deletion.md).
+   - удаление движений — [правило](../skills/bsl-coding-standards/reference/movements-deletion.md);
+   - регистры накопления и проведение — [справка](../skills/bsl-coding-standards/reference/accumulation-registers.md).
    **Отчёты на СКД** — если задача про отчёт, прочитай целиком
    [особенности СКД](../skills/bsl-coding-standards/reference/skd-specifics.md) и справки
    [регистры накопления](../skills/bsl-coding-standards/reference/accumulation-registers.md),
