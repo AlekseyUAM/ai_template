@@ -20,6 +20,18 @@ PostgreSQL и пишет `.ai1c.env` с `AGENTMON_DSN`. По умолчанию 
 При недоступности PostgreSQL используется локальный SQLite. `run.py` поднимает Web UI на
 `http://127.0.0.1:8765`.
 
+Чтобы терминал не блокировался, запустите Web UI в фоне (Linux / macOS):
+```bash
+nohup python run.py > run.log 2>&1 < /dev/null &
+```
+`nohup` и перенаправленный stdin отвязывают процесс от терминала — окно можно
+закрывать, лог пишется в `run.log`. Посмотреть лог без блокировки:
+`tail -n 50 run.log`; следить в реальном времени — `tail -f run.log` (выход —
+`Ctrl+C`). Остановить: `pkill -f "python -m agentmon"`.
+
+Если в `run.log` появилось `address already in use`, уже работает другой
+экземпляр: найдите его (`ss -ltnp | grep 8765`) и остановите.
+
 Подробности и переменные окружения — в [docs/running-web-ui.md](docs/running-web-ui.md).
 Фазы развития — в [docs/PHASES.md](docs/PHASES.md).
 
