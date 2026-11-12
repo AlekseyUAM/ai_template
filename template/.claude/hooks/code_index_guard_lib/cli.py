@@ -2,7 +2,7 @@
 import json
 import sys
 
-from . import bash, decisions, tools
+from . import bash, decisions, powershell, shell, tools
 from .config import indexed_paths, load_guard_config
 from .context import GuardContext
 
@@ -57,8 +57,17 @@ def main(argv=None):
             d = decisions.decide_grep(ti, cwd, ctx)
         elif tool == "Glob":
             d = decisions.decide_glob(ti, cwd, ctx)
+        elif tool == "PowerShell":
+            d = powershell.decide_powershell(ti, cwd, ctx)
         elif tool == "Bash":
             d = bash.decide_bash(ti, cwd, ctx)
+            if d is None:
+                # Команда без решения в Bash-грамматике: на Windows харнесс
+                # передаёт в Bash то, что на деле PowerShell — разбираем повторно
+                # как PowerShell, выкинув тела heredoc'ов (это ДАННЫЕ).
+                cmd = ti.get("command") or ""
+                d = powershell.decide_powershell(
+                    {"command": shell.strip_heredocs(cmd)}, cwd, ctx)
         if d is not None:
             emit(d)
     except Exception:

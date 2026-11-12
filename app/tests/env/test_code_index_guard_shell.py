@@ -38,8 +38,11 @@ def test_dir_change():
     assert shell.dir_change("cd ..", "C:/r/a", None) == "C:/r"
     assert shell.dir_change("cd ../other", "C:/r/a", None) == "C:/r/other"
     assert shell.dir_change("cd ~/p", "C:/r", "C:/Users/u") == "C:/Users/u/p"
-    assert shell.dir_change("cd -", "C:/r", None) == ""
-    assert shell.dir_change("popd", "C:/r", None) == ""
+    # Каталог стал неизвестен — отдельный маркер, НЕ пустая строка: пустая база
+    # матчится с любым индексированным префиксом и даёт ложный отказ.
+    assert shell.dir_change("cd -", "C:/r", None) is shell._UNKNOWN_DIR
+    assert shell.dir_change("popd", "C:/r", None) is shell._UNKNOWN_DIR
+    assert shell.dir_change("cd x", None, None) is shell._UNKNOWN_DIR
     assert shell.dir_change("sl", "C:/r", None) == "C:/r"
     assert shell.dir_change("ls", "C:/r", None) is None
 
