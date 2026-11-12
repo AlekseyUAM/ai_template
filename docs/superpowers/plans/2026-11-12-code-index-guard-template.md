@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Только stdlib Python 3.10+; никаких pip-пакетов, бинарей и сетевых вызовов в хуке.
-- Источник порта: `deps/code-index-mcp/crates/code-index-guard/src/main.rs` (v1.15.4, commit `4f55d0d44b4b2789a426a2d2096d6051c0de9c4b`). В docstring точки входа — MIT-атрибуция.
+- Источник порта: `deps/code-index-mcp/crates/code-index-guard/src/main.rs` (v1.15.4, commit `fd3199f204183179aad2d39873a0341d5849ddae`). В docstring точки входа — MIT-атрибуция.
 - Контракт: stdin JSON `{tool_name, tool_input, cwd}`; stdout — решение `deny`/`allow` либо ничего; **exit всегда 0**; любое исключение → пустой stdout.
 - Префикс имён MCP по умолчанию `mcp__code_index__`; конфиг-ключ `mcp_prefix`, CLI `--mcp-prefix` переопределяет.
 - Все тексты отказов — на русском, с точными именами инструментов code-index.
@@ -559,7 +559,7 @@ if str(HOOKS) not in sys.path:
     sys.path.insert(0, str(HOOKS))
 
 from code_index_guard_lib import index_db  # noqa: E402
-from guard_fixtures import build_repo  # noqa: E402
+from env.guard_fixtures import build_repo  # noqa: E402
 
 
 def test_text_contents_v5_is_serveable(tmp_path):
@@ -580,10 +580,18 @@ def test_oversize_is_not_serveable(tmp_path):
                                  "src/main.rs", case_insensitive=False) == (False, 1700000000)
 
 
+def test_bare_row_is_not_serveable(tmp_path):
+    # Строка в files без text_contents и file_contents — «голая»: MCP не отдаст,
+    # но mtime у неё есть (upstream возвращает Some(mtime)).
+    root = build_repo(tmp_path)
+    assert index_db.serveability(str(root / ".code-index" / "index.db"),
+                                 "Cargo.lock", case_insensitive=False) == (False, 1700000000)
+
+
 def test_unknown_file_is_not_serveable(tmp_path):
     root = build_repo(tmp_path)
     assert index_db.serveability(str(root / ".code-index" / "index.db"),
-                                 "Cargo.lock", case_insensitive=False) == (False, None)
+                                 "missing.txt", case_insensitive=False) == (False, None)
 
 
 def test_read_is_blockable_requires_db(tmp_path):
@@ -761,7 +769,7 @@ if str(HOOKS) not in sys.path:
     sys.path.insert(0, str(HOOKS))
 
 from code_index_guard_lib import decisions, tools  # noqa: E402
-from guard_fixtures import build_repo, make_ctx  # noqa: E402
+from env.guard_fixtures import build_repo, make_ctx  # noqa: E402
 
 BIN = ("grep_code", "grep_text", "read_file", "list_files",
        "get_function", "get_file_summary", "stat_file", "get_stats")
@@ -1078,7 +1086,7 @@ if str(HOOKS) not in sys.path:
     sys.path.insert(0, str(HOOKS))
 
 from code_index_guard_lib import bash, tools  # noqa: E402
-from guard_fixtures import build_repo, make_ctx  # noqa: E402
+from env.guard_fixtures import build_repo, make_ctx  # noqa: E402
 
 
 def _root(tmp_path, **kw):
@@ -1245,7 +1253,7 @@ if str(HOOKS) not in sys.path:
     sys.path.insert(0, str(HOOKS))
 
 from code_index_guard_lib import powershell, tools  # noqa: E402
-from guard_fixtures import build_repo, make_ctx  # noqa: E402
+from env.guard_fixtures import build_repo, make_ctx  # noqa: E402
 
 
 def _root(tmp_path, **kw):
@@ -1387,7 +1395,7 @@ if str(HOOKS) not in sys.path:
     sys.path.insert(0, str(HOOKS))
 
 from code_index_guard_lib import cli  # noqa: E402
-from guard_fixtures import build_repo, make_ctx  # noqa: E402
+from env.guard_fixtures import build_repo, make_ctx  # noqa: E402
 
 
 def test_read_deny_contract(tmp_path):
@@ -1517,7 +1525,7 @@ if str(HOOKS) not in sys.path:
     sys.path.insert(0, str(HOOKS))
 
 from code_index_guard_lib import cli  # noqa: E402
-from guard_fixtures import build_repo, make_ctx  # noqa: E402
+from env.guard_fixtures import build_repo, make_ctx  # noqa: E402
 
 
 def _subst(obj, root):
