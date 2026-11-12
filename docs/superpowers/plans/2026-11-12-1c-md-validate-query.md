@@ -488,10 +488,17 @@ def test_deploy_1c_md_makes_validate_query_first_layer(tmp_path):
 
 
 def test_deploy_1c_md_queries_makes_validate_query_first_layer(tmp_path):
+    # Реальная карточка этого вида тоже называет сервер `1c-md` (дефолт вида):
+    # без connection имя упало бы в id `1c-md-queries` и override переименовал бы
+    # инструмент в `mcp__1c-md-queries__…`.
+    conn = '"1c-md": {"type": "http", "url": "http://localhost/base/hs/mcp"}'
     content.deploy_content(
-        LocalProvisioner(), cfg(tmp_path, [sel("1c-md-queries")]),
+        LocalProvisioner(),
+        cfg(tmp_path, [sel("1c-md-queries", connection=conn)]),
         update=False)
-    assert "mcp__1c-md__validate_query" in skill_text(tmp_path, "query-analyze")
+    text = skill_text(tmp_path, "query-analyze")
+    assert "mcp__1c-md__validate_query" in text
+    assert "analyze_query.py" in text
 
 
 def test_deploy_without_1c_md_keeps_query_analyze_as_is(tmp_path):
