@@ -3,12 +3,22 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 HOOKS = Path(__file__).resolve().parents[3] / "template" / ".claude" / "hooks"
 if str(HOOKS) not in sys.path:
     sys.path.insert(0, str(HOOKS))
 
-from code_index_guard_lib import cli  # noqa: E402
+from code_index_guard_lib import cli, tools  # noqa: E402
 from env.guard_fixtures import build_repo, make_ctx  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _isolate_prefix():
+    """cli.run выставляет процесс-глобальный tools._prefix — не протекаем."""
+    saved = tools._prefix
+    yield
+    tools._prefix = saved
 
 
 def test_read_deny_contract(tmp_path):

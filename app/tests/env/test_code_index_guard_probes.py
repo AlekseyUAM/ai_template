@@ -1,4 +1,3 @@
-import json
 import sys
 from pathlib import Path
 
@@ -8,8 +7,16 @@ HOOKS = Path(__file__).resolve().parents[3] / "template" / ".claude" / "hooks"
 if str(HOOKS) not in sys.path:
     sys.path.insert(0, str(HOOKS))
 
-from code_index_guard_lib import cli  # noqa: E402
+from code_index_guard_lib import cli, tools  # noqa: E402
 from env.guard_fixtures import build_repo, make_ctx  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _isolate_prefix():
+    """cli.run выставляет процесс-глобальный tools._prefix — не протекаем."""
+    saved = tools._prefix
+    yield
+    tools._prefix = saved
 
 
 def _subst(obj, root):
@@ -58,6 +65,12 @@ CASES = [
     {"n": "Get-Content индексированного", "want": "ОТКАЗ", "tool": "PowerShell",
      "cmd": "Get-Content src/main.rs"},
     {"n": "Select-String", "want": "ОТКАЗ", "tool": "PowerShell",
+     "cmd": "Select-String -Path src/main.rs -Pattern main"},
+    # Bash-парсер не знает Get-Content: None → cli.run повторяет разбор как
+    # PowerShell (фолбэк для Windows-харнесса). Пропажа фолбэка = «пропуск».
+    {"n": "Get-Content под tool=Bash (фолбэк)", "want": "ОТКАЗ", "tool": "Bash",
+     "cmd": "Get-Content src/main.rs"},
+    {"n": "Select-String под tool=Bash (фолбэк)", "want": "ОТКАЗ", "tool": "Bash",
      "cmd": "Select-String -Path src/main.rs -Pattern main"},
     {"n": "grep ПОСЛЕ трубы", "want": "пропуск", "tool": "Bash",
      "cmd": "pytest -q 2>&1 | grep -E passed"},
