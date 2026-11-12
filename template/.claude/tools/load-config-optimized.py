@@ -17,6 +17,7 @@ load-config-optimized.py
 `optimized-config-loading`.
 """
 
+import argparse
 import sys
 import os
 import subprocess
@@ -321,6 +322,16 @@ def collect_changes(
     changed, snapshot, deleted, skipped = filter_loaded(dirty, state)
     return expand_to_load_paths(changed), snapshot, deleted, skipped
 
+def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
+    """Аргументы командной строки."""
+    parser = argparse.ArgumentParser(
+        description="Частичная загрузка изменённых файлов конфигурации 1С")
+    parser.add_argument(
+        "--state", metavar="PATH",
+        help="манифест «что уже загружено» (обычно "
+             "logs/task#<id>/load-state.json); без него грузится весь diff vs HEAD")
+    return parser.parse_args(argv)
+
 def run_optimized_load(files: List[str]) -> int:
     """Выполни оптимизированную загрузку конфигурации"""
     if not files:
@@ -379,20 +390,40 @@ def run_optimized_load(files: List[str]) -> int:
         except:
             pass
 
-def main():
+def main(argv: Optional[List[str]] = None) -> int:
     """Главная функция"""
     _force_utf8_output()
+    args = parse_args(argv)
+    state_path = os.path.abspath(args.state) if args.state else None
+    if state_path and os.path.isdir(state_path):
+        print(f"❌ --state указывает на каталог: {state_path}", file=sys.stderr)
+        return 2
+
     print("📦 Загрузка конфигурации 1С (частичная, только изменённые файлы)")
     print()
 
     print("🔍 Определение изменённых файлов...")
-    files = get_changed_files()
+    state = load_state(state_path) if state_path else None
+    files, snapshot, deleted, skipped = collect_changes(state)
+
+    for rel in deleted:
+        print(f"⚠️  Удалён ранее загруженный файл (забыт в состоянии): {rel}")
+    if skipped:
+        print(f"⏭️  Пропущено как уже загруженное: {len(skipped)}")
+        for rel in skipped:
+            print(f"  - {rel}")
+        print()
 
     if not files:
         print("✅ Нет изменённых файлов конфигурации — загрузка не требуется")
+        if state_path is not None:
+            save_state(state_path, snapshot or {})
         return 0
 
-    return run_optimized_load(files)
+    code = run_optimized_load(files)
+    if code == 0 and state_path is not None:
+        save_state(state_path, snapshot or {})
+    return code
 
 if __name__ == "__main__":
     try:

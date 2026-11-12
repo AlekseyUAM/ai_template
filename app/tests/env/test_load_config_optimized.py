@@ -252,3 +252,87 @@ def test_collect_changes_forgets_deleted_state_file(tmp_path, monkeypatch):
     assert deleted == [missing]
     assert missing not in snapshot
     assert skipped == []
+
+
+def test_main_saves_state_after_successful_load(tmp_path, monkeypatch):
+    mod = _load()
+    files = ["Configuration.xml", "Catalogs/Товары.xml"]
+    _write_cf(tmp_path, files)
+    calls = []
+
+    monkeypatch.setattr(mod, "get_project_root", lambda: tmp_path)
+    monkeypatch.setattr(mod, "subprocess",
+                        _fake_git([f"src/cf/{rel}" for rel in files]))
+    monkeypatch.setattr(mod, "run_optimized_load", lambda fs: calls.append(fs) or 0)
+    monkeypatch.chdir(tmp_path)
+    state_path = tmp_path / "logs" / "task#1" / "load-state.json"
+
+    rc = mod.main(["--state", str(state_path)])
+
+    assert rc == 0
+    assert calls == [["Configuration.xml", "Catalogs/Товары.xml"]]
+    assert mod.load_state(str(state_path)) == _hashes(mod, tmp_path, files)
+
+
+def test_main_keeps_state_on_failed_load(tmp_path, monkeypatch):
+    mod = _load()
+    files = ["Configuration.xml", "Catalogs/Товары.xml"]
+    _write_cf(tmp_path, files)
+    state_path = tmp_path / "load-state.json"
+    mod.save_state(str(state_path), {"Configuration.xml": "0" * 64})
+    before = state_path.read_text(encoding="utf-8")
+
+    monkeypatch.setattr(mod, "get_project_root", lambda: tmp_path)
+    monkeypatch.setattr(mod, "subprocess",
+                        _fake_git([f"src/cf/{rel}" for rel in files]))
+    monkeypatch.setattr(mod, "run_optimized_load", lambda fs: 1)
+    monkeypatch.chdir(tmp_path)
+
+    rc = mod.main(["--state", str(state_path)])
+
+    assert rc == 1
+    assert state_path.read_text(encoding="utf-8") == before
+
+
+def test_main_updates_state_when_nothing_to_load(tmp_path, monkeypatch):
+    mod = _load()
+    state_path = tmp_path / "load-state.json"
+    mod.save_state(str(state_path), {"Catalogs/Старый/Ext/Old.bsl": "0" * 64})
+
+    def _must_not_load(files):
+        raise AssertionError("загрузка не нужна")
+
+    monkeypatch.setattr(mod, "get_project_root", lambda: tmp_path)
+    monkeypatch.setattr(mod, "subprocess", _fake_git([]))
+    monkeypatch.setattr(mod, "run_optimized_load", _must_not_load)
+    monkeypatch.chdir(tmp_path)
+
+    rc = mod.main(["--state", str(state_path)])
+
+    assert rc == 0
+    assert mod.load_state(str(state_path)) == {}
+
+
+def test_main_without_state_uses_full_diff(tmp_path, monkeypatch):
+    mod = _load()
+    files = ["Configuration.xml", "Catalogs/Товары.xml"]
+    _write_cf(tmp_path, files)
+    calls = []
+
+    monkeypatch.setattr(mod, "get_project_root", lambda: tmp_path)
+    monkeypatch.setattr(mod, "subprocess",
+                        _fake_git([f"src/cf/{rel}" for rel in files]))
+    monkeypatch.setattr(mod, "run_optimized_load", lambda fs: calls.append(fs) or 0)
+    monkeypatch.chdir(tmp_path)
+
+    rc = mod.main([])
+
+    assert rc == 0
+    assert calls == [["Configuration.xml", "Catalogs/Товары.xml"]]
+
+
+def test_main_rejects_directory_as_state(tmp_path, monkeypatch):
+    mod = _load()
+    monkeypatch.chdir(tmp_path)
+
+    assert mod.main(["--state", str(tmp_path)]) == 2
