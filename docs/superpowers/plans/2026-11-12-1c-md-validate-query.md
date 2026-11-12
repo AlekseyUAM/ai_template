@@ -51,6 +51,7 @@
 - `app/tests/env/test_content_conditions.py` — новый файл тестов.
 - `template/.claude/skills/mcp-usage/SKILL.md` — условное описание `1c-md`.
 - `template/.claude/skills/query-analyze/SKILL.md` — условная преамбула про `validate_query`.
+- `template/.claude/agents/*.md` — плейсхолдер `{{MCP_1C_MD_TOOLS}}` в `tools:` (Task 4).
 
 ---
 
@@ -651,8 +652,189 @@ EOF
 
 ---
 
+### Task 4: Доступ субагентов к `validate_query`
+
+**Files:**
+- Modify: `app/src/agentmon/env/content.py` (`deploy_content`: `agent_subs`; комментарий об ordering у `_rewrite_python_invocations`)
+- Modify: `template/.claude/agents/analyst.md`, `architect.md`, `developer.md`, `developer-tests.md`, `reviewer.md`, `technical-writer.md` (строка `tools:`)
+- Modify: `template/.claude/skills/mcp-usage/SKILL.md`, `template/.claude/skills/query-analyze/SKILL.md` (уточнение про навык `meta-info`)
+- Test: `app/tests/env/test_content_conditions.py` (append + усиление существующих проверок)
+
+**Interfaces:**
+- Consumes: `has_1c_md` и `mcp_subs` из `deploy_content`; `_render_agents(..., overrides=...)`.
+- Produces: плейсхолдер `{{MCP_1C_MD_TOOLS}}` в `tools:` агентов, заменяемый на `, mcp__<фактическое имя>__*` при включённом `1c-md` и на пустую строку иначе.
+
+- [ ] **Step 1: Write the failing tests**
+
+Дописать в `app/tests/env/test_content_conditions.py`:
+
+```python
+# --- деплой: доступ субагентов ---
+
+AGENTS = ("analyst", "architect", "developer", "developer-tests",
+          "reviewer", "technical-writer")
+
+
+def agent_text(tmp_path, name):
+    return (Path(tmp_path) / ".claude" / "agents" / f"{name}.md"
+            ).read_text(encoding="utf-8")
+
+
+def test_deploy_1c_md_adds_tool_to_all_agent_allow_lists(tmp_path):
+    content.deploy_content(
+        LocalProvisioner(), cfg(tmp_path, [sel("1c-md")]), update=False)
+    for name in AGENTS:
+        text = agent_text(tmp_path, name)
+        assert "mcp__1c-md__*" in text, name
+        assert "{{MCP_1C_MD_TOOLS}}" not in text, name
+
+
+def test_deploy_without_1c_md_agent_tools_unchanged(tmp_path):
+    content.deploy_content(LocalProvisioner(), cfg(tmp_path, []), update=False)
+    for name in AGENTS:
+        text = agent_text(tmp_path, name)
+        assert "mcp__1c-md__*" not in text, name
+        assert "{{MCP_1C_MD_TOOLS}}" not in text, name
+
+
+def test_renamed_1c_md_tool_added_to_agents(tmp_path):
+    conn = '"my_md": {"type": "http", "url": "http://localhost/base/hs/mcp"}'
+    content.deploy_content(
+        LocalProvisioner(), cfg(tmp_path, [sel("1c-md", connection=conn)]),
+        update=False)
+    text = agent_text(tmp_path, "reviewer")
+    assert "mcp__my_md__*" in text
+    assert "mcp__1c-md__*" not in text
+```
+
+Усилить существующий `test_deploy_1c_md_queries_also_adds_section`:
+
+```python
+def test_deploy_1c_md_queries_also_adds_section(tmp_path):
+    conn = '"1c-md": {"type": "http", "url": "http://localhost/base/hs/mcp"}'
+    content.deploy_content(
+        LocalProvisioner(),
+        cfg(tmp_path, [sel("1c-md-queries", connection=conn)]),
+        update=False)
+    text = skill_text(tmp_path, "mcp-usage")
+    assert "validate_query" in text
+    assert "метаданные, загруженные в БД" in text
+    assert "<!-- @if " not in text and "<!-- @endif -->" not in text
+```
+
+Во всех проверках утечки маркеров заменить подстроку `<!-- @if` на `<!-- @if `
+(с пробелом) и `<!-- @endif` на `<!-- @endif -->` — так тест повторяет
+собственную проверку рендерера.
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `cd /home/uam/projects/ai_template/app && python -m pytest tests/env/test_content_conditions.py -v`
+
+Expected: FAIL — `assert 'mcp__1c-md__*' in ...` для агентов (плейсхолдера ещё нет).
+
+- [ ] **Step 3: Implement the conditional agent tool**
+
+В `app/src/agentmon/env/content.py` в `deploy_content`, сразу после вычисления `has_1c_md`:
+
+```python
+    agent_subs = dict(subs)
+    agent_subs["{{MCP_1C_MD_TOOLS}}"] = (
+        f", mcp__{mcp_subs.get('1c-md', '1c-md')}__*" if has_1c_md else "")
+    _render_agents(prov, config, f"{claude}/agents", overrides=agent_subs)
+```
+
+(заменить существующий вызов `_render_agents(..., overrides=subs)`).
+
+Перед вызовом `_rewrite_python_invocations` добавить комментарий об
+ordering-зависимости:
+
+```python
+    # _rewrite_python_invocations проходит ВСЕ *.md, включая неизменённые;
+    # _render_template_texts пишет только изменённые. Не удалять этот проход.
+    _rewrite_python_invocations(prov, claude, _py_cmd(prov, project_dir))
+```
+
+- [ ] **Step 4: Add the placeholder to the six agents**
+
+В каждом из шести файлов `template/.claude/agents/*.md` дописать
+`{{MCP_1C_MD_TOOLS}}` в конец строки `tools:`:
+
+```yaml
+tools: Read, Grep, Glob, Write, Skill, mcp__1c_naparnic__*, mcp__bsl_ls__*, mcp__1c_platform__*, mcp__code_index__*{{MCP_1C_MD_TOOLS}}
+```
+
+(точный набор инструментов у каждого агента сохраняется; меняется только хвост строки).
+
+- [ ] **Step 5: Clarify `meta-info` wording**
+
+В `template/.claude/skills/mcp-usage/SKILL.md`:
+
+```markdown
+1. сверь новые имена с XML-исходниками (`meta-info`, `code_index`);
+```
+→
+```markdown
+1. сверь новые имена с XML-исходниками (навык `meta-info`, `code_index`);
+```
+
+В `template/.claude/skills/query-analyze/SKILL.md`:
+
+```markdown
+ошибки «не найдено». Такие имена сверяй с XML (`meta-info`, `code_index`), а не
+```
+→
+```markdown
+ошибки «не найдено». Такие имена сверяй с XML (навык `meta-info`, `code_index`), а не
+```
+
+- [ ] **Step 6: Run the focused tests**
+
+Run: `cd /home/uam/projects/ai_template/app && python -m pytest tests/env/test_content_conditions.py -v`
+
+Expected: PASS — все тесты файла.
+
+- [ ] **Step 7: Run regressions and the full suite**
+
+Run: `cd /home/uam/projects/ai_template/app && python -m pytest tests/env/test_content_deploy.py tests/env/test_content.py -q`
+
+Expected: PASS.
+
+Run: `cd /home/uam/projects/ai_template/app && python -m pytest -q`
+
+Expected: PASS, без новых падений.
+
+- [ ] **Step 8: Commit**
+
+```bash
+cd /home/uam/projects/ai_template
+git add app/src/agentmon/env/content.py \
+        app/tests/env/test_content_conditions.py \
+        template/.claude/agents/analyst.md \
+        template/.claude/agents/architect.md \
+        template/.claude/agents/developer.md \
+        template/.claude/agents/developer-tests.md \
+        template/.claude/agents/reviewer.md \
+        template/.claude/agents/technical-writer.md \
+        template/.claude/skills/mcp-usage/SKILL.md \
+        template/.claude/skills/query-analyze/SKILL.md
+git commit -m "$(cat <<'EOF'
+fix(env): доступ субагентов к validate_query и уточнение текстов
+
+tools агентов — allow-list, поэтому mcp__<имя 1c-md>__* добавляется в конец
+tools всех шести агентов только при включённом 1c-md (плейсхолдер
+{{MCP_1C_MD_TOOLS}}), с учётом переименования сервера. В навыках уточнено,
+что meta-info — навык, а не MCP-инструмент; добавлен комментарий об
+ordering-зависимости прохода rewrite-python.
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
+EOF
+)"
+```
+
+---
+
 ## Самопроверка плана
 
-- **Покрытие спеки:** триггер по `config.mcp` — Task 2 Step 3d; оба вида — тесты Task 2/3; маркеры и ошибки — Task 1; `mcp-usage` — Task 2; `query-analyze` — Task 3; fallback и предупреждение о БД — Task 3 Step 3; `update-env` в обе стороны — Task 3 Step 1; переименование сервера — Task 3 Step 1; отсутствие утечки маркеров — Task 3 Step 1.
+- **Покрытие спеки:** триггер по `config.mcp` — Task 2 Step 3d; оба вида — тесты Task 2/3; маркеры и ошибки — Task 1; `mcp-usage` — Task 2; `query-analyze` — Task 3; fallback и предупреждение о БД — Task 3 Step 3; `update-env` в обе стороны — Task 3 Step 1; переименование сервера — Task 3 Step 1; отсутствие утечки маркеров — Task 3 Step 1; доступ субагентов через `tools` — Task 4; уточнение `meta-info` — Task 4 Step 5.
 - **Плейсхолдеры:** нет TODO/TBD; весь код и тексты приведены целиком.
 - **Согласованность сигнатур:** `_render_conditional_blocks(text, has_1c_md, *, filename)` используется в Task 1, 2 и 3 одинаково; `_render_template_texts(..., has_1c_md, py_cmd)` — в Task 2 и вызывается из `deploy_content`.
