@@ -512,6 +512,45 @@ def test_deploy_guard_same_name_cards_only_last_served(tmp_path):
     assert list(build_mcp_json(cfg.mcp)["mcpServers"]) == ["code_index"]
 
 
+def test_deploy_guard_last_wins_different_keys(tmp_path):
+    from agentmon.env.config_schema import McpSelection
+    from agentmon.env.content import deploy_content
+    from agentmon.env.mcp_catalog import build_mcp_json
+    from agentmon.backends.local import LocalProvisioner
+    # Ключи гард-карточек РАЗНЫЕ (code_index_queries и code_index): в .mcp.json
+    # живут оба сервера, поэтому first-vs-last различимы. Хвостовая не-гард
+    # карточка не перетягивает имя. Гард обязан называть последнюю гард-карточку
+    # (code_index) и защищать только её репозиторий.
+    cfg = _config(tmp_path, [
+        McpSelection(id="code-index", enabled=True, mode="managed",
+                     connection='"code_index_queries": {"type": "http", '
+                                '"url": "http://x:1/mcp"}',
+                     catalog_dir="C:/proj/one/cf", project_name="one"),
+        McpSelection(id="code-index-local", enabled=True, mode="managed",
+                     connection='"code_index": {"type": "http", '
+                                '"url": "http://x:2/mcp"}',
+                     catalog_dir="C:/proj/two/cf", project_name="two"),
+        # `bsl-ls` нет в CATALOG — без connection build_mcp_json упадёт, поэтому
+        # хвостовой карточке задаём свой (не гард) ключ фрагментом.
+        McpSelection(id="bsl-ls", enabled=True, mode="managed",
+                     connection='"bsl_ls": {"type": "http", '
+                                '"url": "http://x:3/mcp"}')])
+    deploy_content(LocalProvisioner(), cfg, update=False)
+    text = _guard_text(tmp_path)
+    assert 'mcp_prefix = "mcp__code_index__"' in text
+    assert text.count("[[local]]") == 1
+    assert 'path = "C:/proj/two/cf"' in text
+    assert 'alias = "two"' in text
+    assert 'path = "C:/proj/one/cf"' not in text
+    keys = list(build_mcp_json(cfg.mcp)["mcpServers"])
+    assert "code_index_queries" in keys
+    assert "code_index" in keys
+    # `code_index` — последний гард-ключ (bsl_ls идёт после, но это не гард).
+    guarded = [k for k in keys if k.startswith("code_")]
+    assert guarded == ["code_index_queries", "code_index"]
+    # _expected_prefix не подходит: он требует единственный ключ `code`.
+
+
 def test_deploy_guard_rejects_tilde_catalog_dir(tmp_path):
     from agentmon.env.config_schema import McpSelection
     from agentmon.env.content import deploy_content
