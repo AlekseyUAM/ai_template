@@ -1,13 +1,12 @@
-"""CLI-контракт хука. Полный контракт (run/render, журнал) — Task 8."""
+"""CLI-контракт хука: чистые run/render и fail-safe main."""
 import json
 import sys
 
-from . import bash, decisions, powershell, shell, tools
-from .config import indexed_paths, load_guard_config
 from .context import GuardContext
 
 
 def build_context() -> GuardContext:
+    from .config import indexed_paths, load_guard_config
     from .paths import default_case_insensitive
     ci = default_case_insensitive()
     cfg = load_guard_config()
@@ -28,47 +27,55 @@ def parse_args(argv):
     return list_roots, prefix
 
 
-def emit(decision) -> None:
+def run(payload, ctx, prefix=None):
+    from . import bash, decisions, powershell, shell, tools
+    tools.set_prefix(prefix or ctx.config.mcp_prefix)
+    tool = payload.get("tool_name")
+    ti = payload.get("tool_input") or {}
+    cwd = payload.get("cwd")
+    if tool == "Read":
+        return decisions.decide_read(ti, ctx)
+    if tool == "Grep":
+        return decisions.decide_grep(ti, cwd, ctx)
+    if tool == "Glob":
+        return decisions.decide_glob(ti, cwd, ctx)
+    if tool == "PowerShell":
+        return powershell.decide_powershell(ti, cwd, ctx)
+    if tool == "Bash":
+        d = bash.decide_bash(ti, cwd, ctx)
+        if d is None:
+            # Команда без решения в Bash-грамматике: на Windows харнесс
+            # передаёт в Bash то, что на деле PowerShell — разбираем повторно
+            # как PowerShell, выкинув тела heredoc'ов (это ДАННЫЕ).
+            cmd = ti.get("command") or ""
+            d = powershell.decide_powershell(
+                {"command": shell.strip_heredocs(cmd)}, cwd, ctx)
+        return d
+    return None
+
+
+def render(decision):
+    if decision is None:
+        return None
     hs = {"hookEventName": "PreToolUse",
           "permissionDecision": "allow" if decision.allow else "deny"}
     if decision.reason:
         hs["permissionDecisionReason"] = decision.reason
-    print(json.dumps({"hookSpecificOutput": hs}, ensure_ascii=False))
+    return json.dumps({"hookSpecificOutput": hs}, ensure_ascii=False)
 
 
 def main(argv=None):
-    args = list(sys.argv[1:] if argv is None else argv)
-    list_roots, prefix = parse_args(args)
     try:
+        args = list(sys.argv[1:] if argv is None else argv)
+        list_roots, prefix = parse_args(args)
         ctx = build_context()
-        tools.set_prefix(prefix or ctx.config.mcp_prefix)
         if list_roots:
             return  # режим v1 не реализован: пустой stdout
         payload = json.load(sys.stdin)
         if not isinstance(payload, dict):
             return
-        tool = payload.get("tool_name")
-        ti = payload.get("tool_input") or {}
-        cwd = payload.get("cwd")
-        d = None
-        if tool == "Read":
-            d = decisions.decide_read(ti, ctx)
-        elif tool == "Grep":
-            d = decisions.decide_grep(ti, cwd, ctx)
-        elif tool == "Glob":
-            d = decisions.decide_glob(ti, cwd, ctx)
-        elif tool == "PowerShell":
-            d = powershell.decide_powershell(ti, cwd, ctx)
-        elif tool == "Bash":
-            d = bash.decide_bash(ti, cwd, ctx)
-            if d is None:
-                # Команда без решения в Bash-грамматике: на Windows харнесс
-                # передаёт в Bash то, что на деле PowerShell — разбираем повторно
-                # как PowerShell, выкинув тела heredoc'ов (это ДАННЫЕ).
-                cmd = ti.get("command") or ""
-                d = powershell.decide_powershell(
-                    {"command": shell.strip_heredocs(cmd)}, cwd, ctx)
-        if d is not None:
-            emit(d)
+        out = render(run(payload, ctx, prefix))
+        if out:
+            print(out)
     except Exception:
         return
