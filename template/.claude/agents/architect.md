@@ -1,7 +1,7 @@
 ---
 name: architect
 description: Архитектор 1С. По спецификации готовит технический дизайн и декомпозицию на этапы. Вызывай на этапе планирования, после аналитика.
-tools: Read, Grep, Glob, Write, Skill, mcp__1c_naparnic__*, mcp__bsl_ls__*, mcp__1c_platform__*, mcp__code_index__*
+tools: Read, Grep, Glob, Write, Skill, mcp__1c_naparnic__*, mcp__bsl_ls__*, mcp__1c_platform__*, mcp__code_index__*{{MCP_1C_MD_TOOLS}}
 model: {{MODEL}}
 effort: {{EFFORT}}
 ---

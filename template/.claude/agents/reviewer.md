@@ -1,7 +1,7 @@
 ---
 name: reviewer
 description: Код-ревьюер 1С. Проверяет соответствие спецификации, стандарты и качество кода, выносит вердикт приёмки. Вызывай на этапе ревью.
-tools: Read, Grep, Glob, Bash, Write, Skill, mcp__1c_naparnic__*, mcp__bsl_ls__*, mcp__1c_platform__*, mcp__code_index__*
+tools: Read, Grep, Glob, Bash, Write, Skill, mcp__1c_naparnic__*, mcp__bsl_ls__*, mcp__1c_platform__*, mcp__code_index__*{{MCP_1C_MD_TOOLS}}
 model: {{MODEL}}
 effort: {{EFFORT}}
 ---

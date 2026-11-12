@@ -1,7 +1,7 @@
 ---
 name: developer
 description: Разработчик 1С. Пишет BSL-код по спецификации, техдизайну и заранее написанным тестам. Вызывай на этапе разработки.
-tools: Read, Grep, Glob, Edit, Write, Bash, Skill, mcp__1c_naparnic__*, mcp__bsl_ls__*, mcp__1c_platform__*, mcp__code_index__*
+tools: Read, Grep, Glob, Edit, Write, Bash, Skill, mcp__1c_naparnic__*, mcp__bsl_ls__*, mcp__1c_platform__*, mcp__code_index__*{{MCP_1C_MD_TOOLS}}
 model: {{MODEL}}
 effort: {{EFFORT}}
 ---

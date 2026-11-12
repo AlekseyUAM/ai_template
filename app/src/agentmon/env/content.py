@@ -229,7 +229,13 @@ def deploy_content(prov, config, *, update: bool) -> None:
         and sel.id in ("1c-md", "1c-md-queries")
         for sel in config.mcp
     )
-    _render_agents(prov, config, f"{claude}/agents", overrides=subs)
+    # tools агентов — allow-list: без явной записи mcp__<имя 1c-md>__* субагент
+    # не сможет вызвать validate_query, даже если навык его рекомендует. Хвост
+    # строки tools дописываем только при включённом 1c-md; имя — фактическое.
+    agent_subs = dict(subs)
+    agent_subs["{{MCP_1C_MD_TOOLS}}"] = (
+        f", mcp__{mcp_subs.get('1c-md', '1c-md')}__*" if has_1c_md else "")
+    _render_agents(prov, config, f"{claude}/agents", overrides=agent_subs)
     # settings.json — текст JSON, а путь к интерпретатору впечатывается прямо в
     # него. Слэши — прямые: Git Bash на Windows съедает литеральный backslash в
     # команде (claude-code#26759), а JSON-строка требует экранировать кавычки.
@@ -240,6 +246,8 @@ def deploy_content(prov, config, *, update: bool) -> None:
     for placeholder, actual in subs.items():
         settings = settings.replace(placeholder, actual)
     write_preserving(prov, f"{claude}/settings.json", settings, update=update)
+    # _rewrite_python_invocations проходит ВСЕ *.md, включая неизменённые;
+    # _render_template_texts пишет только изменённые. Не удалять этот проход.
     _rewrite_python_invocations(prov, claude, _py_cmd(prov, project_dir))
     _deploy_vscode(prov, project_dir, update=update)
     if not update:

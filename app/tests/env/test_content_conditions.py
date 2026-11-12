@@ -76,14 +76,19 @@ def test_deploy_1c_md_adds_validate_query_to_mcp_usage(tmp_path):
     text = skill_text(tmp_path, "mcp-usage")
     assert "validate_query" in text
     assert "метаданные, загруженные в БД" in text
-    assert "<!-- @if" not in text and "<!-- @endif" not in text
+    assert "<!-- @if " not in text and "<!-- @endif -->" not in text
 
 
 def test_deploy_1c_md_queries_also_adds_section(tmp_path):
+    conn = '"1c-md": {"type": "http", "url": "http://localhost/base/hs/mcp"}'
     content.deploy_content(
-        LocalProvisioner(), cfg(tmp_path, [sel("1c-md-queries")]),
+        LocalProvisioner(),
+        cfg(tmp_path, [sel("1c-md-queries", connection=conn)]),
         update=False)
-    assert "validate_query" in skill_text(tmp_path, "mcp-usage")
+    text = skill_text(tmp_path, "mcp-usage")
+    assert "validate_query" in text
+    assert "метаданные, загруженные в БД" in text
+    assert "<!-- @if " not in text and "<!-- @endif -->" not in text
 
 
 def test_deploy_without_1c_md_has_no_validate_query_in_mcp_usage(tmp_path):
@@ -91,7 +96,7 @@ def test_deploy_without_1c_md_has_no_validate_query_in_mcp_usage(tmp_path):
         LocalProvisioner(), cfg(tmp_path, [sel("bsl-ls")]), update=False)
     text = skill_text(tmp_path, "mcp-usage")
     assert "validate_query" not in text
-    assert "<!-- @if" not in text
+    assert "<!-- @if " not in text
 
 
 def test_deploy_disabled_1c_md_has_no_validate_query(tmp_path):
@@ -109,7 +114,7 @@ def test_deploy_1c_md_makes_validate_query_first_layer(tmp_path):
     text = skill_text(tmp_path, "query-analyze")
     assert "mcp__1c-md__validate_query" in text
     assert "analyze_query.py" in text          # локальные проверки остались
-    assert "<!-- @if" not in text
+    assert "<!-- @if " not in text
 
 
 def test_deploy_1c_md_queries_makes_validate_query_first_layer(tmp_path):
@@ -172,8 +177,8 @@ def test_no_conditional_markers_leak_into_project(tmp_path):
         update=False)
     for path in (Path(tmp_path) / ".claude").rglob("*.md"):
         text = path.read_text(encoding="utf-8")
-        assert "<!-- @if" not in text, path
-        assert "<!-- @endif" not in text, path
+        assert "<!-- @if " not in text, path
+        assert "<!-- @endif -->" not in text, path
 
 
 def test_template_markers_are_balanced():
@@ -181,3 +186,41 @@ def test_template_markers_are_balanced():
         text = path.read_text(encoding="utf-8")
         content._render_conditional_blocks(text, True, filename=str(path))
         content._render_conditional_blocks(text, False, filename=str(path))
+
+
+# --- деплой: доступ субагентов ---
+
+AGENTS = ("analyst", "architect", "developer", "developer-tests",
+          "reviewer", "technical-writer")
+
+
+def agent_text(tmp_path, name):
+    return (Path(tmp_path) / ".claude" / "agents" / f"{name}.md"
+            ).read_text(encoding="utf-8")
+
+
+def test_deploy_1c_md_adds_tool_to_all_agent_allow_lists(tmp_path):
+    content.deploy_content(
+        LocalProvisioner(), cfg(tmp_path, [sel("1c-md")]), update=False)
+    for name in AGENTS:
+        text = agent_text(tmp_path, name)
+        assert "mcp__1c-md__*" in text, name
+        assert "{{MCP_1C_MD_TOOLS}}" not in text, name
+
+
+def test_deploy_without_1c_md_agent_tools_unchanged(tmp_path):
+    content.deploy_content(LocalProvisioner(), cfg(tmp_path, []), update=False)
+    for name in AGENTS:
+        text = agent_text(tmp_path, name)
+        assert "mcp__1c-md__*" not in text, name
+        assert "{{MCP_1C_MD_TOOLS}}" not in text, name
+
+
+def test_renamed_1c_md_tool_added_to_agents(tmp_path):
+    conn = '"my_md": {"type": "http", "url": "http://localhost/base/hs/mcp"}'
+    content.deploy_content(
+        LocalProvisioner(), cfg(tmp_path, [sel("1c-md", connection=conn)]),
+        update=False)
+    text = agent_text(tmp_path, "reviewer")
+    assert "mcp__my_md__*" in text
+    assert "mcp__1c-md__*" not in text

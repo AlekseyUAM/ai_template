@@ -1,7 +1,7 @@
 ---
 name: technical-writer
 description: Технический писатель 1С. Анализирует артефакты задачи и формирует документацию — для пользователя (как пользоваться) и для разработчика (как устроено решение). Вызывай на этапе документации, после разработки и ревью.
-tools: Read, Grep, Glob, Write, Skill, mcp__code_index__*, mcp__1c_platform__*
+tools: Read, Grep, Glob, Write, Skill, mcp__code_index__*, mcp__1c_platform__*{{MCP_1C_MD_TOOLS}}
 model: {{MODEL}}
 effort: {{EFFORT}}
 ---
