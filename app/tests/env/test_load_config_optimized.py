@@ -7,6 +7,7 @@
 форм/макетов (включая их Ext-содержимое).
 """
 import importlib.util
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -124,3 +125,36 @@ def test_expand_to_load_paths_adds_object_root_and_ext(tmp_path, monkeypatch):
     got = mod.expand_to_load_paths(["Catalogs/Товары/Ext/ObjectModule.bsl"])
 
     assert set(got) == set(files)
+
+
+def test_file_sha256_missing_returns_none(tmp_path):
+    mod = _load()
+    assert mod.file_sha256(tmp_path / "нет-такого") is None
+
+
+def test_save_and_load_state_roundtrip(tmp_path):
+    mod = _load()
+    path = tmp_path / "logs" / "task#1" / "load-state.json"
+    files = {"Catalogs/Товары.xml": "abc", "Configuration.xml": "def"}
+
+    mod.save_state(str(path), files)
+
+    assert mod.load_state(str(path)) == files
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert data["version"] == 1
+    assert data["hash"] == "sha256"
+    assert data["files"] == files
+
+
+def test_load_state_tolerates_missing_and_broken(tmp_path):
+    mod = _load()
+    assert mod.load_state(None) == {}
+    assert mod.load_state(str(tmp_path / "absent.json")) == {}
+
+    broken = tmp_path / "broken.json"
+    broken.write_text("{oops", encoding="utf-8")
+    assert mod.load_state(str(broken)) == {}
+
+    broken.write_text(json.dumps({"version": 99, "files": {"a": "b"}}),
+                      encoding="utf-8")
+    assert mod.load_state(str(broken)) == {}

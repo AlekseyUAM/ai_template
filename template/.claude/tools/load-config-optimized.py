@@ -21,8 +21,14 @@ import sys
 import os
 import subprocess
 import tempfile
+import hashlib
+import json
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import List
+from typing import Dict, List, Optional, Tuple
+
+STATE_VERSION = 1
+STATE_HASH = "sha256"
 
 def _force_utf8_output() -> None:
     """Перевести stdout/stderr в UTF-8.
@@ -193,6 +199,73 @@ def expand_to_load_paths(raw: List[str]) -> List[str]:
 def get_changed_files() -> List[str]:
     """Изменённые файлы конфигурации для -listFile (без учёта состояния)."""
     return expand_to_load_paths(get_dirty_paths())
+
+def file_sha256(path: Path) -> Optional[str]:
+    """sha256 содержимого файла; None, если файл отсутствует или не читается."""
+    try:
+        digest = hashlib.sha256()
+        with open(path, "rb") as fh:
+            for chunk in iter(lambda: fh.read(1 << 20), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+    except OSError:
+        return None
+
+
+def load_state(path: Optional[str]) -> Dict[str, str]:
+    """Прочитать манифест «что уже загружено»; при любой проблеме — пусто.
+
+    Битый JSON, неизвестная версия/алгоритм или отсутствие файла не срывают
+    загрузку: вызывающий грузит полный diff vs HEAD. Проблема только логируется.
+    """
+    if not path:
+        return {}
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+    except FileNotFoundError:
+        return {}
+    except (OSError, ValueError) as e:
+        print(f"⚠️  Не удалось прочитать состояние {path}: {e} — гружу весь diff",
+              file=sys.stderr)
+        return {}
+
+    if (not isinstance(data, dict)
+            or data.get("version") != STATE_VERSION
+            or data.get("hash", STATE_HASH) != STATE_HASH
+            or not isinstance(data.get("files"), dict)):
+        print(f"⚠️  Неизвестный формат состояния {path} — гружу весь diff",
+              file=sys.stderr)
+        return {}
+
+    return {k: v for k, v in data["files"].items()
+            if isinstance(k, str) and isinstance(v, str)}
+
+
+def save_state(path: Optional[str], files: Dict[str, str]) -> None:
+    """Атомарно записать манифест; ошибка записи не срывает загрузку."""
+    if not path:
+        return
+    data = {
+        "version": STATE_VERSION,
+        "hash": STATE_HASH,
+        "updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "files": {k: files[k] for k in sorted(files)},
+    }
+    target = Path(path)
+    tmp = target.with_name(target.name + ".tmp")
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(data, fh, ensure_ascii=False, indent=2)
+            fh.write("\n")
+        os.replace(tmp, target)
+    except OSError as e:
+        print(f"⚠️  Не удалось сохранить состояние {path}: {e}", file=sys.stderr)
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
 
 def run_optimized_load(files: List[str]) -> int:
     """Выполни оптимизированную загрузку конфигурации"""
