@@ -382,9 +382,12 @@ def test_deploy_writes_guard_config_and_hook(tmp_path):
     import json
     from agentmon.env.content import deploy_content
     from agentmon.backends.local import LocalProvisioner
+    # connection-фрагмент явно называет сервер code_index — префикс гарда должен
+    # совпасть с ключом `.mcp.json`.
     cfg = _config(tmp_path, [McpSelection(
         id="code-index", enabled=True, mode="managed",
-        catalog_dir="C:/proj/src/cf", project_name="proj")])
+        catalog_dir="C:/proj/src/cf", project_name="proj",
+        connection='"code_index": {"type": "http", "url": "http://x:1/mcp"}')])
     prov = LocalProvisioner()
     deploy_content(prov, cfg, update=False)
     guard = (tmp_path / "p" / ".claude" / "hooks" / "code-index-guard.toml")
@@ -408,9 +411,52 @@ def test_deploy_without_code_index_has_no_hook(tmp_path):
     deploy_content(prov, cfg, update=False)
     guard = tmp_path / "p" / ".claude" / "hooks" / "code-index-guard.toml"
     assert guard.exists()
-    assert "[[local]]" not in guard.read_text(encoding="utf-8")
+    text = guard.read_text(encoding="utf-8")
+    assert "[[local]]" not in text
+    # Префикс инертен (гард не регистрируется) — остаётся плейсхолдер.
+    assert 'mcp_prefix = "mcp__code_index__"' in text
     settings = (tmp_path / "p" / ".claude" / "settings.json").read_text(encoding="utf-8")
     assert "code_index_guard.py" not in settings
+
+
+def test_deploy_guard_prefix_no_connection(tmp_path):
+    from agentmon.env.config_schema import McpSelection
+    from agentmon.env.content import deploy_content
+    from agentmon.env.mcp_catalog import build_mcp_json
+    from agentmon.backends.local import LocalProvisioner
+    # Карточка без connection: ключ сервера в .mcp.json — sel.id (`code-index`).
+    # Префикс гарда обязан называть тот же сервер, иначе deny-сообщения укажут
+    # на несуществующие инструменты.
+    sel = McpSelection(
+        id="code-index", enabled=True, mode="managed",
+        catalog_dir="C:/proj/src/cf", project_name="proj")
+    cfg = _config(tmp_path, [sel])
+    deploy_content(LocalProvisioner(), cfg, update=False)
+    text = (tmp_path / "p" / ".claude" / "hooks" / "code-index-guard.toml"
+            ).read_text(encoding="utf-8")
+    assert 'mcp_prefix = "mcp__code-index__"' in text
+    # Перекрёстная проверка инварианта: тот же ключ в .mcp.json.
+    servers = build_mcp_json([sel])["mcpServers"]
+    assert list(servers) == ["code-index"]
+
+
+def test_deploy_guard_prefix_prefers_guarded_card(tmp_path):
+    from agentmon.env.config_schema import McpSelection
+    from agentmon.env.content import deploy_content
+    from agentmon.backends.local import LocalProvisioner
+    # Первая включённая гардом карточка задаёт префикс; не-гард карточки до неё
+    # (как и после) не перетягивают имя.
+    cfg = _config(tmp_path, [
+        McpSelection(id="bsl-ls", enabled=True, mode="managed"),
+        McpSelection(id="code-index", enabled=True, mode="managed",
+                     catalog_dir="C:/a", project_name="a"),
+        McpSelection(id="code-index-local", enabled=True, mode="managed",
+                     catalog_dir="C:/b", project_name="b")])
+    deploy_content(LocalProvisioner(), cfg, update=False)
+    text = (tmp_path / "p" / ".claude" / "hooks" / "code-index-guard.toml"
+            ).read_text(encoding="utf-8")
+    assert 'mcp_prefix = "mcp__code-index__"' in text
+    assert text.count("[[local]]") == 2
 
 
 def test_deploy_guard_uses_actual_mcp_name(tmp_path):
@@ -432,3 +478,7 @@ def test_deploy_guard_uses_actual_mcp_name(tmp_path):
     settings = (tmp_path / "p" / ".claude" / "settings.json").read_text(encoding="utf-8")
     assert "code_index_guard.py" in settings
     assert "code_index_queries_guard.py" not in settings
+    # Сам файл хука на месте под исходным именем.
+    assert (tmp_path / "p" / ".claude" / "hooks" / "code_index_guard.py").exists()
+    assert not (tmp_path / "p" / ".claude" / "hooks"
+                / "code_index_queries_guard.py").exists()

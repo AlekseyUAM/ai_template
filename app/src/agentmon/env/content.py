@@ -3,7 +3,7 @@ import re
 from pathlib import Path
 
 from .scaffold import write_preserving
-from .mcp_catalog import mcp_name_overrides
+from .mcp_catalog import _server_name, mcp_name_overrides
 
 # Шаблон разворачиваемого окружения лежит в корне репозитория (template/).
 # Содержимое .claude-окружения (агенты/скилы/правила/хуки/инструменты) —
@@ -77,20 +77,6 @@ def _is_special(rel: Path) -> bool:
     )
 
 
-def _default_mcp_name(mcp) -> str:
-    """Дефолтный mcp_name вида code-index (`code_index`) — префикс инструментов.
-
-    Нужен, когда сервер не переименован: без connection-фрагмента имя сервера
-    в .mcp.json — sel.id вида (`code-index`), а инструменты называются по
-    дефолтному mcp_name вида.
-    """
-    from .mcp_types import get_type
-    for sel in mcp:
-        if getattr(sel, "enabled", False) and sel.id in _GUARD_MCP_IDS:
-            return get_type(sel.id).defaults.get("mcp_name") or "code_index"
-    return "code_index"
-
-
 def _toml_escape(value: str) -> str:
     return value.replace("\\", "\\\\").replace('"', '\\"')
 
@@ -117,19 +103,32 @@ def _guard_entries(mcp) -> list[tuple[str, str]]:
     return out
 
 
+def _guard_mcp_name(mcp) -> str:
+    """Ключ сервера code-index в .mcp.json — основа префикса инструментов.
+
+    Берём первый включённый выбор с id из `_GUARD_MCP_IDS` и имя из
+    `_server_name` — той же функции, что строит `.mcp.json`. Иначе deny-сообщения
+    гарда назвали бы несуществующий сервер: без connection-фрагмента ключ —
+    `sel.id` (`code-index`, а не `code_index`), с фрагментом — имя из него.
+
+    Без включённых code-index конфиг получается только из комментариев (он
+    нейтрализует устаревший сгенерированный конфиг при обновлении), и префикс
+    не используется гардом. Для него оставляем плейсхолдер `code_index` (как
+    `DEFAULT_MCP_PREFIX` хука) либо переименование из `mcp_name_overrides`.
+    """
+    for sel in mcp:
+        if getattr(sel, "enabled", False) and sel.id in _GUARD_MCP_IDS:
+            return _server_name(sel)
+    return mcp_name_overrides(mcp).get("code_index", "code_index")
+
+
 def _guard_config_text(mcp) -> str:
     """Текст code-index-guard.toml: префикс MCP + [[local]] по репозиториям.
 
-    Префикс — фактическое имя сервера code-index (`mcp_name_overrides`, как в
-    .mcp.json); без выбранных code-index — дефолтный плейсхолдер `code_index`,
-    а конфиг получается только из комментариев: он нейтрализует устаревший
-    сгенерированный конфиг при обновлении.
+    Префикс — фактический ключ сервера code-index в `.mcp.json` (см.
+    `_guard_mcp_name`); `[[local]]` — по репозиториям каталогов этих серверов.
     """
-    # Дефолт подставляем по отсутствию переименования, а не по отсутствию ключа:
-    # `mcp_name_overrides` заносит и `code_index → code-index`, когда связи нет.
-    actual = mcp_name_overrides(mcp).get("code_index", "code_index")
-    if actual == "code-index":
-        actual = _default_mcp_name(mcp)
+    actual = _guard_mcp_name(mcp)
     lines = [
         "# Сгенерировано при развёртывании окружения agentmon.",
         "# Ручные правки будут перезаписаны при обновлении окружения.",
