@@ -21,6 +21,40 @@ _DEFAULT_EFFORT = "medium"
 # символов-ограничителей входит и backslash.
 _PY_INVOKE = re.compile(r"\bpython (?=[\"'.$\\-])")
 
+# Условные блоки шаблона: <!-- @if 1c-md --> … <!-- @endif -->. Маркер @if
+# стоит сразу после строки-разделителя (без пустой строки перед ним), первая
+# строка внутри блока — пустая для отбивки абзаца, @endif — сразу после
+# последней строки контента; пустая строка после @endif остаётся в шаблоне.
+_CONDITIONAL_BLOCK = re.compile(
+    r"^<!-- @if (?P<cond>[a-z0-9_-]+) -->\n(?P<body>.*?)^<!-- @endif -->\n",
+    re.MULTILINE | re.DOTALL,
+)
+
+
+def _render_conditional_blocks(text: str, has_1c_md: bool, *,
+                               filename: str = "") -> str:
+    """Оставляет/вырезает условные блоки шаблона по составу MCP проекта.
+
+    Сейчас условие одно: `1c-md` — включён MCP вида `1c-md` или
+    `1c-md-queries`. Незакрытый, вложенный или лишний маркер — ValueError:
+    маркеры не должны попасть в развёрнутый проект.
+    """
+    conditions = {"1c-md": has_1c_md}
+
+    def repl(match: re.Match) -> str:
+        cond = match.group("cond")
+        if cond not in conditions:
+            raise ValueError(
+                f"неизвестное условие {cond!r} в {filename or '<текст>'}")
+        return match.group("body") if conditions[cond] else ""
+
+    rendered = _CONDITIONAL_BLOCK.sub(repl, text)
+    if "<!-- @if " in rendered or "<!-- @endif -->" in rendered:
+        raise ValueError(
+            f"несбалансированный условный блок в {filename or '<текст>'}: "
+            "@if/@endif должны быть парными и не вложенными")
+    return rendered
+
 
 def _is_special(rel: Path) -> bool:
     """Файлы шаблона, которые разворачиваются не копией, а отдельно.
