@@ -364,3 +364,71 @@ def test_update_backs_up_overwritten_template_file(tmp_path):
     bak = skill.with_name("SKILL.md.bak")
     assert bak.exists() and "моя правка" in bak.read_text(encoding="utf-8")
     assert skill.read_text(encoding="utf-8") != "моя правка\n"
+
+
+# --- хук code-index-guard: конфиг генерируется при развёртывании ---
+
+def _config(tmp_path, mcp):
+    from agentmon.env.config_schema import EnvConfig
+    return EnvConfig(
+        schema_version=1, project_name="proj", project_dir=str(tmp_path / "p"),
+        developer_id="", developer_email="", platform_dir="",
+        platform_version="", db_kind="file", db_connection="",
+        web_publication="", mcp=mcp, agents=[])
+
+
+def test_deploy_writes_guard_config_and_hook(tmp_path):
+    from agentmon.env.config_schema import McpSelection
+    import json
+    from agentmon.env.content import deploy_content
+    from agentmon.backends.local import LocalProvisioner
+    cfg = _config(tmp_path, [McpSelection(
+        id="code-index", enabled=True, mode="managed",
+        catalog_dir="C:/proj/src/cf", project_name="proj")])
+    prov = LocalProvisioner()
+    deploy_content(prov, cfg, update=False)
+    guard = (tmp_path / "p" / ".claude" / "hooks" / "code-index-guard.toml")
+    text = guard.read_text(encoding="utf-8")
+    assert 'path = "C:/proj/src/cf"' in text
+    assert 'alias = "proj"' in text
+    assert 'mcp_prefix = "mcp__code_index__"' in text
+    settings = json.loads((tmp_path / "p" / ".claude" / "settings.json")
+                          .read_text(encoding="utf-8"))
+    cmds = [h["command"] for e in settings["hooks"]["PreToolUse"]
+            for h in e["hooks"]]
+    assert any("code_index_guard.py" in c for c in cmds)
+
+
+def test_deploy_without_code_index_has_no_hook(tmp_path):
+    from agentmon.env.config_schema import McpSelection
+    from agentmon.env.content import deploy_content
+    from agentmon.backends.local import LocalProvisioner
+    cfg = _config(tmp_path, [McpSelection(id="bsl-ls", enabled=True, mode="managed")])
+    prov = LocalProvisioner()
+    deploy_content(prov, cfg, update=False)
+    guard = tmp_path / "p" / ".claude" / "hooks" / "code-index-guard.toml"
+    assert guard.exists()
+    assert "[[local]]" not in guard.read_text(encoding="utf-8")
+    settings = (tmp_path / "p" / ".claude" / "settings.json").read_text(encoding="utf-8")
+    assert "code_index_guard.py" not in settings
+
+
+def test_deploy_guard_uses_actual_mcp_name(tmp_path):
+    from agentmon.env.config_schema import McpSelection
+    from agentmon.env.content import deploy_content
+    from agentmon.backends.local import LocalProvisioner
+    # connection — фрагмент без внешних фигурных скобок (конвенция карточки
+    # MCP: _parse_connection сам оборачивает его в {...}).
+    cfg = _config(tmp_path, [McpSelection(
+        id="code-index", enabled=True, mode="managed",
+        catalog_dir="C:/proj/src/cf", project_name="proj",
+        connection='"code_index_queries": {"type": "http", "url": "http://x:1/mcp"}')])
+    prov = LocalProvisioner()
+    deploy_content(prov, cfg, update=False)
+    text = (tmp_path / "p" / ".claude" / "hooks" / "code-index-guard.toml"
+            ).read_text(encoding="utf-8")
+    assert 'mcp_prefix = "mcp__code_index_queries__"' in text
+    # Подстановка имён MCP не должна переименовать имя файла хука.
+    settings = (tmp_path / "p" / ".claude" / "settings.json").read_text(encoding="utf-8")
+    assert "code_index_guard.py" in settings
+    assert "code_index_queries_guard.py" not in settings

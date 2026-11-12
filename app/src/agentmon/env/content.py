@@ -56,6 +56,12 @@ def _render_conditional_blocks(text: str, has_1c_md: bool, *,
     return rendered
 
 
+# Конфиг хука code-index-guard в развёрнутом проекте: генерируется из выбранных
+# MCP code-index (а не копируется из шаблона — образец .toml.example остаётся).
+_GUARD_CFG_REL = Path(".claude/hooks/code-index-guard.toml")
+_GUARD_MCP_IDS = ("code-index", "code-index-local")
+
+
 def _is_special(rel: Path) -> bool:
     """Файлы шаблона, которые разворачиваются не копией, а отдельно.
 
@@ -67,7 +73,94 @@ def _is_special(rel: Path) -> bool:
         parts == ("README.md",)
         or parts[:2] == (".claude", "agents")
         or parts == (".claude", "settings.json")
+        or rel == _GUARD_CFG_REL
     )
+
+
+def _default_mcp_name(mcp) -> str:
+    """Дефолтный mcp_name вида code-index (`code_index`) — префикс инструментов.
+
+    Нужен, когда сервер не переименован: без connection-фрагмента имя сервера
+    в .mcp.json — sel.id вида (`code-index`), а инструменты называются по
+    дефолтному mcp_name вида.
+    """
+    from .mcp_types import get_type
+    for sel in mcp:
+        if getattr(sel, "enabled", False) and sel.id in _GUARD_MCP_IDS:
+            return get_type(sel.id).defaults.get("mcp_name") or "code_index"
+    return "code_index"
+
+
+def _toml_escape(value: str) -> str:
+    return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _default_alias(path: str) -> str:
+    """alias репозитория по пути, если в карточке MCP имя не задано."""
+    last = path.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1]
+    return last.lower().replace(" ", "_")
+
+
+def _guard_entries(mcp) -> list[tuple[str, str]]:
+    """(path, alias) индексируемых репозиториев включённых code-index MCP."""
+    out: list[tuple[str, str]] = []
+    for sel in mcp:
+        if not getattr(sel, "enabled", False):
+            continue
+        if sel.id not in _GUARD_MCP_IDS:
+            continue
+        path = getattr(sel, "catalog_dir", None)
+        if not path:
+            continue
+        alias = getattr(sel, "project_name", None) or _default_alias(path)
+        out.append((path, alias))
+    return out
+
+
+def _guard_config_text(mcp) -> str:
+    """Текст code-index-guard.toml: префикс MCP + [[local]] по репозиториям.
+
+    Префикс — фактическое имя сервера code-index (`mcp_name_overrides`, как в
+    .mcp.json); без выбранных code-index — дефолтный плейсхолдер `code_index`,
+    а конфиг получается только из комментариев: он нейтрализует устаревший
+    сгенерированный конфиг при обновлении.
+    """
+    # Дефолт подставляем по отсутствию переименования, а не по отсутствию ключа:
+    # `mcp_name_overrides` заносит и `code_index → code-index`, когда связи нет.
+    actual = mcp_name_overrides(mcp).get("code_index", "code_index")
+    if actual == "code-index":
+        actual = _default_mcp_name(mcp)
+    lines = [
+        "# Сгенерировано при развёртывании окружения agentmon.",
+        "# Ручные правки будут перезаписаны при обновлении окружения.",
+        f'mcp_prefix = "mcp__{actual}__"',
+        "",
+    ]
+    for path, alias in _guard_entries(mcp):
+        lines += ["[[local]]",
+                  f'path = "{_toml_escape(path)}"',
+                  f'alias = "{_toml_escape(alias)}"', ""]
+    return "\n".join(lines) + "\n"
+
+
+def _inject_guard_hook(settings_text: str, py_cmd: str) -> str:
+    """Добавляет PreToolUse-запись хука code-index-guard в settings.json.
+
+    Вызывается ПОСЛЕ подстановки имён MCP: иначе `code_index` в имени файла
+    хука будет переименован вместе с плейсхолдерами.
+    """
+    data = json.loads(settings_text)
+    pre = data.setdefault("hooks", {}).setdefault("PreToolUse", [])
+    pre.insert(0, {
+        "matcher": "Read|Grep|Glob|Bash|PowerShell",
+        "hooks": [{
+            "type": "command",
+            "command": (f'{py_cmd} "$CLAUDE_PROJECT_DIR/.claude/'
+                        'hooks/code_index_guard.py"'),
+            "timeout": 10,
+        }],
+    })
+    return json.dumps(data, ensure_ascii=False, indent=2) + "\n"
 
 
 def _model_effort(config, name):
@@ -245,6 +338,14 @@ def deploy_content(prov, config, *, update: bool) -> None:
     settings = _PY_INVOKE.sub(lambda m: py_json + " ", _render_settings())
     for placeholder, actual in subs.items():
         settings = settings.replace(placeholder, actual)
+    # Хук code-index-guard регистрируем ПОСЛЕ подстановки имён MCP: имя файла
+    # хука содержит `code_index`, который подстановка иначе переименовала бы.
+    # Конфиг хука пишем всегда (без code-index — только комментарии): так он
+    # нейтрализует устаревший сгенерированный конфиг при обновлении.
+    prov.write_text(f"{claude}/hooks/code-index-guard.toml",
+                    _guard_config_text(config.mcp))
+    if _guard_entries(config.mcp):
+        settings = _inject_guard_hook(settings, _py_cmd(prov, project_dir))
     write_preserving(prov, f"{claude}/settings.json", settings, update=update)
     # _rewrite_python_invocations проходит ВСЕ *.md, включая неизменённые;
     # _render_template_texts пишет только изменённые. Не удалять этот проход.

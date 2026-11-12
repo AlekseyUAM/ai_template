@@ -11,6 +11,8 @@ class McpSelection:
     endpoint: str | None = None     # external: url или команда
     secret_env: str | None = None   # managed: имя env-переменной с секретом
     connection: str | None = None   # фрагмент "<имя>": {...} из справочника MCP
+    catalog_dir: str | None = None  # code-index: каталог индексируемой базы
+    project_name: str | None = None # code-index: alias репозитория в индексе
 
 
 @dataclass

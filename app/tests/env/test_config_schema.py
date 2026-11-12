@@ -19,3 +19,15 @@ def sample_config():
 def test_roundtrip_dict():
     cfg = sample_config()
     assert EnvConfig.from_dict(cfg.to_dict()) == cfg
+
+
+def test_mcp_selection_guard_fields_roundtrip():
+    sel = McpSelection(id="code-index", enabled=True, mode="managed",
+                       catalog_dir="/code/cfg", project_name="proj")
+    data = {"schema_version": 1, "project_name": "p", "project_dir": "/p",
+            "developer_id": "", "developer_email": "", "platform_dir": "",
+            "platform_version": "", "db_kind": "file", "db_connection": "",
+            "web_publication": "", "mcp": [sel.__dict__], "agents": []}
+    cfg = EnvConfig.from_dict(data)
+    assert cfg.mcp[0].catalog_dir == "/code/cfg"
+    assert cfg.mcp[0].project_name == "proj"

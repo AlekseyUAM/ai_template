@@ -207,6 +207,8 @@ def build_project_router(store, registry, monitor=None,
                 id=row.get("standard_key") or row["name"],
                 enabled=True, mode="managed",
                 connection=row.get("connection_json"),
+                catalog_dir=row.get("catalog_dir"),
+                project_name=row.get("project_name"),
             ))
         if valid_mcp_ids:
             mcp_repo.set_for_project(pid, valid_mcp_ids)
@@ -436,6 +438,8 @@ def build_project_router(store, registry, monitor=None,
                 enabled=True,
                 mode="managed",
                 connection=row.get("connection_json"),
+                catalog_dir=row.get("catalog_dir"),
+                project_name=row.get("project_name"),
             ))
 
         config = EnvConfig(
