@@ -1,0 +1,15 @@
+# Конфиг хука code-index-guard (Python-порт).
+# В развёрнутом проекте файл генерируется автоматически при создании/обновлении
+# окружения; этот образец — для ручного развёртывания template.
+#
+# mcp_prefix — как называются инструменты сервера code-index в этой сессии.
+# [[local]] — индексированные репозитории: path + alias (alias = repo= в вызовах).
+
+mcp_prefix = "mcp__code_index__"
+
+# [[local]]
+# path = "C:/proj/src/cf"
+# alias = "proj"
+
+# Вместо [[local]] можно указать daemon.toml индексатора:
+# daemon_toml = "C:/tools/code-index/daemon.toml"
