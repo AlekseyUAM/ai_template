@@ -96,12 +96,15 @@ def _render_settings() -> str:
     return (CONTENT_DIR / "settings.json").read_text(encoding="utf-8")
 
 
-def _apply_mcp_names(prov, claude_dir, overrides) -> None:
-    """Подставляет актуальные имена MCP вместо плейсхолдеров — пишем на цель.
+def _render_template_texts(prov, claude_dir, overrides, *,
+                           has_1c_md: bool, py_cmd: str) -> None:
+    """Подставляет имена MCP и рендерит условные блоки — пишем на цель.
 
     Обходим текстовые файлы шаблона .claude на мониторе; меняем и пишем на цель
     только изменившиеся. Агенты и settings.json пропускаем: агенты обрабатываются
     в _render_agents (с учётом model/effort), settings.json — через write_preserving.
+    При записи применяется и подстановка интерпретатора .venv: файл с условными
+    блоками (query-analyze) содержит вызовы `python …`.
     """
     for src in sorted(CONTENT_DIR.rglob("*")):
         if not src.is_file():
@@ -116,11 +119,16 @@ def _apply_mcp_names(prov, claude_dir, overrides) -> None:
             text = src.read_text(encoding="utf-8")
         except (UnicodeDecodeError, OSError):
             continue
-        new = text
+        # Сначала рендер условных блоков, потом подстановка имён MCP: иначе
+        # override `1c-md` → `1c-md-queries` (если сервер назван по-другому)
+        # испортил бы имя условия в маркере `<!-- @if 1c-md -->`.
+        new = _render_conditional_blocks(
+            text, has_1c_md, filename=rel.as_posix())
         for placeholder, actual in overrides.items():
             new = new.replace(placeholder, actual)
         if new != text:
-            prov.write_text(f"{claude_dir}/{rel.as_posix()}", new)
+            prov.write_text(f"{claude_dir}/{rel.as_posix()}",
+                            _rewrite_python_text(new, py_cmd))
 
 
 def venv_python(prov, project_dir) -> str:
@@ -150,6 +158,11 @@ def _deploy_vscode(prov, project_dir, *, update: bool) -> None:
                      content, update=update)
 
 
+def _rewrite_python_text(text: str, py_cmd: str) -> str:
+    """Заменяет вызовы `python …` на интерпретатор .venv проекта."""
+    return _PY_INVOKE.sub(lambda _m: py_cmd + " ", text)
+
+
 def _rewrite_python_invocations(prov, claude_dir, py_cmd) -> None:
     """Пишет версии *.md шаблона с заменой `python ` на путь venv — на цель.
 
@@ -163,7 +176,7 @@ def _rewrite_python_invocations(prov, claude_dir, py_cmd) -> None:
             text = src.read_text(encoding="utf-8")
         except (UnicodeDecodeError, OSError):
             continue
-        new = _PY_INVOKE.sub(lambda m: py_cmd + " ", text)
+        new = _rewrite_python_text(text, py_cmd)
         if new != text:
             prov.write_text(f"{claude_dir}/{rel.as_posix()}", new)
 
@@ -211,6 +224,11 @@ def deploy_content(prov, config, *, update: bool) -> None:
     # сервера после переименования.
     mcp_subs = mcp_name_overrides(config.mcp)
     subs = {**mcp_subs, "{{CODE_INDEX_REPO}}": config.project_name}
+    has_1c_md = any(
+        getattr(sel, "enabled", False)
+        and sel.id in ("1c-md", "1c-md-queries")
+        for sel in config.mcp
+    )
     _render_agents(prov, config, f"{claude}/agents", overrides=subs)
     # settings.json — текст JSON, а путь к интерпретатору впечатывается прямо в
     # него. Слэши — прямые: Git Bash на Windows съедает литеральный backslash в
@@ -227,7 +245,8 @@ def deploy_content(prov, config, *, update: bool) -> None:
     if not update:
         write_preserving(prov, f"{project_dir}/README.md",
                          _project_readme(config.project_name), update=update)
-    _apply_mcp_names(prov, claude, subs)
+    _render_template_texts(prov, claude, subs, has_1c_md=has_1c_md,
+                           py_cmd=_py_cmd(prov, project_dir))
     from .nethasp import deploy_nethasp
     deploy_nethasp(prov, config)
 

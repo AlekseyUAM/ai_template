@@ -66,3 +66,36 @@ def test_render_conditionals_orphan_endif_raises():
     with pytest.raises(ValueError, match="x.md"):
         content._render_conditional_blocks(
             "текст\n<!-- @endif -->\n", True, filename="x.md")
+
+
+# --- деплой: mcp-usage ---
+
+def test_deploy_1c_md_adds_validate_query_to_mcp_usage(tmp_path):
+    content.deploy_content(
+        LocalProvisioner(), cfg(tmp_path, [sel("1c-md")]), update=False)
+    text = skill_text(tmp_path, "mcp-usage")
+    assert "validate_query" in text
+    assert "метаданные, загруженные в БД" in text
+    assert "<!-- @if" not in text and "<!-- @endif" not in text
+
+
+def test_deploy_1c_md_queries_also_adds_section(tmp_path):
+    content.deploy_content(
+        LocalProvisioner(), cfg(tmp_path, [sel("1c-md-queries")]),
+        update=False)
+    assert "validate_query" in skill_text(tmp_path, "mcp-usage")
+
+
+def test_deploy_without_1c_md_has_no_validate_query_in_mcp_usage(tmp_path):
+    content.deploy_content(
+        LocalProvisioner(), cfg(tmp_path, [sel("bsl-ls")]), update=False)
+    text = skill_text(tmp_path, "mcp-usage")
+    assert "validate_query" not in text
+    assert "<!-- @if" not in text
+
+
+def test_deploy_disabled_1c_md_has_no_validate_query(tmp_path):
+    content.deploy_content(
+        LocalProvisioner(), cfg(tmp_path, [sel("1c-md", enabled=False)]),
+        update=False)
+    assert "validate_query" not in skill_text(tmp_path, "mcp-usage")
