@@ -158,3 +158,97 @@ def test_load_state_tolerates_missing_and_broken(tmp_path):
     broken.write_text(json.dumps({"version": 99, "files": {"a": "b"}}),
                       encoding="utf-8")
     assert mod.load_state(str(broken)) == {}
+
+
+def _write_cf(root, rels):
+    cf_dir = root / "src" / "cf"
+    for rel in rels:
+        path = cf_dir / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("<x/>", encoding="utf-8")
+
+
+def _hashes(mod, root, rels):
+    cf_dir = root / "src" / "cf"
+    return {rel: mod.file_sha256(cf_dir / rel) for rel in rels}
+
+
+def test_collect_changes_skips_unchanged_metadata_and_configuration(
+        tmp_path, monkeypatch):
+    mod = _load()
+    files = [
+        "Configuration.xml",
+        "Catalogs/Товары.xml",
+        "Catalogs/Товары/Ext/ObjectModule.bsl",
+    ]
+    _write_cf(tmp_path, files)
+    state = _hashes(mod, tmp_path, files)
+
+    monkeypatch.setattr(mod, "get_project_root", lambda: tmp_path)
+    monkeypatch.setattr(mod, "subprocess",
+                        _fake_git([f"src/cf/{rel}" for rel in files]))
+    monkeypatch.chdir(tmp_path)
+
+    got, snapshot, deleted, skipped = mod.collect_changes(state)
+
+    assert got == []
+    assert deleted == []
+    assert set(skipped) == set(files)
+    assert snapshot == state
+
+
+def test_collect_changes_loads_only_changed_module(tmp_path, monkeypatch):
+    mod = _load()
+    files = [
+        "Configuration.xml",
+        "Catalogs/Товары.xml",
+        "Catalogs/Товары/Ext/ObjectModule.bsl",
+        "Catalogs/Услуги.xml",
+        "Catalogs/Услуги/Ext/ObjectModule.bsl",
+    ]
+    _write_cf(tmp_path, files)
+    state = _hashes(mod, tmp_path, files)
+    (tmp_path / "src" / "cf" / "Catalogs/Товары/Ext/ObjectModule.bsl"
+     ).write_text("// изменено\n", encoding="utf-8")
+
+    monkeypatch.setattr(mod, "get_project_root", lambda: tmp_path)
+    monkeypatch.setattr(mod, "subprocess",
+                        _fake_git([f"src/cf/{rel}" for rel in files]))
+    monkeypatch.chdir(tmp_path)
+
+    got, _snapshot, _deleted, _skipped = mod.collect_changes(state)
+
+    assert "Configuration.xml" not in got
+    assert "Catalogs/Товары/Ext/ObjectModule.bsl" in got
+    assert "Catalogs/Товары.xml" in got          # корень изменённого объекта
+    assert "Catalogs/Услуги.xml" not in got      # чужой объект не тронут
+
+
+def test_collect_changes_detects_revert_to_head(tmp_path, monkeypatch):
+    mod = _load()
+    rel = "Catalogs/Товары.xml"
+    _write_cf(tmp_path, [rel])
+
+    monkeypatch.setattr(mod, "get_project_root", lambda: tmp_path)
+    monkeypatch.setattr(mod, "subprocess", _fake_git([]))  # файл откатили к HEAD
+    monkeypatch.chdir(tmp_path)
+
+    got, _snapshot, _deleted, _skipped = mod.collect_changes({rel: "0" * 64})
+
+    assert got == [rel]
+
+
+def test_collect_changes_forgets_deleted_state_file(tmp_path, monkeypatch):
+    mod = _load()
+    missing = "Catalogs/Старый/Ext/OldModule.bsl"
+
+    monkeypatch.setattr(mod, "get_project_root", lambda: tmp_path)
+    monkeypatch.setattr(mod, "subprocess", _fake_git([]))
+    monkeypatch.chdir(tmp_path)
+
+    got, snapshot, deleted, skipped = mod.collect_changes({missing: "0" * 64})
+
+    assert got == []
+    assert deleted == [missing]
+    assert missing not in snapshot
+    assert skipped == []

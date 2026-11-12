@@ -198,7 +198,8 @@ def expand_to_load_paths(raw: List[str]) -> List[str]:
 
 def get_changed_files() -> List[str]:
     """Изменённые файлы конфигурации для -listFile (без учёта состояния)."""
-    return expand_to_load_paths(get_dirty_paths())
+    files, _, _, _ = collect_changes(None)
+    return files
 
 def file_sha256(path: Path) -> Optional[str]:
     """sha256 содержимого файла; None, если файл отсутствует или не читается."""
@@ -266,6 +267,59 @@ def save_state(path: Optional[str], files: Dict[str, str]) -> None:
             os.unlink(tmp)
         except OSError:
             pass
+
+
+def filter_loaded(
+    candidates: List[str], state: Dict[str, str]
+) -> Tuple[List[str], Dict[str, str], List[str], List[str]]:
+    """Разделить кандидатов на изменённых и уже загруженных.
+
+    Кандидаты — объединение сырых путей из git и ключей прежнего состояния:
+    второе ловит «изменил → загрузил → откатил к HEAD» — файл исчез из diff,
+    но его текущее содержимое отличается от загруженного. Возвращает
+    (изменённые, снимок для нового состояния, удалённые, пропущенные).
+    Снимок включает все существующие кандидаты — и изменённые, и нет.
+    """
+    cf_dir = get_project_root() / "src" / "cf"
+    order: List[str] = []
+    seen = set()
+    for rel in list(candidates) + sorted(state):
+        if rel in seen:
+            continue
+        seen.add(rel)
+        order.append(rel)
+
+    changed: List[str] = []
+    snapshot: Dict[str, str] = {}
+    deleted: List[str] = []
+    skipped: List[str] = []
+    for rel in order:
+        digest = file_sha256(cf_dir / rel)
+        if digest is None:
+            if rel in state:
+                deleted.append(rel)
+            continue
+        snapshot[rel] = digest
+        if state.get(rel) == digest:
+            skipped.append(rel)
+        else:
+            changed.append(rel)
+    return changed, snapshot, deleted, skipped
+
+
+def collect_changes(
+    state: Optional[Dict[str, str]] = None
+) -> Tuple[List[str], Optional[Dict[str, str]], List[str], List[str]]:
+    """Собрать файлы для загрузки с учётом состояния.
+
+    state=None — без состояния (весь diff vs HEAD), снимок не снимается.
+    state={} — состояние включено, но файла ещё нет: снимок будет создан.
+    """
+    dirty = get_dirty_paths()
+    if state is None:
+        return expand_to_load_paths(dirty), None, [], []
+    changed, snapshot, deleted, skipped = filter_loaded(dirty, state)
+    return expand_to_load_paths(changed), snapshot, deleted, skipped
 
 def run_optimized_load(files: List[str]) -> int:
     """Выполни оптимизированную загрузку конфигурации"""
