@@ -94,3 +94,33 @@ def test_service_config_dump_info_excluded(tmp_path, monkeypatch):
 
     assert "Reports/Продажи.xml" in got
     assert "Reports/Продажи/Ext/ConfigDumpInfo.xml" not in got
+
+
+def test_get_dirty_paths_normalizes_dedupes_and_filters(tmp_path, monkeypatch):
+    mod = _load()
+    monkeypatch.setattr(mod, "get_project_root", lambda: tmp_path)
+    monkeypatch.setattr(mod, "subprocess", _fake_git([
+        "src/cf/Catalogs/Товары.xml",
+        "src/cf/Catalogs/Товары.xml",
+        "src/cf/Catalogs/Товары/Ext/ConfigDumpInfo.xml",
+    ]))
+    monkeypatch.chdir(tmp_path)
+
+    assert mod.get_dirty_paths() == ["Catalogs/Товары.xml"]
+
+
+def test_expand_to_load_paths_adds_object_root_and_ext(tmp_path, monkeypatch):
+    mod = _load()
+    files = [
+        "Catalogs/Товары.xml",
+        "Catalogs/Товары/Ext/ObjectModule.bsl",
+    ]
+    for rel in files:
+        path = tmp_path / "src" / "cf" / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("<x/>", encoding="utf-8")
+    monkeypatch.setattr(mod, "get_project_root", lambda: tmp_path)
+
+    got = mod.expand_to_load_paths(["Catalogs/Товары/Ext/ObjectModule.bsl"])
+
+    assert set(got) == set(files)

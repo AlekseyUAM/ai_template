@@ -73,24 +73,15 @@ def _object_root(rel: str) -> str:
     return f"{kind}/{name}.xml"
 
 
-def get_changed_files() -> List[str]:
-    """Список файлов изменённых объектов конфигурации для -listFile (из git).
+def get_dirty_paths() -> List[str]:
+    """Сырые изменённые пути (относительно src/cf) из git.
 
-    Учитывает и отслеживаемые изменения (git diff), и новые untracked-файлы
-    (git ls-files --others). Пути — относительно src/cf. По образцу навыка
-    db-load-git в список попадают:
-      - корневой файл каждого изменённого объекта (<Вид>/<Имя>.xml);
-      - сам изменённый файл (XML вложенных объектов: Forms/<Ф>.xml,
-        Templates/<М>.xml; модули; Ext/*) — платформа по корню вложенные
-        объекты и их содержимое не грузит;
-      - для изменённого не-XML файла или файла внутри Ext — все файлы каталога
-        Ext объекта (как в db-load-git).
-
-    Удалённые файлы пропускаются: платформа молча игнорирует отсутствующий файл
-    в -listFile. ConfigDumpInfo.xml (в т.ч. вложенный) исключается: это не объект
-    метаданных, через -listFile он даёт ошибку «URL ... не может быть
-    преобразован в полное имя объекта метаданных»; платформа обновит его сама по
-    флагу -updateConfigDumpInfo.
+    Учитывает отслеживаемые изменения (git diff HEAD) и новые untracked-файлы
+    (git ls-files --others). Пути нормализуются к прямым слэшам, префикс
+    src/cf/ отбрасывается, ConfigDumpInfo.xml (в т.ч. вложенный) исключается:
+    это не объект метаданных, через -listFile он даёт ошибку «URL ... не может
+    быть преобразован в полное имя объекта метаданных»; платформа обновит его
+    сама по флагу -updateConfigDumpInfo.
     """
     project_root = get_project_root()
     os.chdir(project_root)
@@ -124,7 +115,38 @@ def get_changed_files() -> List[str]:
         print(f"❌ Ошибка при получении списка файлов: {e}", file=sys.stderr)
         return []
 
-    cf_dir = project_root / "src" / "cf"
+    result: List[str] = []
+    seen = set()
+    for f in raw:
+        f = f.strip().replace("\\", "/")
+        if not f:
+            continue
+        rel = f.replace("src/cf/", "", 1)
+        if rel == "ConfigDumpInfo.xml" or rel.endswith("/ConfigDumpInfo.xml"):
+            continue
+        if rel in seen:
+            continue
+        seen.add(rel)
+        result.append(rel)
+    return result
+
+
+def expand_to_load_paths(raw: List[str]) -> List[str]:
+    """Развернуть изменённые пути в список файлов для -listFile.
+
+    По образцу навыка db-load-git в список попадают:
+      - корневой файл каждого изменённого объекта (<Вид>/<Имя>.xml);
+      - сам изменённый файл (XML вложенных объектов: Forms/<Ф>.xml,
+        Templates/<М>.xml; модули; Ext/*) — платформа по корню вложенные
+        объекты и их содержимое не грузит;
+      - для изменённого не-XML файла или файла внутри Ext — все файлы каталога
+        Ext объекта (как в db-load-git).
+
+    Удалённые файлы пропускаются: платформа молча игнорирует отсутствующий файл
+    в -listFile; корень объекта при этом добавляется, если существует, — через
+    него платформа подхватит изменённый состав.
+    """
+    cf_dir = get_project_root() / "src" / "cf"
     seen = set()
     result: List[str] = []
 
@@ -135,15 +157,7 @@ def get_changed_files() -> List[str]:
         seen.add(rel)
         result.append(rel)
 
-    for f in raw:
-        f = f.strip().replace("\\", "/")
-        if not f:
-            continue
-        rel = f.replace("src/cf/", "", 1)
-        # ConfigDumpInfo.xml (в т.ч. вложенный) — не объект метаданных.
-        if rel == "ConfigDumpInfo.xml" or rel.endswith("/ConfigDumpInfo.xml"):
-            continue
-
+    for rel in raw:
         # Корневой файл объекта грузим всегда, если он существует. Configuration.xml
         # остаётся в списке и при удалении объекта — через него платформа подхватит
         # изменённый состав.
@@ -174,6 +188,11 @@ def get_changed_files() -> List[str]:
                         add(str(p.relative_to(cf_dir)).replace("\\", "/"))
 
     return result
+
+
+def get_changed_files() -> List[str]:
+    """Изменённые файлы конфигурации для -listFile (без учёта состояния)."""
+    return expand_to_load_paths(get_dirty_paths())
 
 def run_optimized_load(files: List[str]) -> int:
     """Выполни оптимизированную загрузку конфигурации"""
