@@ -82,6 +82,15 @@ bsl-indexer daemon reload
 не ошибку. `daemon_offline` означает, что `serve` не нашёл `daemon.json`:
 проверьте, что демон запущен и оба процесса используют один `CODE_INDEX_HOME`.
 
+## Хук-перенаправление (`code_index_guard.py`)
+
+PreToolUse-хук (лежит в `hooks/` шаблона окружения) перенаправляет нативные
+Read/Grep/Glob/Bash/PowerShell по индексированным каталогам в инструменты
+`code_index`. Конфиг `.claude/hooks/code-index-guard.toml` генерируется при
+развёртывании окружения; без него хук инертен и ничего не меняет. Откат —
+удалить блок `PreToolUse` из `.claude/settings.json`. Список прочих хуков —
+в [template/README.md](../../template/README.md).
+
 Дальше:
 
 - [code-index.md](code-index.md) — развёртывание в Docker;
