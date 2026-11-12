@@ -21,7 +21,7 @@
   "stages": [
     {
       "name": "analyze",
-      "enabled": true,
+      "enabled": false,
       "subagent": "analyst",
       "artifact": "ANALYZE.md",
       "gate": false,
