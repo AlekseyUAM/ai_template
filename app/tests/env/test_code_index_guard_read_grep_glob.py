@@ -8,10 +8,6 @@ if str(HOOKS) not in sys.path:
 from code_index_guard_lib import decisions, tools  # noqa: E402
 from env.guard_fixtures import build_repo, make_ctx  # noqa: E402
 
-BIN = ("grep_code", "grep_text", "read_file", "list_files",
-       "get_function", "get_file_summary", "stat_file", "get_stats")
-
-
 def _ctx(root):
     tools.set_prefix("mcp__code_index__")
     return make_ctx(root)

@@ -87,9 +87,48 @@ def _default_alias(path: str) -> str:
     return last.lower().replace(" ", "_")
 
 
+def _guard_mcp_name(mcp) -> str:
+    """Ключ сервера code-index в .mcp.json — основа префикса гарда.
+
+    Берём **последний** включённый выбор с id из `_GUARD_MCP_IDS` и имя из
+    `_server_name` — той же функции, что строит `.mcp.json`. В `build_mcp_json`
+    серверы складываются в dict по ключу, т.е. при совпадении имён (обе карточки
+    по умолчанию дают `code_index`) выживает последний выбор. Гард обязан
+    называть именно его, иначе deny-сообщения укажут на несуществующий сервер.
+    Без connection-фрагмента ключ — `sel.id` (`code-index`), с фрагментом — имя
+    из него.
+
+    Без включённых code-index конфиг получается только из комментариев (он
+    нейтрализует устаревший сгенерированный конфиг при обновлении), и префикс
+    не используется гардом. Для него оставляем плейсхолдер `code_index` (как
+    `DEFAULT_MCP_PREFIX` хука) либо переименование из `mcp_name_overrides`.
+    """
+    last = None
+    for sel in mcp:
+        if getattr(sel, "enabled", False) and sel.id in _GUARD_MCP_IDS:
+            last = sel
+    if last is not None:
+        return _server_name(last)
+    return mcp_name_overrides(mcp).get("code_index", "code_index")
+
+
 def _guard_entries(mcp) -> list[tuple[str, str]]:
-    """(path, alias) индексируемых репозиториев включённых code-index MCP."""
-    out: list[tuple[str, str]] = []
+    """(path, alias) репозиториев, реально обслуживаемых сервером гарда.
+
+    Гард несёт один `mcp_prefix`, а `build_mcp_json` складывает серверы в dict
+    по `_server_name(sel)` — при совпадении имён (обе карточки code-index по
+    умолчанию дают `code_index`) в `.mcp.json` остаётся только последний.
+    Поэтому входят лишь включённые гардом карточки, чей `_server_name` равен
+    имени выжившего сервера (см. `_guard_mcp_name`).
+
+    Ограничение: при разных именах гардом защищается только последний сервер;
+    репозиторий другого (оно же — доступное модели без deny) гард не упоминает:
+    он абстендится, а не ведёт модель к несуществующему серверу.
+
+    Каталог обязан быть абсолютным путём: ни хук, ни демон code-index не
+    раскрывают `~`, поэтому такая карточка — ошибка конфигурации.
+    """
+    served: tuple[str, str] | None = None
     for sel in mcp:
         if not getattr(sel, "enabled", False):
             continue
@@ -98,35 +137,22 @@ def _guard_entries(mcp) -> list[tuple[str, str]]:
         path = getattr(sel, "catalog_dir", None)
         if not path:
             continue
-        alias = getattr(sel, "project_name", None) or _default_alias(path)
-        out.append((path, alias))
-    return out
-
-
-def _guard_mcp_name(mcp) -> str:
-    """Ключ сервера code-index в .mcp.json — основа префикса инструментов.
-
-    Берём первый включённый выбор с id из `_GUARD_MCP_IDS` и имя из
-    `_server_name` — той же функции, что строит `.mcp.json`. Иначе deny-сообщения
-    гарда назвали бы несуществующий сервер: без connection-фрагмента ключ —
-    `sel.id` (`code-index`, а не `code_index`), с фрагментом — имя из него.
-
-    Без включённых code-index конфиг получается только из комментариев (он
-    нейтрализует устаревший сгенерированный конфиг при обновлении), и префикс
-    не используется гардом. Для него оставляем плейсхолдер `code_index` (как
-    `DEFAULT_MCP_PREFIX` хука) либо переименование из `mcp_name_overrides`.
-    """
-    for sel in mcp:
-        if getattr(sel, "enabled", False) and sel.id in _GUARD_MCP_IDS:
-            return _server_name(sel)
-    return mcp_name_overrides(mcp).get("code_index", "code_index")
+        if path.strip().startswith("~"):
+            raise ValueError(
+                f"catalog_dir {path!r} карточки {sel.id}: code-index не "
+                "раскрывает домашний каталог (~), укажите абсолютный путь")
+        if _server_name(sel) == _guard_mcp_name(mcp):
+            served = (path, getattr(sel, "project_name", None)
+                      or _default_alias(path))
+    return [served] if served else []
 
 
 def _guard_config_text(mcp) -> str:
     """Текст code-index-guard.toml: префикс MCP + [[local]] по репозиториям.
 
     Префикс — фактический ключ сервера code-index в `.mcp.json` (см.
-    `_guard_mcp_name`); `[[local]]` — по репозиториям каталогов этих серверов.
+    `_guard_mcp_name`); `[[local]]` — только по репозиториям, обслуживаемым
+    этим сервером (см. `_guard_entries`).
     """
     actual = _guard_mcp_name(mcp)
     lines = [

@@ -10,7 +10,8 @@
     Read/Grep/Glob/Bash/PowerShell по индексированным каталогам в инструменты
     `code_index`. Конфиг `code-index-guard.toml` генерируется при развёртывании
     окружения; без него хук инертен. Откат — удалить блок `PreToolUse` из
-    `.claude/settings.json`.
+    `.claude/settings.json`; обновление окружения впишет его заново, для
+    постоянного отключения уберите MCP code-index из проекта.
 - `tools/` — вспомогательные инструменты (например, `task_status.py`)
 
 Развёртывание выполняется функцией `content.deploy_content` из пакета `agentmon.env`.
