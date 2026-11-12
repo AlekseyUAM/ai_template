@@ -9,7 +9,11 @@ load-config-optimized.py
 что и полная перезагрузка, но быстрее.
 
 Использование:
-    python .claude/tools/load-config-optimized.py
+    python .claude/tools/load-config-optimized.py [--state PATH]
+
+С --state грузятся только файлы, изменившиеся с последней успешной загрузки:
+в PATH хранится манифест sha256 (обычно logs/task#<id>/load-state.json).
+Без --state — весь git diff vs HEAD, как раньше.
 
 Скрипт печатает ход загрузки в stdout и завершается кодом 0 при успехе
 (или «нет изменённых файлов») и ненулевым кодом при ошибке загрузки. Оркестратор

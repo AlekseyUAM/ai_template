@@ -110,7 +110,7 @@ analyze → plan → tests → develop → testing → review → docs.
 3. Запусти частичную загрузку изменённых файлов (правило
    `optimized-config-loading`) в фоне с логом:
    ```bash
-   python .claude/tools/load-config-optimized.py > logs/task#<id>/load-config.log 2>&1
+   python .claude/tools/load-config-optimized.py --state logs/task#<id>/load-state.json > logs/task#<id>/load-config.log 2>&1
    ```
 4. Проснувшись по завершении, проверь код возврата и лог:
    - **Успех** (код `0` и строка `✅ Оптимизированная загрузка завершена` или
