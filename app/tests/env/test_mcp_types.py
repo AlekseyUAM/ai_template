@@ -64,12 +64,19 @@ def test_bsl_ls_defaults_and_docker():
     assert t.action == "docker"
 
 
-def test_platform_is_sse():
+def test_platform_uses_stdio_bridge():
     t = get_type("1c-platform")
     assert t.defaults["mcp_name"] == "1c_platform"
     assert t.defaults["port"] == 8002
-    assert '"type": "sse"' in t.connection_template
-    assert '"transport": "sse"' in t.connection_template
+    assert '"type": "stdio"' in t.connection_template
+    assert "sse_stdio_bridge.py" in t.connection_template
+    assert "http://{url}:{port}/sse" in t.connection_template
+
+
+def test_sse_bridge_template_present():
+    from pathlib import Path
+    p = Path(__file__).resolve().parents[3] / "template/.claude/mcp/sse_stdio_bridge.py"
+    assert p.is_file()
 
 
 def test_platform_requires_platform_path():

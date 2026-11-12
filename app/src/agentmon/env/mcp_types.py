@@ -36,11 +36,17 @@ _HTTP_PORT = (
     '    "url": "http://{url}:{port}/mcp"\n'
     '}'
 )
-_SSE_PORT = (
+# HTTP+SSE-серверы (mcp-bsl-context) не шлют keep-alive, а MCP-клиент Claude
+# Code рвёт молчащий SSE-поток через ~5 минут. Мост держит SSE Python-клиентом
+# (у него нет такого таймаута) и отдаёт сервер как stdio — без правок сервера.
+_SSE_BRIDGE = (
     '"{mcp_name}": {\n'
-    '    "type": "sse",\n'
-    '    "url": "http://{url}:{port}/sse",\n'
-    '    "transport": "sse"\n'
+    '    "type": "stdio",\n'
+    '    "command": "python3",\n'
+    '    "args": [\n'
+    '        ".claude/mcp/sse_stdio_bridge.py",\n'
+    '        "http://{url}:{port}/sse"\n'
+    '    ]\n'
     '}'
 )
 _CUSTOM = (
@@ -107,7 +113,7 @@ MCP_TYPES: list[McpType] = [
         title="Справка по платформе",
         fields=("name", "mcp_name", "purpose", "url", "port",
                 "platform_path", "connection"),
-        connection_template=_SSE_PORT,
+        connection_template=_SSE_BRIDGE,
         defaults={
             "mcp_name": "1c_platform",
             "url": "localhost",
