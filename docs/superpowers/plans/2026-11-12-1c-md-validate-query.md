@@ -232,7 +232,7 @@ def test_deploy_1c_md_adds_validate_query_to_mcp_usage(tmp_path):
         LocalProvisioner(), cfg(tmp_path, [sel("1c-md")]), update=False)
     text = skill_text(tmp_path, "mcp-usage")
     assert "validate_query" in text
-    assert "загружены в БД" in text
+    assert "метаданные, загруженные в БД" in text
     assert "<!-- @if" not in text and "<!-- @endif" not in text
 
 
@@ -310,11 +310,13 @@ def _render_template_texts(prov, claude_dir, overrides, *,
             text = src.read_text(encoding="utf-8")
         except (UnicodeDecodeError, OSError):
             continue
-        new = text
+        # Сначала рендер условных блоков, потом подстановка имён MCP: иначе
+        # override `1c-md` → `1c-md-queries` (если сервер назван по-другому)
+        # испортил бы имя условия в маркере `<!-- @if 1c-md -->`.
+        new = _render_conditional_blocks(
+            text, has_1c_md, filename=rel.as_posix())
         for placeholder, actual in overrides.items():
             new = new.replace(placeholder, actual)
-        new = _render_conditional_blocks(
-            new, has_1c_md, filename=rel.as_posix())
         if new != text:
             prov.write_text(f"{claude_dir}/{rel.as_posix()}",
                             _rewrite_python_text(new, py_cmd))
