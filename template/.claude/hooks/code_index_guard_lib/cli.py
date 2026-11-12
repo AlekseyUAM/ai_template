@@ -2,7 +2,7 @@
 import json
 import sys
 
-from . import decisions, tools
+from . import bash, decisions, tools
 from .config import indexed_paths, load_guard_config
 from .context import GuardContext
 
@@ -57,6 +57,8 @@ def main(argv=None):
             d = decisions.decide_grep(ti, cwd, ctx)
         elif tool == "Glob":
             d = decisions.decide_glob(ti, cwd, ctx)
+        elif tool == "Bash":
+            d = bash.decide_bash(ti, cwd, ctx)
         if d is not None:
             emit(d)
     except Exception:
