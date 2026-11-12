@@ -32,9 +32,8 @@ def decide_powershell(tool_input: dict, cwd: str | None, ctx) -> Decision | None
 
     # Цепочка звеньев: как у Bash (обрыв на первой одиночной трубе — правее
     # фильтруется чужой вывод объектами, а не читаются файлы).
-    # None — каталог неизвестен (popd, cd -, нераскрытая подстановка): пустая
-    # строка вместо None матчится с индексированным префиксом и даёт ложный отказ.
-    base: str | None = cwd or ""
+    # `""` — каталог неизвестен: match_indexed("") воздерживается.
+    base = cwd or ""
     home = shell.home_dir()
     link: str | None = None
     assignments: dict[str, str] = {}
@@ -48,9 +47,6 @@ def decide_powershell(tool_input: dict, cwd: str | None, ctx) -> Decision | None
             assignments[assign[0]] = assign[1]
             continue
         b = shell.dir_change(part, base, home)
-        if b is shell._UNKNOWN_DIR:
-            base = None
-            continue
         if b is not None:
             base = b
             continue

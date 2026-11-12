@@ -181,21 +181,13 @@ def parse_assignment(part: str, ps: bool = False) -> tuple[str, str] | None:
     return (name, value)
 
 
-_UNKNOWN_DIR = object()
-
-
-def dir_change(part: str, base: "str | None", home: str | None) -> "str | None | object":
+def dir_change(part: str, base: str, home: str | None) -> str | None:
     """Звено смены каталога → новый базовый каталог.
 
     None — звено не смена каталога. `""` — каталог стал неизвестен (popd, cd -,
     нераскрытая подстановка): дальше воздерживаемся, а не судим по прежнему cwd.
-    `_UNKNOWN_DIR` — каталог был неизвестен и звено меняет базу на относительную:
-    подменять её пустой строкой нельзя, пустая успешно матчится с индексированным
-    префиксом (порт Rust `Option<String>`).
     Окружение не читается: домашний каталог передаёт вызывающий.
     """
-    if base is None:
-        return _UNKNOWN_DIR
     base = base.replace("\\", "/")
     trimmed = base.rstrip("/")
     # Корень `/` не должен схлопнуться в пустую строку: пустая база — «каталог неизвестен».
@@ -221,7 +213,7 @@ def dir_change(part: str, base: "str | None", home: str | None) -> "str | None |
     else:
         return None
     if is_pop:
-        return _UNKNOWN_DIR  # куда вернулись — неизвестно
+        return ""  # куда вернулись — неизвестно
     arg = arg.strip()
     arg = _trim_matches(_trim_matches(arg, '"'), "'")
     # Ведущие ключи: у Set-Location это -Path/-LiteralPath, у cmd-шного cd — /d.
@@ -238,10 +230,10 @@ def dir_change(part: str, base: "str | None", home: str | None) -> "str | None |
         return home if home is not None else ""
     # `cd -` и нераскрытая подстановка: цель неизвестна.
     if arg == "-" or "$" in arg:
-        return _UNKNOWN_DIR
+        return ""
     if arg == "~" or arg.startswith("~/"):
         if home is None:
-            return _UNKNOWN_DIR  # домашнего каталога не знаем
+            return ""  # домашнего каталога не знаем
         rest = arg.lstrip("~").lstrip("/")
         if not rest:
             abs_path = home
@@ -252,7 +244,7 @@ def dir_change(part: str, base: "str | None", home: str | None) -> "str | None |
         abs_path = arg
     else:
         if not base:
-            return _UNKNOWN_DIR  # относительный от неизвестного каталога
+            return ""  # относительный от неизвестного каталога
         abs_path = f"{base}/{arg}"
     return paths.normalize_dir(abs_path)
 
@@ -282,14 +274,12 @@ def expand_vars(text: str, vars: dict[str, str]) -> str:
     return out
 
 
-def ls_targets_are_files(link: str, base: "str | None") -> bool:
+def ls_targets_are_files(link: str, base: str) -> bool:
     """true → у звена `ls` есть цели и КАЖДАЯ из них — существующий файл.
 
     Тогда это взгляд на размер и дату файлов, а не обход каталога. Голый `ls`,
     каталог и маска целями-файлами не считаются.
     """
-    if base is None:
-        return True  # каталог неизвестен — существование цели не проверяем: пропускаем
     base = base.replace("\\", "/").rstrip("/")
     has_target = False
     for word in link.split()[1:]:
