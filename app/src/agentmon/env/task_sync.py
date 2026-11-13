@@ -15,6 +15,7 @@ from agentmon.store.tasks import TaskRepo
 from agentmon.env.task_json import update_json
 from agentmon.env.task_schema import task_folder_name
 from agentmon.env.task_model import overall_status
+from agentmon.env.timefmt import parse_ts
 
 # Статусами queued/stopped владеет стек/очередь — в task.json их нет, поэтому
 # status из файла для них не перезаписываем (иначе выбьем задачу из очереди).
@@ -37,15 +38,20 @@ def _apply_stage_timings(file_stages, prev_by_name, now) -> list:
     """
     for s in file_stages:
         prev = prev_by_name.get(s.get("name"), {})
+        # В файле даты — ISO-строки; в БД и для сравнений — epoch-числа.
+        s["started_at"] = parse_ts(s.get("started_at"))
+        s["finished_at"] = parse_ts(s.get("finished_at"))
+        prev_started = parse_ts(prev.get("started_at"))
+        prev_finished = parse_ts(prev.get("finished_at"))
         status = s.get("status")
         if s.get("started_at") is None:
-            if prev.get("started_at") is not None:
-                s["started_at"] = prev["started_at"]
+            if prev_started is not None:
+                s["started_at"] = prev_started
             elif status in ("running", "done", "failed"):
                 s["started_at"] = now
         if status in ("done", "failed") and s.get("finished_at") is None:
-            if prev.get("finished_at") is not None:
-                s["finished_at"] = prev["finished_at"]
+            if prev_finished is not None:
+                s["finished_at"] = prev_finished
             else:
                 s["finished_at"] = now
     return file_stages
@@ -70,9 +76,11 @@ def sync_task_from_file(store, project_path, task, now_fn=time.time,
         return None
 
     fields = {}
-    for key in ("stage", "started_at", "finished_at"):
+    if "stage" in data:
+        fields["stage"] = data.get("stage")
+    for key in ("started_at", "finished_at"):
         if key in data:
-            fields[key] = data.get(key)
+            fields[key] = parse_ts(data.get(key))
     file_status = data.get("status")
     if (sync_status and file_status in ALLOWED_FILE_STATUSES
             and task.get("status") not in PROTECTED_STATUSES):
@@ -87,7 +95,13 @@ def sync_task_from_file(store, project_path, task, now_fn=time.time,
         stages = _apply_stage_timings(data["stages"], prev_by_name, now_fn())
         fields["stages_json"] = json.dumps(stages, ensure_ascii=False)
     if "db_update" in data:
-        fields["db_update_json"] = json.dumps(data["db_update"], ensure_ascii=False)
+        db_update = data["db_update"]
+        if isinstance(db_update, dict):
+            db_update = dict(db_update)
+            for key in ("started_at", "finished_at"):
+                if key in db_update:
+                    db_update[key] = parse_ts(db_update.get(key))
+        fields["db_update_json"] = json.dumps(db_update, ensure_ascii=False)
     if fields:
         TaskRepo(store).update(task["id"], **fields)
     return fields

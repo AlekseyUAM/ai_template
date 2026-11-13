@@ -1,6 +1,7 @@
 """Тесты task_sync: дошт­амп таймингов этапов и запись approval в task.json."""
 import json
 from pathlib import Path
+from datetime import datetime, timedelta, timezone
 
 from agentmon.store.db import connect
 from agentmon.store.schema import init_schema
@@ -123,3 +124,126 @@ def test_unknown_file_status_ignored(tmp_path):
     task = tr.get(tid)
     task_sync.sync_task_from_file(db, str(tmp_path / "proj"), task)
     assert tr.get(tid)["status"] == "planned"
+
+
+# ─── ISO-даты task.json → epoch в БД ─────────────────────────────────────────
+
+_MSK = timezone(timedelta(hours=3))
+
+
+def _epoch_11_msk():
+    return datetime(2026, 11, 13, 11, 0, tzinfo=_MSK).timestamp()
+
+
+def _epoch_0830_utc():
+    return datetime(2026, 11, 13, 8, 30, tzinfo=timezone.utc).timestamp()
+
+
+def test_sync_converts_iso_stage_timings(tmp_path):
+    """ISO-даты этапов из файла → epoch-числа в БД."""
+    db, tr, tid = _setup(tmp_path)
+    stages = _done_analyze()
+    for s in stages:
+        if s["name"] == "analyze":
+            s["started_at"] = "2026-11-13T11:00:00+03:00"
+            s["finished_at"] = "2026-11-13T08:30:00Z"
+    _write_task_json(tmp_path, tid, stages, status="awaiting_user")
+
+    sync_task_from_file(db, str(tmp_path), tr.get(tid), now_fn=lambda: 1000.0)
+
+    analyze = next(s for s in json.loads(tr.get(tid)["stages_json"])
+                   if s["name"] == "analyze")
+    assert analyze["started_at"] == _epoch_11_msk()
+    assert analyze["finished_at"] == _epoch_0830_utc()
+
+
+def test_sync_mixed_epoch_and_iso_timings(tmp_path):
+    """Старое число и новая ISO-строка в одном файле — оба в БД числами."""
+    db, tr, tid = _setup(tmp_path)
+    stages = _done_analyze()
+    for s in stages:
+        if s["name"] == "analyze":
+            s["started_at"] = 5.0
+            s["finished_at"] = "2026-11-13T08:30:00Z"
+    _write_task_json(tmp_path, tid, stages, status="awaiting_user")
+
+    sync_task_from_file(db, str(tmp_path), tr.get(tid), now_fn=lambda: 1000.0)
+
+    analyze = next(s for s in json.loads(tr.get(tid)["stages_json"])
+                   if s["name"] == "analyze")
+    assert analyze["started_at"] == 5.0
+    assert analyze["finished_at"] == _epoch_0830_utc()
+
+
+def test_sync_converts_task_level_iso_timings(tmp_path):
+    """Task-level started_at/finished_at из файла → числа в колонках БД."""
+    db, tr, tid = _setup(tmp_path)
+    folder = Path(tmp_path) / "tasks" / f"task#{tid}"
+    folder.mkdir(parents=True)
+    (folder / "task.json").write_text(json.dumps({
+        "status": "running",
+        "started_at": "2026-11-13T11:00:00+03:00",
+        "finished_at": None,
+        "stages": [],
+    }, ensure_ascii=False), encoding="utf-8")
+
+    sync_task_from_file(db, str(tmp_path), tr.get(tid), now_fn=lambda: 1000.0)
+
+    assert tr.get(tid)["started_at"] == _epoch_11_msk()
+    assert tr.get(tid)["finished_at"] is None
+
+
+def test_sync_converts_db_update_iso_timings(tmp_path):
+    """db_update: ISO внутри словаря → числа в JSON-строке БД, прочее сохраняется."""
+    db, tr, tid = _setup(tmp_path)
+    folder = Path(tmp_path) / "tasks" / f"task#{tid}"
+    folder.mkdir(parents=True)
+    (folder / "task.json").write_text(json.dumps({
+        "status": "running",
+        "db_update": {
+            "started_at": "2026-11-13T11:00:00+03:00",
+            "finished_at": "2026-11-13T08:30:00Z",
+            "note": "keep",
+        },
+        "stages": [],
+    }, ensure_ascii=False), encoding="utf-8")
+
+    sync_task_from_file(db, str(tmp_path), tr.get(tid), now_fn=lambda: 1000.0)
+
+    db_update = json.loads(tr.get(tid)["db_update_json"])
+    assert db_update["started_at"] == _epoch_11_msk()
+    assert db_update["finished_at"] == _epoch_0830_utc()
+    assert db_update["note"] == "keep"
+
+
+def test_sync_invalid_iso_falls_back_to_now(tmp_path):
+    """Мусор вместо даты не роняет синк: этап done получает фолбэк now."""
+    db, tr, tid = _setup(tmp_path)
+    stages = _done_analyze()
+    for s in stages:
+        if s["name"] == "analyze":
+            s["started_at"] = "не дата"
+    _write_task_json(tmp_path, tid, stages, status="awaiting_user")
+
+    sync_task_from_file(db, str(tmp_path), tr.get(tid), now_fn=lambda: 1000.0)
+
+    analyze = next(s for s in json.loads(tr.get(tid)["stages_json"])
+                   if s["name"] == "analyze")
+    assert analyze["started_at"] == 1000.0
+    assert analyze["finished_at"] == 1000.0
+
+
+def test_sync_invalid_task_level_iso_becomes_none(tmp_path):
+    """Невалидная task-level дата — как отсутствующая (None), без исключения."""
+    db, tr, tid = _setup(tmp_path)
+    folder = Path(tmp_path) / "tasks" / f"task#{tid}"
+    folder.mkdir(parents=True)
+    (folder / "task.json").write_text(json.dumps({
+        "status": "running",
+        "started_at": "не дата",
+        "stages": [],
+    }, ensure_ascii=False), encoding="utf-8")
+
+    sync_task_from_file(db, str(tmp_path), tr.get(tid), now_fn=lambda: 1000.0)
+
+    assert tr.get(tid)["started_at"] is None
