@@ -3,11 +3,13 @@
 Prefix: /api/env/tasks
 """
 import json
+import time
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 
 from .task_model import build_stages, overall_status, validate_task
+from .timefmt import to_local_iso
 
 
 def build_task2_router(store) -> APIRouter:
@@ -108,6 +110,7 @@ def build_task2_router(store) -> APIRouter:
             stages_json=json.dumps(stages, ensure_ascii=False),
             status="planned",
             stage=None,
+            now=time.time(),
             update_db=update_db,
             max_minutes=max_minutes,
             interactive=interactive,
@@ -155,6 +158,14 @@ def build_task2_router(store) -> APIRouter:
         # для обрамления кода маркерами при включённом mark_changes.
         task_data["developer_id"] = project.get("identifier", "")
         task_data["stages"] = stages
+        # task.json — человекочитаемые даты: ISO в локальном поясе ОС.
+        for key in ("created_at", "started_at", "finished_at"):
+            if key in task_data:
+                task_data[key] = to_local_iso(task_data.get(key))
+        for stage in task_data["stages"]:
+            for key in ("started_at", "finished_at"):
+                if key in stage:
+                    stage[key] = to_local_iso(stage.get(key))
         (task_dir / "task.json").write_text(
             json.dumps(task_data, ensure_ascii=False, indent=2),
             encoding="utf-8",

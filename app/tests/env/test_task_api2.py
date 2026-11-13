@@ -822,3 +822,35 @@ def test_changed_files_dedup(tmp_path):
     assert changed.count("file1.py") == 1
     assert "file2.py" in changed
     assert "file3.py" in changed
+
+
+def test_create_task_writes_iso_created_at(tmp_path):
+    """created_at в task.json — локальный ISO, в БД — epoch-число."""
+    from datetime import datetime
+
+    client, store = make_client(tmp_path)
+    pid, project_path = seed_project(store, tmp_path)
+
+    r = client.post("/api/env/tasks", json={
+        "project_id": pid,
+        "name": "Задача с датой",
+        "identifier": "C-1",
+        "goal": "Цель",
+        "plan": "План",
+        "constraints": "Ограничения",
+        "tests": "",
+        "enabled_stages": ["analyze"],
+        "gated_stages": [],
+    })
+    assert r.status_code == 200
+    task = r.json()["task"]
+    assert isinstance(task["created_at"], (int, float))
+
+    task_json_data = json.loads(
+        (project_path / "tasks" / "task#C-1" / "task.json").read_text())
+    created = task_json_data["created_at"]
+    assert isinstance(created, str)
+    parsed = datetime.fromisoformat(created)
+    assert parsed.tzinfo is not None
+    # Точность до секунд: с БД-временем расходится меньше чем на секунду.
+    assert abs(parsed.timestamp() - float(task["created_at"])) < 1.0
