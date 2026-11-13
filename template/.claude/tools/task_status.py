@@ -7,6 +7,7 @@
 """
 import argparse
 import contextlib
+from datetime import datetime
 import json
 import os
 import time
@@ -69,6 +70,31 @@ def _atomic_write_json(path: Path, data: dict) -> None:
             pass
 
 TRUTHY = {"1", "true", "yes", "да", "истина", "on"}
+
+
+def _now_iso() -> str:
+    """Текущее время в ISO 8601 с локальным смещением ОС."""
+    return datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+def _normalize_times(data: dict) -> None:
+    """Числовые даты в task.json → ISO-строки (старые файлы, без миграции)."""
+    def _convert(container: dict) -> None:
+        for key in ("created_at", "started_at", "finished_at"):
+            value = container.get(key)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                container[key] = (
+                    datetime.fromtimestamp(value)
+                    .astimezone()
+                    .isoformat(timespec="seconds"))
+
+    _convert(data)
+    for stage in data.get("stages", []):
+        if isinstance(stage, dict):
+            _convert(stage)
+    db_update = data.get("db_update")
+    if isinstance(db_update, dict):
+        _convert(db_update)
 
 
 def _truthy(value) -> bool:
@@ -154,7 +180,7 @@ def set_db_update(task_dir: str, phase: str) -> None:
     path = Path(task_dir) / "task.json"
     with _locked(path):
         data = json.loads(path.read_text(encoding="utf-8"))
-        now = time.time()
+        now = _now_iso()
         du = data.get("db_update") or {}
         if phase == "start":
             du = {"started_at": now, "finished_at": None}
@@ -162,6 +188,7 @@ def set_db_update(task_dir: str, phase: str) -> None:
             du.setdefault("started_at", now)
             du["finished_at"] = now
         data["db_update"] = du
+        _normalize_times(data)
         _atomic_write_json(path, data)
 
 
@@ -191,7 +218,7 @@ def _apply_update(data: dict, stage: str, status: str, files) -> None:
                         and _truthy(data.get("update_db")):
                     data["db_update"] = {"started_at": None, "finished_at": None}
                 # Тайминги этапа и номер итерации
-                now_stage = time.time()
+                now_stage = _now_iso()
                 if status == "running":
                     if s.get("finished_at") is not None:
                         # повторный прогон этапа в цикле develop↔testing/review
@@ -206,12 +233,13 @@ def _apply_update(data: dict, stage: str, status: str, files) -> None:
             # в task_api2.update_stage), иначе он застрянет на начальном значении.
             overall = _overall_status(data.get("stages", []))
             data["status"] = overall
-            # Отметки времени — epoch-секунды, как в БД (queue.py): started_at при
-            # первом переходе задачи в running (ставим один раз), finished_at при
-            # достижении терминального статуса (done/failed). При возврате в
-            # нетерминальный статус (например, цикл review→develop) снимаем
+            # Отметки времени — ISO 8601 в локальном поясе ОС. В БД их
+            # переводит обратно в epoch task_sync; фолбэк для неотмеченных
+            # этапов остаётся числовым. started_at ставится при первом
+            # переходе задачи в running, finished_at — при терминальном
+            # статусе; при возврате в нетерминальный статус снимаем
             # устаревший finished_at.
-            now = time.time()
+            now = _now_iso()
             if overall == "running" and not data.get("started_at"):
                 data["started_at"] = now
             if overall in ("done", "failed"):
@@ -227,6 +255,7 @@ def update(task_dir: str, stage: str, status: str, files=None) -> None:
     with _locked(path):
         data = json.loads(path.read_text(encoding="utf-8"))
         _apply_update(data, stage, status, files)
+        _normalize_times(data)
         _atomic_write_json(path, data)
 
 

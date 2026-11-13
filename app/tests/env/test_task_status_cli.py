@@ -1,5 +1,6 @@
 import importlib.util
 import json
+from datetime import datetime
 from pathlib import Path
 import pytest
 from agentmon.env import task_schema as ts
@@ -12,6 +13,11 @@ def _load():
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
+
+
+def _iso_dt(value: str) -> datetime:
+    """Разбор ISO-даты из task.json для сравнений в тестах."""
+    return datetime.fromisoformat(value)
 
 
 def _task(tmp_path):
@@ -79,15 +85,16 @@ def test_cli_sets_started_and_finished_at(tmp_path):
     d = _one_stage_task(tmp_path)
     mod.main([str(d), "develop", "running"])
     running = json.loads((d / "task.json").read_text(encoding="utf-8"))
-    assert isinstance(running["started_at"], (int, float))
+    assert isinstance(running["started_at"], str)
+    assert _iso_dt(running["started_at"]).tzinfo is not None
     assert running.get("finished_at") is None
 
     mod.main([str(d), "develop", "done"])
     done = json.loads((d / "task.json").read_text(encoding="utf-8"))
     # started_at не перезаписывается, finished_at проставляется и не раньше старта
     assert done["started_at"] == running["started_at"]
-    assert isinstance(done["finished_at"], (int, float))
-    assert done["finished_at"] >= done["started_at"]
+    assert isinstance(done["finished_at"], str)
+    assert _iso_dt(done["finished_at"]) >= _iso_dt(done["started_at"])
 
 
 def test_cli_clears_finished_at_when_reopened(tmp_path):
@@ -128,14 +135,14 @@ def test_cli_stamps_stage_timing(tmp_path):
     mod.main([str(d), "develop", "running"])
     data = json.loads((d / "task.json").read_text(encoding="utf-8"))
     dev = next(s for s in data["stages"] if s["name"] == "develop")
-    assert dev["started_at"] is not None
+    assert isinstance(dev["started_at"], str)
     assert dev["finished_at"] is None
     assert dev["iteration"] == 1
     mod.main([str(d), "develop", "done"])
     data = json.loads((d / "task.json").read_text(encoding="utf-8"))
     dev = next(s for s in data["stages"] if s["name"] == "develop")
-    assert dev["finished_at"] is not None
-    assert dev["finished_at"] >= dev["started_at"]
+    assert isinstance(dev["finished_at"], str)
+    assert _iso_dt(dev["finished_at"]) >= _iso_dt(dev["started_at"])
 
 
 def test_cli_rerun_increments_iteration(tmp_path):
@@ -155,12 +162,13 @@ def test_cli_db_update_start_and_done(tmp_path):
     d = _task(tmp_path)
     mod.main([str(d), "db-update", "start"])
     data = json.loads((d / "task.json").read_text(encoding="utf-8"))
-    assert data["db_update"]["started_at"] is not None
+    assert isinstance(data["db_update"]["started_at"], str)
     assert data["db_update"]["finished_at"] is None
     mod.main([str(d), "db-update", "done"])
     data = json.loads((d / "task.json").read_text(encoding="utf-8"))
-    assert data["db_update"]["finished_at"] is not None
-    assert data["db_update"]["finished_at"] >= data["db_update"]["started_at"]
+    assert isinstance(data["db_update"]["finished_at"], str)
+    assert _iso_dt(data["db_update"]["finished_at"]) >= \
+        _iso_dt(data["db_update"]["started_at"])
 
 
 def _task_with_update_db(tmp_path):
@@ -256,3 +264,30 @@ def test_overall_status_awaiting_user(tmp_path):
     d = _gated_task(tmp_path, "done")
     data = json.loads((d / "task.json").read_text(encoding="utf-8"))
     assert mod._overall_status(data["stages"]) == "awaiting_user"
+
+
+def test_cli_normalizes_old_epoch_dates_to_iso(tmp_path):
+    """Числовые даты старого файла при записи конвертируются в ISO."""
+    mod = _load()
+    d = _one_stage_task(tmp_path)
+    data = json.loads((d / "task.json").read_text(encoding="utf-8"))
+    data["created_at"] = 1000.0
+    data["started_at"] = 800.0
+    data["db_update"] = {"started_at": 700.0, "finished_at": None}
+    dev = next(s for s in data["stages"] if s["name"] == "develop")
+    dev["started_at"] = 900.0
+    (d / "task.json").write_text(
+        json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    mod.main([str(d), "develop", "running"])
+
+    data = json.loads((d / "task.json").read_text(encoding="utf-8"))
+    dev = next(s for s in data["stages"] if s["name"] == "develop")
+    assert isinstance(data["created_at"], str)
+    assert _iso_dt(data["created_at"]).timestamp() == 1000.0
+    assert isinstance(data["started_at"], str)
+    assert _iso_dt(data["started_at"]).timestamp() == 800.0
+    assert isinstance(data["db_update"]["started_at"], str)
+    assert _iso_dt(data["db_update"]["started_at"]).timestamp() == 700.0
+    # Этап уже был в running — started_at перезаписан текущим запуском (ISO).
+    assert isinstance(dev["started_at"], str)
