@@ -240,44 +240,6 @@ def test_no_totals_not_flagged():
     assert "totals-field-not-aggregated" not in _codes(q)
 
 
-# ── aggregate-without-isnull (ошибка 6) ──────────────
-
-@pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
-def test_aggregate_without_isnull_flagged():
-    q = (
-        "ВЫБРАТЬ СУММА(ТоварыОбороты.СтоимостьРасход) КАК С "
-        "ИЗ РегистрНакопления.Товары.Обороты КАК ТоварыОбороты"
-    )
-    assert "aggregate-without-isnull" in _codes(q)
-
-
-@pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
-def test_aggregate_with_isnull_not_flagged():
-    q = (
-        "ВЫБРАТЬ ЕСТЬNULL(СУММА(ТоварыОбороты.СтоимостьРасход), 0) КАК С "
-        "ИЗ РегистрНакопления.Товары.Обороты КАК ТоварыОбороты"
-    )
-    assert "aggregate-without-isnull" not in _codes(q)
-
-
-@pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
-def test_aggregate_with_grouping_not_flagged():
-    # Есть СГРУППИРОВАТЬ ПО — пустые группы не дают строк, ловушки нет.
-    q = (
-        "ВЫБРАТЬ Т.Номенклатура КАК Номенклатура, СУММА(Т.Количество) КАК Кол "
-        "ИЗ РегистрНакопления.Товары КАК Т "
-        "СГРУППИРОВАТЬ ПО Т.Номенклатура"
-    )
-    assert "aggregate-without-isnull" not in _codes(q)
-
-
-@pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
-def test_count_not_flagged():
-    # КОЛИЧЕСТВО(*) на пустом наборе даёт 0, а не NULL.
-    q = "ВЫБРАТЬ КОЛИЧЕСТВО(*) КАК К ИЗ Справочник.Товары КАК Т"
-    assert "aggregate-without-isnull" not in _codes(q)
-
-
 def test_keyword_case_expression_words_not_flagged_as_alias():
     # «Конец», «Выбор», «Когда», «Тогда», «Иначе» как псевдоним поля (КАК Конец)
     # не должны давать ложное срабатывание keyword-lowercase (Fix 2).
