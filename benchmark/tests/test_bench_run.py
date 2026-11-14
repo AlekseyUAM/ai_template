@@ -5,7 +5,8 @@ from pathlib import Path
 import pytest
 
 from bench_run import (BenchError, TaskInfo, _task_aliases, apply_limits,
-                       build_options, check_freshness, collect_diff,
+                       build_options, changed_files, check_freshness,
+                       collect_diff,
                        discover_tasks, git_state, parse_args, parse_limit_arg,
                        parse_minutes, read_env_file, resolve_project_dir,
                        select_tasks)
@@ -181,3 +182,9 @@ def test_collect_diff_includes_tracked_and_untracked(tmp_path):
     assert "tracked.txt" in text and "new.txt" in text
     assert "tracked.txt" in changed and "new.txt" in changed
     assert "tracked.txt" in stat.read_text(encoding="utf-8")
+
+
+def test_changed_files_rejects_invalid_before_head(tmp_path):
+    project = make_git_project(tmp_path)
+    with pytest.raises(BenchError):
+        changed_files(project, "0" * 40)

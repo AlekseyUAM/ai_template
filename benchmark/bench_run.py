@@ -108,8 +108,7 @@ def _untracked_files(project_dir: Path) -> list[str]:
 
 
 def changed_files(project_dir: Path, before_head: str) -> list[str]:
-    out = _git(project_dir, "diff", "--name-only", before_head,
-               check=False).stdout
+    out = _git(project_dir, "diff", "--name-only", before_head).stdout
     files = {line.strip() for line in out.splitlines() if line.strip()}
     files.update(_untracked_files(project_dir))
     return sorted(files)
@@ -117,8 +116,8 @@ def changed_files(project_dir: Path, before_head: str) -> list[str]:
 
 def collect_diff(project_dir: Path, before_head: str, out_path: Path,
                  stat_path: Path) -> list[str]:
-    diff = _git(project_dir, "diff", before_head, check=False).stdout
-    stat = _git(project_dir, "diff", "--stat", before_head, check=False).stdout
+    diff = _git(project_dir, "diff", before_head).stdout
+    stat = _git(project_dir, "diff", "--stat", before_head).stdout
     parts = [diff]
     stat_parts = [stat]
     for rel in _untracked_files(project_dir):
