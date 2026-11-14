@@ -3,9 +3,10 @@ from pathlib import Path
 
 import pytest
 
-from bench_run import (BenchError, apply_limits, build_options, discover_tasks,
-                       parse_args, parse_limit_arg, parse_minutes,
-                       read_env_file, resolve_project_dir, select_tasks)
+from bench_run import (BenchError, TaskInfo, _task_aliases, apply_limits,
+                       build_options, discover_tasks, parse_args,
+                       parse_limit_arg, parse_minutes, read_env_file,
+                       resolve_project_dir, select_tasks)
 
 
 def make_project(root: Path) -> Path:
@@ -75,6 +76,18 @@ def test_discover_and_select(tmp_path):
     assert [t.folder for t in select_tasks(tasks, ["001"])] == ["task##001"]
     with pytest.raises(BenchError):
         select_tasks(tasks, ["nope"])
+
+
+def test_empty_selector_does_not_match_any_task(tmp_path):
+    tasks = discover_tasks(make_project(tmp_path))
+    with pytest.raises(BenchError):
+        select_tasks(tasks, [""])
+
+
+def test_degenerate_identifier_has_no_empty_alias(tmp_path):
+    task = TaskInfo(folder="task##001", path=tmp_path, identifier="#",
+                    max_minutes=30, status="", raw={})
+    assert "" not in _task_aliases(task)
 
 
 def test_apply_limits_and_duplicates(tmp_path):

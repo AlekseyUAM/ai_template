@@ -3,12 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
-import signal
-import subprocess
-import sys
-import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -144,12 +139,14 @@ def discover_tasks(project_dir: Path) -> list[TaskInfo]:
 
 
 def _task_aliases(task: TaskInfo) -> set[str]:
-    return {
+    aliases = {
         task.folder,
         task.identifier,
-        task.identifier.lstrip("#"),
+        task.identifier.removeprefix("#"),
         task.folder.removeprefix("task##"),
     }
+    aliases.discard("")
+    return aliases
 
 
 def _match_task(tasks: list[TaskInfo], selector: str) -> TaskInfo | None:
