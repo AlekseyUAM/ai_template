@@ -107,15 +107,29 @@ analyze → plan → tests → develop → testing → review → docs.
    - `TESTS.md` содержит секцию «Смоук» с общим числом сценариев;
    - `logs/task#<id>/run-tests-smoke.log` и `result.json` (`ИмяФайлаЛог` из конфига)
      существуют, и их mtime позже mtime тест-модуля `src/cfe/ЮнитТесты`;
+   - `logs/task#<id>/load-extension-tests.log` заканчивается `LOAD_EXIT=0`, и его mtime
+     не старше mtime тест-модуля; `EXIT=load-failed` в `run-tests-smoke.log` —
+     доказательство недействительно.
    - в логе `EXIT=4` (прогон состоялся, тесты красные — на смоуке это норма), нет
      `EXIT=2`; в `result.json` `Выполнено = true`, `ОписаниеОшибки = null`, число
      тестов равно числу сценариев из секции «Смоук», у каждого теста `Результат = false`.
 3. Если доказательства отсутствуют/противоречивы — один контрольный прогон в фоне
    (см. «Долгие фоновые операции»):
    ```bash
-   python .claude/skills/1c-batch/scripts/1c-batch.py load-extension src/cfe/ЮнитТесты --name ЮнитТесты > logs/task#<id>/load-extension-tests.log 2>&1
-   ( python .claude/tools/run-tests.py configs/task#<id>/test.json --timeout 120 > logs/task#<id>/run-tests-smoke.log 2>&1; echo "EXIT=$?" >> logs/task#<id>/run-tests-smoke.log )
+   python .claude/skills/1c-batch/scripts/1c-batch.py load-extension \
+       src/cfe/ЮнитТесты --name ЮнитТесты \
+       > logs/task#<id>/load-extension-tests.log 2>&1
+   load_rc=$?; echo "LOAD_EXIT=$load_rc" >> logs/task#<id>/load-extension-tests.log
+   if [ "$load_rc" -eq 0 ]; then
+       python .claude/tools/run-tests.py configs/task#<id>/test.json --timeout 300 \
+           > logs/task#<id>/run-tests-smoke.log 2>&1
+       rc=$?; echo "EXIT=$rc" >> logs/task#<id>/run-tests-smoke.log
+   else
+       echo "EXIT=load-failed" >> logs/task#<id>/run-tests-smoke.log
+   fi
    ```
+   `LOAD_EXIT≠0` или `EXIT=load-failed` — загрузка расширения не удалась, прогон
+   тестов не выполнялся; такой контрольный прогон смоук не подтверждает.
    Не подтвердился — вернуть `tests` в `pending` с логом.
 4. Критерии корректного красного (те же, что у автора тестов): нет ошибок
    компиляции/setup; ни один тест не зелёный; красные падают по утверждению или по
@@ -287,8 +301,9 @@ SendMessage, а не новым запуском. Это сохраняет ко
    > `<артефакт>` (путь), `TESTING.md`/`REVIEW.md` (путь) и лог (путь). Вердикт:
    > `<вердикт>`. Твоя зона: `<зона>`. Не меняй `<ограничения>`. Верни краткий отчёт:
    > что прочитал, что изменил, какие проверки выполнил.
-   > Если этап `tests` — после правки выполни красный смоук сам (`run-tests.py`,
-   > полный набор), обнови секцию «Смоук» в `TESTS.md` и приложи пути логов.
+   > Если этап `tests` — после правки загрузи расширение (`1c-batch.py load-extension`)
+   > и выполни красный смоук сам (`run-tests.py`, полный набор), обнови секцию
+   > «Смоук» в `TESTS.md` и приложи пути логов.
 3. После ответа проверь, что артефакт изменился и отчёт соответствует задаче. Если нет —
    fallback на нового агента.
 4. Новый агент запускай, если: идентификатора нет; SendMessage недоступен; агент не

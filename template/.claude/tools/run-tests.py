@@ -452,6 +452,11 @@ def run_tests(config_arg: str, extension: str, timeout: int, no_check: bool,
         return diagnose_timeout(project_root)
     if rc != RC_OK:
         return rc
+
+    if scenarios:
+        print("ℹ️  Отладочный прогон --test: это не доказательство смоука — "
+              "полный набор запускайте отдельно.")
+
     return _read_and_print_result(result_path)
 
 

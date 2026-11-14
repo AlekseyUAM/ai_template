@@ -16,8 +16,10 @@ effort: {{EFFORT}}
 
 Повторно — когда оркестратор вернул этап `tests` в цикле: тест оказался **дефектным**
 (в `TESTING.md` виновник — тест) или красный смоук нашёл дефект до разработки. Тогда:
-1. Определи источник диагностики: `TESTING.md`/`REVIEW.md` и `result.json` последнего
-   прогона. Текущий `TESTS.md` — файл без суффикса; предыдущая версия — `TESTS.<n>.md`.
+1. Определи источник диагностики: при возврате со смоука — `run-tests-smoke.log` и
+   `result.json` последнего **полного** прогона; при возврате из `testing` — `TESTING.md`
+   и `result.json`; при возврате из `review` — `REVIEW.md` и `result.json`. Текущий
+   `TESTS.md` — файл без суффикса; предыдущая версия — `TESTS.<n>.md`.
 2. Почини тест-модуль в `src/cfe/ЮнитТесты`, не ослабляя проверку ради сокрытия
    реального бага кода; при необходимости обнови `TESTS.md`. После правки выполни
    отладочный прогон `--test` по упавшим сценариям, затем полный набор (смоук) и
@@ -130,11 +132,21 @@ effort: {{EFFORT}}
 python .claude/skills/1c-batch/scripts/1c-batch.py load-extension \
     src/cfe/ЮнитТесты --name ЮнитТесты \
     > logs/task#<id>/load-extension-tests.log 2>&1
-python .claude/tools/run-tests.py configs/task#<id>/test.json --timeout 120 \
-    > logs/task#<id>/run-tests-smoke.log 2>&1
-rc=$?; echo "EXIT=$rc" >> logs/task#<id>/run-tests-smoke.log
-tail -80 logs/task#<id>/run-tests-smoke.log
+load_rc=$?; echo "LOAD_EXIT=$load_rc" >> logs/task#<id>/load-extension-tests.log
+if [ "$load_rc" -eq 0 ]; then
+    python .claude/tools/run-tests.py configs/task#<id>/test.json --timeout 300 \
+        > logs/task#<id>/run-tests-smoke.log 2>&1
+    rc=$?; echo "EXIT=$rc" >> logs/task#<id>/run-tests-smoke.log
+else
+    echo "EXIT=load-failed" >> logs/task#<id>/run-tests-smoke.log
+fi
+tail -80 logs/task#<id>/load-extension-tests.log logs/task#<id>/run-tests-smoke.log
 ```
+
+Обязателен `LOAD_EXIT=0`: при `LOAD_EXIT≠0` или `EXIT=load-failed` тестовый прогон
+не запускался — загрузка расширения не удалась, это дефект; не считай прогон
+доказательством смоука (прогон по предыдущей версии тест-расширения дал бы
+правдоподобный `EXIT=4`).
 
 На смоуке ожидаемый код — `EXIT=4` (прогон состоялся, все тесты красные). `EXIT=2`
 (ошибка компиляции), `EXIT=5` (нет результата) и `1/3/124` — дефекты, чини до `4`.
@@ -168,7 +180,8 @@ tail -80 logs/task#<id>/run-tests-debug.log
 
 ### Секция «Смоук» в `TESTS.md`
 
-Запиши: дату/время, пути `load-extension-tests.log` и `run-tests-smoke.log`, `EXIT`,
+Запиши: дату/время, пути `logs/task#<id>/load-extension-tests.log` и
+`logs/task#<id>/run-tests-smoke.log`, `LOAD_EXIT`, `EXIT`,
 `Выполнено`, `ОписаниеОшибки`, общее число сценариев полного набора, подтверждение что
 все `Результат=false` и красные падают по утверждению.
 

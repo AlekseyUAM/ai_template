@@ -172,3 +172,70 @@ def test_enterprise_failure_returned_as_is(monkeypatch, tmp_path):
     cfg = _config(tmp_path, result_path)
     _patch_enterprise(monkeypatch, mod, result_path, None, rc=1)
     assert mod.run_tests(str(cfg), "ЮнитТесты", 10, True) == 1
+
+
+def test_all_tests_passed_prints_summary(monkeypatch, tmp_path, capsys):
+    mod = _load()
+    result_path = tmp_path / "result.json"
+    cfg = _config(tmp_path, result_path)
+    _patch_enterprise(monkeypatch, mod, result_path,
+                      _result([{"Имя": "A", "Результат": True,
+                                "ОписаниеОшибки": None}]))
+    assert mod.run_tests(str(cfg), "ЮнитТесты", 10, True) == mod.RC_OK
+    assert "ИТОГ: 1/1 пройдено" in capsys.readouterr().out
+
+
+def test_debug_run_prints_not_evidence_notice(monkeypatch, tmp_path, capsys):
+    mod = _load()
+    result_path = tmp_path / "result.json"
+    cfg = _config(tmp_path, result_path)
+    _patch_enterprise(monkeypatch, mod, result_path,
+                      _result([{"Имя": "A", "Результат": False,
+                                "ОписаниеОшибки": "boom"}]))
+    scenarios = "A"
+    assert mod.run_tests(str(cfg), "ЮнитТесты", 10, True,
+                         scenarios) == mod.RC_TESTS_FAILED
+    out = capsys.readouterr().out
+    notice = "Отладочный прогон --test: это не доказательство смоука"
+    assert notice in out
+    assert out.index(notice) < out.index("ИТОГ: 0/1 пройдено")
+
+
+def test_full_run_has_no_debug_notice(monkeypatch, tmp_path, capsys):
+    mod = _load()
+    result_path = tmp_path / "result.json"
+    cfg = _config(tmp_path, result_path)
+    _patch_enterprise(monkeypatch, mod, result_path,
+                      _result([{"Имя": "A", "Результат": True,
+                                "ОписаниеОшибки": None}]))
+    assert mod.run_tests(str(cfg), "ЮнитТесты", 10, True) == mod.RC_OK
+    assert "не доказательство смоука" not in capsys.readouterr().out
+
+
+def test_done_false_returns_rc4(monkeypatch, tmp_path):
+    mod = _load()
+    result_path = tmp_path / "result.json"
+    cfg = _config(tmp_path, result_path)
+    _patch_enterprise(monkeypatch, mod, result_path,
+                      _result([{"Имя": "A", "Результат": True,
+                                "ОписаниеОшибки": None}], done=False))
+    assert mod.run_tests(str(cfg), "ЮнитТесты", 10, True) == mod.RC_TESTS_FAILED
+
+
+def test_malformed_result_returns_rc5(monkeypatch, tmp_path):
+    mod = _load()
+    result_path = tmp_path / "result.json"
+    cfg = _config(tmp_path, result_path)
+    # Файл пишется во время «прогона»: _reset_result_log удаляет старый result.json,
+    # поэтому запись после run_enterprise дала бы rc5 «файл не найден» вместо
+    # «невалидный», и тест не отличил бы эти ветки.
+    started = {}
+
+    def fake(project_root, c_value, timeout):
+        started["exists_at_start"] = result_path.exists()
+        result_path.write_text("not json", encoding="utf-8")
+        return mod.RC_OK
+
+    monkeypatch.setattr(mod, "run_enterprise", fake)
+    assert mod.run_tests(str(cfg), "ЮнитТесты", 10, True) == mod.RC_NO_RESULT
+    assert started["exists_at_start"] is False
