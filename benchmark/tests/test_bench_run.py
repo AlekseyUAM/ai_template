@@ -52,6 +52,19 @@ def test_find_session_files(tmp_path):
     assert find_session_files("missing", projects_root=tmp_path / "projects").main is None
 
 
+def test_find_session_files_case_insensitive(tmp_path):
+    project = tmp_path / "projects" / "-tmp-x"
+    project.mkdir(parents=True)
+    main = project / "fake-session.jsonl"
+    main.write_text("", encoding="utf-8")
+    sub = project / "fake-session" / "subagents"
+    sub.mkdir(parents=True)
+    (sub / "agent-a.jsonl").write_text("", encoding="utf-8")
+    files = find_session_files("FAKE-SESSION", projects_root=tmp_path / "projects")
+    assert files.main == main
+    assert files.subagents == (sub / "agent-a.jsonl",)
+
+
 def test_run_claude_result(tmp_path):
     fake = write_fake_claude(tmp_path / "fake", "\n".join([
         "import json",

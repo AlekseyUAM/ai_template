@@ -76,6 +76,8 @@ def extract_analyst_text(stream: StreamSummary) -> str | None:
     text = result.get("result")
     if result.get("is_error") or not isinstance(text, str):
         return None
+    # lstrip(), не strip(): сохраняем конечный перевод строки (ожидание теста),
+    # финальный \n нормализует write_report.
     return text.lstrip() or None
 
 

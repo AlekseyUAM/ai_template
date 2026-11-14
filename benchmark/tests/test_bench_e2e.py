@@ -134,6 +134,7 @@ def test_e2e_success_with_analysis(env):
     runs = sorted((project / "tmp" / "benchmark").iterdir())
     metrics = json.loads((runs[-1] / "metrics.json").read_text(encoding="utf-8"))
     assert [task["outcome"] for task in metrics["tasks"]] == ["success", "success"]
+    assert metrics["run"]["contaminated"] is False
     assert (runs[-1] / "digest.md").is_file()
     assert (runs[-1] / "diffs" / "task##001.diff").is_file()
 

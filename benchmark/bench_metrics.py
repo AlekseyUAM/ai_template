@@ -58,7 +58,11 @@ def find_session_files(session_id: str | None,
     if not session_id:
         return SessionFiles(None, ())
     root = Path(projects_root) if projects_root else Path.home() / ".claude" / "projects"
-    matches = sorted(root.glob(f"*/{session_id}.jsonl"))
+    # Claude Code may store session files under a different letter case.
+    candidates = {session_id}
+    candidates.add(session_id.lower())
+    matches = sorted({match for candidate in candidates
+                      for match in root.glob(f"*/{candidate}.jsonl")})
     if not matches:
         return SessionFiles(None, ())
     main = matches[0]
@@ -592,6 +596,11 @@ def render_digest(metrics: dict) -> str:
         lines.append("| " + " | ".join(_cell(cell) for cell in cells) + " |")
     for task in metrics.get("tasks") or []:
         lines += ["", f"## {task.get('folder')}", ""]
+        if task.get("outcome") != "success":
+            lines.append(f"- ⚠ результаты задачи недостоверны: исход "
+                         f"{task.get('outcome')} — артефакты и анализаторы "
+                         f"могут быть неполными")
+            lines.append("")
         exit_code = task.get("exit_code")
         lines.append(f"- Исход: `{task.get('outcome')}`, код выхода: "
                      f"`{'—' if exit_code is None else exit_code}`, время: "

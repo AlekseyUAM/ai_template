@@ -83,6 +83,13 @@ def git_state(project_dir: Path) -> GitState:
     return GitState(head=head, status=status)
 
 
+def _safe_git_state(path: Path) -> GitState | None:
+    try:
+        return git_state(path)
+    except BenchError:
+        return None
+
+
 def check_freshness(project_dir: Path, tasks: list[TaskInfo],
                     force: bool = False) -> list[str]:
     if force:
@@ -572,6 +579,7 @@ def execute(options: RunOptions) -> int:
             "repo_root": str(options.repo_root),
             "claude_cmd": options.claude_cmd,
             "force": options.force,
+            "contaminated": bool(options.force),
             "skip_analysis": options.skip_analysis,
             "env_file": str(options.env_file),
             "tasks": [{"folder": task.folder,
@@ -684,7 +692,8 @@ def execute(options: RunOptions) -> int:
         task_folders=[task.folder for task in options.tasks],
     )
     (run_dir / "analysis-prompt.md").write_text(prompt, encoding="utf-8")
-    analyst_before = git_state(options.project_dir)
+    project_before = git_state(options.project_dir)
+    repo_before = _safe_git_state(options.repo_root)
     analyst = run_claude(
         cmd=options.claude_cmd,
         prompt=prompt,
@@ -696,7 +705,8 @@ def execute(options: RunOptions) -> int:
                     "--disallowedTools", "Edit", "MultiEdit", "NotebookEdit",
                     "Write", "Agent"),
     )
-    analyst_after = git_state(options.project_dir)
+    project_after = git_state(options.project_dir)
+    repo_after = _safe_git_state(options.repo_root)
     text = extract_analyst_text(analyst.stream)
     error = None
     if analyst.timed_out:
@@ -711,14 +721,24 @@ def execute(options: RunOptions) -> int:
             run_dir=run_dir, metrics=run_metrics, error=error)
     else:
         (run_dir / "analyst-result.md").write_text(text, encoding="utf-8")
-    mutated = (analyst_before.head != analyst_after.head
-               or analyst_before.status != analyst_after.status)
+    project_mutated = (project_before.head != project_after.head
+                       or project_before.status != project_after.status)
+    repo_mutated = bool(
+        repo_before and repo_after
+        and (repo_before.head != repo_after.head
+             or repo_before.status != repo_after.status))
+    mutated = project_mutated or repo_mutated
     if mutated:
+        heads = [f"проект `{project_before.head[:8]}` → `{project_after.head[:8]}`"]
+        if repo_mutated:
+            heads.append(f"template `{repo_before.head[:8]}` → `{repo_after.head[:8]}`")
         text += ("\n\n## ⚠ Предупреждение\n\n"
-                 "Во время сессии-аналитика изменилось git-состояние проекта. "
-                 f"Проверьте `{analyst_before.head[:8]}` → `{analyst_after.head[:8]}` "
-                 "и `git status`; отчёт мог быть построен на изменённых данных.\n")
-        log("⚠ аналитик изменил git-состояние проекта")
+                 "Во время сессии-аналитика изменилось git-состояние проекта "
+                 "или репозитория template. Проверьте "
+                 + ", ".join(heads)
+                 + " и `git status`; отчёт мог быть построен на изменённых "
+                 "данных.\n")
+        log("⚠ аналитик изменил git-состояние проекта или репозитория template")
     target = write_report(options.project_dir, text)
     run_metrics["run"]["finished_at"] = _iso_now()
     run_metrics["analysis"] = {
@@ -729,7 +749,8 @@ def execute(options: RunOptions) -> int:
         "timed_out": analyst.timed_out,
         "exit_code": analyst.exit_code,
         "error": error,
-        "project_mutated": mutated,
+        "project_mutated": project_mutated,
+        "repo_mutated": repo_mutated,
         "result_path": str(target),
     }
     write_json_atomic(metrics_path, run_metrics)

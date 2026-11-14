@@ -344,6 +344,18 @@ def test_render_digest_none_values_rendered_as_dash():
     assert "`None`" not in text
 
 
+def test_render_digest_warns_on_unsuccessful_outcome():
+    task = {"folder": "task##005", "limit_minutes": 30, "outcome": "timeout",
+            "duration_sec": 1800.0, "exit_code": None, "stages": [], "cycles": {},
+            "transcript": {}}
+    text = render_digest(_digest_metrics(task))
+    heading = text.index("## task##005")
+    warning = text.index(
+        "- ⚠ результаты задачи недостоверны: исход timeout — артефакты и "
+        "анализаторы могут быть неполными")
+    assert warning > heading
+
+
 def test_render_digest_bad_duration_does_not_raise():
     task = {"folder": "task##003", "limit_minutes": 30, "outcome": "error",
             "duration_sec": "oops", "exit_code": 1, "transcript": {}}
