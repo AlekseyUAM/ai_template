@@ -141,7 +141,10 @@ def parse_tool_events(path: Path | None) -> list[ToolEvent]:
                 for block in blocks:
                     if not isinstance(block, dict) or block.get("type") != "tool_result":
                         continue
-                    tool = by_id.get(str(block.get("tool_use_id") or ""))
+                    result_id = str(block.get("tool_use_id") or "")
+                    if not result_id:
+                        continue
+                    tool = by_id.get(result_id)
                     if tool is None:
                         continue
                     tool.finished_at = _parse_timestamp(event.get("timestamp"))

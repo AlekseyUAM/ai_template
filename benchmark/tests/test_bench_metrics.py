@@ -154,6 +154,19 @@ def test_parse_tool_events_duplicate_id_keeps_first(tmp_path):
     assert events[0].duration_sec is not None
 
 
+def test_parse_tool_events_ignores_empty_result_id(tmp_path):
+    path = write_jsonl(tmp_path / "t.jsonl", [
+        tool_use("2026-01-01T00:00:00+00:00", "", "Bash",
+                 {"command": "echo hi"}),
+        tool_result("2026-01-01T00:00:30+00:00", ""),
+    ])
+    events = parse_tool_events(path)
+    assert len(events) == 1
+    assert events[0].name == "Bash"
+    assert events[0].finished_at is None
+    assert events[0].duration_sec is None
+
+
 def test_aggregate_environment_tolerates_bad_transcript():
     env = aggregate_environment([{"transcript": "oops"},
                                  {"transcript": {"main": 42}}])
