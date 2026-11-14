@@ -11,6 +11,7 @@ import os
 import re
 import shutil
 import socket
+import subprocess
 import time
 import urllib.error
 import urllib.request
@@ -21,6 +22,9 @@ from urllib.parse import urlparse
 
 from .config_schema import SCHEMA_VERSION, EnvConfig, McpSelection
 from .devbase import _parse_connection, git_commit_all, git_init_project
+from .mcp_docker_recipes import container_name, launch_params, recipe_for
+from . import mcp_docker
+from . import mcp_sources
 from .project_checks import current_env_version, infer_db_kind, validate_name
 from .timefmt import to_local_iso
 from ..paths import same_path
@@ -599,3 +603,117 @@ def commit_baseline(cfg: BenchConfig, tasks: list[ImportedTask], prov) -> None:
     git_commit_all(
         prov, cfg.project_dir,
         f"baseline before task{tasks[0].identifier}", config=cfg)
+
+
+CODE_INDEX_CONTAINER = "ai1c-mcp-code_index"
+
+
+def _image_absent(image: str, run) -> bool:
+    """Отсутствие образа: docker-опрос тем же `run`, что и остальные команды."""
+    return not mcp_docker.image_exists(image, run=run)
+
+
+def _build_code_index_image(repo_root: Path, *, run, log=print) -> None:
+    recipe = recipe_for("code-index")
+    build = recipe.build
+    if build is None:
+        raise SetupError(f"образ {recipe.image} отсутствует, а сборка недоступна")
+    cloned = mcp_sources.clone(build, str(repo_root), run=run)
+    if not cloned["ok"]:
+        raise SetupError("не удалось скачать исходники code-index:\n"
+                         + cloned.get("log", ""))
+    built = mcp_docker.build(
+        recipe.image, str(repo_root / build.dockerfile),
+        str(repo_root / build.context), run=run)
+    if not built["ok"]:
+        raise SetupError("не удалось собрать образ code-index:\n"
+                         + built.get("log", ""))
+    log(f"✓ образ code-index собран: {recipe.image}")
+
+
+def launch_code_index(cfg: BenchConfig, *, repo_root: Path, mid: int,
+                      run=subprocess.run, image_exists=_image_absent,
+                      launch=mcp_docker.launch, build_image=None,
+                      log=print) -> str:
+    """Пересоздать контейнер code_index и вернуть его имя."""
+    name = container_name({"mcp_name": "code_index"})
+    run(["docker", "rm", "-f", "-v", name], capture_output=True, text=True)
+
+    state_dir = Path(repo_root) / ".ai1c" / "mcp-state" / str(mid)
+    params = launch_params(
+        "code-index",
+        port=cfg.code_index_port,
+        catalog_dir=str(Path(cfg.project_dir) / "src" / "cf"),
+        state_dir=str(state_dir),
+        project_name=cfg.project_name,
+    )
+    if not image_exists(params["image"]):
+        if build_image is None:
+            _build_code_index_image(repo_root, run=run, log=log)
+        else:
+            build_image()
+
+    result = launch(
+        name=name,
+        image=params["image"],
+        port=cfg.code_index_port,
+        internal_port=params["internal_port"],
+        env=params["env"],
+        volumes=params["volumes"],
+        network=params.get("network"),
+        run=run,
+    )
+    if not result.get("ok"):
+        raise SetupError(
+            f"не удалось запустить контейнер {name}:\n{result.get('log', '')}")
+    log(f"✓ контейнер code_index запущен: {name} "
+        f"(порт {cfg.code_index_port})")
+    return name
+
+
+def _daemon_status(name: str, run):
+    result = run(
+        ["docker", "exec", name, "env",
+         "CODE_INDEX_HOME=/data/code-index-home",
+         "bsl-indexer", "daemon", "status", "--json"],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        return None
+    try:
+        return json.loads(result.stdout)
+    except (TypeError, ValueError):
+        return None
+
+
+def wait_code_index_ready(name: str, *, cfg: BenchConfig,
+                          run=subprocess.run, sleep=time.sleep,
+                          clock=time.monotonic, log=print) -> None:
+    """Дождаться статуса ready для всех путей (полная первичная индексация)."""
+    deadline = clock() + cfg.code_index_wait_minutes * 60
+    last_state = None
+    while True:
+        data = _daemon_status(name, run)
+        if data:
+            paths = data.get("paths") or []
+            errors = [p for p in paths if p.get("status") == "error"]
+            if errors:
+                raise SetupError(
+                    "code_index завершился с ошибкой: "
+                    + ", ".join(f"{p.get('path')}: {p.get('status')}"
+                                for p in errors))
+            if paths and all(p.get("status") == "ready" for p in paths):
+                log("✓ индекс code_index готов: "
+                    + ", ".join(p.get("path", "?") for p in paths))
+                return
+            state = ", ".join(
+                f"{p.get('path')}: {p.get('status')}" for p in paths)
+            if state != last_state:
+                log(f"… индексация code_index: {state or 'нет данных'}")
+                last_state = state
+        if clock() >= deadline:
+            raise SetupError(
+                "code_index не проиндексировал базу за "
+                f"{cfg.code_index_wait_minutes} мин; увеличьте "
+                "CODE_INDEX_WAIT_MINUTES")
+        sleep(15)

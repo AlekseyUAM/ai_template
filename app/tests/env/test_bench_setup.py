@@ -621,3 +621,108 @@ def test_commit_init_raises_on_commit_failure(tmp_path):
     with pytest.raises(RuntimeError, match="boom"):
         commit_init(cfg, prov)
     assert prov.calls[0][0] == ["git", "init"]
+
+
+from agentmon.env.bench_setup import (
+    CODE_INDEX_CONTAINER,
+    launch_code_index,
+    wait_code_index_ready,
+)
+
+
+def test_launch_code_index_removes_old_container_with_volumes(tmp_path):
+    cfg = load_config(write_env(tmp_path), repo_root=tmp_path)
+    project = Path(cfg.project_dir)
+    (project / "src" / "cf").mkdir(parents=True)
+    state_root = tmp_path / "repo"
+    state_root.mkdir()
+    calls = []
+    launched = {}
+
+    def fake_run(cmd, **kwargs):
+        calls.append(list(cmd))
+        return RunResult(1)  # docker rm для отсутствующего контейнера
+
+    def fake_launch(**kwargs):
+        launched.update(kwargs)
+        return {"ok": True, "log": ""}
+
+    name = launch_code_index(
+        cfg, repo_root=state_root, mid=42, run=fake_run,
+        image_exists=lambda image: True, launch=fake_launch,
+        build_image=lambda: (_ for _ in ()).throw(
+            AssertionError("готовая сборка не нужна")),
+        log=lambda line: None,
+    )
+    assert name == CODE_INDEX_CONTAINER
+    assert calls[0] == ["docker", "rm", "-f", "-v", CODE_INDEX_CONTAINER]
+    assert launched["name"] == CODE_INDEX_CONTAINER
+    assert launched["port"] == cfg.code_index_port
+    volumes = launched["volumes"]
+    assert f"{project / 'src' / 'cf'}:/repos/src" in volumes
+    toml = state_root / ".ai1c" / "mcp-state" / "42" / "daemon.toml"
+    assert toml.is_file()
+    assert f'alias = "{cfg.project_name}"' in toml.read_text(encoding="utf-8")
+    assert 'path = "/repos/src"' in toml.read_text(encoding="utf-8")
+
+
+def test_launch_code_index_raises_when_launch_fails(tmp_path):
+    cfg = load_config(write_env(tmp_path), repo_root=tmp_path)
+    with pytest.raises(SetupError, match="контейнер"):
+        launch_code_index(
+            cfg, repo_root=tmp_path, mid=1,
+            run=lambda cmd, **kwargs: RunResult(),
+            image_exists=lambda image: True,
+            launch=lambda **kwargs: {"ok": False, "log": "boom"},
+            log=lambda line: None,
+        )
+
+
+def test_wait_code_index_ready_returns_when_ready(tmp_path):
+    cfg = load_config(write_env(tmp_path), repo_root=tmp_path)
+    status = json.dumps({
+        "status": "running",
+        "paths": [{"path": "/repos/src", "status": "ready"}],
+    })
+    lines = []
+    wait_code_index_ready(
+        CODE_INDEX_CONTAINER, cfg=cfg,
+        run=lambda cmd, **kwargs: RunResult(0, status),
+        sleep=lambda seconds: None, clock=lambda: 0.0,
+        log=lines.append,
+    )
+    assert any("готов" in line for line in lines)
+
+
+def test_wait_code_index_ready_fails_on_error_status(tmp_path):
+    cfg = load_config(write_env(tmp_path), repo_root=tmp_path)
+    status = json.dumps({
+        "status": "running",
+        "paths": [{"path": "/repos/src", "status": "error"}],
+    })
+    with pytest.raises(SetupError, match="error"):
+        wait_code_index_ready(
+            CODE_INDEX_CONTAINER, cfg=cfg,
+            run=lambda cmd, **kwargs: RunResult(0, status),
+            sleep=lambda seconds: None, clock=lambda: 0.0,
+            log=lambda line: None,
+        )
+
+
+def test_wait_code_index_ready_times_out(tmp_path):
+    cfg = load_config(
+        write_env(tmp_path, CODE_INDEX_WAIT_MINUTES="1"), repo_root=tmp_path)
+    now = [0.0]
+
+    def fake_sleep(seconds):
+        now[0] += seconds
+
+    with pytest.raises(SetupError, match="CODE_INDEX_WAIT_MINUTES"):
+        wait_code_index_ready(
+            CODE_INDEX_CONTAINER, cfg=cfg,
+            run=lambda cmd, **kwargs: RunResult(
+                0, json.dumps({"paths": [
+                    {"path": "/repos/src", "status": "initial_indexing"}]})),
+            sleep=fake_sleep, clock=lambda: now[0],
+            log=lambda line: None,
+        )
