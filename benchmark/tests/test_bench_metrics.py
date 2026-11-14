@@ -126,3 +126,39 @@ def test_aggregate_environment():
     assert env["tool_errors"] == 2
     assert env["command_not_found"] == 1
     assert env["timeouts"] == 1
+
+
+def test_aggregate_environment_timed_out_and_mcp():
+    tasks = [{"transcript": {"main": {"tool_errors": 3, "error_signatures": [
+        {"signature": "Bash: Command timed out after 2m", "count": 1},
+        {"signature": "Bash: command not found", "count": 1},
+        {"signature": "mcp__bsl_ls__check: server unavailable", "count": 1}]}}}]
+    env = aggregate_environment(tasks)
+    assert env["timeouts"] == 1
+    assert env["command_not_found"] == 1
+    assert env["mcp_errors"] == 1
+    assert env["tool_errors"] == 3
+
+
+def test_parse_tool_events_duplicate_id_keeps_first(tmp_path):
+    path = write_jsonl(tmp_path / "t.jsonl", [
+        tool_use("2026-01-01T00:00:00+00:00", "dup", "Bash",
+                 {"command": "echo hi"}),
+        tool_use("2026-01-01T00:00:01+00:00", "dup", "Read",
+                 {"file_path": "/p/a.bsl"}),
+        tool_result("2026-01-01T00:00:30+00:00", "dup"),
+    ])
+    events = parse_tool_events(path)
+    assert len(events) == 1
+    assert events[0].name == "Bash"
+    assert events[0].duration_sec is not None
+
+
+def test_aggregate_environment_tolerates_bad_transcript():
+    env = aggregate_environment([{"transcript": "oops"},
+                                 {"transcript": {"main": 42}}])
+    assert env["tool_errors"] == 0
+    assert env["timeouts"] == 0
+    assert env["command_not_found"] == 0
+    assert env["mcp_errors"] == 0
+    assert env["error_signatures"] == []

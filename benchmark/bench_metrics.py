@@ -130,8 +130,13 @@ def parse_tool_events(path: Path | None) -> list[ToolEvent]:
                         input=block.get("input") if isinstance(block.get("input"), dict) else {},
                         started_at=_parse_timestamp(event.get("timestamp")),
                     )
+                    if tool.tool_use_id and tool.tool_use_id in by_id:
+                        # Дубль id: первый tool_use уже связан с tool_result,
+                        # повторный блок игнорируем, чтобы не осиротить события.
+                        continue
                     events.append(tool)
-                    by_id[tool.tool_use_id] = tool
+                    if tool.tool_use_id:
+                        by_id[tool.tool_use_id] = tool
             elif event.get("type") == "user":
                 for block in blocks:
                     if not isinstance(block, dict) or block.get("type") != "tool_result":
@@ -274,13 +279,26 @@ def summarize_transcripts(project_dir: Path, session: SessionFiles,
     return {"source": source, "main": main, "subagents": subagents}
 
 
+def _count_timeouts(lowered: str) -> int:
+    # "timed out" ("Command timed out after 2m") не содержит "таймаут",
+    # поэтому по сигнатурам каждое совпадение считается не более одного раза.
+    return lowered.count("timeout") + lowered.count("таймаут") + lowered.count("timed out")
+
+
 def aggregate_environment(task_metrics: list[dict]) -> dict:
     signatures: Counter = Counter()
     tool_errors = 0
     for task in task_metrics:
-        main = (task.get("transcript") or {}).get("main") or {}
+        transcript = task.get("transcript") if isinstance(task, dict) else None
+        if not isinstance(transcript, dict):
+            continue
+        main = transcript.get("main")
+        if not isinstance(main, dict):
+            continue
         tool_errors += int(main.get("tool_errors") or 0)
         for item in main.get("error_signatures") or []:
+            if not isinstance(item, dict):
+                continue
             signatures[str(item.get("signature"))] += int(item.get("count") or 0)
     lowered = "\n".join(signatures.elements()).lower()
     return {
@@ -289,7 +307,7 @@ def aggregate_environment(task_metrics: list[dict]) -> dict:
             {"signature": signature, "count": count}
             for signature, count in signatures.most_common(10)],
         "command_not_found": lowered.count("command not found"),
-        "timeouts": lowered.count("timeout") + lowered.count("таймаут"),
+        "timeouts": _count_timeouts(lowered),
         "mcp_errors": sum(count for signature, count in signatures.items()
                           if "mcp__" in signature),
     }
