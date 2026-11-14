@@ -323,3 +323,75 @@ def test_render_digest_contains_key_sections():
     assert "command not found" in text
     assert "run-tests.py" in text
     assert "400" in text
+
+
+def _digest_metrics(task: dict) -> dict:
+    return {"run": {"run_id": "r", "project_dir": "/p", "claude_cmd": "c"},
+            "tasks": [task], "environment": {}}
+
+
+def test_render_digest_none_values_rendered_as_dash():
+    task = {"folder": "task##002", "limit_minutes": 30, "outcome": "error",
+            "duration_sec": 10.0, "exit_code": None,
+            "stream": {"num_turns": 1, "cost_usd": None, "session_id": None},
+            "stages": [], "cycles": {}, "transcript": {}}
+    text = render_digest(_digest_metrics(task))
+    assert "код выхода: `—`" in text
+    assert "session=—" in text
+    assert "cost=—" in text
+    assert "session=None" not in text
+    assert "cost=None" not in text
+    assert "`None`" not in text
+
+
+def test_render_digest_bad_duration_does_not_raise():
+    task = {"folder": "task##003", "limit_minutes": 30, "outcome": "error",
+            "duration_sec": "oops", "exit_code": 1, "transcript": {}}
+    text = render_digest(_digest_metrics(task))
+    assert "код выхода: `1`" in text
+    assert "время: —" in text
+
+
+def test_render_digest_escapes_pipe_in_tables():
+    task = {"folder": "task##004", "limit_minutes": 30, "outcome": "success",
+            "duration_sec": 5.0, "exit_code": 0, "stages": [], "cycles": {},
+            "transcript": {"main": {"slow_ops": [
+                {"tool": "Bash", "input": "a | b", "duration_sec": 3.5}]}}}
+    text = render_digest(_digest_metrics(task))
+    assert "`a \\| b`" in text
+    slow_row = next(line for line in text.splitlines() if "a \\| b" in line)
+    assert slow_row.count("|") - slow_row.count("\\|") == 4
+    task_row = next(line for line in text.splitlines()
+                    if line.startswith("| task##004 "))
+    assert task_row.count("|") == 8  # 7 столбцов
+
+
+def test_render_digest_newline_in_cell_replaced():
+    task = {"folder": "task##005", "limit_minutes": 30, "outcome": "success",
+            "duration_sec": 5.0, "exit_code": 0, "stages": [], "cycles": {},
+            "transcript": {"main": {"slow_ops": [
+                {"tool": "Bash", "input": "a\nb", "duration_sec": 1.0}]}}}
+    text = render_digest(_digest_metrics(task))
+    assert "`a b`" in text
+
+
+def test_render_digest_analyzers_absent():
+    task = {"folder": "task##006", "limit_minutes": 30, "outcome": "success",
+            "duration_sec": 5.0, "exit_code": 0, "transcript": {}}
+    text = render_digest(_digest_metrics(task))
+    assert "### Анализаторы" in text
+    assert "анализаторы не запускались" in text
+    assert "файлов 0" not in text
+
+
+def test_render_digest_query_findings():
+    task = {"folder": "task##007", "limit_minutes": 30, "outcome": "success",
+            "duration_sec": 5.0, "exit_code": 0, "transcript": {},
+            "analyzers": {"query_analyze": {
+                "skipped": None,
+                "results": {"/p/Module.bsl": {
+                    "findings": {"error": 1, "warning": 0, "info": 2}}}}}}
+    text = render_digest(_digest_metrics(task))
+    assert "query-analyze: файлов 1" in text
+    assert "  - `Module.bsl`: error=1, warning=0, info=2" in text
+    assert "анализаторы не запускались" not in text

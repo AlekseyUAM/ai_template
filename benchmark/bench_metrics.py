@@ -538,10 +538,23 @@ def write_json_atomic(path: Path, data) -> None:
 def _seconds(value) -> str:
     if value is None:
         return "—"
-    value = float(value)
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return "—"
     if value >= 60:
         return f"{value / 60:.1f} мин"
     return f"{value:.0f} с"
+
+
+def _opt(value) -> str:
+    return "—" if value is None else str(value)
+
+
+def _cell(value) -> str:
+    """Ячейка markdown-таблицы: переводы строк в пробелы, `|` экранируется."""
+    text = "—" if value is None else str(value)
+    return text.replace("\r\n", " ").replace("\n", " ").replace("|", "\\|")
 
 
 def render_digest(metrics: dict) -> str:
@@ -564,24 +577,30 @@ def render_digest(metrics: dict) -> str:
             f"{stage.get('name')}×{stage.get('iteration')}"
             for stage in task.get("stages") or [] if stage.get("enabled"))
         cycles = task.get("cycles") or {}
-        lines.append(
-            f"| {task.get('folder')} | {task.get('limit_minutes')} мин | "
-            f"{task.get('outcome')} | {_seconds(task.get('duration_sec'))} | "
-            f"{stages or '—'} | "
-            f"запусков {cycles.get('test_runs', 0)}, "
-            f"смоуков {cycles.get('smoke_runs', 0)}, "
-            f"правок тестов {cycles.get('test_module_edits', 0)} | "
-            f"итераций {cycles.get('review_iteration', 0)}, "
-            f"архивов {cycles.get('review_archives', 0)} |")
+        cells = [
+            task.get("folder"),
+            f"{task.get('limit_minutes')} мин",
+            task.get("outcome"),
+            _seconds(task.get("duration_sec")),
+            stages or "—",
+            (f"запусков {cycles.get('test_runs', 0)}, "
+             f"смоуков {cycles.get('smoke_runs', 0)}, "
+             f"правок тестов {cycles.get('test_module_edits', 0)}"),
+            (f"итераций {cycles.get('review_iteration', 0)}, "
+             f"архивов {cycles.get('review_archives', 0)}"),
+        ]
+        lines.append("| " + " | ".join(_cell(cell) for cell in cells) + " |")
     for task in metrics.get("tasks") or []:
         lines += ["", f"## {task.get('folder')}", ""]
+        exit_code = task.get("exit_code")
         lines.append(f"- Исход: `{task.get('outcome')}`, код выхода: "
-                     f"`{task.get('exit_code')}`, время: "
+                     f"`{'—' if exit_code is None else exit_code}`, время: "
                      f"{_seconds(task.get('duration_sec'))}")
         stream = task.get("stream") or {}
+        session = stream.get("session_id")
         lines.append(f"- Агент: turns={stream.get('num_turns')}, "
-                     f"cost=${stream.get('cost_usd')}, "
-                     f"session={stream.get('session_id')}")
+                     f"cost={_opt(stream.get('cost_usd'))}, "
+                     f"session={_opt(session)}")
         transcript = task.get("transcript") or {}
         main = transcript.get("main") or {}
         lines.append(f"- Источник транскрипта: {transcript.get('source', '—')}, "
@@ -594,7 +613,8 @@ def render_digest(metrics: dict) -> str:
             lines += ["", "### Долгие операции", "",
                       "| Инструмент | Вход | Длительность |", "|---|---|---|"]
             for op in main["slow_ops"]:
-                lines.append(f"| {op.get('tool')} | `{op.get('input')}` | "
+                lines.append(f"| {_cell(op.get('tool'))} | "
+                             f"`{_cell(op.get('input'))}` | "
                              f"{_seconds(op.get('duration_sec'))} |")
         if main.get("gaps"):
             lines += ["", "### Простои > 5 мин", ""]
@@ -616,9 +636,12 @@ def render_digest(metrics: dict) -> str:
                              f"{_seconds(agent.get('duration_sec'))}, "
                              f"ошибок {agent.get('tool_errors', 0)}, "
                              f"тестов {agent.get('test_runs', 0)}")
-        analyzers = task.get("analyzers") or {}
-        code = analyzers.get("code_analyze") or {}
+        analyzers = task.get("analyzers")
         lines += ["", "### Анализаторы", ""]
+        if not analyzers:
+            lines.append("- анализаторы не запускались")
+            continue
+        code = analyzers.get("code_analyze") or {}
         if code.get("skipped"):
             lines.append(f"- code-analyze: пропущен ({code['skipped']})")
         else:
@@ -633,6 +656,11 @@ def render_digest(metrics: dict) -> str:
             lines.append(f"- query-analyze: пропущен ({query['skipped']})")
         else:
             lines.append(f"- query-analyze: файлов {len(query.get('results') or {})}")
+        for path, result in (query.get("results") or {}).items():
+            findings = result.get("findings") or {}
+            lines.append(f"  - `{Path(path).name}`: error={findings.get('error', 0)}, "
+                         f"warning={findings.get('warning', 0)}, "
+                         f"info={findings.get('info', 0)}")
     env = metrics.get("environment") or {}
     lines += ["", "## Окружение", "",
               f"- Ошибок инструментов: {env.get('tool_errors', 0)}",
