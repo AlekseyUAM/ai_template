@@ -939,16 +939,19 @@ def test_load_config_rejects_malformed_port_in_url(tmp_path):
             repo_root=tmp_path)
 
 
-def _status_run(status=None, *, inspect_running="true"):
-    """Фейковый docker run: exec status → status (rc по None), inspect → running."""
+def _status_run(status=None, *, inspect_running="true", inspect_rc=0):
+    """Фейковый docker run: exec status → status (rc по None), inspect → running.
+
+    Успешный `docker inspect` отдаёт rc=0 и `{{.State.Running}}` в stdout;
+    несуществующий контейнер → rc!=0 и пустой stdout.
+    """
     def fake_run(cmd, **kwargs):
         if cmd[:2] == ["docker", "exec"]:
             if status is None:
                 return RunResult(1, "", "container not found")
             return RunResult(0, status)
         if cmd[:3] == ["docker", "inspect", "-f"]:
-            running = inspect_running == "true"
-            return RunResult(0 if running else 1, f"{inspect_running}\n")
+            return RunResult(inspect_rc, f"{inspect_running}\n")
         raise AssertionError(f"неожиданная команда: {cmd}")
     return fake_run
 
@@ -975,7 +978,7 @@ def test_wait_code_index_ready_fails_fast_when_container_stopped(tmp_path):
     with pytest.raises(SetupError) as excinfo:
         wait_code_index_ready(
             CODE_INDEX_CONTAINER, cfg=cfg,
-            run=_status_run(None, inspect_running="false"),
+            run=_status_run(None, inspect_running="false", inspect_rc=0),
             sleep=sleeps.append, clock=lambda: 0.0,
             log=lambda line: None)
     message = str(excinfo.value)
@@ -1006,6 +1009,27 @@ def test_wait_code_index_ready_keeps_waiting_while_container_runs(tmp_path):
     assert CODE_INDEX_CONTAINER in message
     assert str(cfg.code_index_port) in message
     assert "/data/code-index-home/daemon.json" in message
+    assert now[0] >= 60
+
+
+def test_wait_code_index_ready_keeps_waiting_when_inspect_fails(tmp_path):
+    cfg = load_config(
+        write_env(tmp_path, CODE_INDEX_WAIT_MINUTES="1"), repo_root=tmp_path)
+    now = [0.0]
+
+    def fake_sleep(seconds):
+        now[0] += seconds
+
+    with pytest.raises(SetupError) as excinfo:
+        wait_code_index_ready(
+            CODE_INDEX_CONTAINER, cfg=cfg,
+            run=_status_run(None, inspect_running="", inspect_rc=1),
+            sleep=fake_sleep, clock=lambda: now[0],
+            log=lambda line: None)
+    message = str(excinfo.value)
+    assert "не запущен" not in message
+    assert "CODE_INDEX_WAIT_MINUTES" in message
+    assert CODE_INDEX_CONTAINER in message
     assert now[0] >= 60
 
 

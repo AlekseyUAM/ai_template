@@ -741,7 +741,11 @@ CODE_INDEX_DAEMON_JSON = "/data/code-index-home/daemon.json"
 
 
 def _container_running(name: str, run) -> bool | None:
-    """True, если контейнер работает; None, если проверить не удалось."""
+    """True — работает; False — точно остановлен; None — проверить не удалось.
+
+    `docker inspect` с rc!=0 или OSError (сбой демона, таймаут) — не повод
+    считать контейнер остановленным: долгая индексация может идти дальше.
+    """
     try:
         result = run(["docker", "inspect", "-f", "{{.State.Running}}", name],
                      capture_output=True, text=True)
@@ -781,7 +785,7 @@ def wait_code_index_ready(name: str, *, cfg: BenchConfig,
             if state != last_state:
                 log(f"… индексация code_index: {state or 'нет данных'}")
                 last_state = state
-        elif _container_running(name, run) is not True:
+        elif _container_running(name, run) is False:
             raise SetupError(
                 f"контейнер code_index {name} не запущен "
                 f"(порт {cfg.code_index_port}); проверьте "
