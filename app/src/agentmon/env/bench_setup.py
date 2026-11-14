@@ -86,6 +86,19 @@ def parse_env_file(path: Path) -> dict[str, str]:
     return data
 
 
+def load_env_file(path: Path, env: dict[str, str]) -> None:
+    """Прочитать KEY=value в env, перезаписывая существующие ключи (как run.py)."""
+    if not path.is_file():
+        return
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        key, sep, value = line.partition("=")
+        if sep:
+            env[key.strip()] = value.strip()
+
+
 def _resolve_platform(raw: Path) -> Path:
     """Каталог платформы → бинарник 1cv8; сам файл возвращается как есть."""
     if raw.is_file():
@@ -121,6 +134,13 @@ def load_config(env_path: Path, *, repo_root: Path,
         value = data.get(key, "")
         if value and not _URL_RE.match(value):
             raise SetupError(f"{key} должен начинаться с http:// или https://")
+        if value:
+            try:
+                _url_host_port(value)
+            except ValueError:
+                raise SetupError(
+                    f"{key}: некорректный URL {value!r} "
+                    "(проверьте порт: http://host:порт/путь)") from None
 
     try:
         port = int(data["MCP_CODE_INDEX_PORT"])
@@ -216,8 +236,11 @@ def _connection_platform(url: str) -> str:
 
 
 def _url_host_port(url: str) -> tuple[str, int]:
+    """Хост и порт URL; ValueError на некорректном порту (http://host:abc)."""
     parsed = urlparse(url)
     port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    if not 1 <= port <= 65535:
+        raise ValueError(f"некорректный порт в URL: {url}")
     return parsed.hostname or "", port
 
 
@@ -518,6 +541,33 @@ class ImportedTask:
 _TASK_HEADER_RE = re.compile(r"^(# Задача .+?) \(#\d+\):", re.MULTILINE)
 
 
+def _task_max_minutes(data: dict, folder: str) -> int:
+    """max_minutes задачи: отсутствует → 60; не целое или < 1 → SetupError."""
+    value = data.get("max_minutes")
+    if value is None:
+        return 60
+    try:
+        minutes = int(value)
+    except (TypeError, ValueError):
+        raise SetupError(
+            f"{folder}/task.json: max_minutes должен быть целым числом, "
+            f"получено {value!r}") from None
+    if minutes < 1:
+        raise SetupError(
+            f"{folder}/task.json: max_minutes должен быть не меньше 1, "
+            f"получено {value!r}")
+    return minutes
+
+
+def _task_identifier(data: dict, folder: str) -> str:
+    """identifier из task.json, иначе номер из имени папки (task##001 → #001)."""
+    identifier = str(data.get("identifier") or "").strip()
+    if identifier:
+        return identifier
+    digits = re.sub(r"\D", "", folder)
+    return f"#{digits}" if digits else folder
+
+
 def _source_task_dirs(repo_root: Path) -> list[Path]:
     tasks_root = repo_root / "benchmark" / "tasks"
     if not tasks_root.is_dir():
@@ -540,9 +590,8 @@ def import_tasks(*, project_id: int, cfg: BenchConfig, repo_root: Path,
     for source in sources:
         raw = (source / "task.json").read_text(encoding="utf-8")
         data = json.loads(raw)
-        identifier = str(data.get("identifier") or "").strip()
-        if not identifier:
-            identifier = source.name.removeprefix("task#")
+        identifier = _task_identifier(data, source.name)
+        max_minutes = _task_max_minutes(data, source.name)
 
         destination = Path(cfg.project_dir) / "tasks" / source.name
         shutil.copytree(source, destination)
@@ -562,7 +611,7 @@ def import_tasks(*, project_id: int, cfg: BenchConfig, repo_root: Path,
             now=now,
             kind=data.get("kind") or "real",
             update_db=1 if data.get("update_db") else 0,
-            max_minutes=int(data.get("max_minutes") or 60),
+            max_minutes=max_minutes,
             interactive=0,
             mark_changes=1 if data.get("mark_changes") else 0,
         )
@@ -587,6 +636,9 @@ def import_tasks(*, project_id: int, cfg: BenchConfig, repo_root: Path,
                 lambda match: f"{match.group(1)} (#{task_id}):", text, count=1)
             if updated != text:
                 task_md.write_text(updated, encoding="utf-8")
+            else:
+                log(f"⚠ {source.name}/TASK.md: заголовок не распознан — "
+                    "id не обновлён")
 
         imported.append(ImportedTask(identifier, task_id, source.name))
         log(f"✓ задача {identifier} → #{task_id} ({source.name})")
@@ -685,11 +737,28 @@ def _daemon_status(name: str, run):
         return None
 
 
+CODE_INDEX_DAEMON_JSON = "/data/code-index-home/daemon.json"
+
+
+def _container_running(name: str, run) -> bool | None:
+    """True, если контейнер работает; None, если проверить не удалось."""
+    try:
+        result = run(["docker", "inspect", "-f", "{{.State.Running}}", name],
+                     capture_output=True, text=True)
+    except OSError:
+        return None
+    if getattr(result, "returncode", 1) != 0:
+        return None
+    return (getattr(result, "stdout", "") or "").strip() == "true"
+
+
 def wait_code_index_ready(name: str, *, cfg: BenchConfig,
                           run=subprocess.run, sleep=time.sleep,
                           clock=time.monotonic, log=print) -> None:
     """Дождаться статуса ready для всех путей (полная первичная индексация)."""
     deadline = clock() + cfg.code_index_wait_minutes * 60
+    where = (f"{name} (порт {cfg.code_index_port}), "
+             f"детали: docker logs {name}, состояние: {CODE_INDEX_DAEMON_JSON}")
     last_state = None
     while True:
         data = _daemon_status(name, run)
@@ -699,8 +768,10 @@ def wait_code_index_ready(name: str, *, cfg: BenchConfig,
             if errors:
                 raise SetupError(
                     "code_index завершился с ошибкой: "
-                    + ", ".join(f"{p.get('path')}: {p.get('status')}"
-                                for p in errors))
+                    + ", ".join(
+                        f"{p.get('path')}: {p.get('error') or p.get('message') or p.get('status')}"
+                        for p in errors)
+                    + f"; контейнер {where}")
             if paths and all(p.get("status") == "ready" for p in paths):
                 log("✓ индекс code_index готов: "
                     + ", ".join(p.get("path", "?") for p in paths))
@@ -710,11 +781,16 @@ def wait_code_index_ready(name: str, *, cfg: BenchConfig,
             if state != last_state:
                 log(f"… индексация code_index: {state or 'нет данных'}")
                 last_state = state
+        elif _container_running(name, run) is not True:
+            raise SetupError(
+                f"контейнер code_index {name} не запущен "
+                f"(порт {cfg.code_index_port}); проверьте "
+                f"`docker logs {name}` и {CODE_INDEX_DAEMON_JSON}")
         if clock() >= deadline:
             raise SetupError(
                 "code_index не проиндексировал базу за "
-                f"{cfg.code_index_wait_minutes} мин; увеличьте "
-                "CODE_INDEX_WAIT_MINUTES")
+                f"{cfg.code_index_wait_minutes} мин (контейнер {where}); "
+                "увеличьте CODE_INDEX_WAIT_MINUTES")
         sleep(15)
 
 

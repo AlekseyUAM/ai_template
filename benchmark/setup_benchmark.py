@@ -16,17 +16,16 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def load_repo_env() -> None:
-    """Прочитать .ai1c.env в os.environ до импорта agentmon.config."""
-    env_file = ROOT / ".ai1c.env"
-    if not env_file.is_file():
-        return
-    for raw in env_file.read_text(encoding="utf-8").splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#"):
-            continue
-        key, sep, value = line.partition("=")
-        if sep and key.strip() not in os.environ:
-            os.environ[key.strip()] = value.strip()
+    """Прочитать .ai1c.env в os.environ до импорта agentmon.config.
+
+    Семантика как у run.py: значения файла перезаписывают уже заданные ключи.
+    """
+    sys.path.insert(0, str(ROOT / "app" / "src"))
+    try:
+        from agentmon.env.bench_setup import load_env_file
+    finally:
+        sys.path.remove(str(ROOT / "app" / "src"))
+    load_env_file(ROOT / ".ai1c.env", os.environ)
 
 
 def main(argv: list[str] | None = None) -> int:

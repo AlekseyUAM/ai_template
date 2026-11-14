@@ -1462,8 +1462,6 @@ def commit_baseline(cfg: BenchConfig, tasks: list[ImportedTask], prov) -> None:
         f"baseline before task{tasks[0].identifier}", config=cfg)
 ```
 
-Удалить неиспользуемую `_repo_root_of` — она не нужна.
-
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cd app && .venv/bin/python -m pytest tests/env/test_bench_setup.py -q`
@@ -1911,11 +1909,24 @@ def rollback(state: RollbackState, *, store, run=subprocess.run, log=print) -> N
 
     if state.container:
         try:
-            run(["docker", "rm", "-f", "-v", state.container],
-                capture_output=True, text=True)
+            res = run(["docker", "rm", "-f", "-v", state.container],
+                      capture_output=True, text=True)
         except Exception as exc:                       # noqa: BLE001
-            log(f"⚠ откат контейнера {state.container}: {exc}")
-    log(f"✗ Откат выполнен. Каталог проекта оставлен: {state.project_dir}")
+            warn(f"откат контейнера {state.container}: {exc}")
+        else:
+            code = getattr(res, "returncode", 0)
+            if code != 0:
+                tail = ((getattr(res, "stdout", "") or "")
+                        + (getattr(res, "stderr", "") or "")).strip()[-500:]
+                warn(f"откат контейнера {state.container}: docker rm "
+                     f"вернул код {code}: {tail}")
+
+    if warnings:
+        log("✗ Откат выполнен частично: " + "; ".join(warnings))
+    else:
+        log("✗ Откат выполнен.")
+    log(f"✗ Каталог проекта оставлен для диагностики: {state.project_dir}. "
+        "Удалите его перед повторным запуском.")
 
 
 def run_setup(cfg: BenchConfig, *, repo_root: Path, store, registry,

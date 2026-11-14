@@ -913,3 +913,165 @@ def test_rollback_reports_failed_container_removal(tmp_path):
     assert "1" in partial[0]
     assert "no such container" in partial[0]
     assert not any(line.startswith("✗ Откат выполнен.") for line in lines)
+
+
+from agentmon.env.bench_setup import load_env_file
+
+
+def test_load_env_file_overwrites_existing_keys(tmp_path):
+    path = tmp_path / ".ai1c.env"
+    path.write_text("# comment\nA=1\n\nB=2\n", encoding="utf-8")
+    env = {"A": "old", "C": "keep"}
+    load_env_file(path, env)
+    assert env == {"A": "1", "B": "2", "C": "keep"}
+
+
+def test_load_env_file_missing_file_is_noop(tmp_path):
+    env = {"A": "old"}
+    load_env_file(tmp_path / "absent.env", env)
+    assert env == {"A": "old"}
+
+
+def test_load_config_rejects_malformed_port_in_url(tmp_path):
+    with pytest.raises(SetupError, match="MCP_BSL_LS_URL"):
+        load_config(
+            write_env(tmp_path, MCP_BSL_LS_URL="http://localhost:abc/mcp"),
+            repo_root=tmp_path)
+
+
+def _status_run(status=None, *, inspect_running="true"):
+    """Фейковый docker run: exec status → status (rc по None), inspect → running."""
+    def fake_run(cmd, **kwargs):
+        if cmd[:2] == ["docker", "exec"]:
+            if status is None:
+                return RunResult(1, "", "container not found")
+            return RunResult(0, status)
+        if cmd[:3] == ["docker", "inspect", "-f"]:
+            running = inspect_running == "true"
+            return RunResult(0 if running else 1, f"{inspect_running}\n")
+        raise AssertionError(f"неожиданная команда: {cmd}")
+    return fake_run
+
+
+def test_wait_code_index_ready_error_message_includes_diagnostics(tmp_path):
+    cfg = load_config(write_env(tmp_path), repo_root=tmp_path)
+    status = json.dumps({"paths": [
+        {"path": "/repos/src", "status": "error", "error": "disk full"}]})
+    with pytest.raises(SetupError) as excinfo:
+        wait_code_index_ready(
+            CODE_INDEX_CONTAINER, cfg=cfg,
+            run=_status_run(status), sleep=lambda s: None,
+            clock=lambda: 0.0, log=lambda line: None)
+    message = str(excinfo.value)
+    assert "disk full" in message
+    assert CODE_INDEX_CONTAINER in message
+    assert str(cfg.code_index_port) in message
+    assert "/data/code-index-home/daemon.json" in message
+
+
+def test_wait_code_index_ready_fails_fast_when_container_stopped(tmp_path):
+    cfg = load_config(write_env(tmp_path), repo_root=tmp_path)
+    sleeps = []
+    with pytest.raises(SetupError) as excinfo:
+        wait_code_index_ready(
+            CODE_INDEX_CONTAINER, cfg=cfg,
+            run=_status_run(None, inspect_running="false"),
+            sleep=sleeps.append, clock=lambda: 0.0,
+            log=lambda line: None)
+    message = str(excinfo.value)
+    assert "не запущен" in message
+    assert CODE_INDEX_CONTAINER in message
+    assert str(cfg.code_index_port) in message
+    assert "/data/code-index-home/daemon.json" in message
+    assert f"docker logs {CODE_INDEX_CONTAINER}" in message
+    assert sleeps == []
+
+
+def test_wait_code_index_ready_keeps_waiting_while_container_runs(tmp_path):
+    cfg = load_config(
+        write_env(tmp_path, CODE_INDEX_WAIT_MINUTES="1"), repo_root=tmp_path)
+    now = [0.0]
+
+    def fake_sleep(seconds):
+        now[0] += seconds
+
+    with pytest.raises(SetupError) as excinfo:
+        wait_code_index_ready(
+            CODE_INDEX_CONTAINER, cfg=cfg,
+            run=_status_run(None, inspect_running="true"),
+            sleep=fake_sleep, clock=lambda: now[0],
+            log=lambda line: None)
+    message = str(excinfo.value)
+    assert "CODE_INDEX_WAIT_MINUTES" in message
+    assert CODE_INDEX_CONTAINER in message
+    assert str(cfg.code_index_port) in message
+    assert "/data/code-index-home/daemon.json" in message
+    assert now[0] >= 60
+
+
+def _tasks_root(tmp_path):
+    root = make_repo_root(tmp_path)
+    task_dir = make_tasks(root)
+    cfg = load_config(write_env(tmp_path), repo_root=root)
+    store = make_store(tmp_path)
+    project_id = create_project_row(store, cfg)
+    Path(cfg.project_dir).mkdir(parents=True)
+    return root, task_dir, cfg, store, project_id
+
+
+def _edit_task(task_dir, *, remove=(), **changes):
+    data = json.loads((task_dir / "task.json").read_text(encoding="utf-8"))
+    data.update(changes)
+    for key in remove:
+        data.pop(key, None)
+    (task_dir / "task.json").write_text(
+        json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def test_import_tasks_rejects_non_integer_max_minutes(tmp_path):
+    root, task_dir, cfg, store, project_id = _tasks_root(tmp_path)
+    _edit_task(task_dir, max_minutes="90 мин")
+    with pytest.raises(SetupError) as excinfo:
+        import_tasks(project_id=project_id, cfg=cfg, repo_root=root,
+                     store=store, log=lambda line: None)
+    message = str(excinfo.value)
+    assert "task##001" in message
+    assert "90 мин" in message
+    assert TaskRepo(store).list(project_id=project_id) == []
+
+
+def test_import_tasks_rejects_zero_max_minutes(tmp_path):
+    root, task_dir, cfg, store, project_id = _tasks_root(tmp_path)
+    _edit_task(task_dir, max_minutes=0)
+    with pytest.raises(SetupError, match="task##001"):
+        import_tasks(project_id=project_id, cfg=cfg, repo_root=root,
+                     store=store, log=lambda line: None)
+
+
+def test_import_tasks_defaults_max_minutes_to_60(tmp_path):
+    root, task_dir, cfg, store, project_id = _tasks_root(tmp_path)
+    _edit_task(task_dir, remove=("max_minutes",))
+    imported = import_tasks(project_id=project_id, cfg=cfg, repo_root=root,
+                            store=store, log=lambda line: None)
+    assert TaskRepo(store).get(imported[0].task_id)["max_minutes"] == 60
+
+
+def test_import_tasks_identifier_falls_back_to_folder_number(tmp_path):
+    root, task_dir, cfg, store, project_id = _tasks_root(tmp_path)
+    _edit_task(task_dir, identifier="")
+    imported = import_tasks(project_id=project_id, cfg=cfg, repo_root=root,
+                            store=store, log=lambda line: None)
+    assert imported[0].identifier == "#001"
+
+
+def test_import_tasks_warns_when_task_md_header_unrecognized(tmp_path):
+    root, task_dir, cfg, store, project_id = _tasks_root(tmp_path)
+    (task_dir / "TASK.md").write_text(
+        "Задача без шапки\n\n## Цель\nx\n", encoding="utf-8")
+    lines = []
+    imported = import_tasks(project_id=project_id, cfg=cfg, repo_root=root,
+                            store=store, log=lines.append)
+    assert any("task##001/TASK.md" in line and "⚠" in line for line in lines)
+    md = (Path(cfg.project_dir) / "tasks" / "task##001" / "TASK.md").read_text(
+        encoding="utf-8")
+    assert md.startswith("Задача без шапки")
