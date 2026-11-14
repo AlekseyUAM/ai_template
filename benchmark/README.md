@@ -59,11 +59,12 @@
 
 ```bash
 .venv/bin/python benchmark/run_benchmark.py \
-    --limit task##001=30 --limit task##002=2ч
+    --limit task##001=30 --limit task##002=120
 ```
 
 Скрипт выполняет все задачи проекта `tasks/task##*` по очереди в `claude-ds`.
 Лимит по умолчанию — `max_minutes` из `task.json`; `--limit` переопределяет его.
+Значение `--limit` — целое число минут, без единиц измерения (`120`, не `2ч`).
 Первый `timeout`/`failed`/`incomplete` останавливает следующие задачи, но анализ
 по собранным данным всё равно выполняется.
 

@@ -90,19 +90,16 @@ def make_project(root: Path) -> Path:
     return project
 
 
-def test_parse_minutes_units():
+def test_parse_minutes_is_integer_minutes():
     assert parse_minutes("30") == 30
-    assert parse_minutes("30м") == 30
-    assert parse_minutes("30М") == 30
-    assert parse_minutes("2ч") == 120
-    assert parse_minutes("2h") == 120
-    for bad in ("0", "-1", "abc", "", "1.5ч"):
+    assert parse_minutes("120") == 120
+    for bad in ("0", "-1", "abc", "", "1.5", "30м", "2ч", "2h", "30 min"):
         with pytest.raises(BenchError):
             parse_minutes(bad)
 
 
 def test_parse_limit_arg():
-    assert parse_limit_arg("task##001=30м") == ("task##001", 30)
+    assert parse_limit_arg("task##001=30") == ("task##001", 30)
     with pytest.raises(BenchError):
         parse_limit_arg("task##001")
     with pytest.raises(BenchError):
@@ -156,7 +153,7 @@ def test_build_options(tmp_path):
     project = make_project(tmp_path)
     env = tmp_path / "test.env"
     env.write_text(f"BENCH_PROJECT_DIR={project}\n", encoding="utf-8")
-    ns = parse_args(["--env", str(env), "--task", "#001", "--limit", "#001=30м",
+    ns = parse_args(["--env", str(env), "--task", "#001", "--limit", "#001=30",
                      "--analysis-timeout", "15"])
     opts = build_options(ns, tmp_path)
     assert opts.project_dir == project.resolve()
@@ -196,9 +193,7 @@ class BenchError(RuntimeError):
     """Ожидаемая ошибка benchmark-раннера."""
 
 
-_MINUTES_RE = re.compile(
-    r"^(\d+)\s*(м|мин|m|min|ч|час|часа|часов|h|hour|hours)?$",
-    re.IGNORECASE)
+_MINUTES_RE = re.compile(r"^\d+$")
 
 
 @dataclass(frozen=True)
@@ -226,16 +221,14 @@ class RunOptions:
 
 
 def parse_minutes(value: str) -> int:
-    """Разобрать длительность: 30, 30м, 30m, 2ч, 2h."""
-    match = _MINUTES_RE.fullmatch((value or "").strip())
-    if not match:
-        raise BenchError(f"некорректная длительность: {value!r}")
-    number = int(match.group(1))
-    unit = (match.group(2) or "м").lower()
+    """Разобрать длительность в минутах: только целое число."""
+    raw = (value or "").strip()
+    if not _MINUTES_RE.fullmatch(raw):
+        raise BenchError(
+            f"некорректная длительность (нужно целое число минут): {value!r}")
+    number = int(raw)
     if number < 1:
         raise BenchError(f"длительность должна быть больше нуля: {value!r}")
-    if unit in ("ч", "час", "часа", "часов", "h", "hour", "hours"):
-        return number * 60
     return number
 
 
@@ -391,7 +384,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         dest="task_selectors",
                         help="задача: task##001, #001 или 001 (повторяемый)")
     parser.add_argument("--limit", action="append", default=[], dest="limit_args",
-                        help="лимит: task##001=30, #002=2ч (повторяемый)")
+                        help="лимит в минутах: task##001=30, #002=120 (повторяемый)")
     parser.add_argument("--claude-cmd", default="claude-ds",
                         help="команда агента (по умолчанию claude-ds)")
     parser.add_argument("--analysis-timeout", type=int, default=30,
@@ -2610,7 +2603,7 @@ git commit -m "feat(bench): оркестрация прогона, CLI и end-to
 
 ```bash
 .venv/bin/python benchmark/run_benchmark.py \
-    --limit task##001=30 --limit task##002=2ч
+    --limit task##001=30 --limit task##002=120
 ```
 
 Скрипт выполняет все задачи проекта `tasks/task##*` по очереди в `claude-ds`.

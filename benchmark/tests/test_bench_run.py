@@ -134,19 +134,16 @@ def make_project(root: Path) -> Path:
     return project
 
 
-def test_parse_minutes_units():
+def test_parse_minutes_is_integer_minutes():
     assert parse_minutes("30") == 30
-    assert parse_minutes("30м") == 30
-    assert parse_minutes("30М") == 30
-    assert parse_minutes("2ч") == 120
-    assert parse_minutes("2h") == 120
-    for bad in ("0", "-1", "abc", "", "1.5ч"):
+    assert parse_minutes("120") == 120
+    for bad in ("0", "-1", "abc", "", "1.5", "30м", "2ч", "2h", "30 min"):
         with pytest.raises(BenchError):
             parse_minutes(bad)
 
 
 def test_parse_limit_arg():
-    assert parse_limit_arg("task##001=30м") == ("task##001", 30)
+    assert parse_limit_arg("task##001=30") == ("task##001", 30)
     with pytest.raises(BenchError):
         parse_limit_arg("task##001")
     with pytest.raises(BenchError):
@@ -212,7 +209,7 @@ def test_build_options(tmp_path):
     project = make_project(tmp_path)
     env = tmp_path / "test.env"
     env.write_text(f"BENCH_PROJECT_DIR={project}\n", encoding="utf-8")
-    ns = parse_args(["--env", str(env), "--task", "#001", "--limit", "#001=30м",
+    ns = parse_args(["--env", str(env), "--task", "#001", "--limit", "#001=30",
                      "--analysis-timeout", "15"])
     opts = build_options(ns, tmp_path)
     assert opts.project_dir == project.resolve()
