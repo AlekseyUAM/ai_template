@@ -63,11 +63,16 @@ Claude Code, но измерение качества template (время, ит
 ## Архитектура
 
 ```
-benchmark/run_benchmark.py   # CLI: аргументы, логи, коды выхода
-benchmark/bench_run.py       # ядро: preflight, запуск, метрики, дайджест, аналитик
-benchmark/tests/conftest.py  # sys.path для импорта bench_run
+benchmark/run_benchmark.py      # CLI: аргументы, логи, коды выхода
+benchmark/bench_run.py          # оркестрация: конфиг, preflight, цикл задач, git, запуск процесса
+benchmark/bench_metrics.py      # stream-json, транскрипты/сабагенты, дайджест, метрики, анализаторы
+benchmark/bench_analysis.py     # промпт аналитика, извлечение ответа, RESULT.md и fallback
+benchmark/tests/conftest.py     # sys.path для импорта модулей benchmark
 benchmark/tests/test_bench_run.py
-benchmark/README.md          # раздел «Прогон и анализ»
+benchmark/tests/test_bench_metrics.py
+benchmark/tests/test_bench_analysis.py
+benchmark/tests/test_bench_e2e.py
+benchmark/README.md             # раздел «Прогон и анализ»
 ```
 
 Ядро не импортирует `agentmon`; `BENCH_PROJECT_DIR` читается из
@@ -299,7 +304,9 @@ claude-ds -p <analysis-prompt> --output-format stream-json --verbose \
 
 ## Тестирование
 
-`benchmark/tests/test_bench_run.py`, без реальных вызовов `claude`, 1С и сети:
+`benchmark/tests/` (`test_bench_run.py`, `test_bench_metrics.py`,
+`test_bench_analysis.py`, `test_bench_e2e.py`), без реальных вызовов `claude`,
+1С и сети:
 
 - разбор `--limit` (`30`, `30м`, `2ч`, мусор, дубликаты), селекторы задач;
 - обнаружение и сортировка задач, `max_minutes` из `task.json`;
