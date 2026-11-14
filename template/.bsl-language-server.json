@@ -6,6 +6,14 @@
     "parameters": {
       "LineLength": {
         "maxLineLength": 160
+      },
+      "CognitiveComplexity": {
+        "complexityThreshold": 30,
+        "checkModuleBody": true
+      },
+      "CyclomaticComplexity": {
+        "complexityThreshold": 40,
+        "checkModuleBody": true
       }
     }
   }
