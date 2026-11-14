@@ -1,7 +1,12 @@
 """Метрики benchmark-прогона: stream-json, транскрипты, дайджест, анализаторы."""
 from __future__ import annotations
 
+import hashlib
 import json
+import os
+import re
+import subprocess
+import sys
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -314,3 +319,188 @@ def aggregate_environment(task_metrics: list[dict]) -> dict:
         "mcp_errors": sum(count for signature, count in signatures.items()
                           if "mcp__" in signature),
     }
+
+
+_VERDICT_RE = re.compile(r"\|\s*Вердикт\s*\|\s*([^|]+?)\s*\|")
+
+
+def _parse_iso(value) -> datetime | None:
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        try:
+            return datetime.fromtimestamp(value).astimezone()
+        except (OverflowError, OSError, ValueError):
+            return None
+    return _parse_timestamp(value)
+
+
+def collect_task_state(project_dir: Path, task) -> dict:
+    task_dir = project_dir / "tasks" / task.folder
+    files = []
+    if task_dir.is_dir():
+        files = sorted(path.name for path in task_dir.iterdir()
+                       if path.is_file() and path.name not in
+                       ("task.json", "TASK.md") and not path.name.endswith(".lock"))
+    verdicts = {}
+    for name in ("TESTING.md", "REVIEW.md"):
+        path = task_dir / name
+        if path.is_file():
+            match = _VERDICT_RE.search(path.read_text(encoding="utf-8"))
+            if match:
+                verdicts[name] = match.group(1).strip()
+    archives = [name for name in files if re.fullmatch(r"(REVIEW|TESTING|TESTS|DEVELOP)\.\d+\.md", name)]
+    test_results = []
+    logs = project_dir / "logs"
+    if logs.is_dir():
+        for result_path in sorted(logs.glob("task#*/result.json")):
+            try:
+                data = json.loads(result_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            if isinstance(data, dict):
+                test_results.append(data)
+    return {"files": files, "verdicts": verdicts, "archives": archives,
+            "test_results": test_results}
+
+
+def stage_table(task_json: dict) -> list[dict]:
+    stages = []
+    for stage in task_json.get("stages") or []:
+        if not isinstance(stage, dict):
+            continue
+        started = _parse_iso(stage.get("started_at"))
+        finished = _parse_iso(stage.get("finished_at"))
+        duration = (finished - started).total_seconds() if started and finished else None
+        stages.append({
+            "name": stage.get("name"),
+            "enabled": bool(stage.get("enabled")),
+            "status": stage.get("status"),
+            "iteration": int(stage.get("iteration") or 1),
+            "duration_sec": duration,
+            "changed_files": list(stage.get("changed_files") or []),
+        })
+    return stages
+
+
+def _find_stage(task_json: dict, name: str) -> dict:
+    for stage in task_json.get("stages") or []:
+        if isinstance(stage, dict) and stage.get("name") == name:
+            return stage
+    return {}
+
+
+# Имя зафиксировано интерфейсом задачи (префикс test_ не означает pytest-тест).
+# Имя зафиксировано интерфейсом задачи: это функция метрик, не pytest-тест.
+def test_cycle_metrics(task_json: dict, state: dict, transcript: dict) -> dict:
+    main = (transcript.get("main") or {})
+    edits = main.get("edits") or {}
+    test_edits = sum(count for path, count in edits.items()
+                     if "ЮнитТесты" in path and "/src/cfe/" in f"/{path}")
+    return {
+        "tests_iteration": int(_find_stage(task_json, "tests").get("iteration") or 1),
+        "review_iteration": int(_find_stage(task_json, "review").get("iteration") or 1),
+        "review_archives": len(state.get("archives") or []),
+        "test_runs": int(main.get("test_runs") or 0),
+        "smoke_runs": int(main.get("smoke_runs") or 0),
+        "test_module_edits": test_edits,
+        "review_verdict": (state.get("verdicts") or {}).get("REVIEW.md"),
+    }
+
+
+def _python(project_dir: Path) -> str:
+    candidate = project_dir / ".venv" / "bin" / "python"
+    return str(candidate) if candidate.is_file() else sys.executable
+
+
+def _safe_name(path: Path) -> str:
+    digest = hashlib.sha1(str(path).encode("utf-8")).hexdigest()[:10]
+    return f"{digest}_{path.name}"
+
+
+def _run_script(argv: list[str], cwd: Path, stdin_text: str | None = None) -> dict:
+    try:
+        proc = subprocess.run(argv, cwd=cwd, text=True, capture_output=True,
+                              encoding="utf-8", errors="replace",
+                              input=stdin_text, timeout=180)
+        return {"returncode": proc.returncode, "stdout": proc.stdout,
+                "stderr": proc.stderr}
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return {"returncode": -1, "stdout": "", "stderr": str(exc)}
+
+
+def _findings(output: str) -> dict[str, int]:
+    counts = {"error": 0, "warning": 0, "info": 0}
+    for line in output.splitlines():
+        parts = [part.strip() for part in line.split("|", 2)]
+        if len(parts) >= 2 and parts[0] in counts:
+            counts[parts[0]] += 1
+    return counts
+
+
+def run_static_analyzers(project_dir: Path, files: list[str],
+                         reference: Path | None, out_dir: Path) -> dict:
+    analyzers_dir = out_dir / "analyzers"
+    analyzers_dir.mkdir(parents=True, exist_ok=True)
+    targets = []
+    for raw in files:
+        path = (project_dir / raw).resolve() if not Path(raw).is_absolute() else Path(raw)
+        if path.is_file() and path.suffix.lower() == ".bsl":
+            targets.append(path)
+    if reference is not None and reference.is_file():
+        targets.append(reference.resolve())
+    targets = sorted(set(targets))
+    python = _python(project_dir)
+    code_script = project_dir / ".claude" / "skills" / "code-analyze" / "scripts" / "analyze_code.py"
+    extract_script = project_dir / ".claude" / "skills" / "query-analyze" / "scripts" / "extract_queries.py"
+    query_script = project_dir / ".claude" / "skills" / "query-analyze" / "scripts" / "analyze_query.py"
+    code_result = {"available": code_script.is_file(),
+                   "skipped": None if code_script.is_file() else "analyze_code.py не найден",
+                   "results": {}}
+    query_result = {"available": extract_script.is_file() and query_script.is_file(),
+                    "skipped": None if extract_script.is_file() and query_script.is_file()
+                    else "analyze_query.py/extract_queries.py не найден",
+                    "results": {}}
+    for target in targets:
+        key = str(target)
+        if code_script.is_file():
+            run = _run_script([python, str(code_script), str(target), "-NoFail"],
+                              project_dir)
+            output = run["stdout"] + run["stderr"]
+            output_path = analyzers_dir / f"{_safe_name(target)}.code.txt"
+            output_path.write_text(output, encoding="utf-8")
+            code_result["results"][key] = {
+                "returncode": run["returncode"],
+                "findings": _findings(run["stdout"]),
+                "output_path": str(output_path),
+                "warnings": run["stderr"].strip()[:1000],
+            }
+        if extract_script.is_file() and query_script.is_file():
+            extracted = _run_script([python, str(extract_script), "-Path", str(target)],
+                                    project_dir)
+            analyzed = _run_script([python, str(query_script), "-"], project_dir,
+                                   stdin_text=extracted["stdout"])
+            output = extracted["stdout"] + extracted["stderr"] + analyzed["stdout"] + analyzed["stderr"]
+            output_path = analyzers_dir / f"{_safe_name(target)}.query.txt"
+            output_path.write_text(output, encoding="utf-8")
+            query_result["results"][key] = {
+                "returncode": analyzed["returncode"],
+                "findings": _findings(analyzed["stdout"]),
+                "output_path": str(output_path),
+                "extract_returncode": extracted["returncode"],
+                "warnings": (extracted["stderr"] + analyzed["stderr"]).strip()[:1000],
+            }
+    return {"code_analyze": code_result, "query_analyze": query_result}
+
+
+def write_json_atomic(path: Path, data) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f"{path.name}.tmp.{os.getpid()}")
+    try:
+        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+                       encoding="utf-8")
+        os.replace(tmp, path)
+    finally:
+        try:
+            if tmp.exists():
+                tmp.unlink()
+        except OSError:
+            pass

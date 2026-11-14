@@ -5,6 +5,9 @@ from bench_metrics import (aggregate_environment, classify_bash,
                            parse_tool_events, summarize_events,
                            summarize_transcripts)
 from bench_metrics import SessionFiles
+from bench_metrics import (collect_task_state, run_static_analyzers,
+                           stage_table, test_cycle_metrics, write_json_atomic)
+from bench_run import TaskInfo
 
 
 def write_jsonl(path: Path, rows: list[dict]) -> Path:
@@ -175,3 +178,97 @@ def test_aggregate_environment_tolerates_bad_transcript():
     assert env["command_not_found"] == 0
     assert env["mcp_errors"] == 0
     assert env["error_signatures"] == []
+
+
+def task_info(project: Path, folder: str) -> TaskInfo:
+    path = project / "tasks" / folder
+    data = json.loads((path / "task.json").read_text(encoding="utf-8"))
+    return TaskInfo(folder, path, data["identifier"], data["max_minutes"],
+                    data.get("status", ""), data)
+
+
+def test_collect_task_state(tmp_path):
+    project = tmp_path / "project"
+    task_dir = project / "tasks" / "task##001"
+    task_dir.mkdir(parents=True)
+    (task_dir / "task.json").write_text(json.dumps({
+        "identifier": "001", "max_minutes": 30, "status": "planned"}),
+        encoding="utf-8")
+    (task_dir / "TASK.md").write_text("# TASK\n", encoding="utf-8")
+    (task_dir / "DEVELOP.md").write_text("# dev\n", encoding="utf-8")
+    (task_dir / "REVIEW.1.md").write_text("# old\n", encoding="utf-8")
+    (task_dir / "REVIEW.md").write_text(
+        "| Вердикт | ✓ ПРИНЯТО |\n", encoding="utf-8")
+    logs = project / "logs" / "task#23"
+    logs.mkdir(parents=True)
+    (logs / "result.json").write_text(json.dumps({
+        "Выполнено": True, "ОписаниеОшибки": None,
+        "РезультатТестов": [{"Имя": "A", "Результат": True}]}),
+        encoding="utf-8")
+    task = task_info(project, "task##001")
+    state = collect_task_state(project, task)
+    assert "DEVELOP.md" in state["files"]
+    assert state["verdicts"]["REVIEW.md"] == "✓ ПРИНЯТО"
+    assert "REVIEW.1.md" in state["archives"]
+    assert state["test_results"][0]["Выполнено"] is True
+
+
+def test_stage_table_and_cycle_metrics():
+    task_json = {"stages": [
+        {"name": "tests", "enabled": True, "status": "done", "iteration": 3,
+         "started_at": "2026-01-01T00:00:00+00:00",
+         "finished_at": "2026-01-01T00:01:00+00:00", "changed_files": []},
+        {"name": "review", "enabled": True, "status": "done", "iteration": 2,
+         "started_at": "2026-01-01T00:01:00+00:00",
+         "finished_at": None, "changed_files": []},
+    ]}
+    stages = stage_table(task_json)
+    assert stages[0]["duration_sec"] == 60.0
+    assert stages[1]["duration_sec"] is None
+    cycles = test_cycle_metrics(
+        task_json,
+        {"archives": ["REVIEW.1.md"], "verdicts": {"REVIEW.md": "✓ ПРИНЯТО"}},
+        {"main": {"test_runs": 4, "smoke_runs": 1,
+                  "edits": {"src/cfe/ЮнитТесты/M.bsl": 5}}})
+    assert cycles == {"tests_iteration": 3, "review_iteration": 2,
+                      "review_archives": 1, "test_runs": 4,
+                      "smoke_runs": 1, "test_module_edits": 5,
+                      "review_verdict": "✓ ПРИНЯТО"}
+
+
+def test_run_static_analyzers(tmp_path):
+    project = tmp_path / "project"
+    scripts = project / ".claude" / "skills"
+    (scripts / "code-analyze" / "scripts").mkdir(parents=True)
+    (scripts / "query-analyze" / "scripts").mkdir(parents=True)
+    (scripts / "code-analyze" / "scripts" / "analyze_code.py").write_text(
+        "print('warning | rule-1 | 1 | msg')\nprint('info | rule-2 | 2 | msg')\n",
+        encoding="utf-8")
+    (scripts / "query-analyze" / "scripts" / "extract_queries.py").write_text(
+        "print('ВЫБРАТЬ 1')", encoding="utf-8")
+    (scripts / "query-analyze" / "scripts" / "analyze_query.py").write_text(
+        "import sys\nprint('error | q-1 | 1 | bad')\n", encoding="utf-8")
+    target = project / "Module.bsl"
+    target.write_text("Процедура А()\nКонецПроцедуры\n", encoding="utf-8")
+    reference = project / "example.bsl"
+    reference.write_text("Процедура А()\nКонецПроцедуры\n", encoding="utf-8")
+    result = run_static_analyzers(project, ["Module.bsl"], reference,
+                                  tmp_path / "out")
+    code = result["code_analyze"]["results"][str(target.resolve())]
+    assert code["findings"] == {"warning": 1, "info": 1, "error": 0}
+    assert str(reference.resolve()) in result["code_analyze"]["results"]
+    query = result["query_analyze"]["results"][str(target.resolve())]
+    assert query["findings"]["error"] == 1
+
+
+def test_run_static_analyzers_missing_script(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    result = run_static_analyzers(project, [], None, tmp_path / "out")
+    assert "не найден" in result["code_analyze"]["skipped"]
+
+
+def test_write_json_atomic(tmp_path):
+    path = tmp_path / "x.json"
+    write_json_atomic(path, {"a": 1})
+    assert json.loads(path.read_text(encoding="utf-8")) == {"a": 1}
