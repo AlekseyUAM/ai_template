@@ -36,6 +36,8 @@ run-tests.py
     2    ошибка компиляции модулей (предприятие не запускалось или зависло
          на модальном окне ошибки компиляции основной конфигурации)
     3    ошибка среды/лицензии (платформа не запустилась, база недоступна)
+    4    прогон состоялся, но есть проваленные тесты (result.json свежий)
+    5    result.json не найден, невалиден или список тестов пуст
     124  таймаут сеанса предприятия
 """
 
@@ -59,6 +61,12 @@ RC_LAUNCH_ERROR = 1
 RC_COMPILE_ERROR = 2
 RC_ENV_ERROR = 3
 RC_TIMEOUT = 124
+RC_TESTS_FAILED = 4
+RC_NO_RESULT = 5
+
+RESULT_DONE_KEY = "Выполнено"
+RESULT_ERROR_KEY = "ОписаниеОшибки"
+RESULT_TESTS_KEY = "РезультатТестов"
 
 # Маркеры ошибки компиляции в выводе конфигуратора (/CheckModules). Нужны на случай,
 # если конфигуратор отчитался успехом, но написал ошибку в лог; при обычной ошибке
@@ -244,7 +252,6 @@ def run_enterprise(project_root: Path, c_value: str, timeout: int) -> int:
     print()
     if returncode == 0:
         print("✅ Прогон тестов завершён (сеанс 1С закрыт).")
-        print("   Результаты смотри там, куда их пишет обработчик тестов в конфигурации.")
     else:
         print("❌ Ошибка запуска предприятия")
     return returncode
@@ -320,6 +327,84 @@ def make_effective_config(project_root: Path, config_path: Path,
     return effective
 
 
+def _result_log_path(project_root: Path, config_path: Path) -> Path | None:
+    """Путь к result.json из конфига тестов (поле ИмяФайлаЛог)."""
+    try:
+        data = json.loads(config_path.read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError) as err:
+        print(f"⚠️  Не удалось прочитать конфиг для определения ИмяФайлаЛог: {err}")
+        return None
+    if not isinstance(data, dict):
+        return None
+    name = data.get("ИмяФайлаЛог")
+    if not isinstance(name, str) or not name.strip():
+        return None
+    path = Path(name)
+    return path if path.is_absolute() else (project_root / path).resolve()
+
+
+def _reset_result_log(path: Path | None) -> None:
+    """Удалить прошлый результат: после прогона файл может быть только свежим."""
+    if path is None:
+        print("⚠️  В конфиге не задан ИмяФайлаЛог — результат после прогона не прочитать.")
+        return
+    try:
+        path.unlink()
+        print(f"🧹 Удалён прошлый результат: {path}")
+    except FileNotFoundError:
+        pass
+    except OSError as err:
+        print(f"⚠️  Не удалось удалить прошлый результат {path}: {err}")
+    print(f"📄 Результат будет записан в: {path}")
+
+
+def _read_and_print_result(path: Path | None) -> int:
+    """Прочитать result.json, напечатать сводку и вернуть 0/4/5."""
+    if path is None:
+        print("❌ В конфиге тестов не задан ИмяФайлаЛог — результат некуда прочитать.")
+        return RC_NO_RESULT
+    if not path.exists():
+        print(f"❌ Файл результата не найден: {path}")
+        print("   Прогон не дошёл до записи результата — проверьте лог сеанса выше.")
+        return RC_NO_RESULT
+    try:
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError) as err:
+        print(f"❌ Не удалось прочитать результат {path}: {err}")
+        return RC_NO_RESULT
+
+    tests = data.get(RESULT_TESTS_KEY) if isinstance(data, dict) else None
+    if not isinstance(tests, list) or not tests:
+        print(f"❌ В результате нет тестов: {path}")
+        return RC_NO_RESULT
+
+    done = data.get(RESULT_DONE_KEY)
+    error = data.get(RESULT_ERROR_KEY)
+    passed = sum(
+        1 for test in tests
+        if isinstance(test, dict) and test.get("Результат") is True
+    )
+    failed = len(tests) - passed
+
+    print()
+    print(f"📊 Результат прогона: {path}")
+    print(f"   Выполнено: {done}")
+    print(f"   ОписаниеОшибки: {error}")
+    print()
+    for test in tests:
+        if not isinstance(test, dict):
+            continue
+        is_ok = test.get("Результат") is True
+        print(f"   {'✓' if is_ok else '✗'} {test.get('Имя', '<без имени>')}")
+        if not is_ok and test.get("ОписаниеОшибки"):
+            print(f"      {test['ОписаниеОшибки']}")
+    print()
+    print(f"ИТОГ: {passed}/{len(tests)} пройдено")
+
+    all_passed = done is True and error is None and failed == 0
+    return RC_OK if all_passed else RC_TESTS_FAILED
+
+
 def run_tests(config_arg: str, extension: str, timeout: int, no_check: bool,
               scenarios: str | None = None) -> int:
     """Скомпилируй модули и запусти предприятие для прогона тестов."""
@@ -344,6 +429,9 @@ def run_tests(config_arg: str, extension: str, timeout: int, no_check: bool,
     if effective_config is None:
         return RC_LAUNCH_ERROR
 
+    result_path = _result_log_path(project_root, effective_config)
+    _reset_result_log(result_path)
+
     print("🧪 Запуск юнит-тестов 1С")
     print(f"   Конфиг: {effective_config}")
     print()
@@ -362,8 +450,9 @@ def run_tests(config_arg: str, extension: str, timeout: int, no_check: bool,
 
     if rc == RC_TIMEOUT:
         return diagnose_timeout(project_root)
-
-    return rc
+    if rc != RC_OK:
+        return rc
+    return _read_and_print_result(result_path)
 
 
 def main() -> int:

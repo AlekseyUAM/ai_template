@@ -1,5 +1,6 @@
 """run-tests.py: ошибка среды не должна выглядеть как ошибка компиляции."""
 import importlib.util
+import json
 from pathlib import Path
 
 CLI = Path(__file__).resolve().parents[3] / "template" / ".claude" / "tools" / "run-tests.py"
@@ -86,3 +87,88 @@ def test_timeout_with_env_failure_stays_rc124(monkeypatch):
     mod = _load()
     _patch(monkeypatch, mod, _Result(1, "Traceback (most recent call last):"))
     assert mod.diagnose_timeout(Path(".")) == mod.RC_TIMEOUT
+
+
+def _config(tmp_path, result_path):
+    cfg = tmp_path / "test.json"
+    cfg.write_text(json.dumps({"ИмяМодуля": "M", "ИмяФайлаЛог": str(result_path)},
+                              ensure_ascii=False), encoding="utf-8")
+    return cfg
+
+
+def _result(tests, done=True, error=None):
+    return {"Выполнено": done, "ОписаниеОшибки": error, "РезультатТестов": tests}
+
+
+def _patch_enterprise(monkeypatch, mod, result_path, result=None, rc=0):
+    state = {"exists_at_start": None}
+
+    def fake(project_root, c_value, timeout):
+        state["exists_at_start"] = result_path.exists()
+        if result is not None:
+            result_path.write_text(json.dumps(result, ensure_ascii=False),
+                                   encoding="utf-8")
+        return rc
+
+    monkeypatch.setattr(mod, "run_enterprise", fake)
+    return state
+
+
+def test_all_tests_passed_returns_rc0(monkeypatch, tmp_path):
+    mod = _load()
+    result_path = tmp_path / "result.json"
+    cfg = _config(tmp_path, result_path)
+    _patch_enterprise(monkeypatch, mod, result_path,
+                      _result([{"Имя": "A", "Результат": True, "ОписаниеОшибки": None}]))
+    assert mod.run_tests(str(cfg), "ЮнитТесты", 10, True) == mod.RC_OK
+
+
+def test_failed_test_returns_rc4_and_prints_summary(monkeypatch, tmp_path, capsys):
+    mod = _load()
+    result_path = tmp_path / "result.json"
+    cfg = _config(tmp_path, result_path)
+    _patch_enterprise(monkeypatch, mod, result_path,
+                      _result([{"Имя": "A", "Результат": False,
+                                "ОписаниеОшибки": "boom"}]))
+    assert mod.run_tests(str(cfg), "ЮнитТесты", 10, True) == mod.RC_TESTS_FAILED
+    out = capsys.readouterr().out
+    assert "ИТОГ: 0/1 пройдено" in out
+    assert "✗ A" in out
+    assert "boom" in out
+
+
+def test_missing_result_returns_rc5(monkeypatch, tmp_path, capsys):
+    mod = _load()
+    result_path = tmp_path / "result.json"
+    cfg = _config(tmp_path, result_path)
+    _patch_enterprise(monkeypatch, mod, result_path, None)
+    assert mod.run_tests(str(cfg), "ЮнитТесты", 10, True) == mod.RC_NO_RESULT
+    assert "Файл результата не найден" in capsys.readouterr().out
+
+
+def test_empty_test_list_returns_rc5(monkeypatch, tmp_path):
+    mod = _load()
+    result_path = tmp_path / "result.json"
+    cfg = _config(tmp_path, result_path)
+    _patch_enterprise(monkeypatch, mod, result_path, _result([]))
+    assert mod.run_tests(str(cfg), "ЮнитТесты", 10, True) == mod.RC_NO_RESULT
+
+
+def test_previous_result_removed_before_run(monkeypatch, tmp_path):
+    mod = _load()
+    result_path = tmp_path / "result.json"
+    result_path.write_text("старый", encoding="utf-8")
+    cfg = _config(tmp_path, result_path)
+    state = _patch_enterprise(monkeypatch, mod, result_path,
+                              _result([{"Имя": "A", "Результат": True,
+                                        "ОписаниеОшибки": None}]))
+    assert mod.run_tests(str(cfg), "ЮнитТесты", 10, True) == mod.RC_OK
+    assert state["exists_at_start"] is False
+
+
+def test_enterprise_failure_returned_as_is(monkeypatch, tmp_path):
+    mod = _load()
+    result_path = tmp_path / "result.json"
+    cfg = _config(tmp_path, result_path)
+    _patch_enterprise(monkeypatch, mod, result_path, None, rc=1)
+    assert mod.run_tests(str(cfg), "ЮнитТесты", 10, True) == 1
