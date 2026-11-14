@@ -436,3 +436,149 @@ def test_check_mcp_url_fails_when_unreachable(tmp_path):
 
 def test_check_mcp_url_accepts_reachable():
     check_mcp_url("http://localhost:9999/hs/mcp", http_ok=lambda url: True)
+
+
+import shutil
+
+from agentmon.env.bench_setup import (
+    ImportedTask,
+    commit_baseline,
+    commit_init,
+    import_tasks,
+)
+from agentmon.store.tasks import TaskRepo
+
+
+def make_tasks(root: Path) -> Path:
+    task_dir = root / "benchmark" / "tasks" / "task##001"
+    task_dir.mkdir(parents=True)
+    data = {
+        "id": 23,
+        "project_id": 13,
+        "name": "Метаданные",
+        "identifier": "#001",
+        "goal": "Добавить метаданные",
+        "plan": "План",
+        "constraints": "Ограничения",
+        "tests": "Тесты",
+        "status": "planned",
+        "stage": None,
+        "started_at": None,
+        "finished_at": None,
+        "created_at": None,
+        "kind": "real",
+        "update_db": True,
+        "max_minutes": 60,
+        "mark_changes": False,
+        "developer_id": "alex",
+        "stages": [
+            {"name": "develop", "enabled": True, "subagent": "developer",
+             "artifact": "DEVELOP.md", "gate": False, "approved": False,
+             "status": "pending", "changed_files": [], "started_at": None,
+             "finished_at": None, "iteration": 1},
+        ],
+    }
+    (task_dir / "task.json").write_text(
+        json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    (task_dir / "TASK.md").write_text(
+        "# Задача #001 (#23): Метаданные\n\n## Цель\nДобавить метаданные\n\n"
+        "## Правка пользователя\nНе потерять эту строку.\n",
+        encoding="utf-8",
+    )
+    (task_dir / "extra.txt").write_text("extra", encoding="utf-8")
+    return task_dir
+
+
+def test_import_tasks_copies_rewrites_and_preserves_body(tmp_path):
+    root = make_repo_root(tmp_path)
+    make_tasks(root)
+    cfg = load_config(write_env(tmp_path), repo_root=root)
+    store = make_store(tmp_path)
+    project_id = create_project_row(store, cfg)
+    Path(cfg.project_dir).mkdir(parents=True)
+
+    imported = import_tasks(project_id=project_id, cfg=cfg, repo_root=root,
+                            store=store, log=lambda line: None)
+
+    assert len(imported) == 1
+    item = imported[0]
+    assert isinstance(item, ImportedTask)
+    assert item.identifier == "#001"
+    assert item.folder == "task##001"
+
+    task_row = TaskRepo(store).get(item.task_id)
+    assert task_row["project_id"] == project_id
+    assert task_row["name"] == "Метаданные"
+    assert task_row["identifier"] == "#001"
+    assert json.loads(task_row["stages_json"])[0]["name"] == "develop"
+
+    task_dir = Path(cfg.project_dir) / "tasks" / "task##001"
+    assert (task_dir / "extra.txt").read_text(encoding="utf-8") == "extra"
+    data = json.loads((task_dir / "task.json").read_text(encoding="utf-8"))
+    assert data["id"] == item.task_id
+    assert data["project_id"] == project_id
+    assert data["developer_id"] == "alex"
+    assert data["status"] == "planned"
+    assert data["created_at"] and "T" in data["created_at"]
+    assert data["update_db"] is True
+    assert data["mark_changes"] is False
+    assert data["stages"][0]["status"] == "pending"
+
+    md = (task_dir / "TASK.md").read_text(encoding="utf-8")
+    assert md.startswith(f"# Задача #001 (#{item.task_id}):")
+    assert "Не потерять эту строку." in md
+
+
+def test_import_tasks_requires_at_least_one_task(tmp_path):
+    root = make_repo_root(tmp_path)
+    (root / "benchmark" / "tasks").mkdir(parents=True)
+    cfg = load_config(write_env(tmp_path), repo_root=root)
+    store = make_store(tmp_path)
+    project_id = create_project_row(store, cfg)
+    Path(cfg.project_dir).mkdir(parents=True)
+    with pytest.raises(SetupError, match="ни одной задачи"):
+        import_tasks(project_id=project_id, cfg=cfg, repo_root=root,
+                     store=store, log=lambda line: None)
+
+
+class GitProv:
+    def __init__(self):
+        self.calls = []
+
+    def mkdirs(self, paths):
+        for path in paths:
+            Path(path).mkdir(parents=True, exist_ok=True)
+
+    def exists(self, path):
+        return False
+
+    def is_file(self, path):
+        return False
+
+    def write_text(self, path, content):
+        pass
+
+    def read_text(self, path):
+        return ""
+
+    def run(self, cmd, cwd=None, timeout=None):
+        self.calls.append((list(cmd), cwd))
+        return RunResult()
+
+
+def test_commit_init_and_baseline(tmp_path):
+    root = make_repo_root(tmp_path)
+    make_tasks(root)
+    cfg = load_config(write_env(tmp_path), repo_root=root)
+    Path(cfg.project_dir).mkdir(parents=True)
+    prov = GitProv()
+
+    commit_init(cfg, prov)
+    assert prov.calls[0][0] == ["git", "init"]
+    init_commit = prov.calls[-1][0]
+    assert "commit" in init_commit and "init" in init_commit
+
+    tasks = [ImportedTask(identifier="#001", task_id=7, folder="task##001")]
+    commit_baseline(cfg, tasks, prov)
+    baseline_commit = prov.calls[-1][0]
+    assert "baseline before task#001" in baseline_commit

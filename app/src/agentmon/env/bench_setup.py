@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import socket
 import time
 import urllib.error
@@ -19,11 +20,13 @@ from typing import Callable
 from urllib.parse import urlparse
 
 from .config_schema import SCHEMA_VERSION, EnvConfig, McpSelection
-from .devbase import _parse_connection
+from .devbase import _parse_connection, git_commit_all, git_init_project
 from .project_checks import current_env_version, infer_db_kind, validate_name
+from .timefmt import to_local_iso
 from ..paths import same_path
 from ..store.mcp import McpRepo
 from ..store.projects import ProjectRepo
+from ..store.tasks import TaskRepo
 
 REQUIRED_KEYS = (
     "BENCH_PROJECT_NAME", "BENCH_PROJECT_DIR", "BENCH_DEVELOPER_ID",
@@ -498,3 +501,101 @@ def check_mcp_url(url: str, *, http_ok=default_http_ok, log=print) -> None:
     if not http_ok(url):
         raise SetupError(f"1c-md недоступен по адресу {url}")
     log(f"✓ 1c-md доступен: {url}")
+
+
+@dataclass(frozen=True)
+class ImportedTask:
+    identifier: str
+    task_id: int
+    folder: str
+
+
+_TASK_HEADER_RE = re.compile(r"^(# Задача .+?) \(#\d+\):", re.MULTILINE)
+
+
+def _source_task_dirs(repo_root: Path) -> list[Path]:
+    tasks_root = repo_root / "benchmark" / "tasks"
+    if not tasks_root.is_dir():
+        return []
+    return sorted(
+        path for path in tasks_root.iterdir()
+        if path.is_dir() and (path / "task.json").is_file()
+    )
+
+
+def import_tasks(*, project_id: int, cfg: BenchConfig, repo_root: Path,
+                 store, log=print) -> list[ImportedTask]:
+    """Скопировать задачи benchmark/tasks, завести их в БД и обновить id в файлах."""
+    sources = _source_task_dirs(repo_root)
+    if not sources:
+        raise SetupError(f"в {repo_root / 'benchmark' / 'tasks'} нет ни одной задачи")
+
+    repo = TaskRepo(store)
+    imported: list[ImportedTask] = []
+    for source in sources:
+        raw = (source / "task.json").read_text(encoding="utf-8")
+        data = json.loads(raw)
+        identifier = str(data.get("identifier") or "").strip()
+        if not identifier:
+            identifier = source.name.removeprefix("task#")
+
+        now = time.time()
+        task_id = repo.add(
+            project_id=project_id,
+            name=data.get("name", ""),
+            identifier=identifier,
+            goal=data.get("goal", ""),
+            plan=data.get("plan", ""),
+            constraints=data.get("constraints", ""),
+            tests=data.get("tests", ""),
+            stages_json=json.dumps(data.get("stages", []), ensure_ascii=False),
+            status="planned",
+            stage=None,
+            now=now,
+            kind=data.get("kind") or "real",
+            update_db=1 if data.get("update_db") else 0,
+            max_minutes=int(data.get("max_minutes") or 60),
+            interactive=0,
+            mark_changes=1 if data.get("mark_changes") else 0,
+        )
+
+        destination = Path(cfg.project_dir) / "tasks" / source.name
+        shutil.copytree(source, destination)
+
+        data["id"] = task_id
+        data["project_id"] = project_id
+        data["developer_id"] = cfg.developer_id
+        data["status"] = "planned"
+        data["stage"] = None
+        data["started_at"] = None
+        data["finished_at"] = None
+        data["created_at"] = to_local_iso(now)
+        data["update_db"] = bool(data.get("update_db"))
+        data["mark_changes"] = bool(data.get("mark_changes"))
+        (destination / "task.json").write_text(
+            json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+        task_md = destination / "TASK.md"
+        if task_md.is_file():
+            text = task_md.read_text(encoding="utf-8")
+            updated = _TASK_HEADER_RE.sub(
+                lambda match: f"{match.group(1)} (#{task_id}):", text, count=1)
+            if updated != text:
+                task_md.write_text(updated, encoding="utf-8")
+
+        imported.append(ImportedTask(identifier, task_id, source.name))
+        log(f"✓ задача {identifier} → #{task_id} ({source.name})")
+    return imported
+
+
+def commit_init(cfg: BenchConfig, prov) -> None:
+    git_init_project(prov, cfg.project_dir, config=cfg)
+    git_commit_all(prov, cfg.project_dir, "init", config=cfg)
+
+
+def commit_baseline(cfg: BenchConfig, tasks: list[ImportedTask], prov) -> None:
+    if not tasks:
+        return
+    git_commit_all(
+        prov, cfg.project_dir,
+        f"baseline before task{tasks[0].identifier}", config=cfg)
