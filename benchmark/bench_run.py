@@ -172,23 +172,21 @@ def _wait_exit(proc: subprocess.Popen, timeout: float) -> bool:
         return False
 
 
-def _kill_group(proc: subprocess.Popen) -> None:
+def _kill_group(proc: subprocess.Popen, pgid: int) -> None:
     """Мягко остановить лидера, затем гарантированно зачистить process group.
 
-    Лидер может выйти по SIGINT/SIGTERM раньше потомков (например, MCP-бэкенды
-    claude), поэтому после его выхода группа всё равно добивается SIGKILL.
-    """
-    try:
-        pgid = os.getpgid(proc.pid)
-    except (ProcessLookupError, OSError):
-        pgid = None
+    ``run_claude`` запускает процесс с ``start_new_session=True``, поэтому
+    pgid группы равен pid лидера на момент старта. PGID передаётся явно: чтение
+    ``os.getpgid`` в момент убийства опасно — после реепа лидера PID/PGID может
+    быть переиспользован и зачистка задела бы чужую группу.
 
+    Зачистка группы после выхода лидера намеренная: потомки (например,
+    MCP-бэкенды claude) могут игнорировать сигналы или пережить лидера,
+    поэтому группа всё равно добивается SIGKILL.
+    """
     def send(sig: int) -> None:
         try:
-            if pgid is not None:
-                os.killpg(pgid, sig)
-            else:
-                proc.send_signal(sig)
+            os.killpg(pgid, sig)
         except (ProcessLookupError, OSError):
             pass
 
@@ -229,13 +227,13 @@ def run_claude(*, cmd: str, prompt: str, cwd: Path, timeout_sec: float,
             exit_code = proc.wait(timeout=timeout_sec)
         except subprocess.TimeoutExpired:
             timed_out = True
-            _kill_group(proc)
+            _kill_group(proc, proc.pid)
             try:
                 exit_code = proc.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 exit_code = proc.poll()
         except BaseException:
-            _kill_group(proc)
+            _kill_group(proc, proc.pid)
             raise
     duration = time.monotonic() - started
     stream = parse_stream(stream_path)
