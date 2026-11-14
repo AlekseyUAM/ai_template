@@ -1,5 +1,8 @@
 import json
+import os
 import subprocess
+import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -72,6 +75,31 @@ def test_run_claude_timeout_kills_process(tmp_path):
     assert run.timed_out is True
     assert run.duration_sec < 10
     assert run.exit_code is not None
+
+
+def test_run_claude_timeout_kills_descendants(tmp_path):
+    pid_file = tmp_path / "grandchild.pid"
+    fake = write_fake_claude(tmp_path / "parent", "\n".join([
+        "import subprocess, sys, time",
+        f"child = subprocess.Popen([sys.executable, '-c', "
+        f"'import time; time.sleep(30)'])",
+        f"open({str(pid_file)!r}, 'w').write(str(child.pid))",
+        "time.sleep(30)",
+    ]) + "\n")
+    run = run_claude(cmd=str(fake), prompt="hi", cwd=tmp_path, timeout_sec=0.5,
+                     stream_path=tmp_path / "out.jsonl",
+                     stderr_path=tmp_path / "err.log")
+    assert run.timed_out is True
+    pid = int(pid_file.read_text(encoding="utf-8"))
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            break
+        time.sleep(0.1)
+    else:
+        pytest.fail(f"потомок {pid} остался жив после таймаута")
 
 
 def make_project(root: Path) -> Path:

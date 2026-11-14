@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from bench_metrics import find_session_files, parse_stream
+
 
 class BenchError(RuntimeError):
     """Ожидаемая ошибка benchmark-раннера."""
@@ -148,48 +150,71 @@ class ClaudeRun:
     session: object
 
 
-def _signal_group(proc: subprocess.Popen, sig: int, wait_sec: float) -> bool:
+def _group_exists(pgid: int | None) -> bool:
+    if pgid is None:
+        return False
     try:
-        pgid = os.getpgid(proc.pid)
-    except (ProcessLookupError, OSError):
-        pgid = None
+        os.killpg(pgid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+
+
+def _wait_exit(proc: subprocess.Popen, timeout: float) -> bool:
     try:
-        if pgid is not None:
-            os.killpg(pgid, sig)
-        else:
-            proc.send_signal(sig)
-    except (ProcessLookupError, OSError):
-        pass
-    try:
-        proc.wait(timeout=wait_sec)
+        proc.wait(timeout=timeout)
         return True
     except subprocess.TimeoutExpired:
         return False
 
 
 def _kill_group(proc: subprocess.Popen) -> None:
-    if proc.poll() is not None:
-        return
-    if _signal_group(proc, signal.SIGINT, 10):
-        return
-    if _signal_group(proc, signal.SIGTERM, 5):
-        return
+    """Мягко остановить лидера, затем гарантированно зачистить process group.
+
+    Лидер может выйти по SIGINT/SIGTERM раньше потомков (например, MCP-бэкенды
+    claude), поэтому после его выхода группа всё равно добивается SIGKILL.
+    """
     try:
         pgid = os.getpgid(proc.pid)
-        os.killpg(pgid, signal.SIGKILL)
     except (ProcessLookupError, OSError):
+        pgid = None
+
+    def send(sig: int) -> None:
+        try:
+            if pgid is not None:
+                os.killpg(pgid, sig)
+            else:
+                proc.send_signal(sig)
+        except (ProcessLookupError, OSError):
+            pass
+
+    if proc.poll() is None:
+        send(signal.SIGINT)
+        _wait_exit(proc, 10)
+    if proc.poll() is None:
+        send(signal.SIGTERM)
+        _wait_exit(proc, 5)
+    if _group_exists(pgid):
+        try:
+            os.killpg(pgid, signal.SIGKILL)
+        except (ProcessLookupError, OSError):
+            pass
+    if proc.poll() is None:
         try:
             proc.kill()
         except OSError:
             pass
+        _wait_exit(proc, 5)
 
 
 def run_claude(*, cmd: str, prompt: str, cwd: Path, timeout_sec: float,
                stream_path: Path, stderr_path: Path,
                extra_args: tuple[str, ...] = ()) -> ClaudeRun:
     """Запустить claude в отдельной сессии и вернуть результат; таймаут убивает группу."""
-    from bench_metrics import find_session_files, parse_stream
-
     argv = [cmd, "-p", prompt, "--output-format", "stream-json",
             "--verbose", *extra_args]
     stream_path.parent.mkdir(parents=True, exist_ok=True)
@@ -205,7 +230,10 @@ def run_claude(*, cmd: str, prompt: str, cwd: Path, timeout_sec: float,
         except subprocess.TimeoutExpired:
             timed_out = True
             _kill_group(proc)
-            exit_code = proc.wait()
+            try:
+                exit_code = proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                exit_code = proc.poll()
         except BaseException:
             _kill_group(proc)
             raise
