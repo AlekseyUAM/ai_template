@@ -283,3 +283,43 @@ def test_write_json_atomic(tmp_path):
     path = tmp_path / "x.json"
     write_json_atomic(path, {"a": 1})
     assert json.loads(path.read_text(encoding="utf-8")) == {"a": 1}
+
+
+from bench_metrics import render_digest
+
+
+def test_render_digest_contains_key_sections():
+    metrics = {
+        "run": {"run_id": "20260101-000000", "project_dir": "/p",
+                "claude_cmd": "claude-ds", "force": False},
+        "tasks": [{
+            "folder": "task##001", "limit_minutes": 30, "outcome": "success",
+            "duration_sec": 120.0, "exit_code": 0,
+            "stream": {"num_turns": 12, "cost_usd": 0.5},
+            "stages": [{"name": "develop", "enabled": True, "status": "done",
+                        "iteration": 2, "duration_sec": 60.0}],
+            "cycles": {"tests_iteration": 2, "review_iteration": 1,
+                       "test_runs": 3, "smoke_runs": 1,
+                       "test_module_edits": 4, "review_archives": 0},
+            "transcript": {"source": "session", "main": {
+                "tool_errors": 1,
+                "error_signatures": [{"signature": "Bash: command not found",
+                                      "count": 1}],
+                "slow_ops": [{"tool": "Bash", "input": "run-tests.py",
+                              "duration_sec": 90.0}],
+                "gaps": [{"after": "Bash", "before": "Read", "gap_sec": 400,
+                          "at": "2026-01-01T00:00:00+00:00"}],
+                "tools": {"Bash": 5}}},
+        }],
+        "environment": {"tool_errors": 1,
+                        "error_signatures": [{"signature": "Bash: command not found",
+                                              "count": 1}],
+                        "command_not_found": 1, "timeouts": 0,
+                        "mcp_errors": 0},
+    }
+    text = render_digest(metrics)
+    assert "# Дайджест benchmark-прогона" in text
+    assert "task##001" in text
+    assert "command not found" in text
+    assert "run-tests.py" in text
+    assert "400" in text

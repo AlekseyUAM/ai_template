@@ -533,3 +533,112 @@ def write_json_atomic(path: Path, data) -> None:
                 tmp.unlink()
         except OSError:
             pass
+
+
+def _seconds(value) -> str:
+    if value is None:
+        return "—"
+    value = float(value)
+    if value >= 60:
+        return f"{value / 60:.1f} мин"
+    return f"{value:.0f} с"
+
+
+def render_digest(metrics: dict) -> str:
+    run = metrics.get("run") or {}
+    lines = [
+        "# Дайджест benchmark-прогона",
+        "",
+        f"- Прогон: `{run.get('run_id', '—')}`",
+        f"- Проект: `{run.get('project_dir', '—')}`",
+        f"- Команда агента: `{run.get('claude_cmd', '—')}`",
+        f"- Режим --force: {'да' if run.get('force') else 'нет'}",
+        "",
+        "## Задачи",
+        "",
+        "| Задача | Лимит | Исход | Факт | Этапы (итерации) | Тесты | Ревью |",
+        "|---|---|---|---|---|---|---|",
+    ]
+    for task in metrics.get("tasks") or []:
+        stages = ", ".join(
+            f"{stage.get('name')}×{stage.get('iteration')}"
+            for stage in task.get("stages") or [] if stage.get("enabled"))
+        cycles = task.get("cycles") or {}
+        lines.append(
+            f"| {task.get('folder')} | {task.get('limit_minutes')} мин | "
+            f"{task.get('outcome')} | {_seconds(task.get('duration_sec'))} | "
+            f"{stages or '—'} | "
+            f"запусков {cycles.get('test_runs', 0)}, "
+            f"смоуков {cycles.get('smoke_runs', 0)}, "
+            f"правок тестов {cycles.get('test_module_edits', 0)} | "
+            f"итераций {cycles.get('review_iteration', 0)}, "
+            f"архивов {cycles.get('review_archives', 0)} |")
+    for task in metrics.get("tasks") or []:
+        lines += ["", f"## {task.get('folder')}", ""]
+        lines.append(f"- Исход: `{task.get('outcome')}`, код выхода: "
+                     f"`{task.get('exit_code')}`, время: "
+                     f"{_seconds(task.get('duration_sec'))}")
+        stream = task.get("stream") or {}
+        lines.append(f"- Агент: turns={stream.get('num_turns')}, "
+                     f"cost=${stream.get('cost_usd')}, "
+                     f"session={stream.get('session_id')}")
+        transcript = task.get("transcript") or {}
+        main = transcript.get("main") or {}
+        lines.append(f"- Источник транскрипта: {transcript.get('source', '—')}, "
+                     f"ошибок инструментов: {main.get('tool_errors', 0)}")
+        if main.get("tools"):
+            lines.append("- Инструменты: " + ", ".join(
+                f"{name}={count}" for name, count in
+                sorted(main["tools"].items())))
+        if main.get("slow_ops"):
+            lines += ["", "### Долгие операции", "",
+                      "| Инструмент | Вход | Длительность |", "|---|---|---|"]
+            for op in main["slow_ops"]:
+                lines.append(f"| {op.get('tool')} | `{op.get('input')}` | "
+                             f"{_seconds(op.get('duration_sec'))} |")
+        if main.get("gaps"):
+            lines += ["", "### Простои > 5 мин", ""]
+            for gap in main["gaps"]:
+                lines.append(f"- {_seconds(gap.get('gap_sec'))} "
+                             f"({gap.get('gap_sec')} с) после "
+                             f"{gap.get('after')} перед {gap.get('before')} "
+                             f"({gap.get('at')})")
+        if main.get("error_signatures"):
+            lines += ["", "### Ошибки", ""]
+            for item in main["error_signatures"]:
+                lines.append(f"- ×{item.get('count')}: {item.get('signature')}")
+        subagents = transcript.get("subagents") or []
+        if subagents:
+            lines += ["", "### Сабагенты", ""]
+            for agent in subagents:
+                lines.append(f"- {agent.get('agent')}: "
+                             f"{agent.get('description')} — "
+                             f"{_seconds(agent.get('duration_sec'))}, "
+                             f"ошибок {agent.get('tool_errors', 0)}, "
+                             f"тестов {agent.get('test_runs', 0)}")
+        analyzers = task.get("analyzers") or {}
+        code = analyzers.get("code_analyze") or {}
+        lines += ["", "### Анализаторы", ""]
+        if code.get("skipped"):
+            lines.append(f"- code-analyze: пропущен ({code['skipped']})")
+        else:
+            lines.append(f"- code-analyze: файлов {len(code.get('results') or {})}")
+        for path, result in (code.get("results") or {}).items():
+            findings = result.get("findings") or {}
+            lines.append(f"  - `{Path(path).name}`: error={findings.get('error', 0)}, "
+                         f"warning={findings.get('warning', 0)}, "
+                         f"info={findings.get('info', 0)}")
+        query = analyzers.get("query_analyze") or {}
+        if query.get("skipped"):
+            lines.append(f"- query-analyze: пропущен ({query['skipped']})")
+        else:
+            lines.append(f"- query-analyze: файлов {len(query.get('results') or {})}")
+    env = metrics.get("environment") or {}
+    lines += ["", "## Окружение", "",
+              f"- Ошибок инструментов: {env.get('tool_errors', 0)}",
+              f"- «command not found»: {env.get('command_not_found', 0)}",
+              f"- Таймаутов: {env.get('timeouts', 0)}",
+              f"- Ошибок MCP: {env.get('mcp_errors', 0)}"]
+    for item in env.get("error_signatures") or []:
+        lines.append(f"- ×{item.get('count')}: {item.get('signature')}")
+    return "\n".join(lines).rstrip() + "\n"
