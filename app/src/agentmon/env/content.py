@@ -195,7 +195,8 @@ def _model_effort(config, name):
     return _DEFAULT_MODEL, _DEFAULT_EFFORT
 
 
-def _render_agents(prov, config, agents_dst, overrides: dict | None = None) -> None:
+def _render_agents(prov, config, agents_dst, overrides: dict | None = None,
+                   *, py_cmd: str | None = None) -> None:
     prov.mkdirs([agents_dst])
     for src in sorted((CONTENT_DIR / "agents").glob("*.md")):
         model, effort = _model_effort(config, src.stem)
@@ -204,6 +205,8 @@ def _render_agents(prov, config, agents_dst, overrides: dict | None = None) -> N
         if overrides:
             for placeholder, actual in overrides.items():
                 text = text.replace(placeholder, actual)
+        if py_cmd:
+            text = _rewrite_python_text(text, py_cmd)
         prov.write_text(f"{agents_dst}/{src.name}", text)
 
 
@@ -290,6 +293,10 @@ def _rewrite_python_invocations(prov, claude_dir, py_cmd) -> None:
         rel = src.relative_to(CONTENT_DIR)
         if "__pycache__" in rel.parts:
             continue
+        # agents/ уже отрендерены _render_agents (включая подстановку python);
+        # повторная запись сырым шаблоном стёрла бы model/effort/MCP-подстановки.
+        if rel.parts[:1] == ("agents",):
+            continue
         try:
             text = src.read_text(encoding="utf-8")
         except (UnicodeDecodeError, OSError):
@@ -353,7 +360,8 @@ def deploy_content(prov, config, *, update: bool) -> None:
     agent_subs = dict(subs)
     agent_subs["{{MCP_1C_MD_TOOLS}}"] = (
         f", mcp__{mcp_subs.get('1c-md', '1c-md')}__*" if has_1c_md else "")
-    _render_agents(prov, config, f"{claude}/agents", overrides=agent_subs)
+    _render_agents(prov, config, f"{claude}/agents", overrides=agent_subs,
+                   py_cmd=_py_cmd(prov, project_dir))
     # settings.json — текст JSON, а путь к интерпретатору впечатывается прямо в
     # него. Слэши — прямые: Git Bash на Windows съедает литеральный backslash в
     # команде (claude-code#26759), а JSON-строка требует экранировать кавычки.

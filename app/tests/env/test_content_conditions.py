@@ -224,3 +224,15 @@ def test_renamed_1c_md_tool_added_to_agents(tmp_path):
     text = agent_text(tmp_path, "reviewer")
     assert "mcp__my_md__*" in text
     assert "mcp__1c-md__*" not in text
+
+
+def test_deploy_agent_with_python_invocations_keeps_render(tmp_path):
+    content.deploy_content(
+        LocalProvisioner(), cfg(tmp_path, [sel("1c-md")]), update=False)
+    text = agent_text(tmp_path, "developer-tests")
+    assert "{{MCP_1C_MD_TOOLS}}" not in text
+    assert "{{MODEL}}" not in text
+    assert "{{EFFORT}}" not in text
+    assert "mcp__1c-md__*" in text
+    assert "run-tests.py" in text
+    assert ".venv" in text
