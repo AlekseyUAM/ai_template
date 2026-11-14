@@ -17,7 +17,8 @@ description: Циклический workflow develop → [testing] → review д
 - Если `testing` включен и не пройдён → цикл: develop → testing → develop
 - Если `testing` включен и пройдён → цикл: develop → testing → review → develop
 - Если `testing` отключен, но `review` включен → цикл: develop → review → develop
-- Если review вернул `tests`, после правки тестов обязателен красный смоук до перевода
+- Если review вернул `tests`, после правки тестов автор тестов сам выполняет красный
+  смоук и фиксирует доказательства в `TESTS.md`; оркестратор проверяет их до перевода
   `tests` в `done` — независимо от того, включён ли `testing`.
 
 ## Логика выполнения
