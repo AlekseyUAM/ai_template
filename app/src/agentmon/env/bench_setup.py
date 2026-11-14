@@ -11,12 +11,15 @@ import os
 import re
 import socket
 import time
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 from urllib.parse import urlparse
 
 from .config_schema import SCHEMA_VERSION, EnvConfig, McpSelection
+from .devbase import _parse_connection
 from .project_checks import current_env_version, infer_db_kind, validate_name
 from ..paths import same_path
 from ..store.mcp import McpRepo
@@ -409,3 +412,89 @@ def build_env_config(cfg: BenchConfig, plans: list[McpPlan]) -> EnvConfig:
         ],
         agents=[],
     )
+
+
+def build_create_base_command(cfg: BenchConfig) -> list[str]:
+    """Команда CREATEINFOBASE для серверной или файловой базы."""
+    conn = _parse_connection(cfg.db_kind, cfg.db_connection)
+    if cfg.db_kind == "file":
+        return [cfg.platform_path, "CREATEINFOBASE", f'File="{conn["path"]}"']
+    return [
+        cfg.platform_path, "CREATEINFOBASE",
+        f'Srvr={conn["server"]};Ref={conn["base"]}',
+    ]
+
+
+def ensure_base(cfg: BenchConfig, *, prov, log=print) -> None:
+    """Создать базу, если её нет. Существование серверной базы заранее не проверить:
+    неудачный CREATEINFOBASE не фатален — ошибка проявится на restore/load."""
+    if cfg.db_kind == "file":
+        conn = _parse_connection(cfg.db_kind, cfg.db_connection)
+        if Path(conn["path"]).exists():
+            log(f"✓ база уже существует: {conn['path']}")
+            return
+    cmd = build_create_base_command(cfg)
+    res = prov.run(cmd)
+    if res.returncode != 0:
+        tail = ((res.stdout or "") + (res.stderr or "")).strip()[-1000:]
+        log(f"⚠ CREATEINFOBASE вернул код {res.returncode} "
+            f"(возможно, база уже существует): {tail}")
+    else:
+        log(f"✓ база создана: {cfg.db_connection}")
+
+
+def base_load_steps(cfg: BenchConfig, repo_root: Path) -> list[list[str]]:
+    """Последовательность аргументов 1c-batch для подготовки базы."""
+    if cfg.dt_path:
+        return [["restore-ib", cfg.dt_path]]
+    steps = [["load-config", str(repo_root / "benchmark" / "cf")]]
+    for rel, name in EXTENSIONS:
+        steps.append(["load-cfg-extension", str(repo_root / rel), "--name", name])
+        steps.append(["update-db-cfg", "--extension", name])
+    return steps
+
+
+def base_dump_steps() -> list[list[str]]:
+    return [
+        ["dump-config", "src/cf"],
+        ["dump-config", "src/cfe", "--all-extensions"],
+    ]
+
+
+def _venv_python(project_dir: str) -> str:
+    base = Path(project_dir) / ".venv"
+    suffix = Path("Scripts") / "python.exe" if os.name == "nt" else Path("bin") / "python"
+    return str(base / suffix)
+
+
+def run_batch_step(project_dir: str, args: list[str], *, prov, log=print) -> None:
+    """Выполнить команду 1c-batch интерпретатором .venv проекта."""
+    script = (Path(project_dir) / ".claude" / "skills" / "1c-batch"
+              / "scripts" / "1c-batch.py")
+    cmd = [_venv_python(project_dir), str(script), *args]
+    res = prov.run(cmd, cwd=project_dir)
+    if res.returncode != 0:
+        tail = ((res.stdout or "") + (res.stderr or "")).strip()[-2000:]
+        raise SetupError(
+            f"1c-batch {' '.join(args)} завершился с кодом "
+            f"{res.returncode}:\n{tail}")
+    log(f"✓ 1c-batch {args[0]}")
+
+
+def default_http_ok(url: str, timeout: float = 5.0) -> bool:
+    """Любой HTTP-ответ (включая 4xx) означает, что сервис слушает."""
+    request = urllib.request.Request(
+        url, headers={"User-Agent": "ai1c-agentmon"})
+    try:
+        with urllib.request.urlopen(request, timeout=timeout):
+            return True
+    except urllib.error.HTTPError:
+        return True
+    except OSError:
+        return False
+
+
+def check_mcp_url(url: str, *, http_ok=default_http_ok, log=print) -> None:
+    if not http_ok(url):
+        raise SetupError(f"1c-md недоступен по адресу {url}")
+    log(f"✓ 1c-md доступен: {url}")

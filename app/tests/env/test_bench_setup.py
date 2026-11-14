@@ -303,3 +303,136 @@ def test_resolve_mcp_cards_reuses_shared_and_creates_project_cards(tmp_path):
     assert len(created2) == 1
     assert repo.get(ids["code-index"])["catalog_dir"] != repo.get(
         ids2["code-index"])["catalog_dir"]
+
+
+from dataclasses import dataclass
+
+from agentmon.env.bench_setup import (
+    base_dump_steps,
+    base_load_steps,
+    build_create_base_command,
+    check_mcp_url,
+    ensure_base,
+    run_batch_step,
+)
+
+
+@dataclass
+class RunResult:
+    returncode: int = 0
+    stdout: str = ""
+    stderr: str = ""
+
+
+class FakeProv:
+    def __init__(self, results=None):
+        self.calls = []
+        self.results = list(results or [])
+
+    def run(self, cmd, cwd=None, timeout=None):
+        self.calls.append((list(cmd), cwd))
+        return self.results.pop(0) if self.results else RunResult()
+
+
+def test_create_base_command_server(tmp_path):
+    cfg = load_config(write_env(tmp_path), repo_root=tmp_path)
+    cmd = build_create_base_command(cfg)
+    assert cmd[1:] == [
+        "CREATEINFOBASE", "Srvr=localhost;Ref=bench"]
+
+
+def test_create_base_command_file(tmp_path):
+    cfg = load_config(
+        write_env(tmp_path, BENCH_DB_CONNECTION=str(tmp_path / "ib")),
+        repo_root=tmp_path,
+    )
+    expected = tmp_path / "ib"
+    cmd = build_create_base_command(cfg)
+    assert cmd[1:] == ["CREATEINFOBASE", f'File="{expected}"']
+
+
+def test_ensure_base_creates_file_base_only_when_missing(tmp_path):
+    cfg = load_config(
+        write_env(tmp_path, BENCH_DB_CONNECTION=str(tmp_path / "ib")),
+        repo_root=tmp_path,
+    )
+    prov = FakeProv()
+    expected = tmp_path / "ib"
+    expected.mkdir()
+    ensure_base(cfg, prov=prov, log=lambda line: None)
+    assert prov.calls == []
+
+    expected.rmdir()
+    ensure_base(cfg, prov=prov, log=lambda line: None)
+    assert prov.calls[0][0][1:] == [
+        "CREATEINFOBASE", f'File="{expected}"']
+
+
+def test_ensure_base_tolerates_existing_server_base(tmp_path):
+    cfg = load_config(write_env(tmp_path), repo_root=tmp_path)
+    prov = FakeProv([RunResult(1, stderr="база уже существует")])
+    lines = []
+    ensure_base(cfg, prov=prov, log=lines.append)
+    assert prov.calls[0][0][1] == "CREATEINFOBASE"
+    assert any("⚠" in line for line in lines)
+
+
+def test_base_load_steps_without_dt(tmp_path):
+    root = make_repo_root(tmp_path)
+    cfg = load_config(write_env(tmp_path), repo_root=root)
+    steps = base_load_steps(cfg, root)
+    assert steps[0] == ["load-config", str(root / "benchmark" / "cf")]
+    assert steps[1] == [
+        "load-cfg-extension",
+        str(root / "app" / "web" / "assets" / "ЮнитТесты.cfe"),
+        "--name", "ЮнитТесты",
+    ]
+    assert steps[2] == ["update-db-cfg", "--extension", "ЮнитТесты"]
+    assert steps[3] == [
+        "load-cfg-extension",
+        str(root / "deps" / "mcp_tools_cfe" / "1c-mcp-tools-1.0.6.cfe"),
+        "--name", "mcp_tools",
+    ]
+    assert steps[4] == ["update-db-cfg", "--extension", "mcp_tools"]
+
+
+def test_base_load_steps_with_dt(tmp_path):
+    cfg = load_config(
+        write_env(tmp_path, BENCH_DT_PATH="base.dt"), repo_root=tmp_path)
+    assert base_load_steps(cfg, tmp_path) == [["restore-ib", cfg.dt_path]]
+
+
+def test_base_dump_steps():
+    assert base_dump_steps() == [
+        ["dump-config", "src/cf"],
+        ["dump-config", "src/cfe", "--all-extensions"],
+    ]
+
+
+def test_run_batch_step_uses_project_venv_and_raises_on_error(tmp_path):
+    cfg = load_config(write_env(tmp_path), repo_root=tmp_path)
+    project = Path(cfg.project_dir)
+    (project / ".venv" / "bin").mkdir(parents=True)
+    (project / ".venv" / "bin" / "python").write_text("")
+    (project / ".claude" / "skills" / "1c-batch" / "scripts").mkdir(parents=True)
+    (project / ".claude" / "skills" / "1c-batch" / "scripts" / "1c-batch.py").write_text("")
+
+    prov = FakeProv([RunResult(1, stdout="line1\n", stderr="ошибка 1С")])
+    with pytest.raises(SetupError, match="ошибка 1С"):
+        run_batch_step(cfg.project_dir, ["load-config", "/cf"],
+                       prov=prov, log=lambda line: None)
+    cmd, cwd = prov.calls[0]
+    assert cmd[:2] == [
+        str(project / ".venv" / "bin" / "python"),
+        str(project / ".claude" / "skills" / "1c-batch" / "scripts" / "1c-batch.py"),
+    ]
+    assert cwd == cfg.project_dir
+
+
+def test_check_mcp_url_fails_when_unreachable(tmp_path):
+    with pytest.raises(SetupError, match="недоступен"):
+        check_mcp_url("http://localhost:9999/hs/mcp", http_ok=lambda url: False)
+
+
+def test_check_mcp_url_accepts_reachable():
+    check_mcp_url("http://localhost:9999/hs/mcp", http_ok=lambda url: True)
