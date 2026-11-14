@@ -5,14 +5,21 @@ import argparse
 import json
 import os
 import re
+import shutil
 import signal
 import subprocess
+import sys
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 
-from bench_metrics import find_session_files, parse_stream
+from bench_analysis import (build_prompt, deterministic_report,
+                            extract_analyst_text, write_report)
+from bench_metrics import (aggregate_environment, collect_task_state,
+                           cycle_metrics, find_session_files, parse_stream,
+                           render_digest, run_static_analyzers, stage_table,
+                           summarize_transcripts, write_json_atomic)
 
 
 class BenchError(RuntimeError):
@@ -451,3 +458,301 @@ def build_options(ns: argparse.Namespace, repo_root: Path) -> RunOptions:
         run_dir=None,
         env_file=env_path,
     )
+
+
+def ensure_claude_cmd(cmd: str) -> None:
+    """Проверить, что команда агента существует и исполняема."""
+    candidate = Path(cmd)
+    if candidate.is_absolute() or os.sep in cmd:
+        resolved = candidate
+    else:
+        found = shutil.which(cmd)
+        resolved = Path(found) if found else candidate
+    if not resolved.is_file() or not os.access(resolved, os.X_OK):
+        raise BenchError(f"команда агента не найдена или не исполняема: {cmd}")
+
+
+def build_task_prompt(folder: str) -> str:
+    return (f"Выполни задачу tasks/{folder} по этапам из её task.json. "
+            f"Следуй навыку task-orchestration.")
+
+
+class RunLog:
+    def __init__(self, path: Path):
+        self._file = path.open("a", encoding="utf-8")
+
+    def __call__(self, message: str) -> None:
+        line = f"[{datetime.now():%H:%M:%S}] {message}"
+        print(line, flush=True)
+        self._file.write(line + "\n")
+        self._file.flush()
+
+    def close(self) -> None:
+        self._file.close()
+
+
+def _iso_now() -> str:
+    return datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+def _outcome(run: ClaudeRun, task_json: dict) -> str:
+    if run.timed_out:
+        return "timeout"
+    if run.exit_code != 0:
+        return "failed"
+    if not task_json:
+        return "incomplete"
+    enabled = [stage for stage in task_json.get("stages") or []
+               if isinstance(stage, dict) and stage.get("enabled")]
+    return "success" if all(stage.get("status") == "done"
+                            for stage in enabled) else "incomplete"
+
+
+def _write_run_json(run_dir: Path, run_metrics: dict) -> None:
+    write_json_atomic(run_dir / "run.json", {
+        "run": run_metrics.get("run") or {},
+        "tasks": [{"folder": task.get("folder"),
+                   "outcome": task.get("outcome"),
+                   "duration_sec": task.get("duration_sec")}
+                  for task in run_metrics.get("tasks") or []],
+        "analysis": run_metrics.get("analysis") or {},
+    })
+
+
+def _stream_metrics(run: ClaudeRun) -> dict:
+    result = run.stream.result or {}
+    return {
+        "session_id": run.stream.session_id,
+        "parse_errors": run.stream.parse_errors,
+        "duration_ms": result.get("duration_ms"),
+        "num_turns": result.get("num_turns"),
+        "cost_usd": result.get("total_cost_usd"),
+        "is_error": result.get("is_error"),
+        "usage": result.get("usage"),
+    }
+
+
+def _inputs_manifest(path: Path, project_dir: Path, repo_root: Path,
+                     run_dir: Path, metrics_path: Path, digest_path: Path,
+                     reference: Path | None, tasks) -> None:
+    lines = ["# Входы анализа", "",
+             f"- Проект: `{project_dir}`",
+             f"- Метрики: `{metrics_path}`",
+             f"- Дайджест: `{digest_path}`",
+             f"- Диффы: `{run_dir / 'diffs'}`",
+             f"- Транскрипты: `{run_dir / 'transcripts'}`",
+             f"- Эталон: `{reference}`" if reference else "- Эталон: недоступен",
+             f"- Template: `{repo_root / 'template'}`", "", "## Задачи", ""]
+    for task in tasks:
+        lines.append(f"- `{task.folder}`: `{task.path}`")
+        for name in sorted(p.name for p in task.path.iterdir() if p.is_file()):
+            if name not in ("task.json", "TASK.md"):
+                lines.append(f"  - `{name}`")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def execute(options: RunOptions) -> int:
+    ensure_claude_cmd(options.claude_cmd)
+    ensure_fresh(options.project_dir, list(options.tasks), force=options.force)
+    run_dir = prepare_run_dir(options.project_dir)
+    options = replace(options, run_dir=run_dir)
+    log = RunLog(run_dir / "run.log")
+    reference = options.repo_root / "benchmark" / "example.bsl"
+    reference = reference if reference.is_file() else None
+    metrics_path = run_dir / "metrics.json"
+    digest_path = run_dir / "digest.md"
+    manifest_path = run_dir / "analysis-inputs.md"
+    run_metrics = {
+        "schema_version": 1,
+        "run": {
+            "run_id": run_dir.name,
+            "started_at": _iso_now(),
+            "finished_at": None,
+            "project_dir": str(options.project_dir),
+            "repo_root": str(options.repo_root),
+            "claude_cmd": options.claude_cmd,
+            "force": options.force,
+            "skip_analysis": options.skip_analysis,
+            "env_file": str(options.env_file),
+            "tasks": [{"folder": task.folder,
+                       "limit_minutes": options.limits[task.folder]}
+                      for task in options.tasks],
+        },
+        "tasks": [],
+        "environment": {},
+        "analysis": {"performed": False},
+    }
+    write_json_atomic(metrics_path, run_metrics)
+    _write_run_json(run_dir, run_metrics)
+    log(f"прогон {run_dir.name}: проект {options.project_dir}")
+    if options.force:
+        log("⚠ --force: проект не проверялся на свежесть")
+    stopped = False
+    for task in options.tasks:
+        log(f"▶ {task.folder}: старт (лимит {options.limits[task.folder]} мин)")
+        task_started = _iso_now()
+        before = git_state(options.project_dir)
+        stream_path = run_dir / "transcripts" / f"{task.folder}.stream.jsonl"
+        stderr_path = run_dir / "transcripts" / f"{task.folder}.stderr.log"
+        run = run_claude(
+            cmd=options.claude_cmd,
+            prompt=build_task_prompt(task.folder),
+            cwd=options.project_dir,
+            timeout_sec=options.limits[task.folder] * 60,
+            stream_path=stream_path,
+            stderr_path=stderr_path,
+        )
+        after = git_state(options.project_dir)
+        diff_path = run_dir / "diffs" / f"{task.folder}.diff"
+        stat_path = run_dir / "diffs" / f"{task.folder}.stat.txt"
+        changed = collect_diff(options.project_dir, before.head, diff_path, stat_path)
+        try:
+            task_json = json.loads((task.path / "task.json").read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            task_json = {}
+        state = collect_task_state(options.project_dir, task)
+        transcript = summarize_transcripts(options.project_dir, run.session,
+                                          run.stream_path)
+        analyzers = run_static_analyzers(options.project_dir, changed, reference,
+                                         run_dir / task.folder)
+        outcome = _outcome(run, task_json)
+        task_finished = _iso_now()
+        task_metrics = {
+            "folder": task.folder,
+            "identifier": task.identifier,
+            "limit_minutes": options.limits[task.folder],
+            "outcome": outcome,
+            "exit_code": run.exit_code,
+            "timed_out": run.timed_out,
+            "duration_sec": round(run.duration_sec, 1),
+            "started_at": task_started,
+            "finished_at": task_finished,
+            "stream": _stream_metrics(run),
+            "task_json": task_json,
+            "stages": stage_table(task_json),
+            "cycles": cycle_metrics(task_json, state, transcript),
+            "artifacts": state,
+            "git": {
+                "head_before": before.head,
+                "head_after": after.head,
+                "dirty_after": bool(after.status.strip()),
+                "changed_files": changed,
+                "diff_path": str(diff_path),
+                "stat_path": str(stat_path),
+            },
+            "transcript": transcript,
+            "analyzers": analyzers,
+        }
+        run_metrics["tasks"].append(task_metrics)
+        write_json_atomic(metrics_path, run_metrics)
+        _write_run_json(run_dir, run_metrics)
+        log(f"{'✓' if outcome == 'success' else '✗'} {task.folder}: {outcome}, "
+            f"{run.duration_sec:.0f} с")
+        if outcome != "success":
+            stopped = True
+            break
+    run_metrics["environment"] = aggregate_environment(run_metrics["tasks"])
+    write_json_atomic(metrics_path, run_metrics)
+    _write_run_json(run_dir, run_metrics)
+    digest_path.write_text(render_digest(run_metrics), encoding="utf-8")
+    log(f"метрики: {metrics_path}")
+    if options.skip_analysis:
+        report = deterministic_report(
+            run_id=run_dir.name, project_dir=options.project_dir,
+            run_dir=run_dir, metrics=run_metrics, skipped=True)
+        target = write_report(options.project_dir, report)
+        run_metrics["run"]["finished_at"] = _iso_now()
+        run_metrics["analysis"] = {"performed": False, "skipped": True,
+                                   "result_path": str(target)}
+        write_json_atomic(metrics_path, run_metrics)
+        _write_run_json(run_dir, run_metrics)
+        log(f"отчёт (без анализа): {target}")
+        log.close()
+        return 0 if not stopped else 2
+    _inputs_manifest(manifest_path, options.project_dir, options.repo_root,
+                     run_dir, metrics_path, digest_path, reference, options.tasks)
+    prompt = build_prompt(
+        run_id=run_dir.name,
+        project_dir=options.project_dir,
+        repo_root=options.repo_root,
+        run_dir=run_dir,
+        metrics_path=metrics_path,
+        digest_path=digest_path,
+        manifest_path=manifest_path,
+        reference_path=reference,
+        contaminated=options.force,
+        task_folders=[task.folder for task in options.tasks],
+    )
+    (run_dir / "analysis-prompt.md").write_text(prompt, encoding="utf-8")
+    analyst_before = git_state(options.project_dir)
+    analyst = run_claude(
+        cmd=options.claude_cmd,
+        prompt=prompt,
+        cwd=options.project_dir,
+        timeout_sec=options.analysis_timeout_min * 60,
+        stream_path=run_dir / "transcripts" / "analyst.stream.jsonl",
+        stderr_path=run_dir / "transcripts" / "analyst.stderr.log",
+        extra_args=("--add-dir", str(options.repo_root),
+                    "--disallowedTools", "Edit", "MultiEdit", "NotebookEdit",
+                    "Write", "Agent"),
+    )
+    analyst_after = git_state(options.project_dir)
+    text = extract_analyst_text(analyst.stream)
+    error = None
+    if analyst.timed_out:
+        error = "сессия-аналитик превысила лимит времени"
+    elif analyst.exit_code != 0:
+        error = f"сессия-аналитик завершилась с кодом {analyst.exit_code}"
+    elif text is None:
+        error = "сессия-аналитик не вернула markdown-отчёт"
+    if error or text is None:
+        text = deterministic_report(
+            run_id=run_dir.name, project_dir=options.project_dir,
+            run_dir=run_dir, metrics=run_metrics, error=error)
+    else:
+        (run_dir / "analyst-result.md").write_text(text, encoding="utf-8")
+    mutated = (analyst_before.head != analyst_after.head
+               or analyst_before.status != analyst_after.status)
+    if mutated:
+        text += ("\n\n## ⚠ Предупреждение\n\n"
+                 "Во время сессии-аналитика изменилось git-состояние проекта. "
+                 f"Проверьте `{analyst_before.head[:8]}` → `{analyst_after.head[:8]}` "
+                 "и `git status`; отчёт мог быть построен на изменённых данных.\n")
+        log("⚠ аналитик изменил git-состояние проекта")
+    target = write_report(options.project_dir, text)
+    run_metrics["run"]["finished_at"] = _iso_now()
+    run_metrics["analysis"] = {
+        "performed": True,
+        "skipped": False,
+        "session_id": analyst.stream.session_id,
+        "duration_sec": round(analyst.duration_sec, 1),
+        "timed_out": analyst.timed_out,
+        "exit_code": analyst.exit_code,
+        "error": error,
+        "project_mutated": mutated,
+        "result_path": str(target),
+    }
+    write_json_atomic(metrics_path, run_metrics)
+    _write_run_json(run_dir, run_metrics)
+    log(f"отчёт: {target}")
+    log.close()
+    if error:
+        return 1
+    return 0 if not stopped else 2
+
+
+def main(argv: list[str] | None = None) -> int:
+    ns = parse_args(argv)
+    repo_root = Path(__file__).resolve().parents[1]
+    try:
+        options = build_options(ns, repo_root)
+        return execute(options)
+    except BenchError as exc:
+        print(f"✗ {exc}", file=sys.stderr)
+        return 1
+    except OSError as exc:
+        print(f"✗ ошибка ввода-вывода: {exc}", file=sys.stderr)
+        return 1
+    except KeyboardInterrupt:
+        print("✗ прервано пользователем", file=sys.stderr)
+        return 130
