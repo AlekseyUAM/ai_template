@@ -388,9 +388,7 @@ def _find_stage(task_json: dict, name: str) -> dict:
     return {}
 
 
-# Имя зафиксировано интерфейсом задачи (префикс test_ не означает pytest-тест).
-# Имя зафиксировано интерфейсом задачи: это функция метрик, не pytest-тест.
-def test_cycle_metrics(task_json: dict, state: dict, transcript: dict) -> dict:
+def cycle_metrics(task_json: dict, state: dict, transcript: dict) -> dict:
     main = (transcript.get("main") or {})
     edits = main.get("edits") or {}
     test_edits = sum(count for path, count in edits.items()

@@ -5,8 +5,9 @@ from bench_metrics import (aggregate_environment, classify_bash,
                            parse_tool_events, summarize_events,
                            summarize_transcripts)
 from bench_metrics import SessionFiles
-from bench_metrics import (collect_task_state, run_static_analyzers,
-                           stage_table, test_cycle_metrics, write_json_atomic)
+from bench_metrics import (collect_task_state, cycle_metrics,
+                           run_static_analyzers, stage_table,
+                           write_json_atomic)
 from bench_run import TaskInfo
 
 
@@ -225,7 +226,7 @@ def test_stage_table_and_cycle_metrics():
     stages = stage_table(task_json)
     assert stages[0]["duration_sec"] == 60.0
     assert stages[1]["duration_sec"] is None
-    cycles = test_cycle_metrics(
+    cycles = cycle_metrics(
         task_json,
         {"archives": ["REVIEW.1.md"], "verdicts": {"REVIEW.md": "✓ ПРИНЯТО"}},
         {"main": {"test_runs": 4, "smoke_runs": 1,
