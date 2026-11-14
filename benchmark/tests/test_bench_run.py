@@ -82,7 +82,9 @@ def test_run_claude_timeout_kills_descendants(tmp_path):
     fake = write_fake_claude(tmp_path / "parent", "\n".join([
         "import subprocess, sys, time",
         f"child = subprocess.Popen([sys.executable, '-c', "
-        f"'import time; time.sleep(30)'])",
+        "'import signal, time; "
+        "signal.signal(signal.SIGINT, signal.SIG_IGN); "
+        "signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(30)'])",
         f"open({str(pid_file)!r}, 'w').write(str(child.pid))",
         "time.sleep(30)",
     ]) + "\n")
