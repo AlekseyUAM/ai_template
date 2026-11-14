@@ -3,8 +3,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
+import signal
 import subprocess
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -132,6 +135,86 @@ def collect_diff(project_dir: Path, before_head: str, out_path: Path,
     out_path.write_text("".join(parts), encoding="utf-8")
     stat_path.write_text("".join(stat_parts), encoding="utf-8")
     return changed_files(project_dir, before_head)
+
+
+@dataclass
+class ClaudeRun:
+    exit_code: int | None
+    timed_out: bool
+    duration_sec: float
+    stream_path: Path
+    stderr_path: Path
+    stream: object
+    session: object
+
+
+def _signal_group(proc: subprocess.Popen, sig: int, wait_sec: float) -> bool:
+    try:
+        pgid = os.getpgid(proc.pid)
+    except (ProcessLookupError, OSError):
+        pgid = None
+    try:
+        if pgid is not None:
+            os.killpg(pgid, sig)
+        else:
+            proc.send_signal(sig)
+    except (ProcessLookupError, OSError):
+        pass
+    try:
+        proc.wait(timeout=wait_sec)
+        return True
+    except subprocess.TimeoutExpired:
+        return False
+
+
+def _kill_group(proc: subprocess.Popen) -> None:
+    if proc.poll() is not None:
+        return
+    if _signal_group(proc, signal.SIGINT, 10):
+        return
+    if _signal_group(proc, signal.SIGTERM, 5):
+        return
+    try:
+        pgid = os.getpgid(proc.pid)
+        os.killpg(pgid, signal.SIGKILL)
+    except (ProcessLookupError, OSError):
+        try:
+            proc.kill()
+        except OSError:
+            pass
+
+
+def run_claude(*, cmd: str, prompt: str, cwd: Path, timeout_sec: float,
+               stream_path: Path, stderr_path: Path,
+               extra_args: tuple[str, ...] = ()) -> ClaudeRun:
+    """Запустить claude в отдельной сессии и вернуть результат; таймаут убивает группу."""
+    from bench_metrics import find_session_files, parse_stream
+
+    argv = [cmd, "-p", prompt, "--output-format", "stream-json",
+            "--verbose", *extra_args]
+    stream_path.parent.mkdir(parents=True, exist_ok=True)
+    stderr_path.parent.mkdir(parents=True, exist_ok=True)
+    started = time.monotonic()
+    timed_out = False
+    with stream_path.open("wb") as out, stderr_path.open("wb") as err:
+        proc = subprocess.Popen(
+            argv, cwd=cwd, stdin=subprocess.DEVNULL, stdout=out, stderr=err,
+            start_new_session=True)
+        try:
+            exit_code = proc.wait(timeout=timeout_sec)
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            _kill_group(proc)
+            exit_code = proc.wait()
+        except BaseException:
+            _kill_group(proc)
+            raise
+    duration = time.monotonic() - started
+    stream = parse_stream(stream_path)
+    session = find_session_files(stream.session_id)
+    return ClaudeRun(exit_code=exit_code, timed_out=timed_out,
+                     duration_sec=duration, stream_path=stream_path,
+                     stderr_path=stderr_path, stream=stream, session=session)
 
 
 def parse_minutes(value: str) -> int:

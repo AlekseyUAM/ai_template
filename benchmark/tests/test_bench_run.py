@@ -4,12 +4,74 @@ from pathlib import Path
 
 import pytest
 
+from bench_metrics import find_session_files, parse_stream
 from bench_run import (BenchError, TaskInfo, _task_aliases, apply_limits,
                        build_options, changed_files, check_freshness,
                        collect_diff,
                        discover_tasks, git_state, parse_args, parse_limit_arg,
                        parse_minutes, read_env_file, resolve_project_dir,
-                       select_tasks)
+                       run_claude, select_tasks)
+
+
+def write_fake_claude(path: Path, body: str) -> Path:
+    path.write_text("#!/usr/bin/env python3\n" + body, encoding="utf-8")
+    path.chmod(0o755)
+    return path
+
+
+def test_parse_stream(tmp_path):
+    stream = tmp_path / "s.jsonl"
+    stream.write_text("\n".join([
+        json.dumps({"type": "system", "subtype": "init",
+                    "session_id": "sid-1"}),
+        "not json",
+        json.dumps({"type": "result", "is_error": False, "result": "ok",
+                    "session_id": "sid-1", "duration_ms": 5}),
+    ]) + "\n", encoding="utf-8")
+    summary = parse_stream(stream)
+    assert summary.session_id == "sid-1"
+    assert summary.result["result"] == "ok"
+    assert summary.parse_errors == 1
+
+
+def test_find_session_files(tmp_path):
+    sid = "abc"
+    project = tmp_path / "projects" / "-tmp-x"
+    project.mkdir(parents=True)
+    main = project / f"{sid}.jsonl"
+    main.write_text("", encoding="utf-8")
+    sub = project / sid / "subagents"
+    sub.mkdir(parents=True)
+    (sub / "agent-a.jsonl").write_text("", encoding="utf-8")
+    files = find_session_files(sid, projects_root=tmp_path / "projects")
+    assert files.main == main
+    assert files.subagents == (sub / "agent-a.jsonl",)
+    assert find_session_files("missing", projects_root=tmp_path / "projects").main is None
+
+
+def test_run_claude_result(tmp_path):
+    fake = write_fake_claude(tmp_path / "fake", "\n".join([
+        "import json",
+        f"print(json.dumps({{'type':'system','subtype':'init','session_id':'sid-2'}}))",
+        f"print(json.dumps({{'type':'result','is_error':False,'result':'ok','session_id':'sid-2'}}))",
+    ]) + "\n")
+    run = run_claude(cmd=str(fake), prompt="hi", cwd=tmp_path, timeout_sec=10,
+                     stream_path=tmp_path / "out.jsonl",
+                     stderr_path=tmp_path / "err.log")
+    assert run.exit_code == 0
+    assert run.timed_out is False
+    assert run.stream.result["result"] == "ok"
+    assert run.stream.session_id == "sid-2"
+
+
+def test_run_claude_timeout_kills_process(tmp_path):
+    fake = write_fake_claude(tmp_path / "sleep", "import time\ntime.sleep(30)\n")
+    run = run_claude(cmd=str(fake), prompt="hi", cwd=tmp_path, timeout_sec=0.5,
+                     stream_path=tmp_path / "out.jsonl",
+                     stderr_path=tmp_path / "err.log")
+    assert run.timed_out is True
+    assert run.duration_sec < 10
+    assert run.exit_code is not None
 
 
 def make_project(root: Path) -> Path:
