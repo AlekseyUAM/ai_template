@@ -67,7 +67,7 @@ def test_summarize_events(tmp_path):
     assert summary["test_runs"] == 2
     assert summary["tool_errors"] == 1
     assert summary["edits"]["src/cfe/ЮнитТесты/M.bsl"] == 1
-    assert summary["error_signatures"][0]["signature"].startswith("command not found")
+    assert "command not found" in summary["error_signatures"][0]["signature"]
     assert summary["slow_ops"][0]["duration_sec"] == 60.0
 
 
@@ -105,6 +105,17 @@ def test_summarize_transcripts_falls_back_to_stream(tmp_path):
     summary = summarize_transcripts(project, SessionFiles(None, ()), fallback)
     assert summary["source"] == "stream"
     assert summary["main"]["tools"] == {"Bash": 1}
+
+
+def test_mcp_tool_error_attributed(tmp_path):
+    path = write_jsonl(tmp_path / "t.jsonl", [
+        tool_use("2026-01-01T00:00:00+00:00", "m1", "mcp__bsl_ls__check", {}),
+        tool_result("2026-01-01T00:00:01+00:00", "m1", "server unavailable", True),
+    ])
+    summary = summarize_events(parse_tool_events(path), tmp_path)
+    assert summary["error_signatures"][0]["signature"].startswith("mcp__bsl_ls__check:")
+    env = aggregate_environment([{"transcript": {"main": summary}}])
+    assert env["mcp_errors"] == 1
 
 
 def test_aggregate_environment():

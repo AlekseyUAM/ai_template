@@ -185,7 +185,7 @@ def summarize_events(events: list[ToolEvent], project_dir: Path) -> dict:
     for event in errors:
         line = next((part.strip() for part in event.result_text.splitlines()
                      if part.strip()), "ошибка без описания")
-        signatures[line[:160]] += 1
+        signatures[f"{event.name}: {line[:160]}"] += 1
     edits: Counter = Counter()
     for event in events:
         if event.name in ("Edit", "Write", "MultiEdit", "NotebookEdit"):
