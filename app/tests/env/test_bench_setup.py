@@ -878,6 +878,8 @@ def test_rollback_deletes_created_cards_and_logs_failures(tmp_path):
     assert McpRepo(store).get(own) is not None
     assert any(f"MCP #{own}" in line and "занята" in line for line in lines)
     assert any("Каталог проекта оставлен" in line for line in lines)
+    assert any("Удалите его перед повторным запуском" in line
+               for line in lines)
     assert removed == []
 
 
@@ -893,3 +895,21 @@ def test_rollback_removes_container_after_db(tmp_path):
              log=lambda line: None)
 
     assert removed == [["docker", "rm", "-f", "-v", CODE_INDEX_CONTAINER]]
+
+
+def test_rollback_reports_failed_container_removal(tmp_path):
+    cfg = load_config(write_env(tmp_path), repo_root=tmp_path)
+    state = RollbackState(project_dir=cfg.project_dir,
+                          container=CODE_INDEX_CONTAINER)
+    lines = []
+
+    rollback(state, store=make_store(tmp_path),
+             run=lambda cmd, **kwargs: RunResult(
+                 1, stderr="no such container"),
+             log=lines.append)
+
+    partial = [line for line in lines if "Откат выполнен частично" in line]
+    assert partial, lines
+    assert "1" in partial[0]
+    assert "no such container" in partial[0]
+    assert not any(line.startswith("✗ Откат выполнен.") for line in lines)

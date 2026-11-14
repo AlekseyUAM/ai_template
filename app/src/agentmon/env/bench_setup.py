@@ -744,37 +744,56 @@ class RollbackState:
 def rollback(state: RollbackState, *, store, run=subprocess.run,
              log=print) -> None:
     """Убрать записи этого запуска; каталог проекта оставить для диагностики."""
+    warnings: list[str] = []
+
+    def warn(message: str) -> None:
+        warnings.append(message)
+        log(f"⚠ {message}")
+
     task_repo = TaskRepo(store)
     for task_id in state.task_ids:
         try:
             task_repo.delete(task_id)
         except Exception as exc:                       # noqa: BLE001
-            log(f"⚠ откат задачи #{task_id}: {exc}")
+            warn(f"откат задачи #{task_id}: {exc}")
 
     mcp_repo = McpRepo(store)
     if state.project_id is not None:
         try:
             mcp_repo.set_for_project(state.project_id, [])
         except Exception as exc:                       # noqa: BLE001
-            log(f"⚠ откат связей MCP: {exc}")
+            warn(f"откат связей MCP: {exc}")
     for mid in state.created_mcp_ids:
         try:
             mcp_repo.delete(mid)
         except Exception as exc:                       # noqa: BLE001
-            log(f"⚠ откат MCP #{mid}: {exc}")
+            warn(f"откат MCP #{mid}: {exc}")
     if state.project_id is not None:
         try:
             ProjectRepo(store).delete(state.project_id)
         except Exception as exc:                       # noqa: BLE001
-            log(f"⚠ откат проекта #{state.project_id}: {exc}")
+            warn(f"откат проекта #{state.project_id}: {exc}")
 
     if state.container:
         try:
-            run(["docker", "rm", "-f", "-v", state.container],
-                capture_output=True, text=True)
+            res = run(["docker", "rm", "-f", "-v", state.container],
+                      capture_output=True, text=True)
         except Exception as exc:                       # noqa: BLE001
-            log(f"⚠ откат контейнера {state.container}: {exc}")
-    log(f"✗ Откат выполнен. Каталог проекта оставлен: {state.project_dir}")
+            warn(f"откат контейнера {state.container}: {exc}")
+        else:
+            code = getattr(res, "returncode", 0)
+            if code != 0:
+                tail = ((getattr(res, "stdout", "") or "")
+                        + (getattr(res, "stderr", "") or "")).strip()[-500:]
+                warn(f"откат контейнера {state.container}: docker rm "
+                     f"вернул код {code}: {tail}")
+
+    if warnings:
+        log("✗ Откат выполнен частично: " + "; ".join(warnings))
+    else:
+        log("✗ Откат выполнен.")
+    log(f"✗ Каталог проекта оставлен для диагностики: {state.project_dir}. "
+        "Удалите его перед повторным запуском.")
 
 
 def run_setup(cfg: BenchConfig, *, repo_root: Path, store, registry,
