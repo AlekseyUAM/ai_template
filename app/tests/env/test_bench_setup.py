@@ -582,3 +582,42 @@ def test_commit_init_and_baseline(tmp_path):
     commit_baseline(cfg, tasks, prov)
     baseline_commit = prov.calls[-1][0]
     assert "baseline before task#001" in baseline_commit
+
+
+def test_import_tasks_copy_failure_leaves_no_task_row(tmp_path, monkeypatch):
+    root = make_repo_root(tmp_path)
+    make_tasks(root)
+    cfg = load_config(write_env(tmp_path), repo_root=root)
+    store = make_store(tmp_path)
+    project_id = create_project_row(store, cfg)
+    Path(cfg.project_dir).mkdir(parents=True)
+
+    def boom(src, dst, *args, **kwargs):
+        raise OSError("boom")
+
+    monkeypatch.setattr(shutil, "copytree", boom)
+
+    with pytest.raises(OSError, match="boom"):
+        import_tasks(project_id=project_id, cfg=cfg, repo_root=root,
+                     store=store, log=lambda line: None)
+
+    assert TaskRepo(store).list(project_id=project_id) == []
+
+
+class FailingCommitProv(GitProv):
+    def run(self, cmd, cwd=None, timeout=None):
+        self.calls.append((list(cmd), cwd))
+        if "commit" in cmd:
+            return RunResult(1, stderr="boom")
+        return RunResult()
+
+
+def test_commit_init_raises_on_commit_failure(tmp_path):
+    root = make_repo_root(tmp_path)
+    cfg = load_config(write_env(tmp_path), repo_root=root)
+    Path(cfg.project_dir).mkdir(parents=True)
+    prov = FailingCommitProv()
+
+    with pytest.raises(RuntimeError, match="boom"):
+        commit_init(cfg, prov)
+    assert prov.calls[0][0] == ["git", "init"]

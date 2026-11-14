@@ -539,6 +539,9 @@ def import_tasks(*, project_id: int, cfg: BenchConfig, repo_root: Path,
         if not identifier:
             identifier = source.name.removeprefix("task#")
 
+        destination = Path(cfg.project_dir) / "tasks" / source.name
+        shutil.copytree(source, destination)
+
         now = time.time()
         task_id = repo.add(
             project_id=project_id,
@@ -558,9 +561,6 @@ def import_tasks(*, project_id: int, cfg: BenchConfig, repo_root: Path,
             interactive=0,
             mark_changes=1 if data.get("mark_changes") else 0,
         )
-
-        destination = Path(cfg.project_dir) / "tasks" / source.name
-        shutil.copytree(source, destination)
 
         data["id"] = task_id
         data["project_id"] = project_id
