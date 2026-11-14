@@ -222,7 +222,7 @@ def test_done_false_returns_rc4(monkeypatch, tmp_path):
     assert mod.run_tests(str(cfg), "ЮнитТесты", 10, True) == mod.RC_TESTS_FAILED
 
 
-def test_malformed_result_returns_rc5(monkeypatch, tmp_path):
+def test_malformed_result_returns_rc5(monkeypatch, tmp_path, capsys):
     mod = _load()
     result_path = tmp_path / "result.json"
     cfg = _config(tmp_path, result_path)
@@ -239,3 +239,6 @@ def test_malformed_result_returns_rc5(monkeypatch, tmp_path):
     monkeypatch.setattr(mod, "run_enterprise", fake)
     assert mod.run_tests(str(cfg), "ЮнитТесты", 10, True) == mod.RC_NO_RESULT
     assert started["exists_at_start"] is False
+    out = capsys.readouterr().out
+    assert "Не удалось прочитать результат" in out
+    assert "Файл результата не найден" not in out
