@@ -333,3 +333,32 @@
 
 Нет. Операционный шаг «перегенерировать `daemon.toml` и перечитать конфиг в
 существующем контейнере test2» выполняется после мержа и не входит в код-правку.
+
+## 12. Уточнение после финального ревью (2026-11-14)
+
+Финальное ревью нашло дыру в смоуке: если `load-extension` падал, его код
+возврата терялся, и `run-tests.py` мог прогнать **старое** расширение, выдав
+правдоподобный `EXIT=4`. Итоговые правила (они же в реализации):
+
+- смоук-команда фиксирует `LOAD_EXIT` и запускает прогон только при `LOAD_EXIT=0`;
+  иначе в `run-tests-smoke.log` пишется `EXIT=load-failed`;
+- оркестратор проверяет, что `load-extension-tests.log` заканчивается
+  `LOAD_EXIT=0` и его mtime не старше тест-модуля;
+- `--test` помечается в выводе `run-tests.py` как отладочный прогон, а не
+  доказательство смоука;
+- таймаут смоука — `300` c.
+
+```bash
+python .claude/skills/1c-batch/scripts/1c-batch.py load-extension \
+    src/cfe/ЮнитТесты --name ЮнитТесты \
+    > logs/task#<id>/load-extension-tests.log 2>&1
+load_rc=$?; echo "LOAD_EXIT=$load_rc" >> logs/task#<id>/load-extension-tests.log
+if [ "$load_rc" -eq 0 ]; then
+    python .claude/tools/run-tests.py configs/task#<id>/test.json --timeout 300 \
+        > logs/task#<id>/run-tests-smoke.log 2>&1
+    rc=$?; echo "EXIT=$rc" >> logs/task#<id>/run-tests-smoke.log
+else
+    echo "EXIT=load-failed" >> logs/task#<id>/run-tests-smoke.log
+fi
+tail -80 logs/task#<id>/load-extension-tests.log logs/task#<id>/run-tests-smoke.log
+```
