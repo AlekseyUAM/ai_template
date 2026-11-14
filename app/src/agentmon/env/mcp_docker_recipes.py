@@ -96,16 +96,22 @@ RECIPES: dict[str, DockerRecipe] = {
     ),
 }
 
-def _daemon_toml(alias: str, path: str) -> str:
+def _daemon_toml(alias: str, path: str, cache_target_url: str | None = None) -> str:
     """Текст daemon.toml для code-index: alias репозитория = имя проекта,
     path — каталог кодовой базы (в контейнере `/repos/src`, локально — реальный
-    путь на хосте). alias и `repo="..."` в подсказках агенту совпадают."""
+    путь на хосте). alias и `repo="..."` в подсказках агенту совпадают.
+    cache_target_url — URL serve, которому демон шлёт инвалидацию кэша."""
+    # Секция — только при известном URL: без неё демон не уведомляет serve,
+    # и его кэш результатов держит протухшие ответы до TTL (1 час).
+    cache = ""
+    if cache_target_url:
+        cache = f'\n[[cache_targets]]\nurl = "{cache_target_url}"\n'
     return f"""# Сгенерировано автоматически при развёртывании code-index.
 [daemon]
 http_host = "127.0.0.1"
 http_port = 0
 log_level = "info"
-
+{cache}
 [[paths]]
 path = "{path}"
 alias = "{alias}"
@@ -150,8 +156,10 @@ def launch_params(type_key: str, *, port: int, token=None,
             raise ValueError("для code-index нужно имя проекта (alias репозитория)")
         sp = Path(state_dir)
         sp.mkdir(parents=True, exist_ok=True)
-        (sp / "daemon.toml").write_text(_daemon_toml(project_name, "/repos/src"),
-                                        encoding="utf-8")
+        (sp / "daemon.toml").write_text(
+            _daemon_toml(project_name, "/repos/src",
+                         f"http://127.0.0.1:{port}"),
+            encoding="utf-8")
         # каталог кодовой базы rw (демон пишет <repo>/.code-index/index.db рядом)
         volumes.append(f"{catalog_dir}:/repos/src")
         # state-том с daemon.toml и runtime демона

@@ -18,8 +18,9 @@ def deploy_local(*, mid, code_index_dir, catalog_dir, project_name, port,
         yield s
 
     toml_path = Path(code_index_dir) / "daemon.toml"
-    toml_path.write_text(_daemon_toml(project_name, catalog_dir),
-                         encoding="utf-8")
+    toml_path.write_text(
+        _daemon_toml(project_name, catalog_dir, f"http://127.0.0.1:{port}"),
+        encoding="utf-8")
     yield (f"✓ daemon.toml: {toml_path} (alias={project_name}, "
            f"path={catalog_dir})")
 

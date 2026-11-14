@@ -67,6 +67,8 @@ def test_code_index_requires_catalog_dir(tmp_path):
     text = daemon.read_text(encoding="utf-8")
     assert 'path = "/repos/src"' in text
     assert 'alias = "МойПроект"' in text
+    assert "[[cache_targets]]" in text
+    assert 'url = "http://127.0.0.1:8004"' in text
 
 
 def test_code_index_requires_project_name(tmp_path):
@@ -83,6 +85,15 @@ def test_daemon_toml_interpolates_alias_and_path():
     assert 'path = "/custom/code/path"' in text
     # дефолтный /repos/src не должен появляться, если его не передали
     assert "/repos/src" not in text
+    # без URL инвалидация не настраивается
+    assert "[[cache_targets]]" not in text
+
+
+def test_daemon_toml_has_cache_target_when_url_given():
+    text = R._daemon_toml("мой-алиас", "/custom/code/path",
+                          "http://127.0.0.1:8004")
+    assert "[[cache_targets]]" in text
+    assert 'url = "http://127.0.0.1:8004"' in text
 
 
 def test_naparnic_host_network_on_linux(monkeypatch):

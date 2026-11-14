@@ -25,6 +25,8 @@ def test_deploy_local_writes_daemon_toml_and_autostarts(tmp_path):
     daemon = (ci / "daemon.toml").read_text(encoding="utf-8")
     assert 'alias = "proj"' in daemon
     assert 'path = "/code/cfg"' in daemon
+    assert "[[cache_targets]]" in daemon
+    assert 'url = "http://127.0.0.1:8005"' in daemon
     # два автозапуска: daemon run и serve
     names = [i[0] for i in captured["installs"]]
     assert names == ["ai1c-code-index-daemon-7", "ai1c-code-index-mcp-7"]
