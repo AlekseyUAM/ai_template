@@ -1,12 +1,14 @@
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
 
 from bench_run import (BenchError, TaskInfo, _task_aliases, apply_limits,
-                       build_options, discover_tasks, parse_args,
-                       parse_limit_arg, parse_minutes, read_env_file,
-                       resolve_project_dir, select_tasks)
+                       build_options, check_freshness, collect_diff,
+                       discover_tasks, git_state, parse_args, parse_limit_arg,
+                       parse_minutes, read_env_file, resolve_project_dir,
+                       select_tasks)
 
 
 def make_project(root: Path) -> Path:
@@ -112,3 +114,70 @@ def test_build_options(tmp_path):
     assert opts.limits == {"task##001": 30}
     assert opts.analysis_timeout_min == 15
     assert opts.run_dir is None
+
+
+def git(project: Path, *args: str) -> str:
+    proc = subprocess.run(["git", *args], cwd=project, text=True,
+                          capture_output=True, check=True)
+    return proc.stdout
+
+
+def make_git_project(root: Path) -> Path:
+    project = make_project(root)
+    git(project, "init", "-q")
+    git(project, "config", "user.email", "bench@example.ru")
+    git(project, "config", "user.name", "Bench")
+    (project / ".gitignore").write_text("/tmp\n", encoding="utf-8")
+    git(project, "add", "-A")
+    git(project, "commit", "-q", "-m", "init")
+    git(project, "commit", "-q", "--allow-empty", "-m", "baseline before task#001")
+    return project
+
+
+def test_check_freshness_clean_and_problems(tmp_path):
+    project = make_git_project(tmp_path)
+    tasks = discover_tasks(project)
+    assert check_freshness(project, tasks) == []
+    (tasks[0].path / "DEVELOP.md").write_text("# x\n", encoding="utf-8")
+    assert any("DEVELOP" in problem for problem in check_freshness(project, tasks))
+    (tasks[0].path / "DEVELOP.md").unlink()
+    (project / "changed.txt").write_text("x", encoding="utf-8")
+    assert any("незакоммиченные" in problem for problem in check_freshness(project, tasks))
+    assert check_freshness(project, tasks, force=True) == []
+
+
+def test_check_freshness_requires_planned_and_baseline(tmp_path):
+    project = make_git_project(tmp_path)
+    tasks = discover_tasks(project)
+    data = json.loads((tasks[0].path / "task.json").read_text(encoding="utf-8"))
+    data["status"] = "running"
+    (tasks[0].path / "task.json").write_text(json.dumps(data), encoding="utf-8")
+    tasks = discover_tasks(project)
+    problems = check_freshness(project, tasks)
+    assert any("planned" in problem for problem in problems)
+
+    project2 = make_project(tmp_path / "second")
+    git(project2, "init", "-q")
+    git(project2, "config", "user.email", "bench@example.ru")
+    git(project2, "config", "user.name", "Bench")
+    git(project2, "add", "-A")
+    git(project2, "commit", "-q", "-m", "init")
+    assert any("baseline" in problem
+               for problem in check_freshness(project2, discover_tasks(project2)))
+
+
+def test_collect_diff_includes_tracked_and_untracked(tmp_path):
+    project = make_git_project(tmp_path)
+    before = git_state(project).head
+    tracked = project / "tracked.txt"
+    tracked.write_text("one\n", encoding="utf-8")
+    git(project, "add", "tracked.txt")
+    git(project, "commit", "-q", "-m", "add tracked")
+    (project / "new.txt").write_text("new\n", encoding="utf-8")
+    out = tmp_path / "diff.txt"
+    stat = tmp_path / "stat.txt"
+    changed = collect_diff(project, before, out, stat)
+    text = out.read_text(encoding="utf-8")
+    assert "tracked.txt" in text and "new.txt" in text
+    assert "tracked.txt" in changed and "new.txt" in changed
+    assert "tracked.txt" in stat.read_text(encoding="utf-8")

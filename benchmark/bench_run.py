@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import subprocess
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -40,6 +41,98 @@ class RunOptions:
     force: bool
     run_dir: Path | None
     env_file: Path
+
+
+@dataclass(frozen=True)
+class GitState:
+    head: str
+    status: str
+
+
+_ARTIFACT_GLOBS = (
+    "ANALYZE.md", "ARCHITECT.md", "TESTS*.md", "DEVELOP*.md", "TESTING*.md",
+    "REVIEW*.md", "DOCS*.md", "task.diff", "USER_FEEDBACK.md",
+)
+
+
+def _git(project_dir: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess:
+    proc = subprocess.run(["git", *args], cwd=project_dir, text=True,
+                          capture_output=True, encoding="utf-8",
+                          errors="replace")
+    if check and proc.returncode != 0:
+        message = proc.stderr.strip() or proc.stdout.strip()
+        raise BenchError(f"git {' '.join(args)}: {message}")
+    return proc
+
+
+def git_state(project_dir: Path) -> GitState:
+    head = _git(project_dir, "rev-parse", "HEAD").stdout.strip()
+    status = _git(project_dir, "status", "--porcelain").stdout
+    return GitState(head=head, status=status)
+
+
+def check_freshness(project_dir: Path, tasks: list[TaskInfo],
+                    force: bool = False) -> list[str]:
+    if force:
+        return []
+    problems: list[str] = []
+    for task in tasks:
+        if task.status != "planned":
+            problems.append(f"{task.folder}: статус {task.status!r}, ожидается 'planned'")
+        for pattern in _ARTIFACT_GLOBS:
+            for _ in task.path.glob(pattern):
+                problems.append(f"{task.folder}: найден артефакт выполнения {pattern}")
+    state = git_state(project_dir)
+    if state.status.strip():
+        problems.append("в проекте есть незакоммиченные изменения (git status не пуст)")
+    subject = _git(project_dir, "log", "-1", "--format=%s").stdout.strip()
+    if not subject.startswith("baseline before task"):
+        problems.append(
+            f"HEAD не является baseline-коммитом setup'а (сейчас: {subject!r})")
+    return problems
+
+
+def ensure_fresh(project_dir: Path, tasks: list[TaskInfo],
+                 force: bool = False) -> None:
+    problems = check_freshness(project_dir, tasks, force=force)
+    if problems:
+        raise BenchError(
+            "проект не готов к benchmark-прогону:\n- " + "\n- ".join(problems)
+            + "\nПересоздайте проект через benchmark/setup_benchmark.py "
+              "или запустите с --force.")
+
+
+def _untracked_files(project_dir: Path) -> list[str]:
+    out = _git(project_dir, "ls-files", "--others", "--exclude-standard").stdout
+    return [line.strip() for line in out.splitlines() if line.strip()]
+
+
+def changed_files(project_dir: Path, before_head: str) -> list[str]:
+    out = _git(project_dir, "diff", "--name-only", before_head,
+               check=False).stdout
+    files = {line.strip() for line in out.splitlines() if line.strip()}
+    files.update(_untracked_files(project_dir))
+    return sorted(files)
+
+
+def collect_diff(project_dir: Path, before_head: str, out_path: Path,
+                 stat_path: Path) -> list[str]:
+    diff = _git(project_dir, "diff", before_head, check=False).stdout
+    stat = _git(project_dir, "diff", "--stat", before_head, check=False).stdout
+    parts = [diff]
+    stat_parts = [stat]
+    for rel in _untracked_files(project_dir):
+        path = project_dir / rel
+        try:
+            content = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        parts.append(f"\n--- /dev/null\n+++ b/{rel}\n")
+        parts.extend(f"+{line}\n" for line in content.splitlines())
+        stat_parts.append(f" {rel} | new file\n")
+    out_path.write_text("".join(parts), encoding="utf-8")
+    stat_path.write_text("".join(stat_parts), encoding="utf-8")
+    return changed_files(project_dir, before_head)
 
 
 def parse_minutes(value: str) -> int:
