@@ -333,7 +333,35 @@ def _parse_iso(value) -> datetime | None:
     return _parse_timestamp(value)
 
 
+def _task_log_dirs(project_dir: Path, task) -> list[Path]:
+    """Каталоги `logs/task#<id>` текущей задачи (без чужих задач).
+
+    Если `task.json` содержит числовой `id` (как в реальных задачах) —
+    берётся только `logs/task#<id>`. Иначе используется `identifier`:
+    `logs/task#<ident>` и `logs/task##<ident>`.
+    """
+    logs = project_dir / "logs"
+    raw = task.raw if isinstance(getattr(task, "raw", None), dict) else {}
+    task_id = raw.get("id")
+    if isinstance(task_id, int) and not isinstance(task_id, bool):
+        return [logs / f"task#{task_id}"]
+    identifier = str(getattr(task, "identifier", "") or "").lstrip("#")
+    if not identifier:
+        return []
+    return [logs / f"task#{identifier}", logs / f"task##{identifier}"]
+
+
 def collect_task_state(project_dir: Path, task) -> dict:
+    """Собрать состояние каталога задачи для метрик bench-отчёта.
+
+    Возвращает словарь с ключами:
+      - ``files`` — имена файлов каталога задачи (кроме ``task.json``,
+        ``TASK.md`` и ``*.lock``);
+      - ``verdicts`` — ``{"TESTING.md"|"REVIEW.md": вердикт}`` из таблицы;
+      - ``archives`` — архивные итерации ``REVIEW|TESTING|TESTS|DEVELOP.<N>.md``;
+      - ``test_results`` — payload-ы ``result.json`` текущей задачи
+        (только из ``logs/task#<id>``; логи других задач не читаются).
+    """
     task_dir = project_dir / "tasks" / task.folder
     files = []
     if task_dir.is_dir():
@@ -349,15 +377,16 @@ def collect_task_state(project_dir: Path, task) -> dict:
                 verdicts[name] = match.group(1).strip()
     archives = [name for name in files if re.fullmatch(r"(REVIEW|TESTING|TESTS|DEVELOP)\.\d+\.md", name)]
     test_results = []
-    logs = project_dir / "logs"
-    if logs.is_dir():
-        for result_path in sorted(logs.glob("task#*/result.json")):
-            try:
-                data = json.loads(result_path.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError):
-                continue
-            if isinstance(data, dict):
-                test_results.append(data)
+    for log_dir in _task_log_dirs(project_dir, task):
+        result_path = log_dir / "result.json"
+        if not result_path.is_file():
+            continue
+        try:
+            data = json.loads(result_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if isinstance(data, dict):
+            test_results.append(data)
     return {"files": files, "verdicts": verdicts, "archives": archives,
             "test_results": test_results}
 
@@ -415,10 +444,12 @@ def _safe_name(path: Path) -> str:
 
 
 def _run_script(argv: list[str], cwd: Path, stdin_text: str | None = None) -> dict:
+    stdin_kwargs = ({"input": stdin_text} if stdin_text is not None
+                    else {"stdin": subprocess.DEVNULL})
     try:
         proc = subprocess.run(argv, cwd=cwd, text=True, capture_output=True,
                               encoding="utf-8", errors="replace",
-                              input=stdin_text, timeout=180)
+                              timeout=180, **stdin_kwargs)
         return {"returncode": proc.returncode, "stdout": proc.stdout,
                 "stderr": proc.stderr}
     except (OSError, subprocess.TimeoutExpired) as exc:

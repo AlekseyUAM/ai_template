@@ -193,8 +193,8 @@ def test_collect_task_state(tmp_path):
     task_dir = project / "tasks" / "task##001"
     task_dir.mkdir(parents=True)
     (task_dir / "task.json").write_text(json.dumps({
-        "identifier": "001", "max_minutes": 30, "status": "planned"}),
-        encoding="utf-8")
+        "id": 23, "identifier": "001", "max_minutes": 30,
+        "status": "planned"}), encoding="utf-8")
     (task_dir / "TASK.md").write_text("# TASK\n", encoding="utf-8")
     (task_dir / "DEVELOP.md").write_text("# dev\n", encoding="utf-8")
     (task_dir / "REVIEW.1.md").write_text("# old\n", encoding="utf-8")
@@ -206,12 +206,22 @@ def test_collect_task_state(tmp_path):
         "Выполнено": True, "ОписаниеОшибки": None,
         "РезультатТестов": [{"Имя": "A", "Результат": True}]}),
         encoding="utf-8")
+    other_logs = project / "logs" / "task#99"
+    other_logs.mkdir(parents=True)
+    (other_logs / "result.json").write_text(json.dumps({
+        "Выполнено": True, "ОписаниеОшибки": None,
+        "РезультатТестов": [{"Имя": "OTHER", "Результат": True}]}),
+        encoding="utf-8")
     task = task_info(project, "task##001")
     state = collect_task_state(project, task)
     assert "DEVELOP.md" in state["files"]
     assert state["verdicts"]["REVIEW.md"] == "✓ ПРИНЯТО"
     assert "REVIEW.1.md" in state["archives"]
     assert state["test_results"][0]["Выполнено"] is True
+    assert len(state["test_results"]) == 1
+    names = [item["Имя"] for result in state["test_results"]
+             for item in result["РезультатТестов"]]
+    assert "OTHER" not in names
 
 
 def test_stage_table_and_cycle_metrics():
