@@ -757,3 +757,139 @@ def test_wait_code_index_ready_times_out(tmp_path):
             sleep=fake_sleep, clock=lambda: now[0],
             log=lambda line: None,
         )
+
+
+from agentmon.env.bench_setup import RollbackState, run_setup, rollback
+
+
+class OrchestratorProv(GitProv):
+    """Провизор, которого хватает install_env-фейку и git-хелперам."""
+
+    def mkdirs(self, paths):
+        for path in paths:
+            Path(path).mkdir(parents=True, exist_ok=True)
+
+
+def fake_install_env(config, **kwargs):
+    Path(config.project_dir, ".claude").mkdir(parents=True, exist_ok=True)
+    Path(config.project_dir, ".claude", "VERSION").write_text("test")
+    (Path(config.project_dir) / "src" / "cf").mkdir(parents=True, exist_ok=True)
+    (Path(config.project_dir) / "src" / "cfe").mkdir(parents=True, exist_ok=True)
+    return []
+
+
+def test_run_setup_happy_path(tmp_path):
+    root = make_repo_root(tmp_path)
+    make_tasks(root)
+    cfg = load_config(write_env(tmp_path), repo_root=root)
+    store, registry = make_store(tmp_path), make_registry(tmp_path)
+    batch_calls, waited = [], []
+
+    result = run_setup(
+        cfg, repo_root=root, store=store, registry=registry,
+        prov=OrchestratorProv(),
+        tcp_ok=lambda url: True,
+        http_ok=lambda url: True,
+        install_env=fake_install_env,
+        batch_run=lambda project_dir, args, **kwargs: batch_calls.append(args),
+        launch_index=lambda cfg, **kwargs: CODE_INDEX_CONTAINER,
+        wait_index=lambda name, **kwargs: waited.append(name),
+        log=lambda line: None,
+    )
+
+    assert result.project_id > 0
+    assert result.container == CODE_INDEX_CONTAINER
+    assert result.task_ids and len(result.task_ids) == 1
+    assert batch_calls[0][0] == "load-config"
+    assert batch_calls[-1][0] == "dump-config"
+    assert waited == [CODE_INDEX_CONTAINER]
+    assert registry.list()[0].path == cfg.project_dir
+    assert TaskRepo(store).list(project_id=result.project_id)
+
+
+def test_run_setup_rolls_back_db_and_container_on_error(tmp_path):
+    root = make_repo_root(tmp_path)
+    make_tasks(root)
+    cfg = load_config(write_env(tmp_path), repo_root=root)
+    store, registry = make_store(tmp_path), make_registry(tmp_path)
+    removed = []
+
+    def failing_wait(name, **kwargs):
+        raise SetupError("индексация не удалась")
+
+    def fake_run(cmd, **kwargs):
+        removed.append(list(cmd))
+        return RunResult()
+
+    with pytest.raises(SetupError, match="индексация"):
+        run_setup(
+            cfg, repo_root=root, store=store, registry=registry,
+            prov=OrchestratorProv(), run=fake_run,
+            tcp_ok=lambda url: True, http_ok=lambda url: True,
+            install_env=fake_install_env,
+            batch_run=lambda project_dir, args, **kwargs: None,
+            launch_index=lambda cfg, **kwargs: CODE_INDEX_CONTAINER,
+            wait_index=failing_wait,
+            log=lambda line: None,
+        )
+
+    assert ProjectRepo(store).list() == []
+    assert McpRepo(store).list() == []
+    assert TaskRepo(store).list() == []
+    assert registry.list() == []
+    assert ["docker", "rm", "-f", "-v", CODE_INDEX_CONTAINER] in removed
+    assert Path(cfg.project_dir).exists()
+
+
+def test_rollback_deletes_created_cards_and_logs_failures(tmp_path):
+    cfg = load_config(write_env(tmp_path), repo_root=tmp_path)
+    store = make_store(tmp_path)
+    project_id = create_project_row(store, cfg)
+    mcp_repo = McpRepo(store)
+    shared = mcp_repo.add(name="shared", standard_key="bsl-ls")
+    own = mcp_repo.add(name="own", standard_key="code-index")
+    state = RollbackState(project_dir=cfg.project_dir, project_id=project_id,
+                          created_mcp_ids=[own])
+    lines = []
+    removed = []
+
+    class FlakyStore:
+        """Прокси store, на котором падает удаление карточки MCP."""
+
+        def __init__(self, inner):
+            self._inner = inner
+
+        def __getattr__(self, name):
+            return getattr(self._inner, name)
+
+        def execute(self, sql, params=None):
+            if sql.startswith("DELETE FROM mcp_servers"):
+                raise RuntimeError("занята")
+            return self._inner.execute(sql, params)
+
+        def transaction(self):
+            return self._inner.transaction()
+
+    rollback(state, store=FlakyStore(store),
+             run=lambda cmd, **kwargs: removed.append(list(cmd)),
+             log=lines.append)
+
+    assert McpRepo(store).get(shared) is not None
+    assert McpRepo(store).get(own) is not None
+    assert any(f"MCP #{own}" in line and "занята" in line for line in lines)
+    assert any("Каталог проекта оставлен" in line for line in lines)
+    assert removed == []
+
+
+def test_rollback_removes_container_after_db(tmp_path):
+    cfg = load_config(write_env(tmp_path), repo_root=tmp_path)
+    store = make_store(tmp_path)
+    state = RollbackState(project_dir=cfg.project_dir,
+                          container=CODE_INDEX_CONTAINER)
+    removed = []
+
+    rollback(state, store=store,
+             run=lambda cmd, **kwargs: removed.append(list(cmd)),
+             log=lambda line: None)
+
+    assert removed == [["docker", "rm", "-f", "-v", CODE_INDEX_CONTAINER]]

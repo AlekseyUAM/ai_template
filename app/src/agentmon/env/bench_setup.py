@@ -22,6 +22,7 @@ from urllib.parse import urlparse
 
 from .config_schema import SCHEMA_VERSION, EnvConfig, McpSelection
 from .devbase import _parse_connection, git_commit_all, git_init_project
+from .installer import install_environment
 from .mcp_docker_recipes import container_name, launch_params, recipe_for
 from . import mcp_docker
 from . import mcp_sources
@@ -715,3 +716,142 @@ def wait_code_index_ready(name: str, *, cfg: BenchConfig,
                 f"{cfg.code_index_wait_minutes} мин; увеличьте "
                 "CODE_INDEX_WAIT_MINUTES")
         sleep(15)
+
+
+@dataclass(frozen=True)
+class SetupResult:
+    project_id: int
+    task_ids: list[int]
+    container: str
+    project_dir: str
+
+
+@dataclass
+class RollbackState:
+    project_dir: str
+    project_id: int | None = None
+    task_ids: list[int] | None = None
+    created_mcp_ids: list[int] | None = None
+    container: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.task_ids is None:
+            self.task_ids = []
+        if self.created_mcp_ids is None:
+            self.created_mcp_ids = []
+
+
+def rollback(state: RollbackState, *, store, run=subprocess.run,
+             log=print) -> None:
+    """Убрать записи этого запуска; каталог проекта оставить для диагностики."""
+    task_repo = TaskRepo(store)
+    for task_id in state.task_ids:
+        try:
+            task_repo.delete(task_id)
+        except Exception as exc:                       # noqa: BLE001
+            log(f"⚠ откат задачи #{task_id}: {exc}")
+
+    mcp_repo = McpRepo(store)
+    if state.project_id is not None:
+        try:
+            mcp_repo.set_for_project(state.project_id, [])
+        except Exception as exc:                       # noqa: BLE001
+            log(f"⚠ откат связей MCP: {exc}")
+    for mid in state.created_mcp_ids:
+        try:
+            mcp_repo.delete(mid)
+        except Exception as exc:                       # noqa: BLE001
+            log(f"⚠ откат MCP #{mid}: {exc}")
+    if state.project_id is not None:
+        try:
+            ProjectRepo(store).delete(state.project_id)
+        except Exception as exc:                       # noqa: BLE001
+            log(f"⚠ откат проекта #{state.project_id}: {exc}")
+
+    if state.container:
+        try:
+            run(["docker", "rm", "-f", "-v", state.container],
+                capture_output=True, text=True)
+        except Exception as exc:                       # noqa: BLE001
+            log(f"⚠ откат контейнера {state.container}: {exc}")
+    log(f"✗ Откат выполнен. Каталог проекта оставлен: {state.project_dir}")
+
+
+def run_setup(cfg: BenchConfig, *, repo_root: Path, store, registry,
+              prov=None, run=subprocess.run, sleep=time.sleep,
+              clock=time.monotonic, log=print, tcp_ok=default_tcp_ok,
+              http_ok=default_http_ok, install_env=install_environment,
+              batch_run=run_batch_step, launch_index=launch_code_index,
+              wait_index=wait_code_index_ready) -> SetupResult:
+    """Полный сценарий подготовки проекта. Ошибка → откат записей БД."""
+    if prov is None:
+        from ..backends.local import LocalProvisioner
+        prov = LocalProvisioner()
+
+    preflight(cfg, repo_root=repo_root, store=store, registry=registry,
+              tcp_ok=tcp_ok)
+
+    state = RollbackState(project_dir=cfg.project_dir)
+    try:
+        log(f"▶ проект «{cfg.project_name}» ({cfg.project_dir})")
+        Path(cfg.project_dir).mkdir(parents=True)
+
+        project_id = create_project_row(store, cfg)
+        state.project_id = project_id
+
+        plans = build_mcp_plans(cfg)
+        by_key, _ = resolve_mcp_cards(
+            McpRepo(store), plans, project_id=project_id,
+            project_name=cfg.project_name, log=log,
+            created_out=state.created_mcp_ids)
+        config = build_env_config(cfg, plans)
+
+        log("▶ окружение проекта")
+        for event in install_env(
+                config, update=False, register=lambda cfg_: None,
+                dump_cf=False, dump_cfe=False, git_init=False,
+                db_user=cfg.db_user, db_password=cfg.db_password, prov=prov):
+            detail = f" {event.detail}" if event.detail else ""
+            log(f"[{event.step}] {event.status}{detail}")
+
+        log("▶ база 1С")
+        ensure_base(cfg, prov=prov, log=log)
+        for args in base_load_steps(cfg, repo_root):
+            batch_run(cfg.project_dir, args, prov=prov, log=log)
+        if cfg.one_c_md_url:
+            check_mcp_url(cfg.one_c_md_url, http_ok=http_ok, log=log)
+
+        log("▶ выгрузка cf/cfe")
+        for args in base_dump_steps():
+            batch_run(cfg.project_dir, args, prov=prov, log=log)
+
+        log("▶ code_index")
+        container = launch_index(
+            cfg, repo_root=repo_root, mid=by_key["code-index"],
+            run=run, log=log)
+        state.container = container
+
+        log("▶ git init")
+        commit_init(cfg, prov)
+
+        log("▶ задачи benchmark")
+        tasks = import_tasks(project_id=project_id, cfg=cfg,
+                             repo_root=repo_root, store=store, log=log)
+        state.task_ids = [task.task_id for task in tasks]
+        commit_baseline(cfg, tasks, prov)
+
+        log("▶ ожидание индексации code_index")
+        wait_index(container, cfg=cfg, run=run, sleep=sleep, clock=clock,
+                   log=log)
+
+        registry.add(name=cfg.project_name, path=cfg.project_dir,
+                     backend="local")
+        return SetupResult(
+            project_id=project_id,
+            task_ids=[task.task_id for task in tasks],
+            container=container,
+            project_dir=cfg.project_dir,
+        )
+    except BaseException:
+        rollback(state, store=store, run=run, log=log)
+        raise
