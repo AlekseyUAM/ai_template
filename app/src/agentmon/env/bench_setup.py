@@ -608,10 +608,6 @@ def commit_baseline(cfg: BenchConfig, tasks: list[ImportedTask], prov) -> None:
 CODE_INDEX_CONTAINER = "ai1c-mcp-code_index"
 
 
-def _image_absent(image: str, run) -> bool:
-    """Отсутствие образа: docker-опрос тем же `run`, что и остальные команды."""
-    return not mcp_docker.image_exists(image, run=run)
-
 
 def _build_code_index_image(repo_root: Path, *, run, log=print) -> None:
     recipe = recipe_for("code-index")
@@ -632,10 +628,12 @@ def _build_code_index_image(repo_root: Path, *, run, log=print) -> None:
 
 
 def launch_code_index(cfg: BenchConfig, *, repo_root: Path, mid: int,
-                      run=subprocess.run, image_exists=_image_absent,
+                      run=subprocess.run, image_exists=None,
                       launch=mcp_docker.launch, build_image=None,
                       log=print) -> str:
     """Пересоздать контейнер code_index и вернуть его имя."""
+    if image_exists is None:
+        image_exists = mcp_docker.image_exists
     name = container_name({"mcp_name": "code_index"})
     run(["docker", "rm", "-f", "-v", name], capture_output=True, text=True)
 

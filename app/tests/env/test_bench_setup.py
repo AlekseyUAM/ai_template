@@ -666,6 +666,37 @@ def test_launch_code_index_removes_old_container_with_volumes(tmp_path):
     assert 'path = "/repos/src"' in toml.read_text(encoding="utf-8")
 
 
+def test_launch_code_index_default_image_exists_uses_module_probe(
+        tmp_path, monkeypatch):
+    from agentmon.env import bench_setup, mcp_docker
+    from agentmon.env.mcp_docker_recipes import recipe_for
+
+    cfg = load_config(write_env(tmp_path), repo_root=tmp_path)
+    (Path(cfg.project_dir) / "src" / "cf").mkdir(parents=True)
+    probed = []
+    launched = {}
+
+    def fake_image_exists(tag):
+        probed.append(tag)
+        return True
+
+    def fake_launch(**kwargs):
+        launched.update(kwargs)
+        return {"ok": True, "log": ""}
+
+    monkeypatch.setattr(mcp_docker, "image_exists", fake_image_exists)
+    name = launch_code_index(
+        cfg, repo_root=tmp_path, mid=7,
+        run=lambda cmd, **kwargs: bench_setup.subprocess.CompletedProcess(
+            list(cmd), 0, "", ""),
+        launch=fake_launch,
+        log=lambda line: None,
+    )
+    assert probed == [recipe_for("code-index").image]
+    assert name == CODE_INDEX_CONTAINER
+    assert launched["name"] == CODE_INDEX_CONTAINER
+
+
 def test_launch_code_index_raises_when_launch_fails(tmp_path):
     cfg = load_config(write_env(tmp_path), repo_root=tmp_path)
     with pytest.raises(SetupError, match="контейнер"):
