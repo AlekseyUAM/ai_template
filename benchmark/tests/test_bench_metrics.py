@@ -230,6 +230,8 @@ def test_collect_task_state(tmp_path):
     assert "DEVELOP.md" in state["files"]
     assert state["verdicts"]["REVIEW.md"] == "✓ ПРИНЯТО"
     assert "REVIEW.1.md" in state["archives"]
+    assert state["archives_by_kind"]["review"] == ["REVIEW.1.md"]
+    assert state["archives_by_kind"]["testing"] == []
     assert state["test_results"][0]["Выполнено"] is True
     assert len(state["test_results"]) == 1
     names = [item["Имя"] for result in state["test_results"]
@@ -251,13 +253,106 @@ def test_stage_table_and_cycle_metrics():
     assert stages[1]["duration_sec"] is None
     cycles = cycle_metrics(
         task_json,
-        {"archives": ["REVIEW.1.md"], "verdicts": {"REVIEW.md": "✓ ПРИНЯТО"}},
+        {"archives": ["REVIEW.1.md", "DEVELOP.1.md"],
+         "archives_by_kind": {"review": ["REVIEW.1.md"],
+                              "develop": ["DEVELOP.1.md"]},
+         "verdicts": {"REVIEW.md": "✓ ПРИНЯТО"}},
         {"main": {"test_runs": 4, "smoke_runs": 1,
                   "edits": {"src/cfe/ЮнитТесты/M.bsl": 5}}})
     assert cycles == {"tests_iteration": 3, "review_iteration": 2,
-                      "review_archives": 1, "test_runs": 4,
-                      "smoke_runs": 1, "test_module_edits": 5,
-                      "review_verdict": "✓ ПРИНЯТО"}
+                      "review_archives": 1, "develop_archives": 1,
+                      "testing_archives": 0, "tests_archives": 0,
+                      "test_runs": 4, "smoke_runs": 1,
+                      "test_module_edits": 5, "review_verdict": "✓ ПРИНЯТО"}
+
+
+def test_collect_task_state_archives_by_kind(tmp_path):
+    project = tmp_path / "project"
+    task_dir = project / "tasks" / "task##001"
+    task_dir.mkdir(parents=True)
+    (task_dir / "task.json").write_text(json.dumps({
+        "id": 1, "identifier": "001", "max_minutes": 30}), encoding="utf-8")
+    for name in ("DEVELOP.1.md", "DEVELOP.2.md", "REVIEW.1.md",
+                 "TESTING.1.md", "TESTS.1.md"):
+        (task_dir / name).write_text("# архив\n", encoding="utf-8")
+    state = collect_task_state(project, task_info(project, "task##001"))
+    assert state["archives_by_kind"] == {
+        "review": ["REVIEW.1.md"],
+        "testing": ["TESTING.1.md"],
+        "tests": ["TESTS.1.md"],
+        "develop": ["DEVELOP.1.md", "DEVELOP.2.md"],
+    }
+    assert len(state["archives"]) == 5
+
+
+def test_cycle_metrics_no_review_only_develop_archives(tmp_path):
+    project = tmp_path / "project"
+    task_dir = project / "tasks" / "task##001"
+    task_dir.mkdir(parents=True)
+    (task_dir / "task.json").write_text(json.dumps({
+        "id": 1, "identifier": "001", "max_minutes": 30}), encoding="utf-8")
+    for name in ("DEVELOP.1.md", "DEVELOP.2.md"):
+        (task_dir / name).write_text("# dev\n", encoding="utf-8")
+    task_json = {"stages": [
+        {"name": "develop", "enabled": True, "status": "failed",
+         "iteration": 2},
+        {"name": "review", "enabled": True, "status": "pending",
+         "iteration": 1},
+    ]}
+    state = collect_task_state(project, task_info(project, "task##001"))
+    cycles = cycle_metrics(task_json, state, {})
+    assert cycles["review_archives"] == 0
+    assert cycles["develop_archives"] == 2
+    assert cycles["review_iteration"] == 0
+    assert cycles["tests_iteration"] == 0
+
+
+def test_cycle_metrics_iteration_only_for_active_stages():
+    task_json = {"stages": [
+        {"name": "tests", "enabled": False, "status": "done", "iteration": 4},
+        {"name": "review", "enabled": True, "status": "skipped",
+         "iteration": 3},
+    ]}
+    cycles = cycle_metrics(
+        task_json, {"archives_by_kind": {"develop": ["DEVELOP.1.md"]}}, {})
+    assert cycles["tests_iteration"] == 0
+    assert cycles["review_iteration"] == 0
+    assert cycles["review_archives"] == 0
+    assert cycles["develop_archives"] == 1
+
+
+def test_stage_table_runs_summed():
+    task_json = {"stages": [{
+        "name": "develop", "enabled": True, "status": "done", "iteration": 2,
+        "started_at": "2026-01-01T00:10:00+00:00",
+        "finished_at": "2026-01-01T00:11:00+00:00",
+        "runs": [
+            {"iteration": 1, "started_at": "2026-01-01T00:00:00+00:00",
+             "finished_at": "2026-01-01T00:01:30+00:00"},
+            {"iteration": 2, "started_at": "2026-01-01T00:10:00+00:00",
+             "finished_at": "2026-01-01T00:11:00+00:00"},
+            {"iteration": 2, "started_at": "2026-01-01T00:20:00+00:00",
+             "finished_at": None},
+        ],
+    }]}
+    stage = stage_table(task_json)[0]
+    assert stage["duration_sec"] == 60.0
+    assert stage["duration_sec_total"] == 150.0
+    assert len(stage["runs"]) == 3
+
+
+def test_stage_table_without_runs_falls_back():
+    task_json = {"stages": [
+        {"name": "tests", "enabled": True, "status": "done", "iteration": 1,
+         "started_at": "2026-01-01T00:00:00+00:00",
+         "finished_at": "2026-01-01T00:02:00+00:00"},
+        {"name": "review", "enabled": False, "status": "pending",
+         "iteration": 1, "runs": []},
+    ]}
+    stages = stage_table(task_json)
+    assert stages[0]["runs"] == []
+    assert stages[0]["duration_sec_total"] == 120.0
+    assert stages[1]["duration_sec_total"] is None
 
 
 def test_run_static_analyzers(tmp_path):
@@ -341,6 +436,50 @@ def test_render_digest_contains_key_sections():
 def _digest_metrics(task: dict) -> dict:
     return {"run": {"run_id": "r", "project_dir": "/p", "claude_cmd": "c"},
             "tasks": [task], "environment": {}}
+
+
+def _digest_review_cell(task: dict) -> str:
+    text = render_digest(_digest_metrics(task))
+    row = next(line for line in text.splitlines()
+               if line.startswith(f"| {task['folder']} "))
+    cells = [cell.strip() for cell in row.strip("|").split(" | ")]
+    return cells[-1]
+
+
+def test_render_digest_review_not_done_when_pending():
+    task = {"folder": "task##008", "limit_minutes": 30, "outcome": "success",
+            "duration_sec": 5.0, "exit_code": 0,
+            "stages": [{"name": "review", "enabled": True, "status": "pending",
+                        "iteration": 1, "duration_sec": None}],
+            "cycles": {"tests_iteration": 1, "review_iteration": 0,
+                       "review_archives": 0, "develop_archives": 2},
+            "transcript": {}}
+    cell = _digest_review_cell(task)
+    assert cell == "ревью не проводилось"
+    assert "итераций" not in cell
+
+
+def test_render_digest_review_not_done_when_disabled_or_absent():
+    for stages in ([{"name": "review", "enabled": False,
+                     "status": "pending", "iteration": 1}],
+                   [{"name": "develop", "enabled": True, "status": "done",
+                     "iteration": 1}]):
+        task = {"folder": "task##009", "limit_minutes": 30,
+                "outcome": "success", "duration_sec": 5.0, "exit_code": 0,
+                "stages": stages, "cycles": {}, "transcript": {}}
+        assert _digest_review_cell(task) == "ревью не проводилось"
+
+
+def test_render_digest_review_iterations_shown():
+    task = {"folder": "task##010", "limit_minutes": 30, "outcome": "success",
+            "duration_sec": 5.0, "exit_code": 0,
+            "stages": [{"name": "review", "enabled": True, "status": "done",
+                        "iteration": 2, "duration_sec": 30.0}],
+            "cycles": {"review_iteration": 2, "review_archives": 1,
+                       "develop_archives": 1, "testing_archives": 0,
+                       "tests_archives": 0},
+            "transcript": {}}
+    assert _digest_review_cell(task) == "итераций 2, архивов 1"
 
 
 def test_render_digest_none_values_rendered_as_dash():

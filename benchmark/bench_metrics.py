@@ -343,6 +343,36 @@ def _parse_iso(value) -> datetime | None:
     return _parse_timestamp(value)
 
 
+# Виды архивных итераций — префиксы имён `REVIEW|TESTING|TESTS|DEVELOP.<N>.md`.
+_ARCHIVE_KINDS = ("review", "testing", "tests", "develop")
+
+# Статусы, при которых этап ещё не начинался: итерация не считается.
+_NOT_STARTED = ("pending", "skipped")
+
+
+def _span_sec(started_at, finished_at) -> float | None:
+    """Секунды между отметками; нет последней или отметки битые — ``None``."""
+    started = _parse_iso(started_at)
+    finished = _parse_iso(finished_at)
+    if started is None or finished is None:
+        return None
+    return (finished - started).total_seconds()
+
+
+def _stage_iteration(task_json: dict, name: str) -> int:
+    """Текущая итерация этапа; 0, если этап не проводился.
+
+    Не проводился — этапа нет, он выключен (``enabled=false``) или его статус
+    ``pending``/``skipped``/пустой. Иначе — поле ``iteration`` (по умолчанию 1).
+    """
+    stage = _find_stage(task_json, name)
+    if not stage or not stage.get("enabled"):
+        return 0
+    if stage.get("status") is None or stage.get("status") in _NOT_STARTED:
+        return 0
+    return int(stage.get("iteration") or 1)
+
+
 def _task_log_dirs(project_dir: Path, task) -> list[Path]:
     """Каталоги `logs/task#<id>` текущей задачи (без чужих задач).
 
@@ -369,6 +399,8 @@ def collect_task_state(project_dir: Path, task) -> dict:
         ``TASK.md`` и ``*.lock``);
       - ``verdicts`` — ``{"TESTING.md"|"REVIEW.md": вердикт}`` из таблицы;
       - ``archives`` — архивные итерации ``REVIEW|TESTING|TESTS|DEVELOP.<N>.md``;
+      - ``archives_by_kind`` — те же архивы по видам (префикс до точки):
+        ``review``, ``testing``, ``tests``, ``develop``;
       - ``test_results`` — payload-ы ``result.json`` текущей задачи
         (только из ``logs/task#<id>``; логи других задач не читаются).
     """
@@ -386,6 +418,9 @@ def collect_task_state(project_dir: Path, task) -> dict:
             if match:
                 verdicts[name] = match.group(1).strip()
     archives = [name for name in files if re.fullmatch(r"(REVIEW|TESTING|TESTS|DEVELOP)\.\d+\.md", name)]
+    archives_by_kind = {kind: [] for kind in _ARCHIVE_KINDS}
+    for name in archives:
+        archives_by_kind[name.split(".", 1)[0].lower()].append(name)
     test_results = []
     for log_dir in _task_log_dirs(project_dir, task):
         result_path = log_dir / "result.json"
@@ -398,7 +433,31 @@ def collect_task_state(project_dir: Path, task) -> dict:
         if isinstance(data, dict):
             test_results.append(data)
     return {"files": files, "verdicts": verdicts, "archives": archives,
+            "archives_by_kind": archives_by_kind,
             "test_results": test_results}
+
+
+def _runs(stage: dict) -> list[dict]:
+    """Нормализованная история прогонов этапа (`runs[]` в task.json)."""
+    runs = []
+    for run in stage.get("runs") or []:
+        if not isinstance(run, dict):
+            continue
+        runs.append({
+            "iteration": int(run.get("iteration") or 1),
+            "started_at": run.get("started_at"),
+            "finished_at": run.get("finished_at"),
+            "duration_sec": _span_sec(run.get("started_at"),
+                                      run.get("finished_at")),
+        })
+    return runs
+
+
+def _runs_total_sec(runs: list[dict]) -> float | None:
+    """Сумма длительностей завершённых прогонов; нет ни одного — ``None``."""
+    completed = [run["duration_sec"] for run in runs
+                 if run.get("duration_sec") is not None]
+    return sum(completed) if completed else None
 
 
 def stage_table(task_json: dict) -> list[dict]:
@@ -406,15 +465,19 @@ def stage_table(task_json: dict) -> list[dict]:
     for stage in task_json.get("stages") or []:
         if not isinstance(stage, dict):
             continue
-        started = _parse_iso(stage.get("started_at"))
-        finished = _parse_iso(stage.get("finished_at"))
-        duration = (finished - started).total_seconds() if started and finished else None
+        duration = _span_sec(stage.get("started_at"), stage.get("finished_at"))
+        runs = _runs(stage)
+        total = _runs_total_sec(runs)
         stages.append({
             "name": stage.get("name"),
             "enabled": bool(stage.get("enabled")),
             "status": stage.get("status"),
             "iteration": int(stage.get("iteration") or 1),
+            # Длительность последней итерации — для совместимости.
             "duration_sec": duration,
+            # Сумма по runs[]; без runs — длительность этапа целиком.
+            "duration_sec_total": total if total is not None else duration,
+            "runs": runs,
             "changed_files": list(stage.get("changed_files") or []),
         })
     return stages
@@ -432,10 +495,14 @@ def cycle_metrics(task_json: dict, state: dict, transcript: dict) -> dict:
     edits = main.get("edits") or {}
     test_edits = sum(count for path, count in edits.items()
                      if "ЮнитТесты" in path and "/src/cfe/" in f"/{path}")
+    by_kind = state.get("archives_by_kind") or {}
     return {
-        "tests_iteration": int(_find_stage(task_json, "tests").get("iteration") or 1),
-        "review_iteration": int(_find_stage(task_json, "review").get("iteration") or 1),
-        "review_archives": len(state.get("archives") or []),
+        "tests_iteration": _stage_iteration(task_json, "tests"),
+        "review_iteration": _stage_iteration(task_json, "review"),
+        "review_archives": len(by_kind.get("review") or []),
+        "develop_archives": len(by_kind.get("develop") or []),
+        "testing_archives": len(by_kind.get("testing") or []),
+        "tests_archives": len(by_kind.get("tests") or []),
         "test_runs": int(main.get("test_runs") or 0),
         "smoke_runs": int(main.get("smoke_runs") or 0),
         "test_module_edits": test_edits,
@@ -567,6 +634,17 @@ def _cell(value) -> str:
     return text.replace("\r\n", " ").replace("\n", " ").replace("|", "\\|")
 
 
+def _review_cell(task: dict, cycles: dict) -> str:
+    """Ячейка «Ревью»: ревью не начиналось — не показываем фиктивные числа."""
+    stage = next((item for item in task.get("stages") or []
+                  if item.get("name") == "review"), None)
+    if not stage or not stage.get("enabled") or (
+            stage.get("status") is None or stage.get("status") in _NOT_STARTED):
+        return "ревью не проводилось"
+    return (f"итераций {cycles.get('review_iteration', 0)}, "
+            f"архивов {cycles.get('review_archives', 0)}")
+
+
 def render_digest(metrics: dict) -> str:
     run = metrics.get("run") or {}
     lines = [
@@ -596,8 +674,7 @@ def render_digest(metrics: dict) -> str:
             (f"запусков {cycles.get('test_runs', 0)}, "
              f"смоуков {cycles.get('smoke_runs', 0)}, "
              f"правок тестов {cycles.get('test_module_edits', 0)}"),
-            (f"итераций {cycles.get('review_iteration', 0)}, "
-             f"архивов {cycles.get('review_archives', 0)}"),
+            _review_cell(task, cycles),
         ]
         lines.append("| " + " | ".join(_cell(cell) for cell in cells) + " |")
     for task in metrics.get("tasks") or []:
