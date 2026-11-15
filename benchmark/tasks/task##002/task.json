@@ -14,7 +14,7 @@
   "kind": "real",
   "identifier": "#002",
   "update_db": true,
-  "max_minutes": 60,
+  "max_minutes": 120,
   "mark_changes": false,
   "db_update_json": null,
   "developer_id": "alex",
