@@ -143,6 +143,8 @@ def list_tasks(project_dir) -> list:
 
 
 def update_stage(task_dir_path, stage_name, *, status, changed_files=None) -> None:
+    """Файловый путь (load_task/save_task) теряет `runs[]` этапа; прод-вызовов нет,
+    для истории прогонов используй `task_status.py`."""
     spec = load_task(task_dir_path)
     for s in spec.stages:
         if s.name == stage_name:
