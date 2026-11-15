@@ -286,6 +286,7 @@ def summarize_transcripts(project_dir: Path, session: SessionFiles,
             "duration_sec": duration,
             "tools": summary["tools"],
             "tool_errors": summary["tool_errors"],
+            "error_signatures": summary["error_signatures"],
             "test_runs": summary["test_runs"],
         })
     return {"source": source, "main": main, "subagents": subagents}
@@ -304,14 +305,19 @@ def aggregate_environment(task_metrics: list[dict]) -> dict:
         transcript = task.get("transcript") if isinstance(task, dict) else None
         if not isinstance(transcript, dict):
             continue
+        agents = []
         main = transcript.get("main")
-        if not isinstance(main, dict):
-            continue
-        tool_errors += int(main.get("tool_errors") or 0)
-        for item in main.get("error_signatures") or []:
-            if not isinstance(item, dict):
-                continue
-            signatures[str(item.get("signature"))] += int(item.get("count") or 0)
+        if isinstance(main, dict):
+            agents.append(main)
+        subagents = transcript.get("subagents")
+        if isinstance(subagents, list):
+            agents.extend(item for item in subagents if isinstance(item, dict))
+        for agent in agents:
+            tool_errors += int(agent.get("tool_errors") or 0)
+            for item in agent.get("error_signatures") or []:
+                if not isinstance(item, dict):
+                    continue
+                signatures[str(item.get("signature"))] += int(item.get("count") or 0)
     lowered = "\n".join(signatures.elements()).lower()
     return {
         "tool_errors": tool_errors,

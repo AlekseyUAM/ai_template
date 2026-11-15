@@ -9,6 +9,65 @@ import rules
 
 # Коды правил, работающих только по тексту (без AST-модели); все остальные требуют модель.
 _TEXT_ONLY_CODES = frozenset({"keyword-lowercase", "query-one-line", "order-after-totals"})
+_SEPARATOR = "--- 8< ---"
+
+
+def split_extracted(text: str) -> list[tuple[str | None, str]]:
+    """Разбить вывод extract_queries.py на блоки (заголовок, текст запроса).
+
+    extract_queries.py печатает `# <путь>:<строка>` перед текстом запроса и
+    разделяет запросы строкой `--- 8< ---`. Обычный текст запроса без заголовков
+    возвращается одним блоком с header=None.
+    """
+    text = text.replace("\r\n", "\n")
+    if not text.strip():
+        return []
+    first = text.lstrip("\n").splitlines()[0]
+    is_extracted = (_SEPARATOR in text
+                    or (first.startswith("# ") and ":" in first))
+    if not is_extracted:
+        return [(None, text.strip("\n"))]
+    blocks: list[tuple[str | None, str]] = []
+    for raw in text.split(_SEPARATOR):
+        raw = raw.strip("\n")
+        if not raw.strip():
+            continue
+        lines = raw.splitlines()
+        header = None
+        if lines and lines[0].startswith("# "):
+            header = lines[0][2:].strip()
+            raw = "\n".join(lines[1:])
+        blocks.append((header, raw))
+    return blocks
+
+
+def analyze_text(text: str):
+    """Разобрать один текст запроса; вернуть (ctx, findings)."""
+    ctx = rules.QueryContext(text)
+    findings = rules.run_all(ctx)
+    # Принудительно обращаемся к модели, чтобы зафиксировать model_error
+    # (run_all мог пропустить все AST-правила без обращения к ctx.model,
+    # если модель ещё не была запрошена).
+    _ = ctx.model
+    findings.sort(key=lambda f: (f.line, f.code))
+    return ctx, findings
+
+
+def _print_findings(findings) -> None:
+    for f in findings:
+        print(f"{f.severity} | {f.code} | строка {f.line} | {f.message}")
+
+
+def _print_detailed(ctx, findings) -> None:
+    hit = {f.code for f in findings}
+    for r in rules.RULES:
+        if r.code in hit:
+            continue
+        is_text_only = r.code in _TEXT_ONLY_CODES
+        if ctx.model_error and not is_text_only:
+            print(f"skip | {r.code} | — | структурная проверка пропущена (AST недоступен)")
+        else:
+            print(f"ok | {r.code} | — | {r.title}")
 
 
 def main(argv=None):
@@ -23,48 +82,49 @@ def main(argv=None):
     else:
         with open(args.source, encoding="utf-8") as fh:
             text = fh.read()
-    ctx = rules.QueryContext(text)
-    findings = rules.run_all(ctx)
-    findings.sort(key=lambda f: (f.line, f.code))
 
-    # Принудительно обращаемся к модели, чтобы зафиксировать model_error
-    # (run_all мог пропустить все AST-правила без обращения к ctx.model,
-    # если модель ещё не была запрошена).
-    _ = ctx.model
+    blocks = split_extracted(text)
+    if not blocks:
+        print("Нарушений не найдено.")
+        return 0
+
+    analyzed = []
+    for header, query in blocks:
+        ctx, findings = analyze_text(query)
+        analyzed.append((header, ctx, findings))
+
     # Инфраструктурный пропуск слоя (нет node/бандла, сбой запуска) — предупреждаем.
     # Синтаксическая ошибка разбора (ctx.parse_error) не пропуск, а находка
     # query-not-parseable — её не дублируем предупреждением.
-    if ctx.model_error and not ctx.parse_error:
+    seen_errors = []
+    for _header, ctx, _findings in analyzed:
+        if ctx.model_error and not ctx.parse_error and ctx.model_error not in seen_errors:
+            seen_errors.append(ctx.model_error)
+    for model_error in seen_errors:
         print(
-            f"ВНИМАНИЕ: структурные (AST) проверки ПРОПУЩЕНЫ — {ctx.model_error}. "
+            f"ВНИМАНИЕ: структурные (AST) проверки ПРОПУЩЕНЫ — {model_error}. "
             "Проверены только текстовые правила. "
             "Отсутствие находок НЕ означает, что запрос корректен.",
             file=sys.stderr,
         )
 
-    for f in findings:
-        print(f"{f.severity} | {f.code} | строка {f.line} | {f.message}")
+    has_error = False
+    for header, ctx, findings in analyzed:
+        if header:
+            print(f"# {header}")
+        _print_findings(findings)
+        if args.Detailed:
+            _print_detailed(ctx, findings)
+        if not findings:
+            if ctx.model_error:
+                print(
+                    "Нарушений по текстовым правилам не найдено "
+                    "(структурные проверки пропущены — см. предупреждение выше)."
+                )
+            else:
+                print("Нарушений не найдено.")
+        has_error = has_error or any(f.severity == "error" for f in findings)
 
-    if args.Detailed:
-        hit = {f.code for f in findings}
-        for r in rules.RULES:
-            if r.code not in hit:
-                is_text_only = r.code in _TEXT_ONLY_CODES
-                if ctx.model_error and not is_text_only:
-                    print(f"skip | {r.code} | — | структурная проверка пропущена (AST недоступен)")
-                else:
-                    print(f"ok | {r.code} | — | {r.title}")
-
-    if not findings:
-        if ctx.model_error:
-            print(
-                "Нарушений по текстовым правилам не найдено "
-                "(структурные проверки пропущены — см. предупреждение выше)."
-            )
-        else:
-            print("Нарушений не найдено.")
-
-    has_error = any(f.severity == "error" for f in findings)
     return 0 if args.NoFail else (1 if has_error else 0)
 
 

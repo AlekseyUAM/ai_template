@@ -26,3 +26,15 @@ def test_orchestrator_handles_db_load():
     t = (SKILLS / "task-orchestration" / "SKILL.md").read_text(encoding="utf-8")
     assert "load-config" in t
     assert "update_db" in t
+
+
+def test_long_operations_are_synchronous():
+    # В `claude -p` ход завершается по end_turn, и фоновые задачи убиваются:
+    # загрузка/тесты должны запускаться синхронно, а не через run_in_background.
+    rules = SKILLS.parent / "rules"
+    for path in (SKILLS / "task-orchestration" / "SKILL.md",
+                 rules / "optimized-config-loading.md"):
+        text = path.read_text(encoding="utf-8")
+        assert "синхронно" in text, path
+        assert "run_in_background" in text, path
+        assert "харнесс сам разбудит" not in text, path

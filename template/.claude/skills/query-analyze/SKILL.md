@@ -68,6 +68,12 @@ python "${CLAUDE_SKILL_DIR}/scripts/analyze_query.py" query.txt
 python "${CLAUDE_SKILL_DIR}/scripts/extract_queries.py" -Path Module.bsl | python "${CLAUDE_SKILL_DIR}/scripts/analyze_query.py" -
 ```
 
+`analyze_query.py` понимает оба формата: обычный текст запроса анализируется целиком,
+а вывод `extract_queries.py` (заголовки `# <путь>:<строка>` и разделитель
+`--- 8< ---`) разбирается на отдельные запросы — каждый проверяется независимо, перед
+его находками печатается заголовок блока. Это важно для пайплайна выше: без разбиения
+склеенный текст нескольких запросов не парсится и даёт ложный `query-not-parseable`.
+
 Находки печатаются как `severity | код | строка N | сообщение`, где код — осмысленный
 слаг правила (напр. `select-star`, `vt-filter-in-where`, `like-leading-wildcard`), а не
 `std*`. Флаг `-Detailed` показывает и пройденные проверки. Код возврата ≠ 0 при находках

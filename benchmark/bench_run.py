@@ -119,22 +119,33 @@ def ensure_fresh(project_dir: Path, tasks: list[TaskInfo],
               "или запустите с --force.")
 
 
+def _split_z(output: str) -> list[str]:
+    """Разбить вывод git с -z по NUL; пустые элементы отбросить."""
+    return [item for item in output.split("\0") if item]
+
+
 def _untracked_files(project_dir: Path) -> list[str]:
-    out = _git(project_dir, "ls-files", "--others", "--exclude-standard").stdout
-    return [line.strip() for line in out.splitlines() if line.strip()]
+    # Без core.quotepath=false git кодирует кириллицу в octal-escape, и пути
+    # новых файлов не совпадают с реальными именами на диске.
+    out = _git(project_dir, "-c", "core.quotepath=false", "ls-files", "-z",
+               "--others", "--exclude-standard").stdout
+    return _split_z(out)
 
 
 def changed_files(project_dir: Path, before_head: str) -> list[str]:
-    out = _git(project_dir, "diff", "--name-only", before_head).stdout
-    files = {line.strip() for line in out.splitlines() if line.strip()}
+    out = _git(project_dir, "-c", "core.quotepath=false", "diff",
+               "--name-only", "-z", before_head).stdout
+    files = set(_split_z(out))
     files.update(_untracked_files(project_dir))
     return sorted(files)
 
 
 def collect_diff(project_dir: Path, before_head: str, out_path: Path,
                  stat_path: Path) -> list[str]:
-    diff = _git(project_dir, "diff", before_head).stdout
-    stat = _git(project_dir, "diff", "--stat", before_head).stdout
+    diff = _git(project_dir, "-c", "core.quotepath=false", "diff",
+                before_head).stdout
+    stat = _git(project_dir, "-c", "core.quotepath=false", "diff", "--stat",
+                before_head).stdout
     parts = [diff]
     stat_parts = [stat]
     for rel in _untracked_files(project_dir):
@@ -475,9 +486,13 @@ def ensure_claude_cmd(cmd: str) -> None:
         raise BenchError(f"команда агента не найдена или не исполняема: {cmd}")
 
 
-def build_task_prompt(folder: str) -> str:
-    return (f"Выполни задачу tasks/{folder} по этапам из её task.json. "
-            f"Следуй навыку task-orchestration.")
+def build_task_prompt(folder: str, limit_minutes: int | None = None) -> str:
+    prompt = (f"Выполни задачу tasks/{folder} по этапам из её task.json. "
+              f"Следуй навыку task-orchestration.")
+    if limit_minutes is not None:
+        prompt += (f" Жёсткий лимит выполнения задачи: {limit_minutes} мин. "
+                   f"При нехватке времени приоритет — обязательным пунктам плана.")
+    return prompt
 
 
 class RunLog:
@@ -600,7 +615,7 @@ def execute(options: RunOptions) -> int:
         stderr_path = run_dir / "transcripts" / f"{task.folder}.stderr.log"
         run = run_claude(
             cmd=options.claude_cmd,
-            prompt=build_task_prompt(task.folder),
+            prompt=build_task_prompt(task.folder, options.limits[task.folder]),
             cwd=options.project_dir,
             timeout_sec=options.limits[task.folder] * 60,
             stream_path=stream_path,

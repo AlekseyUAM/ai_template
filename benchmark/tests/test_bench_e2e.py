@@ -121,6 +121,7 @@ def test_task_prompt_triggers_orchestrator():
     assert "tasks/task##001" in prompt
     assert "tasks/task#" in prompt
     assert "task-orchestration" in prompt
+    assert "30 мин" in build_task_prompt("task##001", 30)
 
 
 def test_e2e_success_with_analysis(env):

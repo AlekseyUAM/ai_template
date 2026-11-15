@@ -290,3 +290,17 @@ def test_changed_files_rejects_invalid_before_head(tmp_path):
     project = make_git_project(tmp_path)
     with pytest.raises(BenchError):
         changed_files(project, "0" * 40)
+
+
+def test_collect_diff_includes_untracked_cyrillic(tmp_path):
+    project = make_git_project(tmp_path)
+    before = git_state(project).head
+    target = project / "src" / "cf" / "Catalogs" / "Номенклатура.xml"
+    target.parent.mkdir(parents=True)
+    target.write_text("<xml/>\n", encoding="utf-8")
+    out = tmp_path / "diff.txt"
+    stat = tmp_path / "stat.txt"
+    changed = collect_diff(project, before, out, stat)
+    assert "src/cf/Catalogs/Номенклатура.xml" in changed
+    assert "Номенклатура.xml" in out.read_text(encoding="utf-8")
+    assert "Номенклатура.xml" in stat.read_text(encoding="utf-8")

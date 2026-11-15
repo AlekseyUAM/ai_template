@@ -181,6 +181,19 @@ def test_aggregate_environment_tolerates_bad_transcript():
     assert env["error_signatures"] == []
 
 
+def test_aggregate_environment_includes_subagent_errors():
+    tasks = [{"transcript": {
+        "main": {"tool_errors": 1,
+                 "error_signatures": [{"signature": "Bash: main", "count": 1}]},
+        "subagents": [{"tool_errors": 2,
+                       "error_signatures": [{"signature": "Edit: sub", "count": 2}]}],
+    }}]
+    env = aggregate_environment(tasks)
+    assert env["tool_errors"] == 3
+    assert any("Edit: sub" in item["signature"]
+               for item in env["error_signatures"])
+
+
 def task_info(project: Path, folder: str) -> TaskInfo:
     path = project / "tasks" / folder
     data = json.loads((path / "task.json").read_text(encoding="utf-8"))
