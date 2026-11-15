@@ -100,7 +100,10 @@ def _daemon_toml(alias: str, path: str, cache_target_url: str | None = None) -> 
     """Текст daemon.toml для code-index: alias репозитория = имя проекта,
     path — каталог кодовой базы (в контейнере `/repos/src`, локально — реальный
     путь на хосте). alias и `repo="..."` в подсказках агенту совпадают.
-    cache_target_url — URL serve, которому демон шлёт инвалидацию кэша."""
+    cache_target_url — URL serve, которому демон шлёт инвалидацию кэша.
+    Секция `[mcp]` включает массовый режим (`full_names`) у `get_object_structure`:
+    без неё serve отбивает вызов с `-32602`. serve читает секцию один раз, при
+    старте, — после её появления нужен перезапуск контейнера."""
     # Секция — только при известном URL: без неё демон не уведомляет serve,
     # и его кэш результатов держит протухшие ответы до TTL (1 час).
     cache = ""
@@ -112,6 +115,10 @@ http_host = "127.0.0.1"
 http_port = 0
 log_level = "info"
 {cache}
+[mcp]
+# массовый режим: get_object_structure принимает full_names (несколько объектов)
+mass_mode_tools = ["get_object_structure"]
+
 [[paths]]
 path = "{path}"
 alias = "{alias}"

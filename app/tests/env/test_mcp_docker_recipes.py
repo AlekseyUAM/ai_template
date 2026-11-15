@@ -96,6 +96,25 @@ def test_daemon_toml_has_cache_target_when_url_given():
     assert 'url = "http://127.0.0.1:8004"' in text
 
 
+def test_daemon_toml_enables_mass_mode_for_object_structure():
+    # mass mode (full_names) выключен по умолчанию: без [mcp].mass_mode_tools
+    # serve отбивает full_names с -32602. Генератор включает его для структуры.
+    text = R._daemon_toml("мой-алиас", "/custom/code/path",
+                          "http://127.0.0.1:8004")
+    assert "[mcp]" in text
+    assert 'mass_mode_tools = ["get_object_structure"]' in text
+    # секция ровно одна и до [[paths]] — иначе TOML припишет ключ чужой таблице
+    assert text.count("[mcp]") == 1
+    assert text.index("[mcp]") < text.index("[[paths]]")
+    # cache_targets не потерян и остаётся до таблиц — ключи daemon.toml не уезжают
+    assert "[[cache_targets]]" in text
+    assert text.index("[[cache_targets]]") < text.index("[mcp]")
+    # без URL тоже включено (независимо от cache_targets)
+    text2 = R._daemon_toml("мой-алиас", "/custom/code/path")
+    assert 'mass_mode_tools = ["get_object_structure"]' in text2
+    assert "[[cache_targets]]" not in text2
+
+
 def test_naparnic_host_network_on_linux(monkeypatch):
     monkeypatch.setattr(R.sys, "platform", "linux")
     p = R.launch_params("1c-naparnic", port=8003, token="T")
