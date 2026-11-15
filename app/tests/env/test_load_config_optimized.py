@@ -441,6 +441,39 @@ def test_platform_warnings_marks_non_property_warnings():
     assert sum(v for _m, v in warn.other) + sum(warn.groups.values()) == warn.count
 
 
+def test_platform_warnings_facet_path_is_not_a_warning():
+    """Путь/слово с «facet» (FacetGroups.xml) — не предупреждение платформы."""
+    mod = _load()
+    text = "\n".join([
+        "Загрузка: src/cf/CommonPictures/FacetGroups.xml",
+        "Чтение FacetGroups.xml — ok",
+        "Неверное значение перечисления - Don'tUse",
+    ])
+
+    warn = mod.platform_warnings(text)
+
+    assert warn.other == [("Неверное значение перечисления", 1)]
+    assert warn.count == 1
+
+
+def test_platform_warnings_property_line_counted_once():
+    """Строка с маркером свойства не учитывается ещё и как «прочее»."""
+    mod = _load()
+    text = _property_warning("Indexing", "Resource")
+
+    warn = mod.platform_warnings(text)
+
+    assert warn.count == 1
+    assert warn.groups == {("Resource", "Indexing"): 1}
+    assert warn.other == []
+
+
+def test_facet_marker_requires_platform_phrasing():
+    mod = _load()
+    assert mod.platform_warnings("facet фиксации ControlType x").count == 1
+    assert mod.platform_warnings("facet of control x").count == 0
+
+
 def _fake_load(monkeypatch, mod, stdout="", returncode=0):
     """Подмени subprocess.run для git (один изменённый объект) и 1c-batch.
 
@@ -513,6 +546,45 @@ def test_load_warnings_block_success_and_state(tmp_path, monkeypatch, capsys):
     assert "Resource Indexing: 5" in out
     assert "Оптимизированная загрузка завершена" not in out
     assert not state_path.exists()
+
+
+def test_load_warnings_prints_other_block(tmp_path, monkeypatch, capsys):
+    """Свойства и прочие предупреждения — разные блоки и счётчики."""
+    mod, state_path = _state_setup(tmp_path, monkeypatch)
+    _fake_load(monkeypatch, mod, stdout="\n".join([
+        _property_warning("Indexing", "Resource"),
+        "Неверное значение перечисления - Don'tUse",
+    ]))
+
+    rc = mod.main(["--state", str(state_path)])
+
+    out = capsys.readouterr().out
+    assert rc == 2
+    assert "⚠️ Платформа проигнорировала 1 свойств" in out
+    assert "  - Resource Indexing: 1" in out
+    assert "Прочие предупреждения платформы (1)" in out
+    assert "  - Неверное значение перечисления: 1" in out
+    # раздельные счётчики: заголовок свойств показывает только свойства
+    property_block = out.split("Прочие предупреждения платформы")[0]
+    property_block = property_block[property_block.index("Платформа проигнорировала"):]
+    assert property_block.count(": 1") == 1
+    # точная строка вердикта (rc 2) печатается отдельной строкой
+    assert ("❌ Загрузка применена, но исходники некорректны: платформа "
+            "проигнорировала перечисленные свойства. Исправь их или "
+            "запусти с --allow-warnings, если это осознанно.") in out
+
+
+def test_load_facet_path_does_not_fail(tmp_path, monkeypatch, capsys):
+    """FacetGroups.xml в логе не делает загрузку ошибочной."""
+    mod, state_path = _state_setup(tmp_path, monkeypatch)
+    _fake_load(monkeypatch, mod, stdout="Чтение src/cf/FacetGroups.xml — ok")
+
+    rc = mod.main(["--state", str(state_path)])
+
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "исходники некорректны" not in out
+    assert state_path.exists()
 
 
 def test_load_warnings_checkpoint_state_kept(tmp_path, monkeypatch, capsys):

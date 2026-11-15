@@ -89,6 +89,13 @@ class ToolEvent:
 
 
 def _parse_timestamp(value) -> datetime | None:
+    # Числовые epoch (старые task.json/транскрипты) — тоже время: без этого
+    # отметка молча превращалась бы в None и длительность терялась.
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        try:
+            return datetime.fromtimestamp(value).astimezone()
+        except (OverflowError, OSError, ValueError):
+            return None
     if not isinstance(value, str):
         return None
     try:
@@ -359,6 +366,21 @@ def _span_sec(started_at, finished_at) -> float | None:
     return (finished - started).total_seconds()
 
 
+def _as_int(value, default: int = 1) -> int:
+    """Толерантный int: ``"2"``/``2.0``/``"2.0"`` → 2, мусор → ``default``.
+
+    Метрики не должны падать целиком из-за одного битого поля ``iteration``.
+    """
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    try:
+        return int(float(value))
+    except (TypeError, ValueError, OverflowError):
+        return default
+
+
 def _stage_iteration(task_json: dict, name: str) -> int:
     """Текущая итерация этапа; 0, если этап не проводился.
 
@@ -370,7 +392,7 @@ def _stage_iteration(task_json: dict, name: str) -> int:
         return 0
     if stage.get("status") is None or stage.get("status") in _NOT_STARTED:
         return 0
-    return int(stage.get("iteration") or 1)
+    return _as_int(stage.get("iteration"))
 
 
 def _task_log_dirs(project_dir: Path, task) -> list[Path]:
@@ -444,7 +466,7 @@ def _runs(stage: dict) -> list[dict]:
         if not isinstance(run, dict):
             continue
         runs.append({
-            "iteration": int(run.get("iteration") or 1),
+            "iteration": _as_int(run.get("iteration")),
             "started_at": run.get("started_at"),
             "finished_at": run.get("finished_at"),
             "duration_sec": _span_sec(run.get("started_at"),
@@ -472,7 +494,7 @@ def stage_table(task_json: dict) -> list[dict]:
             "name": stage.get("name"),
             "enabled": bool(stage.get("enabled")),
             "status": stage.get("status"),
-            "iteration": int(stage.get("iteration") or 1),
+            "iteration": _as_int(stage.get("iteration")),
             # Длительность последней итерации — для совместимости.
             "duration_sec": duration,
             # Сумма по runs[]; без runs — длительность этапа целиком.

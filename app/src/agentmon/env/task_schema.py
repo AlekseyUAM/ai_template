@@ -16,6 +16,13 @@ class Stage:
     Поля gate/approved — часть v2-контракта, который пишет app
     (task_model.build_stages) и читает task_status.py. Без них загрузка
     реального файла падала с TypeError: unexpected keyword argument.
+
+    В сыром stage dict из task.json/stages_json есть также ``runs`` — история
+    прогонов (``[{iteration, started_at, finished_at}, ...]``), которую пишет
+    ``task_status.py`` для метрик. Поле в dataclass не заведено; помни:
+    ``from_dict`` его игнорирует, и правка через ``load_task``/``save_task``
+    историю прогонов не сохранит — писать ``runs`` нужно точечно (как
+    ``task_status.py``), не пересобирая этапы.
     """
     name: str
     enabled: bool = True

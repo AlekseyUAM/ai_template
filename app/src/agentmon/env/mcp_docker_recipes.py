@@ -116,7 +116,9 @@ http_port = 0
 log_level = "info"
 {cache}
 [mcp]
-# массовый режим: get_object_structure принимает full_names (несколько объектов)
+# массовый режим: get_object_structure принимает full_names (несколько объектов).
+# serve читает секцию один раз при старте — после изменения daemon.toml
+# перезапусти контейнер, иначе full_names продолжит отбиваться с -32602.
 mass_mode_tools = ["get_object_structure"]
 
 [[paths]]

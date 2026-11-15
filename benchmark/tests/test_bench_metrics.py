@@ -341,6 +341,80 @@ def test_stage_table_runs_summed():
     assert len(stage["runs"]) == 3
 
 
+def test_stage_table_numeric_runs_stamps_summed():
+    """Числовые epoch-отметки в runs[] — сумма длительностей, а не None."""
+    task_json = {"stages": [{
+        "name": "develop", "enabled": True, "status": "done", "iteration": 2,
+        "started_at": 1767226200.0,
+        "finished_at": 1767226260,
+        "runs": [
+            {"iteration": 1, "started_at": 1767225600.0,
+             "finished_at": 1767225690.0},
+            {"iteration": 2, "started_at": 1767226200,
+             "finished_at": 1767226260},
+            # числовые отметки этапа тоже; последний прогон открыт — в сумму не идёт
+            {"iteration": 2, "started_at": 1767226500, "finished_at": None},
+        ],
+    }]}
+    stage = stage_table(task_json)[0]
+    assert stage["duration_sec_total"] == 150.0
+    assert stage["duration_sec_total"] is not None
+
+
+def test_stage_table_numeric_runs_with_string_iteration_not_skipped():
+    """Числовые отметки runs[] при строковом iteration этапа: сумма, не None.
+
+    `int(stage["iteration"])` падает на "2.0" — без толерантного разбора
+    длительность по runs[] потерялась бы целиком."""
+    task_json = {"stages": [{
+        "name": "develop", "enabled": True, "status": "done", "iteration": "2.0",
+        "runs": [
+            {"iteration": "1", "started_at": 1767225600.0,
+             "finished_at": 1767225660.0},
+            {"iteration": 2, "started_at": 1767226200.0,
+             "finished_at": 1767226260.0},
+        ],
+    }]}
+    stage = stage_table(task_json)[0]
+    assert stage["iteration"] == 2
+    assert stage["duration_sec_total"] == 120.0
+
+
+def test_stage_table_and_runs_tolerant_iteration():
+    """Строки/дробные iteration не роняют метрики: int-значение или 1."""
+    task_json = {"stages": [{
+        "name": "develop", "enabled": True, "status": "done", "iteration": "2.0",
+        "runs": [{"iteration": 2.5, "started_at": "2026-01-01T00:00:00+00:00",
+                  "finished_at": "2026-01-01T00:01:00+00:00"},
+                 {"iteration": "abc", "started_at": None, "finished_at": None}],
+    }]}
+    stage = stage_table(task_json)[0]
+    assert stage["iteration"] == 2
+    assert [run["iteration"] for run in stage["runs"]] == [2, 1]
+    cycles = cycle_metrics(task_json, {}, {})
+    assert cycles["tests_iteration"] == 0
+
+
+def test_cycle_metrics_tests_stage_and_archives(tmp_path):
+    """Активный tests (итерация 3) + TESTS.1.md + TESTING.1.md."""
+    project = tmp_path / "project"
+    task_dir = project / "tasks" / "task##001"
+    task_dir.mkdir(parents=True)
+    (task_dir / "task.json").write_text(json.dumps({
+        "id": 1, "identifier": "001", "max_minutes": 30}), encoding="utf-8")
+    for name in ("TESTS.1.md", "TESTING.1.md"):
+        (task_dir / name).write_text("# архив\n", encoding="utf-8")
+    task_json = {"stages": [
+        {"name": "tests", "enabled": True, "status": "done", "iteration": 3},
+        {"name": "testing", "enabled": True, "status": "done", "iteration": 2},
+    ]}
+    state = collect_task_state(project, task_info(project, "task##001"))
+    cycles = cycle_metrics(task_json, state, {})
+    assert cycles["tests_iteration"] == 3
+    assert cycles["tests_archives"] == 1
+    assert cycles["testing_archives"] == 1
+
+
 def test_stage_table_without_runs_falls_back():
     task_json = {"stages": [
         {"name": "tests", "enabled": True, "status": "done", "iteration": 1,

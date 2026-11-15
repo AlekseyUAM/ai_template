@@ -108,8 +108,19 @@ def test_dir_changed_since_index_true_for_new_dir_old_db(tmp_path):
     assert index_db.dir_changed_since_index(str(root), "newdir") is True
 
 
+def test_dir_changed_since_index_false_same_second(tmp_path):
+    # Отсечка долей секунды: изменения в ту же секунду, что и запись индекса,
+    # выглядят «не новее» — каталог считается свежим по индексу.
+    root = build_repo(tmp_path)
+    os.utime(root / ".code-index" / "index.db", (1700000000, 1700000000))
+    d = root / "newdir"
+    d.mkdir()
+    os.utime(d, (1700000000, 1700000000))
+    assert index_db.dir_changed_since_index(str(root), "newdir") is False
+
+
 def test_dir_changed_since_index_true_above_unix_epoch_2gip(tmp_path):
-    # mtime больше 2^31: старший разряд не должен менять знак сравнения.
+    # Крупные значения mtime (далеко за 2038): сравнение — обычное целое.
     root = build_repo(tmp_path)
     os.utime(root / ".code-index" / "index.db", (2147483648, 2147483648))
     d = root / "newdir"

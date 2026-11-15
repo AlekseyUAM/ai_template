@@ -97,6 +97,10 @@ def _normalize_times(data: dict) -> None:
     for stage in data.get("stages", []):
         if isinstance(stage, dict):
             _convert(stage)
+            # runs[] — история прогонов для метрик: те же числовые отметки
+            for run in stage.get("runs") or []:
+                if isinstance(run, dict):
+                    _convert(run)
     db_update = data.get("db_update")
     if isinstance(db_update, dict):
         _convert(db_update)
@@ -278,6 +282,14 @@ def _apply_update(data: dict, stage: str, status: str, files, task_dir) -> None:
                          "started_at": now_stage, "finished_at": None})
                 elif status in ("done", "failed"):
                     s["finished_at"] = now_stage
+                    for run in reversed(s.get("runs") or []):
+                        if run.get("finished_at") is None:
+                            run["finished_at"] = now_stage
+                            break
+                elif status == "pending":
+                    # Прогон оборван (возврат на доработку, загрузка упала):
+                    # закрываем открытую запись, иначе она осталась бы висеть и
+                    # длительность следующего прогона приписалась бы ей же.
                     for run in reversed(s.get("runs") or []):
                         if run.get("finished_at") is None:
                             run["finished_at"] = now_stage

@@ -19,9 +19,10 @@ load-config-optimized.py
 Скрипт печатает ход загрузки в stdout. Коды возврата:
     0 — загрузка применена, предупреждений платформы нет (или передано
         --allow-warnings), либо «нет изменённых файлов»;
-    2 — загрузка применена, но платформа проигнорировала часть свойств
-        (facet, Исключение XDTO, неверное значение перечисления и т.п.):
-        исходники некорректны, state не сохраняется;
+    2 — загрузка применена, но платформа проигнорировала часть свойств или
+        выдала прочие предупреждения (facet, Исключение XDTO, неверное
+        значение перечисления и т.п.): исходники некорректны, state не
+        сохраняется;
     иное — код возврата дочернего 1c-batch load-config.
 
 Оркестратор запускает его синхронно (обычный Bash без run_in_background)
@@ -50,9 +51,13 @@ STATE_HASH = "sha256"
 _PROPERTY_MARK = "Неверное свойство объекта метаданных"
 _PROPERTY_RE = re.compile(
     r"Свойство (\S+) не входит в состав объекта метаданных (\w+)")
-# «facet» платформа пишет без скобок («facet фиксации ControlType …»), ищем
-# подстроку без учёта регистра; в сводке показываем токен как есть.
-_OTHER_MARKS = ("facet", "Исключение XDTO", "Неверное значение перечисления")
+# «facet» платформа пишет без скобок («facet фиксации ControlType …»). Простая
+# подстрока ловила бы имена файлов/пути (FacetGroups.xml), поэтому — только
+# слово «facet» с последующим платформенным оборотом (фиксации/перечисления/…);
+# в сводке показываем токен как есть.
+_FACET_RE = re.compile(r"\bfacet\s+(?:фиксации|перечисления|движений)",
+                       re.IGNORECASE)
+_OTHER_MARKS = ("Исключение XDTO", "Неверное значение перечисления")
 
 def _force_utf8_output() -> None:
     """Перевести stdout/stderr в UTF-8.
@@ -391,6 +396,10 @@ def platform_warnings(text: str) -> PlatformWarnings:
                 groups[key] = groups.get(key, 0) + 1
             else:
                 other[_PROPERTY_MARK] = other.get(_PROPERTY_MARK, 0) + 1
+            # Строка с маркером свойства не считается ещё и «прочим».
+            continue
+        if _FACET_RE.search(line):
+            other["facet"] = other.get("facet", 0) + 1
         low = line.lower()
         for mark in _OTHER_MARKS:
             if mark.lower() in low:
@@ -404,12 +413,16 @@ def print_platform_warnings(summary: PlatformWarnings) -> None:
     if not summary:
         return
     print()
-    print(f"⚠️ Платформа проигнорировала {summary.count} свойств "
-          f"(загрузка применена):")
-    for (kind, prop), count in summary.groups.items():
-        print(f"  - {kind} {prop}: {count}")
-    for mark, count in summary.other:
-        print(f"  - {mark}: {count}")
+    if summary.groups:
+        print(f"⚠️ Платформа проигнорировала "
+              f"{sum(summary.groups.values())} свойств (загрузка применена):")
+        for (kind, prop), count in summary.groups.items():
+            print(f"  - {kind} {prop}: {count}")
+    if summary.other:
+        print(f"⚠️ Прочие предупреждения платформы "
+              f"({sum(count for _m, count in summary.other)}):")
+        for mark, count in summary.other:
+            print(f"  - {mark}: {count}")
 
 
 def run_optimized_load(files: List[str], allow_warnings: bool = False) -> int:

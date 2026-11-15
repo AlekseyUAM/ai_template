@@ -413,3 +413,57 @@ def test_cli_normalizes_old_epoch_dates_to_iso(tmp_path):
     assert _iso_dt(data["db_update"]["started_at"]).timestamp() == 700.0
     # Этап уже был в running — started_at перезаписан текущим запуском (ISO).
     assert isinstance(dev["started_at"], str)
+
+
+def test_cli_normalizes_old_epoch_dates_in_runs(tmp_path):
+    """Числовые отметки в runs[] тоже конвертируются в ISO при записи."""
+    mod = _load()
+    d = _one_stage_task(tmp_path)
+    data = json.loads((d / "task.json").read_text(encoding="utf-8"))
+    dev = next(s for s in data["stages"] if s["name"] == "develop")
+    dev["runs"] = [{"iteration": 1, "started_at": 900.0, "finished_at": 960}]
+    (d / "task.json").write_text(
+        json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    mod.main([str(d), "develop", "running"])
+
+    dev = _stage(json.loads((d / "task.json").read_text(encoding="utf-8")),
+                 "develop")
+    old, new = dev["runs"][0], dev["runs"][1]
+    assert _iso_dt(old["started_at"]).timestamp() == 900.0
+    assert _iso_dt(old["finished_at"]).timestamp() == 960.0
+    assert isinstance(new["started_at"], str)
+
+
+def test_cli_pending_closes_open_run(tmp_path):
+    """Аброшенный прогон (pending без done/failed) закрывается, iteration не растёт."""
+    mod = _load()
+    d = _task(tmp_path)
+    mod.main([str(d), "develop", "running"])
+    mod.main([str(d), "develop", "pending"])
+    dev = _stage(json.loads((d / "task.json").read_text(encoding="utf-8")),
+                 "develop")
+    assert dev["runs"][0]["finished_at"] is not None
+    assert _iso_dt(dev["runs"][0]["finished_at"]) >= \
+        _iso_dt(dev["runs"][0]["started_at"])
+    assert dev["status"] == "pending"
+    assert dev["iteration"] == 1
+    # Новый прогон — отдельная запись, прежняя остаётся закрытой.
+    mod.main([str(d), "develop", "running"])
+    dev = _stage(json.loads((d / "task.json").read_text(encoding="utf-8")),
+                 "develop")
+    assert len(dev["runs"]) == 2
+    assert dev["runs"][0]["finished_at"] is not None
+    assert dev["runs"][1]["finished_at"] is None
+
+
+def test_cli_pending_keeps_iteration_when_never_finished(tmp_path):
+    """running → pending → running: iteration не растёт (семантика не меняется)."""
+    mod = _load()
+    d = _task(tmp_path)
+    mod.main([str(d), "develop", "running"])
+    mod.main([str(d), "develop", "pending"])
+    mod.main([str(d), "develop", "running"])
+    dev = _stage(json.loads((d / "task.json").read_text(encoding="utf-8")),
+                 "develop")
+    assert dev["iteration"] == 1

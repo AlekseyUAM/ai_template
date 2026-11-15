@@ -1,3 +1,5 @@
+import tomllib
+
 import pytest
 
 from agentmon.env import mcp_docker_recipes as R
@@ -109,10 +111,18 @@ def test_daemon_toml_enables_mass_mode_for_object_structure():
     # cache_targets не потерян и остаётся до таблиц — ключи daemon.toml не уезжают
     assert "[[cache_targets]]" in text
     assert text.index("[[cache_targets]]") < text.index("[mcp]")
+    # TOML корректен и ключ реально лежит в таблице mcp (а не в daemon/paths)
+    parsed = tomllib.loads(text)
+    assert parsed["mcp"]["mass_mode_tools"] == ["get_object_structure"]
+    assert "mass_mode_tools" not in parsed["daemon"]
+    assert parsed["paths"][0]["alias"] == "мой-алиас"
+    # serve читает [mcp] один раз при старте — предупреждение о перезапуске в файле
+    assert "перезапусти контейнер" in text
     # без URL тоже включено (независимо от cache_targets)
     text2 = R._daemon_toml("мой-алиас", "/custom/code/path")
     assert 'mass_mode_tools = ["get_object_structure"]' in text2
     assert "[[cache_targets]]" not in text2
+    assert tomllib.loads(text2)["mcp"]["mass_mode_tools"] == ["get_object_structure"]
 
 
 def test_naparnic_host_network_on_linux(monkeypatch):

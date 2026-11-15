@@ -58,7 +58,8 @@ develop остаётся running, пока загрузка не заверши�
 │  │  │  этапа develop в task.json на момент архивирования (до следующего running)
 │  │  └─ виновник тест → TESTS.md → TESTS.<n>.md, где <n> — текущее iteration
 │  │     этапа tests в task.json на момент архивирования (до следующего running)
-│  │     (TESTING.md архивирует сам task_status.py — см. ниже, вручную не дублируй)
+│  │     (TESTING.md архивирует сам task_status.py — см. ниже, вручную не дублируй:
+│  │     файл станет TESTING.<n>.md, где <n> — iteration этапа testing)
 │  └─ Вернуть этап в pending: task_status.py ... <этап> pending
 │     (iteration инкрементируется автоматически при следующем переводе в running;
 │      develop не трогаем при виновнике тест — код не менялся)
@@ -120,7 +121,7 @@ grep -A 20 '"name": "develop"' tasks/task#001/task.json | grep '"iteration"'
 # Пример: iteration = 1 в момент архивирования → файл получает суффикс .1.md:
 # DEVELOP.md → DEVELOP.1.md  (виновник код → возврат на develop)
 # TESTS.md   → TESTS.1.md    (виновник тест → возврат на tests)
-# TESTING.md → TESTING.1.md  (при возврате на develop/tests из-за падения тестов)
+# TESTING.md → TESTING.1.md  (при возврате на develop/tests; <n> — iteration testing)
 # REVIEW.md  → REVIEW.1.md   (при возврате из review на доработку)
 #
 # Новые артефакты создаются с исходным именем: DEVELOP.md, TESTS.md, TESTING.md, REVIEW.md
