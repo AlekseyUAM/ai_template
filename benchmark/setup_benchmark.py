@@ -80,7 +80,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         result = run_setup(
             cfg, repo_root=ROOT, store=store, registry=registry,
-            prov=LocalProvisioner())
+            prov=LocalProvisioner(), recreate=True)
     except SetupError as exc:
         print(f"✗ {exc}", file=sys.stderr)
         return 1

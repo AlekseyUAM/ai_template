@@ -273,29 +273,35 @@ def create_project_row(store, cfg: BenchConfig) -> int:
 
 
 def preflight(cfg: BenchConfig, *, repo_root: Path, store, registry,
-              tcp_ok=default_tcp_ok) -> None:
-    """Проверить всё, что можно проверить до создания каталога и записей БД."""
+              tcp_ok=default_tcp_ok, allow_existing: bool = False) -> None:
+    """Проверить всё, что можно проверить до создания каталога и записей БД.
+
+    allow_existing=True пропускает проверки уже существующего проекта — режим
+    пересоздания: сначала проверяются остальные условия, чтобы не удалить
+    проект при ошибке в конфигурации.
+    """
     ok, error = validate_name(cfg.project_name)
     if not ok:
         raise SetupError(f"недопустимое BENCH_PROJECT_NAME: {error}")
 
     project_dir = Path(cfg.project_dir)
-    if project_dir.exists() and (not project_dir.is_dir()
-                                 or any(project_dir.iterdir())):
-        raise SetupError(f"каталог проекта не пуст или не является каталогом: "
-                         f"{project_dir}")
+    if not allow_existing:
+        if project_dir.exists() and (not project_dir.is_dir()
+                                     or any(project_dir.iterdir())):
+            raise SetupError(f"каталог проекта не пуст или не является каталогом: "
+                             f"{project_dir}")
 
-    for row in ProjectRepo(store).list():
-        if row["name"] == cfg.project_name or same_path(
-                row["path"], cfg.project_dir):
-            raise SetupError(
-                "проект с таким именем или каталогом уже существует: "
-                f"{row['name']} ({row['path']})")
+        for row in ProjectRepo(store).list():
+            if row["name"] == cfg.project_name or same_path(
+                    row["path"], cfg.project_dir):
+                raise SetupError(
+                    "проект с таким именем или каталогом уже существует: "
+                    f"{row['name']} ({row['path']})")
 
-    for project in registry.list():
-        if same_path(project.path, cfg.project_dir):
-            raise SetupError(
-                f"каталог уже зарегистрирован в реестре: {project.path}")
+        for project in registry.list():
+            if same_path(project.path, cfg.project_dir):
+                raise SetupError(
+                    f"каталог уже зарегистрирован в реестре: {project.path}")
 
     if cfg.dt_path:
         if not Path(cfg.dt_path).is_file():
@@ -312,6 +318,63 @@ def preflight(cfg: BenchConfig, *, repo_root: Path, store, registry,
                      ("MCP_1C_PLATFORM_URL", cfg.platform_url)):
         if not tcp_ok(url):
             raise SetupError(f"{key}: сервер недоступен по адресу {url}")
+
+
+_PROJECT_MARKERS = (".1c-devbase.json", ".claude", "tasks")
+
+
+def _assert_deletable(project_dir: Path) -> None:
+    """Не дать удалить произвольный непустой каталог вместо benchmark-проекта."""
+    if project_dir.is_symlink():
+        raise SetupError(
+            f"каталог проекта — символическая ссылка: {project_dir}. "
+            "Удалите её вручную.")
+    resolved = project_dir.resolve()
+    if (resolved == Path("/") or resolved == Path.home().resolve()
+            or len(resolved.parts) < 3):
+        raise SetupError(f"отказ удалять каталог: {resolved}")
+    if not any((project_dir / marker).exists() for marker in _PROJECT_MARKERS):
+        raise SetupError(
+            f"каталог {project_dir} не похож на benchmark-проект "
+            f"(нет {', '.join(_PROJECT_MARKERS)}); удалять не буду.")
+
+
+def remove_existing_project(cfg: BenchConfig, *, store, registry,
+                            log=print) -> None:
+    """Удалить существующий benchmark-проект: каталог, store и реестр.
+
+    Используется режимом пересоздания setup'а. MCP-карточки не удаляются:
+    они переиспользуются по точному совпадению подключения.
+    """
+    project_dir = Path(cfg.project_dir)
+    if project_dir.exists():
+        if not project_dir.is_dir():
+            raise SetupError(f"путь проекта не является каталогом: {project_dir}")
+        if any(project_dir.iterdir()):
+            _assert_deletable(project_dir)
+
+    removed = False
+    project_repo = ProjectRepo(store)
+    for row in list(project_repo.list()):
+        if row["name"] == cfg.project_name or same_path(
+                row["path"], cfg.project_dir):
+            project_repo.delete(row["id"])
+            removed = True
+            log(f"✓ удалена запись проекта из store: #{row['id']} {row['name']}")
+
+    for project in list(registry.list()):
+        if same_path(project.path, cfg.project_dir):
+            registry.delete(project.id)
+            removed = True
+            log(f"✓ удалена запись проекта из реестра: #{project.id} {project.name}")
+
+    if project_dir.exists():
+        shutil.rmtree(project_dir)
+        removed = True
+        log(f"✓ удалён каталог проекта: {project_dir}")
+
+    if not removed:
+        log("✓ существующий проект не найден — создаю новый")
 
 
 def build_mcp_plans(cfg: BenchConfig) -> list[McpPlan]:
@@ -881,12 +944,20 @@ def run_setup(cfg: BenchConfig, *, repo_root: Path, store, registry,
               clock=time.monotonic, log=print, tcp_ok=default_tcp_ok,
               http_ok=default_http_ok, install_env=install_environment,
               batch_run=run_batch_step, launch_index=launch_code_index,
-              wait_index=wait_code_index_ready) -> SetupResult:
-    """Полный сценарий подготовки проекта. Ошибка → откат записей БД."""
+              wait_index=wait_code_index_ready, recreate: bool = False) -> SetupResult:
+    """Полный сценарий подготовки проекта. Ошибка → откат записей БД.
+
+    recreate=True: предварительно проверить конфигурацию и удалить существующий
+    проект (каталог, запись store и реестра), затем создать заново.
+    """
     if prov is None:
         from ..backends.local import LocalProvisioner
         prov = LocalProvisioner()
 
+    if recreate:
+        preflight(cfg, repo_root=repo_root, store=store, registry=registry,
+                  tcp_ok=tcp_ok, allow_existing=True)
+        remove_existing_project(cfg, store=store, registry=registry, log=log)
     preflight(cfg, repo_root=repo_root, store=store, registry=registry,
               tcp_ok=tcp_ok)
 

@@ -124,6 +124,7 @@ from agentmon.env.bench_setup import (
     build_mcp_plans,
     create_project_row,
     preflight,
+    remove_existing_project,
     resolve_mcp_cards,
 )
 from agentmon.env.config_schema import EnvConfig
@@ -229,6 +230,51 @@ def test_preflight_rejects_registered_path(tmp_path):
         preflight(cfg, repo_root=make_repo_root(tmp_path),
                   store=make_store(tmp_path), registry=registry,
                   tcp_ok=lambda url: True)
+
+
+def test_preflight_allow_existing_skips_project_checks(tmp_path):
+    cfg = load_config(write_env(tmp_path), repo_root=tmp_path)
+    project_dir = Path(cfg.project_dir)
+    project_dir.mkdir(parents=True)
+    (project_dir / "x").write_text("x")
+    store, registry = make_store(tmp_path), make_registry(tmp_path)
+    create_project_row(store, cfg)
+    registry.add(name=cfg.project_name, path=cfg.project_dir, backend="local")
+    preflight(cfg, repo_root=make_repo_root(tmp_path), store=store,
+              registry=registry, tcp_ok=lambda url: True, allow_existing=True)
+
+
+def test_remove_existing_project_removes_dir_store_registry(tmp_path):
+    cfg = load_config(write_env(tmp_path), repo_root=tmp_path)
+    project_dir = Path(cfg.project_dir)
+    project_dir.mkdir(parents=True)
+    (project_dir / ".1c-devbase.json").write_text("{}", encoding="utf-8")
+    (project_dir / "old.txt").write_text("old", encoding="utf-8")
+    store, registry = make_store(tmp_path), make_registry(tmp_path)
+    create_project_row(store, cfg)
+    registry.add(name=cfg.project_name, path=cfg.project_dir, backend="local")
+
+    remove_existing_project(cfg, store=store, registry=registry,
+                            log=lambda line: None)
+
+    assert not project_dir.exists()
+    assert ProjectRepo(store).list() == []
+    assert registry.list() == []
+
+
+def test_remove_existing_project_refuses_unmarked_dir(tmp_path):
+    cfg = load_config(write_env(tmp_path), repo_root=tmp_path)
+    project_dir = Path(cfg.project_dir)
+    project_dir.mkdir(parents=True)
+    (project_dir / "stranger.txt").write_text("data", encoding="utf-8")
+
+    with pytest.raises(SetupError, match="не похож"):
+        remove_existing_project(cfg, store=make_store(tmp_path),
+                                registry=make_registry(tmp_path),
+                                log=lambda line: None)
+
+    assert project_dir.exists()
+    assert (project_dir / "stranger.txt").exists()
 
 
 def test_build_mcp_plans_without_1c_md(tmp_path):
@@ -805,6 +851,54 @@ def test_run_setup_happy_path(tmp_path):
     assert waited == [CODE_INDEX_CONTAINER]
     assert registry.list()[0].path == cfg.project_dir
     assert TaskRepo(store).list(project_id=result.project_id)
+
+
+def test_run_setup_recreate_removes_old_project(tmp_path):
+    root = make_repo_root(tmp_path)
+    make_tasks(root)
+    cfg = load_config(write_env(tmp_path), repo_root=root)
+    project_dir = Path(cfg.project_dir)
+    project_dir.mkdir(parents=True)
+    (project_dir / ".1c-devbase.json").write_text("{}", encoding="utf-8")
+    (project_dir / "old.txt").write_text("old", encoding="utf-8")
+    store, registry = make_store(tmp_path), make_registry(tmp_path)
+    create_project_row(store, cfg)
+    registry.add(name=cfg.project_name, path=cfg.project_dir, backend="local")
+
+    result = run_setup(
+        cfg, repo_root=root, store=store, registry=registry,
+        prov=OrchestratorProv(), recreate=True,
+        tcp_ok=lambda url: True,
+        http_ok=lambda url: True,
+        install_env=fake_install_env,
+        batch_run=lambda project_dir, args, **kwargs: None,
+        launch_index=lambda cfg, **kwargs: CODE_INDEX_CONTAINER,
+        wait_index=lambda name, **kwargs: None,
+        log=lambda line: None,
+    )
+
+    assert not (project_dir / "old.txt").exists()
+    assert [row["id"] for row in ProjectRepo(store).list()] == [result.project_id]
+    assert len(registry.list()) == 1
+    assert registry.list()[0].path == cfg.project_dir
+
+
+def test_run_setup_recreate_keeps_old_project_if_preflight_fails(tmp_path):
+    root = make_repo_root(tmp_path)
+    cfg = load_config(write_env(tmp_path), repo_root=root)
+    project_dir = Path(cfg.project_dir)
+    project_dir.mkdir(parents=True)
+    (project_dir / ".1c-devbase.json").write_text("{}", encoding="utf-8")
+    (project_dir / "old.txt").write_text("old", encoding="utf-8")
+
+    with pytest.raises(SetupError, match="недоступен"):
+        run_setup(
+            cfg, repo_root=root, store=make_store(tmp_path),
+            registry=make_registry(tmp_path), recreate=True,
+            tcp_ok=lambda url: False, log=lambda line: None,
+        )
+
+    assert (project_dir / "old.txt").exists()
 
 
 def test_run_setup_rolls_back_db_and_container_on_error(tmp_path):
