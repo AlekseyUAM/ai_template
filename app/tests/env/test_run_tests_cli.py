@@ -1,8 +1,14 @@
 """run-tests.py: ошибка среды не должна выглядеть как ошибка компиляции."""
 import importlib.util
 import json
+import os
+import signal
 import subprocess
+import sys
+import time
 from pathlib import Path
+
+import pytest
 
 CLI = Path(__file__).resolve().parents[3] / "template" / ".claude" / "tools" / "run-tests.py"
 
@@ -104,11 +110,13 @@ def test_check_modules_timeout_is_rc3_and_kills_tree(monkeypatch, capsys):
     mod = _load()
     monkeypatch.setattr(mod, "batch_cmd", lambda: ["dummy"])
     procs = []
+    seen_timeouts = []
 
     def fake_popen(cmd, *args, **kwargs):
         proc = _Proc(_Result(0))
 
         def communicate(timeout=None):
+            seen_timeouts.append(timeout)
             raise subprocess.TimeoutExpired(cmd, timeout)
 
         proc.communicate = communicate
@@ -121,10 +129,144 @@ def test_check_modules_timeout_is_rc3_and_kills_tree(monkeypatch, capsys):
 
     assert mod.check_modules(Path("."), None) == mod.RC_ENV_ERROR
     assert killed == procs
+    # Контракт «проверка не дольше 600 c» закреплён в тесте, а не только в коде.
+    assert seen_timeouts == [600]
+    assert mod.CHECK_MODULES_TIMEOUT == 600
     out = capsys.readouterr().out
     assert "600" in out
     assert "проблема среды, не компиляции" in out
     assert "Ошибка компиляции" not in out
+
+
+def _patch_timeout_with_partial_output(monkeypatch, mod, out_text, err_text):
+    def fake_popen(cmd, *args, **kwargs):
+        proc = _Proc(_Result(0))
+
+        def communicate(timeout=None):
+            exc = subprocess.TimeoutExpired(cmd, timeout)
+            exc.output = out_text
+            exc.stderr = err_text
+            raise exc
+
+        proc.communicate = communicate
+        return proc
+
+    monkeypatch.setattr(mod, "batch_cmd", lambda: ["dummy"])
+    monkeypatch.setattr(mod.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(mod, "_kill_tree", lambda proc: None)
+
+
+def test_check_modules_timeout_prints_captured_output(monkeypatch, capsys):
+    """Вывод до зависания печатается — иначе env-ошибку не разобрать."""
+    mod = _load()
+    _patch_timeout_with_partial_output(
+        monkeypatch, mod, "CheckModules: старт\n", "License: not found\n")
+
+    assert mod.check_modules(Path("."), None) == mod.RC_ENV_ERROR
+    out = capsys.readouterr().out
+    assert "CheckModules: старт" in out
+    assert "License: not found" in out
+    assert out.index("License: not found") < out.index("не уложилась")
+
+
+def test_check_modules_timeout_tolerates_empty_output(monkeypatch, capsys):
+    """После SIGKILL communicate может отдать None вместо строк."""
+    mod = _load()
+    _patch_timeout_with_partial_output(monkeypatch, mod, None, None)
+
+    assert mod.check_modules(Path("."), None) == mod.RC_ENV_ERROR
+    assert "проблема среды, не компиляции" in capsys.readouterr().out
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX process groups only")
+def test_kill_tree_kills_group_leader_and_grandchild():
+    """Настоящий тест дерева: убить надо и обёртку, и её потомка."""
+    mod = _load()
+    sh = _which_sh()
+    proc = subprocess.Popen(
+        [sh, "-c", 'sleep 30 & echo $!; wait'],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        start_new_session=True,
+    )
+    grandchild_pid = None
+    try:
+        grandchild_pid = int(proc.stdout.readline().strip())
+
+        def alive(pid):
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                return False
+            # Зомби после wait на родителя: kill(0) проходит, но процесс мёртв.
+            try:
+                with open(f"/proc/{pid}/stat", encoding="ascii") as fh:
+                    return fh.read().split(")")[-1].split()[0] != "Z"
+            except OSError:
+                return True
+
+        assert alive(proc.pid)
+        assert alive(grandchild_pid)
+
+        mod._kill_tree(proc)
+
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline and (alive(proc.pid) or alive(grandchild_pid)):
+            time.sleep(0.05)
+        assert proc.poll() is not None
+        assert not alive(grandchild_pid)
+    finally:
+        for pid in (proc.pid, grandchild_pid):
+            if pid is None:
+                continue
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            pass
+        proc.stdout.close()
+        proc.stderr.close()
+
+
+def _which_sh():
+    for candidate in ("/bin/sh", "/usr/bin/sh"):
+        if os.path.exists(candidate):
+            return candidate
+    return "sh"
+
+
+def test_diagnose_timeout_pins_check_timeout(monkeypatch):
+    """И диагностика после таймаута сеанса ждёт проверку не дольше 600 c."""
+    mod = _load()
+    seen = []
+    real_raw = mod._check_modules_raw
+
+    def spy(project_root, extension=None, title="..."):
+        seen.append(extension)
+        return real_raw(project_root, extension, title)
+
+    seen_timeouts = []
+
+    def fake_popen(cmd, *args, **kwargs):
+        proc = _Proc(_Result(0))
+
+        def communicate(timeout=None):
+            seen_timeouts.append(timeout)
+            raise subprocess.TimeoutExpired(cmd, timeout)
+
+        proc.communicate = communicate
+        return proc
+
+    monkeypatch.setattr(mod, "_check_modules_raw", spy)
+    monkeypatch.setattr(mod, "batch_cmd", lambda: ["dummy"])
+    monkeypatch.setattr(mod.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(mod, "_kill_tree", lambda proc: None)
+
+    assert mod.diagnose_timeout(Path(".")) == mod.RC_ENV_ERROR
+    assert seen == [None]
+    assert seen_timeouts == [mod.CHECK_MODULES_TIMEOUT]
 
 
 def _patch_checks(monkeypatch, mod, rc_by_extension):
@@ -281,10 +423,36 @@ def test_timeout_without_config_compile_error_stays_rc124(monkeypatch):
     assert mod.diagnose_timeout(Path(".")) == mod.RC_TIMEOUT
 
 
-def test_timeout_with_env_failure_stays_rc124(monkeypatch):
+def test_timeout_with_env_failure_is_rc3(monkeypatch, capsys):
+    """Среда/лицензия в диагностике — не таймаут сеанса (124), а rc 3.
+
+    Иначе оркестратор примет проблему среды за зависание сеанса и пойдёт
+    искать виновника среди тестов/кода.
+    """
     mod = _load()
     _patch(monkeypatch, mod, _Result(1, "Traceback (most recent call last):"))
-    assert mod.diagnose_timeout(Path(".")) == mod.RC_TIMEOUT
+    assert mod.diagnose_timeout(Path(".")) == mod.RC_ENV_ERROR
+    out = capsys.readouterr().out
+    assert "проблема среды" in out
+    assert "код не править" in out
+
+
+def test_timeout_with_license_failure_is_rc3(monkeypatch):
+    mod = _load()
+    _patch(monkeypatch, mod, _Result(1, "Не найдена лицензия на сервере"))
+    assert mod.diagnose_timeout(Path(".")) == mod.RC_ENV_ERROR
+
+
+def test_run_tests_timeout_with_env_failure_returns_rc3(monkeypatch, tmp_path):
+    """Полный путь: таймаут сеанса + ошибка среды в диагностике → 3, не 124."""
+    mod = _load()
+    result_path = tmp_path / "result.json"
+    cfg = _config(tmp_path, result_path)
+    _patch_checks(monkeypatch, mod, {})
+    monkeypatch.setattr(mod, "run_enterprise", lambda *a, **k: mod.RC_TIMEOUT)
+    _patch(monkeypatch, mod, _Result(1, "License: not found"))
+
+    assert mod.run_tests(str(cfg), "ЮнитТесты", 10, False) == mod.RC_ENV_ERROR
 
 
 def test_timeout_with_check_timeout_is_rc3(monkeypatch):
