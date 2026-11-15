@@ -113,6 +113,27 @@ def read_is_blockable(root: str, rel: str, *, case_insensitive: bool | None = No
     return True
 
 
+def dir_changed_since_index(root: str, rel: str) -> bool:
+    """True → каталог `root/rel` (mtime) новее локального index.db.
+
+    Новые файлы → нативный листинг может показать то, чего нет в MCP:
+    list_files знает только проиндексированное. При отсутствии БД или
+    каталога свежесть не доказать — False (решает вызывающий по своей политике).
+    """
+    try:
+        dir_mtime = int((Path(root) / rel).stat().st_mtime)
+        db_mtime = int((Path(root) / ".code-index" / "index.db").stat().st_mtime)
+    except OSError:
+        return False
+    # int-секунды, как в file_mtime_secs: округление вниз не даёт ложной
+    # «свежести» в ту же секунду, что и запись индекса.
+    # Одиночное сравнение в `if` (не в выражении): значения mtime могут быть
+    # больше 2^31, а сравнение-выражение там ненадёжно.
+    if dir_mtime > db_mtime:
+        return True
+    return False
+
+
 def _read_project_config(root: str) -> dict | None:
     # Только чтение: у хука нет причин трогать файлы проекта.
     try:

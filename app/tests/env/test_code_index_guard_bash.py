@@ -1,3 +1,4 @@
+import os
 import sys
 from pathlib import Path
 
@@ -95,4 +96,69 @@ def test_variable_outside_repo_skipped(tmp_path):
 def test_bare_ls_from_indexed_cwd_denied(tmp_path):
     root = _root(tmp_path)
     d = _decide(root, "ls -la")
+    assert d is not None and d.allow is False
+
+
+# --- Свежесть каталога: листинг изменившегося каталога не блокируем -------------
+
+def _age_index(root, mtime=1700000000):
+    """Индекс старше каталогов на диске — индекс «отстал»."""
+    os.utime(root / ".code-index" / "index.db", (mtime, mtime))
+
+
+def _fresh_index(root):
+    """Свежий индекс: index.db новее всех каталогов репо (каталоги — в прошлом)."""
+    past = (1699999000, 1699999000)
+    for d in (root, root / "src", root / "target", root / ".code-index"):
+        os.utime(d, past)
+
+
+def test_ls_fresh_index_still_denied(tmp_path):
+    # Свежий индекс: index.db новее каталога src → дед-энда нет, deny как раньше.
+    root = _root(tmp_path)
+    _fresh_index(root)
+    assert _decide(root, "ls -R src") is not None
+    assert _decide(root, "ls -la") is not None
+
+
+def test_ls_new_directory_abstains(tmp_path):
+    # Каталог появился после индексации: в MCP его нет, нативный ls — единственный путь.
+    root = _root(tmp_path)
+    _age_index(root)
+    newdir = root / "newdir"
+    newdir.mkdir()
+    os.utime(newdir, (1700000100, 1700000100))
+    assert _decide(root, "ls newdir") is None
+
+
+def test_ls_new_directory_quoted_path_abstains(tmp_path):
+    root = _root(tmp_path)
+    _age_index(root)
+    newdir = root / "newdir"
+    newdir.mkdir()
+    os.utime(newdir, (1700000100, 1700000100))
+    assert _decide(root, f'ls "{root}/newdir"') is None
+
+
+def test_bare_ls_changed_cwd_abstains(tmp_path):
+    # Голый `ls` целится в base; base изменился после индекса → воздержаться.
+    root = _root(tmp_path)
+    _age_index(root)
+    sub = root / "src"
+    os.utime(sub, (1700000100, 1700000100))
+    assert _decide(root, "ls -la", cwd=sub) is None
+
+
+def test_cat_still_denied_when_index_behind(tmp_path):
+    # Ослабление касается ТОЛЬКО листинга каталога: cat по-прежнему deny.
+    root = _root(tmp_path)
+    _age_index(root)
+    d = _decide(root, "cat src/main.rs")
+    assert d is not None and d.allow is False
+
+
+def test_grep_still_denied_when_index_behind(tmp_path):
+    root = _root(tmp_path)
+    _age_index(root)
+    d = _decide(root, "grep -rn main src")
     assert d is not None and d.allow is False

@@ -61,6 +61,12 @@ def redirect_for_link(link: str, base: str, tool_label: str, ctx) -> Decision | 
             if rel and index_db.excluded_from_index(
                     check_root, rel, case_insensitive=ctx.case_insensitive):
                 return None
+        # Свежесть каталога-цели: каталог изменился после индексации (новые
+        # объекты) → list_files их не знает, нативный листинг — единственный путь.
+        # Только для листинга: `cat`/`grep` по индексированным файлам блокируем.
+        if _is_directory_listing(link) and _listing_dir_changed(
+                link, base, ctx, case_insensitive=ctx.case_insensitive):
+            return None
     reason = (
         f"{tool_label} по индексированному пути (repo='{alias}') запрещено. "
         "На индексированных файлах MCP дешевле в 3-10×: инструменты code-index "
@@ -69,6 +75,64 @@ def redirect_for_link(link: str, base: str, tool_label: str, ctx) -> Decision | 
         f'Список репо — {tools.tool("get_stats")}().'
     )
     return Decision(False, reason)
+
+
+_LISTING_UTILS = ("ls", "dir", "find", "get-childitem", "gci")
+
+
+def _is_directory_listing(link: str) -> bool:
+    """Звено — листинг каталога (`ls`/`dir`/`find`/`Get-ChildItem`/`gci`)."""
+    toks = link.split()
+    return bool(toks) and toks[0].lower() in _LISTING_UTILS
+
+
+def _listing_targets(link: str) -> list[str] | None:
+    """Цели листинга без флагов. None → цель не разобрать (маска, флаг со значением).
+
+    Маска (`*`, `?`) — выборка по содержимому каталога, а не листинг конкретного
+    каталога: свежесть такого каталога не определяет, что найдёт команда.
+    """
+    out: list[str] = []
+    for tok in link.split()[1:]:
+        tok = tok.strip('"').strip("'")
+        if not tok:
+            continue
+        if tok.startswith("-"):
+            continue  # флаг; значение флага каталогом не считаем — deny остаётся
+        if "*" in tok or "?" in tok:
+            return None
+        out.append(tok)
+    return out
+
+
+def _listing_dir_changed(link: str, base: str, ctx, *,
+                         case_insensitive: bool) -> bool:
+    """Изменился ли целевой каталог листинга после индексации.
+
+    Целей нет → листинг `base`. Относительная цель → от `base`. Цель берётся,
+    только если она попадает в индексированный репозиторий; несуществующий
+    каталог свежести не даёт (`dir_changed_since_index` → False).
+    """
+    targets = _listing_targets(link)
+    if targets is None:
+        return False
+    if not targets:
+        targets = ["."]
+    for t in targets:
+        t = paths.normalize_msys_drives(t.replace("\\", "/"))
+        if ":/" in t or t.startswith("/"):
+            abs_path = t
+        else:
+            if not base:
+                continue
+            abs_path = f"{base.replace(chr(92), '/').rstrip('/')}/{t}"
+        m = paths.match_indexed(abs_path, ctx.paths, case_insensitive=case_insensitive)
+        if m is None:
+            continue
+        _alias, rel, root = m
+        if index_db.dir_changed_since_index(root, rel):
+            return True
+    return False
 
 
 def _unquote(link: str) -> str:

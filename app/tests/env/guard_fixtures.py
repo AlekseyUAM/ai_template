@@ -56,6 +56,12 @@ def build_repo(tmp_path: Path, *, v4: bool = False, stale: bool = False,
                  (ids["src/main.rs"], 1 if oversize else 0))
     conn.commit()
     conn.close()
+    # Каталоги тоже относим к MTIME: иначе корень репо с mtime «сейчас» выглядит
+    # изменившимся после индексации, и листинг каталога законно пропускается.
+    for d in sorted((p for p in root.rglob("*") if p.is_dir()),
+                    key=lambda p: len(p.parts), reverse=True):
+        os.utime(d, (MTIME, MTIME))
+    os.utime(root, (MTIME, MTIME))
     if stale:
         p = root / "Cargo.toml"
         p.write_text("[package]\nname = \"changed\"\n", encoding="utf-8")
