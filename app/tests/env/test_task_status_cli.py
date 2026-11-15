@@ -157,6 +157,128 @@ def test_cli_rerun_increments_iteration(tmp_path):
     assert dev["finished_at"] is None          # сброшен до нового завершения
 
 
+def _stage(data, name):
+    return next(s for s in data["stages"] if s["name"] == name)
+
+
+def test_cli_runs_first_running_done(tmp_path):
+    mod = _load()
+    d = _task(tmp_path)
+    mod.main([str(d), "develop", "running"])
+    dev = _stage(json.loads((d / "task.json").read_text(encoding="utf-8")), "develop")
+    assert len(dev["runs"]) == 1
+    assert dev["runs"][0]["iteration"] == 1
+    assert dev["runs"][0]["finished_at"] is None
+    assert _iso_dt(dev["runs"][0]["started_at"]).tzinfo is not None
+
+    mod.main([str(d), "develop", "done"])
+    dev = _stage(json.loads((d / "task.json").read_text(encoding="utf-8")), "develop")
+    assert len(dev["runs"]) == 1
+    assert _iso_dt(dev["runs"][0]["finished_at"]) >= _iso_dt(dev["runs"][0]["started_at"])
+
+
+def test_cli_runs_repeat_running_done(tmp_path):
+    mod = _load()
+    d = _task(tmp_path)
+    mod.main([str(d), "develop", "running"])
+    mod.main([str(d), "develop", "done"])
+    mod.main([str(d), "develop", "running"])
+    mod.main([str(d), "develop", "done"])
+    dev = _stage(json.loads((d / "task.json").read_text(encoding="utf-8")), "develop")
+    assert [r["iteration"] for r in dev["runs"]] == [1, 2]
+    assert all(r["finished_at"] is not None for r in dev["runs"])
+    assert dev["iteration"] == 2
+
+
+def test_cli_runs_rerun_without_done_keeps_iteration(tmp_path):
+    """Повторный running без done: вторая запись, iteration как прежде не растёт."""
+    mod = _load()
+    d = _task(tmp_path)
+    mod.main([str(d), "develop", "running"])
+    mod.main([str(d), "develop", "running"])
+    dev = _stage(json.loads((d / "task.json").read_text(encoding="utf-8")), "develop")
+    assert len(dev["runs"]) == 2
+    assert [r["iteration"] for r in dev["runs"]] == [1, 1]
+    assert dev["runs"][1]["finished_at"] is None
+    assert dev["iteration"] == 1
+
+
+def _testing_done_task(tmp_path, review_done=False):
+    s = ts.create_task(tmp_path, title="a", goal="", plan="", constraints="",
+                       enabled_stages=ts.STAGE_NAMES)
+    d = ts.task_dir(tmp_path, s.id)
+    data = json.loads((d / "task.json").read_text(encoding="utf-8"))
+    _stage(data, "testing")["status"] = "done"
+    _stage(data, "develop")["status"] = "done"
+    if review_done:
+        _stage(data, "review")["status"] = "done"
+    (d / "task.json").write_text(json.dumps(data, ensure_ascii=False, indent=2),
+                                 encoding="utf-8")
+    return d
+
+
+def test_cli_archives_testing_verdict_on_develop_pending(tmp_path):
+    mod = _load()
+    d = _testing_done_task(tmp_path)
+    (d / "TESTING.md").write_text("# Вердикт\n", encoding="utf-8")
+    mod.main([str(d), "develop", "pending"])
+    assert not (d / "TESTING.md").exists()
+    assert (d / "TESTING.1.md").read_text(encoding="utf-8") == "# Вердикт\n"
+    assert _stage(json.loads((d / "task.json").read_text(encoding="utf-8")),
+                  "develop")["status"] == "pending"
+
+
+def test_cli_keeps_testing_verdict_when_testing_not_done(tmp_path):
+    """Падение загрузки: testing не done — вердикта нет, TESTING.md не трогаем."""
+    mod = _load()
+    d = _testing_done_task(tmp_path)
+    data = json.loads((d / "task.json").read_text(encoding="utf-8"))
+    _stage(data, "testing")["status"] = "pending"
+    (d / "task.json").write_text(json.dumps(data, ensure_ascii=False, indent=2),
+                                 encoding="utf-8")
+    (d / "TESTING.md").write_text("# Вердикт\n", encoding="utf-8")
+    mod.main([str(d), "develop", "pending"])
+    assert (d / "TESTING.md").exists()
+    assert not (d / "TESTING.1.md").exists()
+
+
+def test_cli_archive_conflict_leaves_everything_untouched(tmp_path):
+    mod = _load()
+    d = _testing_done_task(tmp_path)
+    (d / "TESTING.md").write_text("новый\n", encoding="utf-8")
+    (d / "TESTING.1.md").write_text("старый\n", encoding="utf-8")
+    before = (d / "task.json").read_text(encoding="utf-8")
+    with pytest.raises(SystemExit, match="TESTING.1.md"):
+        mod.main([str(d), "develop", "pending"])
+    assert (d / "TESTING.md").read_text(encoding="utf-8") == "новый\n"
+    assert (d / "TESTING.1.md").read_text(encoding="utf-8") == "старый\n"
+    assert (d / "task.json").read_text(encoding="utf-8") == before
+
+
+def test_cli_archive_conflict_does_not_rename_other_verdict(tmp_path):
+    """Конфликт по TESTING.1.md не должен оставить полуархив (REVIEW переименован)."""
+    mod = _load()
+    d = _testing_done_task(tmp_path, review_done=True)
+    (d / "TESTING.md").write_text("новый\n", encoding="utf-8")
+    (d / "TESTING.1.md").write_text("старый\n", encoding="utf-8")
+    (d / "REVIEW.md").write_text("# Итоговый вердикт\n", encoding="utf-8")
+    before = (d / "task.json").read_text(encoding="utf-8")
+    with pytest.raises(SystemExit):
+        mod.main([str(d), "develop", "pending"])
+    assert (d / "REVIEW.md").exists()
+    assert not (d / "REVIEW.1.md").exists()
+    assert (d / "task.json").read_text(encoding="utf-8") == before
+
+
+def test_cli_archives_review_verdict_on_develop_pending(tmp_path):
+    mod = _load()
+    d = _testing_done_task(tmp_path, review_done=True)
+    (d / "REVIEW.md").write_text("# Итоговый вердикт\n", encoding="utf-8")
+    mod.main([str(d), "develop", "pending"])
+    assert not (d / "REVIEW.md").exists()
+    assert (d / "REVIEW.1.md").exists()
+
+
 def test_cli_db_update_start_and_done(tmp_path):
     mod = _load()
     d = _task(tmp_path)

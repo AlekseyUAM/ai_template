@@ -4,6 +4,11 @@
 Дополнительно обеспечивает гейты: нельзя перевести этап в `running`, пока
 предыдущий включённый этап с `gate: true` не подтверждён (`approved: true`).
 Подтверждение ставится командой со статусом `approve`.
+
+При возврате `develop`/`tests` в `pending` сам архивирует вердикты прошлой
+итерации (`TESTING.md` → `TESTING.<n>.md`, `REVIEW.md` → `REVIEW.<n>.md`).
+Каждый прогон этапа записывается в `stage["runs"]` — история для метрик
+(`iteration` при этом не меняется).
 """
 import argparse
 import contextlib
@@ -152,6 +157,41 @@ def _db_update_block(data: dict, stage: str, status: str):
     return None
 
 
+# Этапы, при возврате которых в pending вердикты итерации (TESTING.md,
+# REVIEW.md) архивируются. DEVELOP.md/TESTS.md архивирует оркестратор сам.
+AUTO_ARCHIVE_STAGES = ("develop", "tests")
+
+
+def _archive_verdicts(task_dir: Path, data: dict) -> None:
+    """Заархивировать вердикты итерации перед возвратом этапа в pending.
+
+    TESTING.md → TESTING.<iteration testing>.md, если testing done;
+    REVIEW.md → REVIEW.<iteration review>.md, если review done. Нет этапа,
+    этап не done или нет файла — no-op. Сначала проверяются все конфликты
+    (целевой файл уже есть) и только потом выполняется переименование, чтобы
+    ошибка не оставляла половину архива (вызывается до изменения статуса)."""
+    plan = []
+    for verdict_stage, artifact in (("testing", "TESTING.md"),
+                                    ("review", "REVIEW.md")):
+        stage = next((s for s in data.get("stages", [])
+                      if s.get("name") == verdict_stage), None)
+        if stage is None or stage.get("status") != "done":
+            continue
+        src = task_dir / artifact
+        if not src.exists():
+            continue
+        dst = task_dir / f"{src.stem}.{stage.get('iteration', 1)}.md"
+        if dst.exists():
+            raise SystemExit(
+                f"ОШИБКА (архив): целевой файл уже существует: {dst}. "
+                f"Не перезаписываю — вердикт {artifact} разберите вручную "
+                f"(уберите или переименуйте {dst.name}), затем повторите "
+                f"команду. Статус этапа и файлы не изменены.")
+        plan.append((src, dst))
+    for src, dst in plan:
+        os.replace(src, dst)
+
+
 def _overall_status(stages) -> str:
     """Общий статус задачи по статусам этапов. Зеркало task_model.overall_status
     (приоритет: failed → awaiting_user → done → running → planned), но с
@@ -192,7 +232,7 @@ def set_db_update(task_dir: str, phase: str) -> None:
         _atomic_write_json(path, data)
 
 
-def _apply_update(data: dict, stage: str, status: str, files) -> None:
+def _apply_update(data: dict, stage: str, status: str, files, task_dir) -> None:
     for s in data.get("stages", []):
         if s["name"] == stage:
             if status == "approve":
@@ -206,6 +246,10 @@ def _apply_update(data: dict, stage: str, status: str, files) -> None:
                     msg = _db_update_block(data, stage, status)
                     if msg:
                         raise SystemExit("ОШИБКА (БД): " + msg)
+                # Архив вердиктов прошлой итерации — ДО изменения статуса: при
+                # конфликте файлов этап и файлы остаются как были.
+                if status == "pending" and stage in AUTO_ARCHIVE_STAGES:
+                    _archive_verdicts(Path(task_dir), data)
                 s["status"] = status
                 data["stage"] = stage
                 changed = s.setdefault("changed_files", [])
@@ -227,8 +271,17 @@ def _apply_update(data: dict, stage: str, status: str, files) -> None:
                     else:
                         s.setdefault("iteration", 1)
                     s["started_at"] = now_stage
+                    # История прогонов для метрик: iteration — как есть, каждый
+                    # перевод в running — отдельная запись.
+                    s.setdefault("runs", []).append(
+                        {"iteration": s.get("iteration", 1),
+                         "started_at": now_stage, "finished_at": None})
                 elif status in ("done", "failed"):
                     s["finished_at"] = now_stage
+                    for run in reversed(s.get("runs") or []):
+                        if run.get("finished_at") is None:
+                            run["finished_at"] = now_stage
+                            break
             # Пересчитать верхнеуровневый статус задачи по этапам (как на DB-пути
             # в task_api2.update_stage), иначе он застрянет на начальном значении.
             overall = _overall_status(data.get("stages", []))
@@ -254,7 +307,7 @@ def update(task_dir: str, stage: str, status: str, files=None) -> None:
     path = Path(task_dir) / "task.json"
     with _locked(path):
         data = json.loads(path.read_text(encoding="utf-8"))
-        _apply_update(data, stage, status, files)
+        _apply_update(data, stage, status, files, task_dir)
         _normalize_times(data)
         _atomic_write_json(path, data)
 
