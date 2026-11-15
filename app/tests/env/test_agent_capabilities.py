@@ -1,7 +1,7 @@
 from pathlib import Path
 A = Path(__file__).resolve().parents[3] / "template" / ".claude" / "agents"
 SKILLS = Path(__file__).resolve().parents[3] / "template" / ".claude" / "skills"
-MCP = ["bsl_ls", "1c_platform", "1c_naparnic", "code_index"]
+MCP = ["bsl_ls", "1c_platform", "code_index"]
 
 def test_each_agent_lists_mcp_and_skills():
     for name in ("analyst","architect","developer-tests","developer","reviewer"):

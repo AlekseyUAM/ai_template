@@ -1,7 +1,6 @@
 {
   "permissions": {
     "allow": [
-      "mcp__1c_naparnic",
       "mcp__bsl_ls",
       "mcp__1c_platform",
       "mcp__code_index"
