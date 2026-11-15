@@ -8,6 +8,7 @@
 """
 import importlib.util
 import json
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -18,6 +19,10 @@ SCRIPT = (Path(__file__).resolve().parents[3] / "template" / ".claude" /
 def _load():
     spec = importlib.util.spec_from_file_location("load_config_optimized", SCRIPT)
     mod = importlib.util.module_from_spec(spec)
+    # Регистрация в sys.modules обязательна: dataclasses (3.12+) при обработке
+    # строковых аннотаций берут cls.__module__ из sys.modules; без записи
+    # получают None и падают с AttributeError на @dataclass.
+    sys.modules["load_config_optimized"] = mod
     spec.loader.exec_module(mod)
     return mod
 
@@ -231,6 +236,7 @@ def test_collect_changes_detects_revert_to_head(tmp_path, monkeypatch):
 
     monkeypatch.setattr(mod, "get_project_root", lambda: tmp_path)
     monkeypatch.setattr(mod, "subprocess", _fake_git([]))  # файл откатили к HEAD
+
     monkeypatch.chdir(tmp_path)
 
     got, _snapshot, _deleted, _skipped = mod.collect_changes({rel: "0" * 64})
@@ -263,7 +269,8 @@ def test_main_saves_state_after_successful_load(tmp_path, monkeypatch):
     monkeypatch.setattr(mod, "get_project_root", lambda: tmp_path)
     monkeypatch.setattr(mod, "subprocess",
                         _fake_git([f"src/cf/{rel}" for rel in files]))
-    monkeypatch.setattr(mod, "run_optimized_load", lambda fs: calls.append(fs) or 0)
+    monkeypatch.setattr(mod, "run_optimized_load",
+                        lambda fs, allow_warnings=False: calls.append(fs) or 0)
     monkeypatch.chdir(tmp_path)
     state_path = tmp_path / "logs" / "task#1" / "load-state.json"
 
@@ -285,7 +292,8 @@ def test_main_keeps_state_on_failed_load(tmp_path, monkeypatch):
     monkeypatch.setattr(mod, "get_project_root", lambda: tmp_path)
     monkeypatch.setattr(mod, "subprocess",
                         _fake_git([f"src/cf/{rel}" for rel in files]))
-    monkeypatch.setattr(mod, "run_optimized_load", lambda fs: 1)
+    monkeypatch.setattr(mod, "run_optimized_load",
+                        lambda fs, allow_warnings=False: 1)
     monkeypatch.chdir(tmp_path)
 
     rc = mod.main(["--state", str(state_path)])
@@ -299,7 +307,7 @@ def test_main_updates_state_when_nothing_to_load(tmp_path, monkeypatch):
     state_path = tmp_path / "load-state.json"
     mod.save_state(str(state_path), {"Catalogs/Старый/Ext/Old.bsl": "0" * 64})
 
-    def _must_not_load(files):
+    def _must_not_load(files, allow_warnings=False):
         raise AssertionError("загрузка не нужна")
 
     monkeypatch.setattr(mod, "get_project_root", lambda: tmp_path)
@@ -322,7 +330,8 @@ def test_main_without_state_uses_full_diff(tmp_path, monkeypatch):
     monkeypatch.setattr(mod, "get_project_root", lambda: tmp_path)
     monkeypatch.setattr(mod, "subprocess",
                         _fake_git([f"src/cf/{rel}" for rel in files]))
-    monkeypatch.setattr(mod, "run_optimized_load", lambda fs: calls.append(fs) or 0)
+    monkeypatch.setattr(mod, "run_optimized_load",
+                        lambda fs, allow_warnings=False: calls.append(fs) or 0)
     monkeypatch.chdir(tmp_path)
 
     rc = mod.main([])
@@ -336,3 +345,227 @@ def test_main_rejects_directory_as_state(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
 
     assert mod.main(["--state", str(tmp_path)]) == 2
+
+
+# ── Предупреждения платформы: проигнорированные свойства ─────────────────────
+# Строки ниже — из реального лога benchmark task##001: агент скопировал свойства
+# измерения регистра сведений в регистр накопления. Платформа их молча
+# проигнорировала (5 измерений × 6 свойств + 5 ресурсов × 4 свойства), а загрузка
+# при этом завершилась кодом 0.
+
+_DIM_PROPS = ("FillFromFillingValue", "FillValue", "Master", "MainFilter",
+              "DataHistory", "TypeReductionMode")
+_RES_PROPS = ("FillFromFillingValue", "FillValue", "Indexing", "DataHistory")
+
+
+def _property_warning(prop, kind):
+    return (f"Неверное свойство объекта метаданных. Свойство {prop} не входит в "
+            f"состав объекта метаданных {kind}. - {prop}")
+
+
+def _real_warning_lines(count=5):
+    """Строки реального лога: по 5 регистров.
+
+    5 измерений × 6 свойств = 30 Dimension + 5 ресурсов × 4 свойства =
+    20 Resource; итого count × 10 = 50 строк при count=5 (как в логе task##001).
+    """
+    lines = []
+    for _ in range(count):
+        lines.extend(_property_warning(p, "Dimension") for p in _DIM_PROPS)
+        lines.extend(_property_warning(p, "Resource") for p in _RES_PROPS)
+    return lines
+
+
+def test_platform_warnings_groups_real_log():
+    mod = _load()
+    text = "\n".join(
+        ["Запуск: 1cv8 DESIGNER /LoadConfigFromFiles src/cf"]
+        + _real_warning_lines()
+        + ["Обработка структуры базы данных...",
+           "Обновление конфигурации успешно завершено"]
+    )
+
+    warn = mod.platform_warnings(text)
+
+    assert warn.count == 50
+    assert warn.groups == {
+        ("Dimension", "FillFromFillingValue"): 5,
+        ("Dimension", "FillValue"): 5,
+        ("Dimension", "Master"): 5,
+        ("Dimension", "MainFilter"): 5,
+        ("Dimension", "DataHistory"): 5,
+        ("Dimension", "TypeReductionMode"): 5,
+        ("Resource", "FillFromFillingValue"): 5,
+        ("Resource", "FillValue"): 5,
+        ("Resource", "Indexing"): 5,
+        ("Resource", "DataHistory"): 5,
+    }
+    assert sum(warn.groups.values()) == 50
+
+
+def test_platform_warnings_clean_output():
+    mod = _load()
+    text = "\n".join([
+        "Обработка структуры базы данных...",
+        "Новый объект: РегистрНакопления.Товары",
+        "Обновление конфигурации успешно завершено",
+        "✅ Оптимизированная загрузка завершена",
+    ])
+
+    warn = mod.platform_warnings(text)
+
+    assert warn.count == 0
+    assert warn.groups == {}
+    assert warn.other == []
+
+
+def test_platform_warnings_marks_non_property_warnings():
+    mod = _load()
+    text = "\n".join([
+        _property_warning("Indexing", "Resource"),
+        "Неверное значение перечисления - Don'tUse",
+        "Неверное значение перечисления - Don'tUse",
+        "Исключение XDTO произошло при чтении файла- /x/src/cf/Catalogs/Организации.xml.",
+        "facet фиксации ControlType не соответствует",
+    ])
+
+    warn = mod.platform_warnings(text)
+
+    assert warn.count == 5
+    assert warn.groups == {("Resource", "Indexing"): 1}
+    assert warn.other == [
+        ("Неверное значение перечисления", 2),
+        ("Исключение XDTO", 1),
+        ("facet", 1),
+    ]
+    assert sum(v for _m, v in warn.other) + sum(warn.groups.values()) == warn.count
+
+
+def _fake_load(monkeypatch, mod, stdout="", returncode=0):
+    """Подмени subprocess.run для git (один изменённый объект) и 1c-batch.
+
+    Возвращает путь изменённого объекта и список вызовов. Configuration.xml
+    не годится: при наличии state он не попадает в список (полная загрузка),
+    а без state — годится, но объект нагляднее.
+    """
+    changed = "Catalogs/Товары.xml"
+    calls = []
+
+    def run(cmd, **kwargs):
+        calls.append(cmd)
+        if "diff" in cmd:
+            return _Completed("")
+        if "ls-files" in cmd:
+            return _Completed(f"src/cf/{changed}")
+        if "load-config" in cmd:
+            assert kwargs.get("capture_output") is True
+            assert kwargs.get("encoding") == "utf-8"
+            assert kwargs.get("errors") == "replace"
+            return _Completed(stdout, returncode)
+        raise AssertionError(f"неожиданный вызов: {cmd}")
+
+    monkeypatch.setattr(mod, "subprocess", SimpleNamespace(run=run))
+    return changed, calls
+
+
+def _state_setup(tmp_path, monkeypatch):
+    """Каталог проекта с одним изменённым объектом; вернуть (mod, state_path)."""
+    mod = _load()
+    _write_cf(tmp_path, ["Catalogs/Товары.xml"])
+    monkeypatch.setattr(mod, "get_project_root", lambda: tmp_path)
+    monkeypatch.chdir(tmp_path)
+    return mod, tmp_path / "logs" / "task#1" / "load-state.json"
+
+
+def test_real_log_file_groups_50_warnings():
+    """Настоящий лог task##001 (если есть рядом): ровно 50, 30+20."""
+    log = Path("/home/uam/projects/test2/logs/task##001/load-config.log")
+    if not log.exists():
+        import pytest
+        pytest.skip("реальный лог task##001 недоступен")
+    mod = _load()
+
+    warn = mod.platform_warnings(log.read_text(encoding="utf-8",
+                                               errors="replace"))
+
+    assert warn.count == 50
+    assert sum(v for (k, _p), v in warn.groups.items() if k == "Dimension") == 30
+    assert sum(v for (k, _p), v in warn.groups.items() if k == "Resource") == 20
+    assert len(warn.groups) == 10
+    assert all(v == 5 for v in warn.groups.values())
+    assert warn.other == []
+
+
+def test_load_warnings_block_success_and_state(tmp_path, monkeypatch, capsys):
+    mod, state_path = _state_setup(tmp_path, monkeypatch)
+    changed, calls = _fake_load(monkeypatch, mod,
+                                stdout="\n".join(_real_warning_lines()))
+
+    rc = mod.main(["--state", str(state_path)])
+
+    out = capsys.readouterr().out
+    # Загрузка действительно шла: child load-config вызван для изменённого объекта.
+    assert any("load-config" in c for c in calls)
+    assert changed in out
+    assert rc == 2
+    assert "⚠️ Платформа проигнорировала 50 свойств" in out
+    assert "Dimension FillFromFillingValue: 5" in out
+    assert "Resource Indexing: 5" in out
+    assert "Оптимизированная загрузка завершена" not in out
+    assert not state_path.exists()
+
+
+def test_load_warnings_checkpoint_state_kept(tmp_path, monkeypatch, capsys):
+    mod, state_path = _state_setup(tmp_path, monkeypatch)
+    mod.save_state(str(state_path), {"Catalogs/Товары.xml": "0" * 64})
+    before = state_path.read_text(encoding="utf-8")
+    _fake_load(monkeypatch, mod,
+               stdout=_property_warning("Indexing", "Resource"))
+
+    rc = mod.main(["--state", str(state_path)])
+
+    assert rc == 2
+    assert state_path.read_text(encoding="utf-8") == before
+
+
+def test_load_warnings_allowed_with_flag(tmp_path, monkeypatch, capsys):
+    mod, state_path = _state_setup(tmp_path, monkeypatch)
+    _fake_load(monkeypatch, mod, stdout=_property_warning("Indexing", "Resource"))
+
+    rc = mod.main(["--state", str(state_path), "--allow-warnings"])
+
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "✅ Оптимизированная загрузка завершена" in out
+    assert "(с предупреждениями, --allow-warnings)" in out
+    assert state_path.exists()
+    assert "Catalogs/Товары.xml" in mod.load_state(str(state_path))
+
+
+def test_clean_load_succeeds_and_saves_state(tmp_path, monkeypatch, capsys):
+    mod, state_path = _state_setup(tmp_path, monkeypatch)
+    _fake_load(monkeypatch, mod, stdout="Обновление конфигурации успешно завершено")
+
+    rc = mod.main(["--state", str(state_path)])
+
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "✅ Оптимизированная загрузка завершена" in out
+    assert "с предупреждениями" not in out
+    assert "⚠️ Платформа проигнорировала" not in out
+    assert state_path.exists()
+
+
+def test_child_failure_code_preserved_with_summary(tmp_path, monkeypatch, capsys):
+    mod, state_path = _state_setup(tmp_path, monkeypatch)
+    _fake_load(monkeypatch, mod, stdout=_property_warning("Indexing", "Resource"),
+               returncode=1)
+
+    rc = mod.main(["--state", str(state_path), "--allow-warnings"])
+
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert "❌ Ошибка при загрузке конфигурации" in out
+    assert "⚠️ Платформа проигнорировала 1 свойств" in out
+    assert "Оптимизированная загрузка завершена" not in out
+    assert not state_path.exists()

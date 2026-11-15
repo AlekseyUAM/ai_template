@@ -10,30 +10,49 @@ load-config-optimized.py
 
 Использование:
     python .claude/tools/load-config-optimized.py [--state PATH]
+                                                [--allow-warnings]
 
 С --state грузятся только файлы, изменившиеся с последней успешной загрузки:
 в PATH хранится манифест sha256 (обычно logs/task#<id>/load-state.json).
 Без --state — весь git diff vs HEAD, как раньше.
 
-Скрипт печатает ход загрузки в stdout и завершается кодом 0 при успехе
-(или «нет изменённых файлов») и ненулевым кодом при ошибке загрузки. Оркестратор
-запускает его синхронно (обычный Bash без run_in_background) с перенаправлением
-вывода в лог — см. правило `optimized-config-loading`.
+Скрипт печатает ход загрузки в stdout. Коды возврата:
+    0 — загрузка применена, предупреждений платформы нет (или передано
+        --allow-warnings), либо «нет изменённых файлов»;
+    2 — загрузка применена, но платформа проигнорировала часть свойств
+        (facet, Исключение XDTO, неверное значение перечисления и т.п.):
+        исходники некорректны, state не сохраняется;
+    иное — код возврата дочернего 1c-batch load-config.
+
+Оркестратор запускает его синхронно (обычный Bash без run_in_background)
+с перенаправлением вывода в лог — см. правило `optimized-config-loading`.
 """
 
 import argparse
+import re
 import sys
 import os
 import subprocess
 import tempfile
 import hashlib
 import json
+from collections import OrderedDict
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 STATE_VERSION = 1
 STATE_HASH = "sha256"
+
+# Маркеры предупреждений платформы на неверные исходники: загрузка при них
+# применяется (код 0), но часть метаданных молча теряется.
+_PROPERTY_MARK = "Неверное свойство объекта метаданных"
+_PROPERTY_RE = re.compile(
+    r"Свойство (\S+) не входит в состав объекта метаданных (\w+)")
+# «facet» платформа пишет без скобок («facet фиксации ControlType …»), ищем
+# подстроку без учёта регистра; в сводке показываем токен как есть.
+_OTHER_MARKS = ("facet", "Исключение XDTO", "Неверное значение перечисления")
 
 def _force_utf8_output() -> None:
     """Перевести stdout/stderr в UTF-8.
@@ -334,10 +353,67 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         "--state", metavar="PATH",
         help="манифест «что уже загружено» (обычно "
              "logs/task#<id>/load-state.json); без него грузится весь diff vs HEAD")
+    parser.add_argument(
+        "--allow-warnings", action="store_true",
+        help="не считать предупреждения платформы (проигнорированные свойства) "
+             "ошибкой: успех и сохранение состояния даже при них")
     return parser.parse_args(argv)
 
-def run_optimized_load(files: List[str]) -> int:
-    """Выполни оптимизированную загрузку конфигурации"""
+@dataclass
+class PlatformWarnings:
+    """Сводка предупреждений платформы о неверных исходниках.
+
+    - count: всего предупреждений по всем проверяемым маркерам;
+    - groups: (вид объекта, свойство) → count по строкам
+      «Свойство X не входит в состав объекта метаданных <Вид>» — счёт по
+      строкам, а не по уникальным значениям, поэтому повторяющаяся в логе
+      строка учитывается каждый раз;
+    - other: (маркер, count) по остальным проверяемым маркерам.
+    """
+    count: int
+    groups: "OrderedDict[Tuple[str, str], int]"
+    other: List[Tuple[str, int]]
+
+    def __bool__(self) -> bool:
+        return self.count > 0
+
+
+def platform_warnings(text: str) -> PlatformWarnings:
+    """Собрать сводку предупреждений платформы о неверных исходниках."""
+    groups: "OrderedDict[Tuple[str, str], int]" = OrderedDict()
+    other: "OrderedDict[str, int]" = OrderedDict()
+    for line in text.splitlines():
+        if _PROPERTY_MARK in line:
+            match = _PROPERTY_RE.search(line)
+            if match:
+                # В сообщении: «Свойство <имя> … <Вид>», в группе (Вид, имя).
+                key = (match.group(2), match.group(1))
+                groups[key] = groups.get(key, 0) + 1
+            else:
+                other[_PROPERTY_MARK] = other.get(_PROPERTY_MARK, 0) + 1
+        low = line.lower()
+        for mark in _OTHER_MARKS:
+            if mark.lower() in low:
+                other[mark] = other.get(mark, 0) + 1
+    total = sum(groups.values()) + sum(other.values())
+    return PlatformWarnings(total, groups, list(other.items()))
+
+
+def print_platform_warnings(summary: PlatformWarnings) -> None:
+    """Напечатать сводку предупреждений платформы."""
+    if not summary:
+        return
+    print()
+    print(f"⚠️ Платформа проигнорировала {summary.count} свойств "
+          f"(загрузка применена):")
+    for (kind, prop), count in summary.groups.items():
+        print(f"  - {kind} {prop}: {count}")
+    for mark, count in summary.other:
+        print(f"  - {mark}: {count}")
+
+
+def run_optimized_load(files: List[str], allow_warnings: bool = False) -> int:
+    """Выполни оптимизированную загрузку конфигурации и проверь предупреждения."""
     if not files:
         print("✅ Нет изменённых файлов конфигурации")
         return 0
@@ -370,18 +446,38 @@ def run_optimized_load(files: List[str]) -> int:
         print()
         print(f"Команда: 1c-batch load-config src/cf --list-file {temp_list}")
 
+        # Вывод дочернего процесса перехватывается, печатается в лог как раньше
+        # и анализируется: платформа при неверном свойстве метаданных только
+        # пишет предупреждение, но завершается кодом 0.
         result = subprocess.run(
             batch_cmd() + ["load-config", "src/cf", "--list-file", temp_list],
-            cwd=get_project_root()
+            cwd=get_project_root(),
+            capture_output=True, encoding="utf-8", errors="replace",
         )
+        output = (result.stdout or "") + (result.stderr or "")
+        if output:
+            print(output, end="" if output.endswith("\n") else "\n")
 
+        warnings = platform_warnings(output)
         print()
-        if result.returncode == 0:
-            print("✅ Оптимизированная загрузка завершена")
-        else:
+        if result.returncode != 0:
             print("❌ Ошибка при загрузке конфигурации")
+            print_platform_warnings(warnings)
+            return result.returncode
 
-        return result.returncode
+        if warnings and not allow_warnings:
+            print_platform_warnings(warnings)
+            print("❌ Загрузка применена, но исходники некорректны: платформа "
+                  "проигнорировала перечисленные свойства. Исправь их или "
+                  "запусти с --allow-warnings, если это осознанно.")
+            return 2
+
+        if warnings:
+            print("✅ Оптимизированная загрузка завершена "
+                  "(с предупреждениями, --allow-warnings)")
+        else:
+            print("✅ Оптимизированная загрузка завершена")
+        return 0
 
     except FileNotFoundError:
         print("❌ Ошибка: не найден wrapper 1c-batch в .claude/skills/1c-batch/scripts.", file=sys.stderr)
@@ -424,7 +520,10 @@ def main(argv: Optional[List[str]] = None) -> int:
             save_state(state_path, snapshot or {})
         return 0
 
-    code = run_optimized_load(files)
+    code = run_optimized_load(files, allow_warnings=args.allow_warnings)
+    # Сохраняем состояние только на успех: при коде 2 (проигнорированные
+    # свойства) исходники нужно чинить, и повторный запуск должен взять те же
+    # файлы, а не считать их загруженными.
     if code == 0 and state_path is not None:
         save_state(state_path, snapshot or {})
     return code
