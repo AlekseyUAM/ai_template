@@ -8,16 +8,19 @@ run-tests.py
 (`1c-batch check-modules`): ошибка компиляции в предприятии выводится модальным
 окном, из-за которого сеанс висит вечно, а оркестратор ждёт его завершения в фоне
 и не узнаёт об ошибке. Конфигуратор же пишет ошибки в лог и завершается кодом, без
-модальных окон. Сам прогон предприятия запускается с таймаутом — чтобы зависший
-сеанс не держал задачу бесконечно. Если сеанс завершился по таймауту, скрипт
-дополнительно проверяет модули основной конфигурации: зависание может быть вызвано
-модальным окном ошибки компиляции модуля, загруженного на этапе разработки вне
-расширения с тестами.
+модальных окон. Проверяются сначала модули расширения с тестами, затем модули
+основной конфигурации: ошибка компиляции в основной конфигурации (модуль,
+загруженный на этапе разработки вне расширения) тоже всплыла бы модальным окном.
+Сама проверка модулей ограничена 600 c на процесс — зависшая проверка убивается по
+дереву и считается ошибкой среды, а не компиляции. Сам прогон предприятия
+запускается с таймаутом — чтобы зависший сеанс не держал задачу бесконечно. Если
+сеанс завершился по таймауту, скрипт дополнительно проверяет модули основной
+конфигурации: причиной зависания мог стать модуль, изменённый после предпроверки.
 
 Использование:
     python .claude/tools/run-tests.py [КОНФИГ] [--extension ИМЯ]
                                       [--timeout СЕК] [--no-check]
-                                      [--test СЦЕНАРИИ]
+                                      [--no-check-main] [--test СЦЕНАРИИ]
 
 КОНФИГ         путь к JSON-файлу конфигурации тестов (по умолчанию configs/test.json),
               передаётся в конфигурацию как абсолютный путь.
@@ -25,7 +28,10 @@ run-tests.py
 --timeout     таймаут сеанса предприятия в секундах (по умолчанию 600).
               Для отладочного прогона (--test) задавайте короткий таймаут явно,
               например `--timeout 60` — значение определяет вызывающий.
---no-check    пропустить предварительную компиляцию модулей.
+--no-check    пропустить предварительную компиляцию модулей (расширения и
+              основной конфигурации).
+--no-check-main пропустить только проверку модулей основной конфигурации;
+              расширение с тестами проверяется.
 --test        имена сценариев через запятую для отладочного прогона
               (например, `--test СебестоимостьФИФО,ПроверкаСклада`);
               остальные сценарии модуля не выполняются.
@@ -33,9 +39,11 @@ run-tests.py
 Коды возврата:
     0    штатное завершение
     1    ошибка запуска
-    2    ошибка компиляции модулей (предприятие не запускалось или зависло
-         на модальном окне ошибки компиляции основной конфигурации)
-    3    ошибка среды/лицензии (платформа не запустилась, база недоступна)
+    2    ошибка компиляции модулей расширения или основной конфигурации
+         (в т.ч. до запуска предприятия; после таймаута — ошибка найдена
+         в основной конфигурации)
+    3    среда/лицензия/таймаут проверки модулей (проверка не уложилась
+         в 600 c, дерево процессов убито) — это НЕ ошибка компиляции
     4    прогон состоялся, но есть проваленные тесты (result.json свежий)
     5    result.json не найден, невалиден или список тестов пуст
     124  таймаут сеанса предприятия
@@ -54,6 +62,8 @@ LAUNCH_PARAM = "ВыполнитьЗапускЮнитТестов"
 DEFAULT_CONFIG = "configs/test.json"
 DEFAULT_EXTENSION = "ЮнитТесты"
 DEFAULT_TIMEOUT = 600
+# Жёсткий таймаут проверки модулей: зависшая проверка не должна держать задачу.
+CHECK_MODULES_TIMEOUT = 600
 
 # Коды возврата
 RC_OK = 0
@@ -63,6 +73,10 @@ RC_ENV_ERROR = 3
 RC_TIMEOUT = 124
 RC_TESTS_FAILED = 4
 RC_NO_RESULT = 5
+# Внутренний код check_modules: проверка не уложилась в CHECK_MODULES_TIMEOUT.
+# Наружу отдаётся как RC_ENV_ERROR; отдельный код нужен, чтобы диагностика
+# таймаута отличала таймаут самой проверки от ошибки среды (лицензия и т.п.).
+RC_CHECK_TIMEOUT = -1
 
 RESULT_DONE_KEY = "Выполнено"
 RESULT_ERROR_KEY = "ОписаниеОшибки"
@@ -143,7 +157,20 @@ def check_modules(project_root: Path, extension: str | None = None,
     Возвращает RC_OK при успехе и RC_COMPILE_ERROR при ошибке компиляции
     (ненулевой код конфигуратора или маркер ошибки в выводе). Конфигуратор пишет
     ошибки в лог и завершается — без модальных окон, которые вешают предприятие.
+    Проблемы среды (лицензия, база) — RC_ENV_ERROR.
+
+    Вся проверка ограничена CHECK_MODULES_TIMEOUT секундами: по истечении таймаута
+    дерево процессов проверки убивается (как у run_enterprise) и возвращается
+    RC_ENV_ERROR — это проблема среды, а не компиляции. Код именно таймаута
+    получают через _check_modules_raw (нужен diagnose_timeout).
     """
+    rc = _check_modules_raw(project_root, extension, title)
+    return RC_ENV_ERROR if rc == RC_CHECK_TIMEOUT else rc
+
+
+def _check_modules_raw(project_root: Path, extension: str | None = None,
+                       title: str = "Предварительная компиляция модулей") -> int:
+    """check_modules без перевода таймаута: возвращает RC_CHECK_TIMEOUT."""
     cmd = batch_cmd() + ["check-modules", "--thin-client", "--server"]
     if extension:
         cmd += ["--extension", extension]
@@ -152,38 +179,57 @@ def check_modules(project_root: Path, extension: str | None = None,
     print(f"   Команда: {' '.join(cmd[len(batch_cmd()):])}")
     print()
 
+    popen_kwargs: dict = {
+        "cwd": project_root,
+        "env": _child_env(),
+        "stdout": subprocess.PIPE,
+        "stderr": subprocess.PIPE,
+        "text": True,
+        "encoding": "utf-8",
+        "errors": "replace",
+    }
+    if os.name == "nt":
+        # Своя группа процессов — чтобы убивать только своё дерево.
+        popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+    else:
+        popen_kwargs["start_new_session"] = True
+
     try:
-        result = subprocess.run(
-            cmd,
-            cwd=project_root,
-            env=_child_env(),
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-        )
+        proc = subprocess.Popen(cmd, **popen_kwargs)
     except FileNotFoundError:
         print("❌ Ошибка: не найден wrapper 1c-batch в .claude/skills/1c-batch/scripts.",
               file=sys.stderr)
         return RC_LAUNCH_ERROR
 
-    output = (result.stdout or "") + (result.stderr or "")
+    try:
+        stdout, stderr = proc.communicate(timeout=CHECK_MODULES_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        print()
+        print(f"⏱️  Проверка модулей не уложилась в {CHECK_MODULES_TIMEOUT} c — "
+              "проблема среды, не компиляции.")
+        print("   Завершаю дерево процессов проверки; ошибок компиляции здесь нет —")
+        print("   проверьте platform_path, лицензию и доступ к базе.")
+        _kill_tree(proc)
+        return RC_CHECK_TIMEOUT
+
+    returncode = proc.returncode
+    output = (stdout or "") + (stderr or "")
     if output.strip():
         print(output.rstrip())
         print()
 
     compile_markers = [m for m in COMPILE_ERROR_MARKERS if m in output]
     env_markers = [m for m in ENV_ERROR_MARKERS if m in output]
-    if result.returncode != 0 or compile_markers:
+    if returncode != 0 or compile_markers:
         # Ошибка компиляции важнее env-маркеров: конфигуратор мог написать и то,
         # и другое, но чинить надо код.
         if not compile_markers and env_markers:
             print(f"❌ Не удалось запустить проверку модулей "
-                  f"(код {result.returncode}): проблема среды/лицензии.")
+                  f"(код {returncode}): проблема среды/лицензии.")
             print("   Это НЕ ошибка компиляции: проверьте platform_path, "
                   "лицензию и доступ к базе.")
             return RC_ENV_ERROR
-        print(f"❌ Ошибка компиляции модулей (код конфигуратора {result.returncode}).")
+        print(f"❌ Ошибка компиляции модулей (код конфигуратора {returncode}).")
         print("   Прогон не состоится. Исправьте ошибки компиляции и повторите.")
         return RC_COMPILE_ERROR
 
@@ -263,8 +309,9 @@ def diagnose_timeout(project_root: Path) -> int:
     Сеанс мог зависнуть на модальном окне ошибки компиляции модуля, который
     загружен в базу на этапе разработки и не входит в расширение с тестами
     (модули расширения проверяет предварительная компиляция). Если ошибка
-    найдена, возвращает RC_COMPILE_ERROR — это причина таймаута. Иначе оставляет
-    RC_TIMEOUT.
+    найдена, возвращает RC_COMPILE_ERROR — это причина таймаута. Если сама
+    проверка не уложилась в таймаут — RC_ENV_ERROR (проблема среды, а не кода).
+    Иначе оставляет RC_TIMEOUT.
     """
     print()
     print("🔎 Диагностика таймаута: проверяю модули основной конфигурации.")
@@ -272,14 +319,20 @@ def diagnose_timeout(project_root: Path) -> int:
     print("   на этапе разработки (вне расширения с тестами).")
     print()
 
-    rc = check_modules(project_root, None,
-                       title="Проверка модулей основной конфигурации")
+    rc = _check_modules_raw(project_root, None,
+                            title="Проверка модулей основной конфигурации")
 
     if rc == RC_COMPILE_ERROR:
         print("❗ Причина таймаута найдена: ошибка компиляции основной конфигурации.")
         print("   Предприятие зависло на модальном окне ошибки компиляции.")
         print("   Исправьте ошибки компиляции и повторите прогон.")
         return RC_COMPILE_ERROR
+
+    if rc == RC_CHECK_TIMEOUT:
+        # Не выдаём таймаут диагностики за таймаут сеанса: это проблема среды,
+        # код править не надо.
+        print("❗ Диагностику провести не удалось: проблема среды, код не править.")
+        return RC_ENV_ERROR
 
     if rc == RC_OK:
         print("ℹ️  Ошибок компиляции в основной конфигурации нет —")
@@ -406,7 +459,7 @@ def _read_and_print_result(path: Path | None) -> int:
 
 
 def run_tests(config_arg: str, extension: str, timeout: int, no_check: bool,
-              scenarios: str | None = None) -> int:
+              scenarios: str | None = None, no_check_main: bool = False) -> int:
     """Скомпилируй модули и запусти предприятие для прогона тестов."""
     project_root = get_project_root()
 
@@ -441,6 +494,15 @@ def run_tests(config_arg: str, extension: str, timeout: int, no_check: bool,
         rc = check_modules(project_root, extension)
         if rc != RC_OK:
             return rc
+        if not no_check_main:
+            rc = check_modules(project_root, None,
+                               title="Проверка модулей основной конфигурации")
+            if rc != RC_OK:
+                return rc
+        else:
+            print("ℹ️  Проверка модулей основной конфигурации пропущена "
+                  "(--no-check-main).")
+            print()
     else:
         print("ℹ️  Предварительная компиляция пропущена (--no-check).")
         print()
@@ -474,14 +536,17 @@ def main() -> int:
     parser.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT,
                         help=f"таймаут сеанса предприятия в секундах (по умолчанию {DEFAULT_TIMEOUT})")
     parser.add_argument("--no-check", action="store_true",
-                        help="пропустить предварительную компиляцию модулей")
+                        help="пропустить предварительную компиляцию модулей "
+                             "(расширения и основной конфигурации)")
+    parser.add_argument("--no-check-main", action="store_true",
+                        help="пропустить только проверку модулей основной конфигурации")
     parser.add_argument("--test", metavar="СЦЕНАРИИ",
                         help="имена сценариев через запятую для отладочного прогона; "
                              "остальные сценарии модуля не выполняются")
     args = parser.parse_args()
 
     return run_tests(args.config, args.extension, args.timeout, args.no_check,
-                     args.test)
+                     args.test, no_check_main=args.no_check_main)
 
 
 if __name__ == "__main__":
