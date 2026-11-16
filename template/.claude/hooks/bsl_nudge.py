@@ -22,7 +22,8 @@ def build_output(event: dict) -> dict:
             "hookEventName": "PostToolUse",
             "additionalContext": (
                 "[ai1c] Изменён BSL-модуль — прогони статический анализ "
-                "(навык mcp-usage, MCP bsl_ls, инструмент mcp__bsl_ls__check)."),
+                "(навык mcp-usage, MCP bsl_ls, mcp__bsl_ls__check) с обязательным "
+                "sha256 файла; текст модуля не перепечатывай."),
         }}
     return {}
 

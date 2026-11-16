@@ -4,6 +4,7 @@
 грузим его напрямую из файла через importlib. Тесты не требуют пакета `mcp` и
 java — проверяется только чистая логика разбора отчёта и формирования ответа.
 """
+import hashlib
 import importlib.util
 from pathlib import Path
 
@@ -245,3 +246,105 @@ def test_timeout_returns_error():
     assert res["ok"] is False
     assert "таймаут" not in res["summary"]  # текст с "не завершился"
     assert "не завершился" in res["summary"]
+
+
+# --- обязательный sha256, источники ввода и сырые counts ---------------------
+
+def _sha(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def test_run_check_sha256_mismatch_rejected_before_java():
+    calls = []
+    res = mod.run_check("Код", "Module.bsl", jar="/opt/x.jar",
+                        expected_sha256="0" * 64,
+                        run=lambda *a, **k: calls.append(1))
+    assert res["ok"] is False
+    assert "sha256" in res["summary"]
+    assert calls == []
+
+
+def test_run_check_sha256_match_ok():
+    code = "Код"
+    report = _report([])
+
+    def fake_run(cmd, **kwargs):
+        import json as _json
+        outdir = cmd[cmd.index("--outputDir") + 1]
+        Path(outdir).mkdir(parents=True, exist_ok=True)
+        (Path(outdir) / "bsl-json.json").write_text(
+            _json.dumps(report), encoding="utf-8")
+
+        class _R:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+        return _R()
+
+    res = mod.run_check(code, "Module.bsl", jar="/opt/x.jar",
+                        expected_sha256=_sha(code), run=fake_run)
+    assert res["ok"] is True
+    assert res["sha256"] == _sha(code)
+
+
+def test_prepare_input_requires_sha256():
+    code, filename, expected, source, error = mod.prepare_input(
+        code="x", file_path=None, sha256="", filename="Module.bsl")
+    assert code is None
+    assert "sha256" in error
+
+
+def test_prepare_input_requires_exactly_one_source():
+    code, filename, expected, source, error = mod.prepare_input(
+        code="x", file_path="y", sha256="0" * 64, filename="Module.bsl")
+    assert code is None
+    assert "ровно один" in error
+
+
+def test_prepare_input_reads_file(tmp_path):
+    path = tmp_path / "Module.bsl"
+    path.write_text("ВЫБРАТЬ 1", encoding="utf-8")
+    code, filename, expected, source, error = mod.prepare_input(
+        code=None, file_path=str(path), sha256=_sha("ВЫБРАТЬ 1"),
+        filename="Module.bsl")
+    assert error is None
+    assert code == "ВЫБРАТЬ 1"
+    assert filename == "Module.bsl"
+    assert source == "file"
+
+
+def test_prepare_input_missing_file(tmp_path):
+    code, filename, expected, source, error = mod.prepare_input(
+        code=None, file_path=str(tmp_path / "nope.bsl"),
+        sha256="0" * 64, filename="Module.bsl")
+    assert code is None
+    assert "file_path" in error
+
+
+def test_counts_in_result():
+    report = _report([{"path": "Module.bsl", "diagnostics": [
+        {"range": {"start": {"line": 0, "character": 0},
+                   "end": {"line": 0, "character": 1}},
+         "severity": 1, "code": "E"},
+        {"range": {"start": {"line": 0, "character": 0},
+                   "end": {"line": 0, "character": 1}},
+         "severity": 2, "code": "W"},
+    ]}])
+
+    def fake_run(cmd, **kwargs):
+        import json as _json
+        outdir = cmd[cmd.index("--outputDir") + 1]
+        Path(outdir).mkdir(parents=True, exist_ok=True)
+        (Path(outdir) / "bsl-json.json").write_text(
+            _json.dumps(report), encoding="utf-8")
+
+        class _R:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+        return _R()
+
+    res = mod.run_check("Код", "Module.bsl", jar="/opt/x.jar",
+                        expected_sha256=_sha("Код"), run=fake_run)
+    assert res["counts"]["Error"] == 1
+    assert res["counts"]["Warning"] == 1

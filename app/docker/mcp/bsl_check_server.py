@@ -1,15 +1,20 @@
 """Тонкий MCP-сервер для образа «Статический анализ BSL».
 
-Экспортирует ровно один инструмент `check`: принимает текст кода BSL и возвращает
-диагностики (ошибки/предупреждения) по настройкам `.bsl-language-server.json`.
-Сервер stateless — без индекса и доступа к кодовой базе: каждый вызов гоняет
-BSL Language Server в режиме CLI `analyze` с json-репортёром по присланному тексту.
+Экспортирует ровно один инструмент `check`: принимает текст кода BSL (и
+обязательный SHA-256 файла) и возвращает диагностики (ошибки/предупреждения) по
+настройкам `.bsl-language-server.json`. Сервер stateless — без индекса и доступа к
+кодовой базе: каждый вызов гоняет BSL Language Server в режиме CLI `analyze` с
+json-репортёром по присланному тексту. Альтернатива тексту — `file_path`: сервер
+читает файл сам, но только если путь виден из контейнера.
 
-Функции `parse_report` и `run_check` специально не зависят от пакета `mcp` и
-легко тестируются без java. Импорт FastMCP выполняется лениво в `build_server()`.
+Функции `parse_report`, `prepare_input` и `run_check` специально не зависят от
+пакета `mcp` и легко тестируются без java. Импорт FastMCP выполняется лениво в
+`build_server()`.
 """
+import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -32,6 +37,9 @@ MAX_CODE_BYTES = 5 * 1024 * 1024
 MAX_CONFIG_BYTES = 1 * 1024 * 1024
 ANALYZE_TIMEOUT_SECONDS = 300
 _RESERVED_FILENAMES = {".bsl-language-server.json"}
+
+# SHA-256 в hex: 64 символа (регистр нормализуется к нижнему).
+_SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 
 
 def _severity_name(raw) -> str:
@@ -109,8 +117,62 @@ def _summary(diagnostics: list[dict]) -> str:
     return f"Найдено замечаний: {len(diagnostics)} ({', '.join(parts)})."
 
 
+def _sha256_hex(text: str) -> str:
+    """SHA-256 текста в UTF-8 (как `sha256sum` по файлу в той же кодировке)."""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _counts(diagnostics: list[dict]) -> dict:
+    """Сырые счётчики по уровням severity (нули для отсутствующих уровней)."""
+    counts = {"Error": 0, "Warning": 0, "Information": 0, "Hint": 0}
+    for diag in diagnostics:
+        severity = diag.get("severity") or ""
+        if severity in counts:
+            counts[severity] += 1
+    return counts
+
+
+def _result(*, ok: bool, summary: str, sha256: str, source: str,
+            raw_bytes: int, diagnostics: list[dict] | None = None) -> dict:
+    """Единый формат ответа: ok/count/counts/diagnostics/summary/sha256/source/bytes."""
+    diagnostics = diagnostics or []
+    return {"ok": ok, "count": len(diagnostics),
+            "counts": _counts(diagnostics), "diagnostics": diagnostics,
+            "summary": summary, "sha256": sha256, "source": source,
+            "bytes": raw_bytes}
+
+
+def prepare_input(code, file_path, sha256, filename):
+    """Проверить аргументы check и вернуть (code, filename, sha, source, error)."""
+    expected = str(sha256 or "").strip().lower()
+    if not expected:
+        return None, filename, expected, "code", (
+            "sha256 обязателен: вычисли его по файлу "
+            "(sha256sum Module.bsl) и передай вместе с code.")
+    if not _SHA256_RE.match(expected):
+        return None, filename, expected, "code", (
+            "sha256 должен быть 64 hex-символа.")
+    if (code is None) == (file_path is None):
+        return None, filename, expected, "code", (
+            "передайте ровно один источник: code или file_path.")
+    source = "code"
+    if file_path is not None:
+        try:
+            code = Path(file_path).read_text(encoding="utf-8")
+        except OSError as exc:
+            return None, filename, expected, "file", (
+                f"не удалось прочитать file_path: {exc}. В Docker-контейнере "
+                f"путь проекта не виден — передайте code+sha256.")
+        source = "file"
+        if filename == "Module.bsl":
+            filename = Path(file_path).name
+    return code, filename, expected, source, None
+
+
 def run_check(code: str, filename: str, jar: str, config: str | None = None,
-              java: str = "java", run=subprocess.run) -> dict:
+              java: str = "java", run=subprocess.run,
+              expected_sha256: str | None = None,
+              source: str = "code") -> dict:
     """Проверить присланный код BSL через CLI `analyze` BSL Language Server.
 
     Пишет `code` во временный `src/<filename>`. Если передан `config` (содержимое
@@ -120,21 +182,43 @@ def run_check(code: str, filename: str, jar: str, config: str | None = None,
     `bsl-json.json`. Параметр `run` (по умолчанию `subprocess.run`) позволяет
     подменить запуск в тестах без java. Временный каталог всегда удаляется.
 
+    Если передан `expected_sha256` — он должен быть 64 hex и совпасть с SHA-256
+    `code`; иначе `ok=False` и java не запускается. Внутренний вызов может не
+    передавать хэш (`None`) — обязательность обеспечивает публичный `check`.
+
     Сервер stateless: никакого доступа к кодовой базе проекта — только присланные
-    код и настройки. Возвращает `{ok, count, diagnostics, summary}`; при ошибке
-    запуска или отсутствии отчёта — `ok=False` и текст ошибки/stderr в `summary`.
+    код и настройки. Возвращает `{ok, count, counts, diagnostics, summary, sha256,
+    source, bytes}`; при ошибке запуска или отсутствии отчёта — `ok=False` и текст
+    ошибки/stderr в `summary`.
     """
     code = code if isinstance(code, str) else str(code or "")
-    if len(code.encode("utf-8")) > MAX_CODE_BYTES:
-        return {"ok": False, "count": 0, "diagnostics": [],
-                "summary": f"код слишком большой (> {MAX_CODE_BYTES} байт)"}
+    raw_bytes = len(code.encode("utf-8"))
+    actual_sha = _sha256_hex(code)
+    if expected_sha256 is not None:
+        expected = str(expected_sha256).strip().lower()
+        if not _SHA256_RE.match(expected):
+            return _result(ok=False, summary="sha256 должен быть 64 hex-символа.",
+                           sha256=actual_sha, source=source, raw_bytes=raw_bytes)
+        if actual_sha != expected:
+            return _result(
+                ok=False,
+                summary=(f"sha256 не совпадает: передан {expected}, фактический "
+                         f"{actual_sha}. Текст не соответствует файлу — не "
+                         f"перепечатывай модуль, передай его как есть."),
+                sha256=actual_sha, source=source, raw_bytes=raw_bytes)
+    if raw_bytes > MAX_CODE_BYTES:
+        return _result(ok=False,
+                       summary=f"код слишком большой (> {MAX_CODE_BYTES} байт)",
+                       sha256=actual_sha, source=source, raw_bytes=raw_bytes)
     if config and len(config.encode("utf-8")) > MAX_CONFIG_BYTES:
-        return {"ok": False, "count": 0, "diagnostics": [],
-                "summary": f"config слишком большой (> {MAX_CONFIG_BYTES} байт)"}
+        return _result(ok=False,
+                       summary=f"config слишком большой (> {MAX_CONFIG_BYTES} байт)",
+                       sha256=actual_sha, source=source, raw_bytes=raw_bytes)
     filename = Path(filename or "Module.bsl").name or "Module.bsl"
     if filename in _RESERVED_FILENAMES:
-        return {"ok": False, "count": 0, "diagnostics": [],
-                "summary": f"имя файла {filename!r} зарезервировано под настройки анализа"}
+        return _result(ok=False,
+                       summary=f"имя файла {filename!r} зарезервировано под настройки анализа",
+                       sha256=actual_sha, source=source, raw_bytes=raw_bytes)
     tmp = tempfile.mkdtemp(prefix="bsl-check-")
     try:
         srcdir = Path(tmp) / "src"
@@ -155,28 +239,32 @@ def run_check(code: str, filename: str, jar: str, config: str | None = None,
             proc = run(cmd, capture_output=True, text=True,
                        timeout=ANALYZE_TIMEOUT_SECONDS)
         except subprocess.TimeoutExpired:
-            return {"ok": False, "count": 0, "diagnostics": [],
-                    "summary": f"BSL LS не завершился за {ANALYZE_TIMEOUT_SECONDS} с"}
+            return _result(ok=False,
+                           summary=f"BSL LS не завершился за {ANALYZE_TIMEOUT_SECONDS} с",
+                           sha256=actual_sha, source=source, raw_bytes=raw_bytes)
         except Exception as exc:  # java не найдена и т.п.
-            return {"ok": False, "count": 0, "diagnostics": [],
-                    "summary": f"Не удалось запустить BSL LS: {exc}"}
+            return _result(ok=False,
+                           summary=f"Не удалось запустить BSL LS: {exc}",
+                           sha256=actual_sha, source=source, raw_bytes=raw_bytes)
 
         report_path = outdir / "bsl-json.json"
         if not report_path.exists():
             stderr = (getattr(proc, "stderr", "") or "").strip()
             code_ = getattr(proc, "returncode", "?")
-            return {"ok": False, "count": 0, "diagnostics": [],
-                    "summary": stderr or f"Отчёт не создан (код возврата {code_})."}
+            return _result(ok=False,
+                           summary=stderr or f"Отчёт не создан (код возврата {code_}).",
+                           sha256=actual_sha, source=source, raw_bytes=raw_bytes)
 
         try:
             report = json.loads(report_path.read_text(encoding="utf-8"))
         except (OSError, ValueError) as exc:
-            return {"ok": False, "count": 0, "diagnostics": [],
-                    "summary": f"Не удалось прочитать отчёт: {exc}"}
+            return _result(ok=False, summary=f"Не удалось прочитать отчёт: {exc}",
+                           sha256=actual_sha, source=source, raw_bytes=raw_bytes)
 
         diagnostics = parse_report(report, filename)
-        return {"ok": True, "count": len(diagnostics),
-                "diagnostics": diagnostics, "summary": _summary(diagnostics)}
+        return _result(ok=True, summary=_summary(diagnostics),
+                       sha256=actual_sha, source=source, raw_bytes=raw_bytes,
+                       diagnostics=diagnostics)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
@@ -195,19 +283,29 @@ def build_server():
     mcp = FastMCP("bsl_ls", host="0.0.0.0", port=port)
 
     @mcp.tool()
-    def check(code: str, config: str | dict | None = None,
+    def check(sha256: str, code: str | None = None,
+              file_path: str | None = None,
+              config: str | dict | None = None,
               filename: str = "Module.bsl") -> dict:
-        """Статический анализ кода 1С (BSL) на соответствие стандартам; возвращает ошибки/предупреждения.
+        """Статический анализ кода 1С (BSL) на соответствие стандартам.
 
-        code — текст модуля BSL для проверки (обязательно).
-        config — содержимое файла настроек .bsl-language-server.json. Перед вызовом
-            прочитай .bsl-language-server.json в корне проекта и передай его сюда
-            (строкой-JSON или объектом), чтобы проверки шли по правилам проекта.
-            Если такого файла в проекте нет — не передавай config: анализ выполнится
-            с правилами BSL LS по умолчанию.
+        sha256 — обязательный SHA-256 файла (64 hex). Вычисли по самому файлу:
+            sha256sum Module.bsl
+        code — точный текст модуля; не перепечатывай его вручную.
+        file_path — альтернатива code: сервер прочитает файл сам, если путь виден
+            в контейнере. В стандартном Docker-развёртывании проект не смонтирован;
+            используйте code+sha256.
+        config — содержимое .bsl-language-server.json (строкой-JSON или объектом).
         filename — имя файла для отчёта (по умолчанию Module.bsl).
         """
-        return run_check(code, filename, jar=jar, config=_as_config_text(config))
+        prepared, filename, expected, source, error = prepare_input(
+            code, file_path, sha256, filename)
+        if error:
+            return _result(ok=False, summary=error, sha256=expected,
+                           source=source, raw_bytes=0)
+        return run_check(prepared, filename, jar=jar,
+                         config=_as_config_text(config),
+                         expected_sha256=expected, source=source)
 
     return mcp
 
