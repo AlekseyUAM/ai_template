@@ -246,6 +246,37 @@ def test_cli_restart_first_run_is_iteration_one(tmp_path):
     assert dev["runs"][0]["finished_at"] is None
 
 
+def test_cli_restart_review_blocked_when_verdict_is_rework(tmp_path):
+    mod = _load()
+    d = _task(tmp_path)
+    (d / "REVIEW.md").write_text(
+        "## Вердикт\n\n| Параметр | Значение |\n| --- | --- |\n"
+        "| Вердикт | ✗ НА ДОРАБОТКУ |\n", encoding="utf-8")
+    with pytest.raises(SystemExit, match="pending"):
+        mod.main([str(d), "review", "restart"])
+    data = json.loads((d / "task.json").read_text(encoding="utf-8"))
+    review = _stage(data, "review")
+    assert review["status"] != "running"
+    assert not review.get("runs")
+
+
+def test_cli_restart_review_allowed_without_rework_verdict(tmp_path):
+    mod = _load()
+    d = _task(tmp_path)
+    mod.main([str(d), "review", "restart"])
+    review = _stage(json.loads((d / "task.json").read_text(encoding="utf-8")),
+                    "review")
+    assert review["status"] == "running"
+    assert review["iteration"] == 1
+
+    (d / "REVIEW.md").write_text(
+        "| Вердикт | ✓ ПРИНЯТО |\n", encoding="utf-8")
+    mod.main([str(d), "review", "restart"])
+    review = _stage(json.loads((d / "task.json").read_text(encoding="utf-8")),
+                    "review")
+    assert review["iteration"] == 2
+
+
 def _testing_done_task(tmp_path, review_done=False):
     s = ts.create_task(tmp_path, title="a", goal="", plan="", constraints="",
                        enabled_stages=ts.STAGE_NAMES)

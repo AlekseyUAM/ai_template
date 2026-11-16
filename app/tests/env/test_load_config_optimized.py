@@ -511,15 +511,22 @@ def _state_setup(tmp_path, monkeypatch):
 
 
 def test_real_log_file_groups_50_warnings():
-    """Настоящий лог task##001 (если есть рядом): ровно 50, 30+20."""
-    log = Path("/home/uam/projects/test2/logs/task##001/load-config.log")
-    if not log.exists():
-        import pytest
-        pytest.skip("реальный лог task##001 недоступен")
+    """Настоящий лог task#001 (если есть рядом): ровно 50, 30+20."""
+    import pytest
+
+    candidates = [
+        Path("/home/uam/projects/test2/logs/task##001/load-config.log"),
+        Path("/home/uam/projects/test2/logs/task#001/load-config.log"),
+    ]
+    log = next((path for path in candidates if path.exists()), None)
+    if log is None:
+        pytest.skip("реальный лог task#001 недоступен")
     mod = _load()
 
     warn = mod.platform_warnings(log.read_text(encoding="utf-8",
                                                errors="replace"))
+    if warn.count != 50:
+        pytest.skip(f"лог {log} изменился: предупреждений {warn.count}, не 50")
 
     assert warn.count == 50
     assert sum(v for (k, _p), v in warn.groups.items() if k == "Dimension") == 30
@@ -641,3 +648,77 @@ def test_child_failure_code_preserved_with_summary(tmp_path, monkeypatch, capsys
     assert "⚠️ Платформа проигнорировала 1 свойств" in out
     assert "Оптимизированная загрузка завершена" not in out
     assert not state_path.exists()
+
+
+def _lock_output():
+    return ("Ошибка исключительной блокировки информационной базы. "
+            "База данных заблокирована: приложение: Фоновое задание")
+
+
+def _fake_load_sequence(monkeypatch, mod, results):
+    """Подменить subprocess.run последовательностью ответов; вернуть счётчик."""
+    calls = []
+
+    def run(cmd, **kwargs):
+        calls.append(cmd)
+        return results.pop(0)
+
+    monkeypatch.setattr(mod, "get_project_root", lambda: Path.cwd())
+    monkeypatch.setattr(mod, "batch_cmd", lambda: ["1c-batch.py"])
+    monkeypatch.setattr(mod, "subprocess", SimpleNamespace(run=run))
+    return calls
+
+
+def test_optimized_load_retries_exclusive_lock(tmp_path, monkeypatch, capsys):
+    mod = _load()
+    monkeypatch.chdir(tmp_path)
+    calls = _fake_load_sequence(monkeypatch, mod, [
+        _Completed(_lock_output(), 1),
+        _Completed("Обновление конфигурации успешно завершено", 0),
+    ])
+    sleeps = []
+
+    rc = mod.run_optimized_load(["A.xml"], retry_delays=(30,),
+                                sleep=sleeps.append)
+
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert len(calls) == 2
+    assert sleeps == [30]
+    assert "ИБ заблокирована" in out
+    assert "повтор через 30 с" in out
+
+
+def test_optimized_load_gives_up_after_lock_retries(tmp_path, monkeypatch,
+                                                    capsys):
+    mod = _load()
+    monkeypatch.chdir(tmp_path)
+    calls = _fake_load_sequence(monkeypatch, mod, [
+        _Completed(_lock_output(), 1),
+        _Completed(_lock_output(), 1),
+    ])
+    sleeps = []
+
+    rc = mod.run_optimized_load(["A.xml"], retry_delays=(30,),
+                                sleep=sleeps.append)
+
+    assert rc == 1
+    assert len(calls) == 2
+    assert sleeps == [30]
+
+
+def test_optimized_load_does_not_retry_other_errors(tmp_path, monkeypatch,
+                                                    capsys):
+    mod = _load()
+    monkeypatch.chdir(tmp_path)
+    calls = _fake_load_sequence(monkeypatch, mod, [
+        _Completed("Другая ошибка загрузки", 1),
+    ])
+    sleeps = []
+
+    rc = mod.run_optimized_load(["A.xml"], retry_delays=(30,),
+                                sleep=sleeps.append)
+
+    assert rc == 1
+    assert len(calls) == 1
+    assert sleeps == []

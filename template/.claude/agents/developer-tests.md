@@ -158,19 +158,26 @@ effort: {{EFFORT}}
 (таймаут не меньше 300 000 мс):
 
 ```bash
+SMOKE_LOG="logs/task#<id>/run-tests-smoke-$(date +%Y%m%d-%H%M%S).log"
 python .claude/skills/1c-batch/scripts/1c-batch.py load-extension \
     src/cfe/ЮнитТесты --name ЮнитТесты \
     > logs/task#<id>/load-extension-tests.log 2>&1
 load_rc=$?; echo "LOAD_EXIT=$load_rc" >> logs/task#<id>/load-extension-tests.log
 if [ "$load_rc" -eq 0 ]; then
     python .claude/tools/run-tests.py configs/task#<id>/test.json --timeout 300 \
-        > logs/task#<id>/run-tests-smoke.log 2>&1
-    rc=$?; echo "EXIT=$rc" >> logs/task#<id>/run-tests-smoke.log
+        --no-check-main > "$SMOKE_LOG" 2>&1
+    rc=$?; echo "EXIT=$rc" >> "$SMOKE_LOG"
 else
-    echo "EXIT=load-failed" >> logs/task#<id>/run-tests-smoke.log
+    echo "EXIT=load-failed" > "$SMOKE_LOG"
 fi
-tail -80 logs/task#<id>/load-extension-tests.log logs/task#<id>/run-tests-smoke.log
+cp "$SMOKE_LOG" logs/task#<id>/run-tests-smoke.log
+tail -80 logs/task#<id>/load-extension-tests.log "$SMOKE_LOG"
 ```
+
+`--no-check-main` экономит минуту на цикл: основная конфигурация на этапе `tests`
+не меняется, её успешная проверка кэшируется по хэшу исходников (повторно не
+запускается). Каждый смоук пишется в отдельный timestamp-лог; `run-tests-smoke.log`
+остаётся последним — его проверяет оркестратор.
 
 Обязателен `LOAD_EXIT=0`: при `LOAD_EXIT≠0` или `EXIT=load-failed` тестовый прогон
 не запускался — загрузка расширения не удалась, это дефект; не считай прогон
@@ -184,7 +191,7 @@ tail -80 logs/task#<id>/load-extension-tests.log logs/task#<id>/run-tests-smoke.
 
 ```bash
 python .claude/tools/run-tests.py configs/task#<id>/test.json \
-    --test <ИмяСценария> --timeout 90 \
+    --test <ИмяСценария> --timeout 90 --no-check-main \
     > logs/task#<id>/run-tests-debug.log 2>&1
 rc=$?; echo "EXIT=$rc" >> logs/task#<id>/run-tests-debug.log
 tail -80 logs/task#<id>/run-tests-debug.log
@@ -203,10 +210,23 @@ tail -80 logs/task#<id>/run-tests-debug.log
   ожидание/факт (или исключение ожидаемого отсутствия функциональности);
 - проверяемый вызов не обёрнут в `Попытка` (кроме сценария ожидаемого отказа);
 - тест, сравнивающий состояние до/после («не изменилось»), до реализации зелёный быть
-  не может — усилить.
+  не может — усилить;
+- **на пустой реализации отсутствие движений — нормальный красный результат.**
+  Сообщение `ОписаниеОшибки` вида «нет движений», «ожидали 300, получили —» — это
+  утверждение по ожидаемому значению, а не ошибка setup. Не пытайся получить движения
+  до реализации: не создавай роли расширения, не правь `Rights.xml`/`ConfigDumpInfo.xml`,
+  не меняй `src/cf` и не ищи «правильный способ проведения». Если все тесты красные
+  по ожидаемым значениям, смоук принят.
 
-Лимит — 2–3 цикла «правка → смоук». Параллельно с полным прогоном оркестратора
-(`testing`) тесты не запускай.
+Лимит — 2–3 цикла «правка → смоук». После третьего цикла **остановись** и верни
+отчёт оркестратору: что сделано, какой результат, какие гипотезы остались. Дальнейшие
+диагностические циклы без указания оркестратора запрещены. Параллельно с полным
+прогоном оркестратора (`testing`) тесты не запускай.
+
+**Границы диагностики.** Тест-модуль и его диагностические зонды — только в
+`src/cfe/ЮнитТесты`. Запрещено изменять `src/cf` (включая временные зонды и
+`Rights.xml`): для этого есть отдельный этап `develop`. Если кажется, что нужна
+правка основной конфигурации, остановись и опиши проблему в отчёте.
 
 ### Секция «Смоук» в `TESTS.md`
 
@@ -256,6 +276,8 @@ tail -80 logs/task#<id>/run-tests-debug.log
 Навыки из `.claude/skills` доступны через инструмент `Skill` — полный актуальный список с описаниями виден при его вызове; выбирай нужный по описанию. Руководства: `mcp-usage`, `bsl-coding-standards`, `sdd-tdd-workflow`, `task-orchestration`. Операционные навыки 1С (создание/правка/анализ/валидация метаданных, форм, ролей, СКД, макетов, XDTO, конфигураций и расширений, подсистем, интерфейсов, внешних обработок и отчётов), пакетные операции (`1c-batch`), веб-публикации и работа с БД — ищи по описанию в этом списке.
 
 **Обязательный первый шаг перед работой:** вызови навык `mcp-usage` (инструмент Skill) и следуй ему — какой MCP под какую задачу, когда искать существующее, когда прогонять статанализ. Единый источник правды по MCP.
+
+**Граница индекса:** `src/cf/**` индексирован — только `mcp__code_index__*`, без `Read`/`Grep`/`cat`/`sed`; `src/cfe/**`, `tasks/**`, `logs/**`, `tmp/**`, `configs/**`, `docs/**` не индексированы — обычные `Read`/`Grep`/`Glob`/`cat`/`grep` разрешены.
 
 ## Границы
 Только написание тестов (Red). Код реализации не пишу — это разработчик.

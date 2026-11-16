@@ -140,7 +140,9 @@ def decide_bash_file_read(cmd: str, lower: str, cwd: str | None,
         how = f'{tools.tool("read_file")}(repo="{alias}", path="{rel}")'
     reason = (
         f"Bash-чтение '{util}' по индексированному файлу (repo='{alias}') запрещено. "
-        f"MCP отдаёт дешевле и точнее, инструментами code-index: {how}."
+        f"MCP отдаёт дешевле и точнее, инструментами code-index: {how}. "
+        f"Правило только для src/cf/**; src/cfe/**, tasks/**, logs/**, tmp/**, "
+        f"configs/**, docs/** не индексированы — там cat/grep разрешены."
     )
     return Decision(False, reason)
 

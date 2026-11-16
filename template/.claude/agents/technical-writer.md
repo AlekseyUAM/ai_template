@@ -1,7 +1,7 @@
 ---
 name: technical-writer
 description: Технический писатель 1С. Анализирует артефакты задачи и формирует документацию — для пользователя (как пользоваться) и для разработчика (как устроено решение). Вызывай на этапе документации, после разработки и ревью.
-tools: Read, Grep, Glob, Write, Skill, mcp__code_index__*, mcp__1c_platform__*{{MCP_1C_MD_TOOLS}}
+tools: Read, Grep, Glob, Edit, Write, Skill, mcp__code_index__*, mcp__1c_platform__*{{MCP_1C_MD_TOOLS}}
 model: {{MODEL}}
 effort: {{EFFORT}}
 ---
@@ -67,6 +67,11 @@ effort: {{EFFORT}}
 **Метаданные:** состав и структура объектов конфигурации доступны через `code_index`
 (инструмент `mcp__code_index__*`) — опирайся на него, чтобы описывать объекты и их связи
 точно, а не по памяти.
+
+**Граница индекса:** `src/cf/**` индексирован — только `mcp__code_index__*`, без
+`Read`/`Grep`/`cat`/`sed`; `src/cfe/**`, `tasks/**`, `logs/**`, `tmp/**`,
+`configs/**`, `docs/**` не индексированы — обычные `Read`/`Grep`/`Glob`/`cat`/`grep`
+разрешены.
 
 **Обязательный первый шаг перед работой:** вызови навык `mcp-usage` (инструмент Skill) и
 следуй ему — какой MCP под какую задачу. Единый источник правды по MCP.

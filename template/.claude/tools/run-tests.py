@@ -20,10 +20,13 @@ run-tests.py
 Использование:
     python .claude/tools/run-tests.py [КОНФИГ] [--extension ИМЯ]
                                       [--timeout СЕК] [--no-check]
-                                      [--no-check-main] [--test СЦЕНАРИИ]
+                                      [--no-check-main] [--no-cache]
+                                      [--test СЦЕНАРИИ]
 
 КОНФИГ         путь к JSON-файлу конфигурации тестов (по умолчанию configs/test.json),
               передаётся в конфигурацию как абсолютный путь.
+Результат      после прогона копируется в result.<n>.json рядом с result.json —
+              история прогонов не теряется при повторных смоуках и --test.
 --extension   имя расширения с тестами для компиляции (по умолчанию ЮнитТесты).
 --timeout     таймаут сеанса предприятия в секундах (по умолчанию 600).
               Для отладочного прогона (--test) задавайте короткий таймаут явно,
@@ -32,6 +35,7 @@ run-tests.py
               основной конфигурации).
 --no-check-main пропустить только проверку модулей основной конфигурации;
               расширение с тестами проверяется.
+--no-cache    не использовать кэш успешной проверки модулей (по хэшу исходников).
 --test        имена сценариев через запятую для отладочного прогона
               (например, `--test СебестоимостьФИФО,ПроверкаСклада`);
               остальные сценарии модуля не выполняются.
@@ -53,8 +57,11 @@ run-tests.py
 """
 
 import argparse
+import hashlib
 import json
 import os
+import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -150,8 +157,75 @@ def batch_cmd() -> list[str]:
     return [sys.executable, str(wrapper)]
 
 
+def _check_source_dir(project_root: Path, extension: str | None) -> Path:
+    """Каталог, который проверяет check-modules: src/cf или src/cfe/<ext>."""
+    if extension:
+        return project_root / "src" / "cfe" / extension
+    return project_root / "src" / "cf"
+
+
+def _tree_hash(root: Path) -> str | None:
+    """Хэш исходников проверки; None — каталога нет (кэш не используем)."""
+    if not root.is_dir():
+        return None
+    digest = hashlib.sha256()
+    for path in sorted(root.rglob("*")):
+        if not path.is_file():
+            continue
+        if path.name == "ConfigDumpInfo.xml":
+            continue
+        if path.suffix.lower() not in (".bsl", ".xml"):
+            continue
+        rel = path.relative_to(root).as_posix()
+        digest.update(rel.encode("utf-8"))
+        digest.update(b"\0")
+        try:
+            with path.open("rb") as handle:
+                for chunk in iter(lambda: handle.read(1 << 20), b""):
+                    digest.update(chunk)
+        except OSError:
+            return None
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def _cache_path(project_root: Path, extension: str | None) -> Path:
+    key = "cf" if not extension else "cfe-" + re.sub(r"[^0-9A-Za-z_.-]+", "_", extension)
+    return project_root / "logs" / ".check-modules-cache" / f"{key}.json"
+
+
+def _cache_hit(project_root: Path, extension: str | None,
+               source_hash: str | None) -> bool:
+    if source_hash is None:
+        return False
+    path = _cache_path(project_root, extension)
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return (isinstance(data, dict) and data.get("schema") == 1
+            and data.get("hash") == source_hash and data.get("rc") == RC_OK)
+
+
+def _cache_store(project_root: Path, extension: str | None,
+                 source_hash: str | None) -> None:
+    if source_hash is None:
+        return
+    path = _cache_path(project_root, extension)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_name(path.name + ".tmp")
+        tmp.write_text(json.dumps({
+            "schema": 1, "hash": source_hash, "rc": RC_OK,
+        }, ensure_ascii=False) + "\n", encoding="utf-8")
+        os.replace(tmp, path)
+    except OSError:
+        pass
+
+
 def check_modules(project_root: Path, extension: str | None = None,
-                  title: str = "Предварительная компиляция модулей") -> int:
+                  title: str = "Предварительная компиляция модулей",
+                  use_cache: bool = True) -> int:
     """Проверка модулей пакетным конфигуратором (/CheckModules).
 
     Если extension задано, проверяются модули только этого расширения
@@ -167,7 +241,16 @@ def check_modules(project_root: Path, extension: str | None = None,
     RC_ENV_ERROR — это проблема среды, а не компиляции. Код именно таймаута
     получают через _check_modules_raw (нужен diagnose_timeout).
     """
+    source = _check_source_dir(project_root, extension)
+    source_hash = _tree_hash(source) if use_cache else None
+    if _cache_hit(project_root, extension, source_hash):
+        print(f"♻️  {title}: исходники не менялись с прошлой успешной проверки "
+              f"— пропускаю компиляцию (кэш).")
+        print()
+        return RC_OK
     rc = _check_modules_raw(project_root, extension, title)
+    if rc == RC_OK and use_cache:
+        _cache_store(project_root, extension, source_hash)
     return RC_ENV_ERROR if rc == RC_CHECK_TIMEOUT else rc
 
 
@@ -428,6 +511,24 @@ def _reset_result_log(path: Path | None) -> None:
     print(f"📄 Результат будет записан в: {path}")
 
 
+def _snapshot_result(path: Path | None) -> None:
+    """Сохранить копию result.json как result.<n>.json — история прогонов."""
+    if path is None or not path.is_file():
+        return
+    numbers = []
+    for candidate in path.parent.glob("result.*.json"):
+        match = re.fullmatch(r"result\.(\d+)\.json", candidate.name)
+        if match:
+            numbers.append(int(match.group(1)))
+    target = path.with_name(f"result.{max(numbers, default=0) + 1}.json")
+    try:
+        shutil.copyfile(path, target)
+    except OSError as err:
+        print(f"⚠️  Не удалось сохранить снимок результата {target}: {err}")
+        return
+    print(f"🗂️  Снимок результата: {target}")
+
+
 def _read_and_print_result(path: Path | None) -> int:
     """Прочитать result.json, напечатать сводку и вернуть 0/4/5."""
     if path is None:
@@ -476,7 +577,8 @@ def _read_and_print_result(path: Path | None) -> int:
 
 
 def run_tests(config_arg: str, extension: str, timeout: int, no_check: bool,
-              scenarios: str | None = None, no_check_main: bool = False) -> int:
+              scenarios: str | None = None, no_check_main: bool = False,
+              no_cache: bool = False) -> int:
     """Скомпилируй модули и запусти предприятие для прогона тестов."""
     project_root = get_project_root()
 
@@ -508,12 +610,13 @@ def run_tests(config_arg: str, extension: str, timeout: int, no_check: bool,
 
     # Предварительная компиляция — чтобы ошибка не всплыла модальным окном в предприятии.
     if not no_check:
-        rc = check_modules(project_root, extension)
+        rc = check_modules(project_root, extension, use_cache=not no_cache)
         if rc != RC_OK:
             return rc
         if not no_check_main:
             rc = check_modules(project_root, None,
-                               title="Проверка модулей основной конфигурации")
+                               title="Проверка модулей основной конфигурации",
+                               use_cache=not no_cache)
             if rc != RC_OK:
                 return rc
         else:
@@ -536,7 +639,9 @@ def run_tests(config_arg: str, extension: str, timeout: int, no_check: bool,
         print("ℹ️  Отладочный прогон --test: это не доказательство смоука — "
               "полный набор запускайте отдельно.")
 
-    return _read_and_print_result(result_path)
+    rc = _read_and_print_result(result_path)
+    _snapshot_result(result_path)
+    return rc
 
 
 def main() -> int:
@@ -557,13 +662,16 @@ def main() -> int:
                              "(расширения и основной конфигурации)")
     parser.add_argument("--no-check-main", action="store_true",
                         help="пропустить только проверку модулей основной конфигурации")
+    parser.add_argument("--no-cache", action="store_true",
+                        help="не использовать кэш успешной проверки модулей")
     parser.add_argument("--test", metavar="СЦЕНАРИИ",
                         help="имена сценариев через запятую для отладочного прогона; "
                              "остальные сценарии модуля не выполняются")
     args = parser.parse_args()
 
     return run_tests(args.config, args.extension, args.timeout, args.no_check,
-                     args.test, no_check_main=args.no_check_main)
+                     args.test, no_check_main=args.no_check_main,
+                     no_cache=args.no_cache)
 
 
 if __name__ == "__main__":

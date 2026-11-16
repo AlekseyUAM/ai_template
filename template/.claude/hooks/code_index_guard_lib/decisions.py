@@ -62,7 +62,10 @@ def decide_read(ti: dict, ctx) -> Decision | None:
         f'{read_file}(repo="{alias}", path="{rel}", line_start=N, line_end=M). '
         f"Функцию целиком: {get_function}(repo=\"{alias}\", function_name=\"...\"). "
         f'Карту файла: {get_file_summary}(repo="{alias}", path="{rel}"). '
-        f'Для гейта Edit допустим Read(file_path="{fp}", offset=1, limit=1).'
+        f'Для гейта Edit допустим Read(file_path="{fp}", offset=1, limit=1). '
+        f'Правило только для индексированного src/cf/**; src/cfe/**, tasks/**, '
+        f'logs/**, tmp/**, configs/**, docs/** не индексированы — там Read/Grep/'
+        f'cat разрешены.'
     )
     return Decision(False, reason)
 

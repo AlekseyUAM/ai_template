@@ -272,7 +272,7 @@ def test_diagnose_timeout_pins_check_timeout(monkeypatch):
 def _patch_checks(monkeypatch, mod, rc_by_extension):
     calls = []
 
-    def fake_check(project_root, extension=None, title="..."):
+    def fake_check(project_root, extension=None, title="...", use_cache=True):
         calls.append((extension, title))
         return rc_by_extension.get(extension, mod.RC_OK)
 
@@ -385,15 +385,17 @@ def test_cli_no_check_main_sets_flag(monkeypatch):
     seen = {}
 
     def fake_run_tests(config, extension, timeout, no_check,
-                       scenarios=None, no_check_main=False):
-        seen.update(no_check=no_check, no_check_main=no_check_main, scenarios=scenarios)
+                       scenarios=None, no_check_main=False, no_cache=False):
+        seen.update(no_check=no_check, no_check_main=no_check_main,
+                    scenarios=scenarios, no_cache=no_cache)
         return mod.RC_OK
 
     monkeypatch.setattr(mod, "run_tests", fake_run_tests)
     monkeypatch.setattr(mod.sys, "argv",
                         ["run-tests.py", "cfg.json", "--no-check-main"])
     assert mod.main() == mod.RC_OK
-    assert seen == {"no_check": False, "no_check_main": True, "scenarios": None}
+    assert seen == {"no_check": False, "no_check_main": True,
+                    "scenarios": None, "no_cache": False}
 
 
 def test_cli_no_check_implies_main_skipped(monkeypatch):
@@ -401,14 +403,16 @@ def test_cli_no_check_implies_main_skipped(monkeypatch):
     seen = {}
 
     def fake_run_tests(config, extension, timeout, no_check,
-                       scenarios=None, no_check_main=False):
-        seen.update(no_check=no_check, no_check_main=no_check_main)
+                       scenarios=None, no_check_main=False, no_cache=False):
+        seen.update(no_check=no_check, no_check_main=no_check_main,
+                    no_cache=no_cache)
         return mod.RC_OK
 
     monkeypatch.setattr(mod, "run_tests", fake_run_tests)
     monkeypatch.setattr(mod.sys, "argv", ["run-tests.py", "cfg.json", "--no-check"])
     assert mod.main() == mod.RC_OK
-    assert seen == {"no_check": True, "no_check_main": False}
+    assert seen == {"no_check": True, "no_check_main": False,
+                    "no_cache": False}
 
 
 def test_timeout_with_config_compile_error_is_rc2(monkeypatch):
@@ -605,6 +609,45 @@ def test_done_false_returns_rc4(monkeypatch, tmp_path):
                       _result([{"Имя": "A", "Результат": True,
                                 "ОписаниеОшибки": None}], done=False))
     assert mod.run_tests(str(cfg), "ЮнитТесты", 10, True) == mod.RC_TESTS_FAILED
+
+
+def test_check_modules_cache_by_source_hash(monkeypatch, tmp_path, capsys):
+    mod = _load()
+    src = tmp_path / "src" / "cf"
+    src.mkdir(parents=True)
+    (src / "Module.bsl").write_text("Процедура А() КонецПроцедуры", encoding="utf-8")
+    procs = _patch(monkeypatch, mod, _Result(0, "Синтаксических ошибок не обнаружено!"))
+
+    assert mod.check_modules(tmp_path, None) == mod.RC_OK
+    assert mod.check_modules(tmp_path, None) == mod.RC_OK
+    assert len(procs) == 1
+    assert "кэш" in capsys.readouterr().out
+
+    (src / "Module.bsl").write_text("Процедура Б() КонецПроцедуры", encoding="utf-8")
+    assert mod.check_modules(tmp_path, None) == mod.RC_OK
+    assert len(procs) == 2
+
+
+def test_check_modules_no_cache_flag_forces_run(monkeypatch, tmp_path):
+    mod = _load()
+    src = tmp_path / "src" / "cf"
+    src.mkdir(parents=True)
+    (src / "Module.bsl").write_text("Процедура А() КонецПроцедуры", encoding="utf-8")
+    procs = _patch(monkeypatch, mod, _Result(0, "ok"))
+
+    assert mod.check_modules(tmp_path, None, use_cache=False) == mod.RC_OK
+    assert mod.check_modules(tmp_path, None, use_cache=False) == mod.RC_OK
+    assert len(procs) == 2
+
+
+def test_snapshot_result_writes_numbered_copies(tmp_path):
+    mod = _load()
+    result = tmp_path / "result.json"
+    result.write_text("{}", encoding="utf-8")
+    mod._snapshot_result(result)
+    mod._snapshot_result(result)
+    assert (tmp_path / "result.1.json").read_text(encoding="utf-8") == "{}"
+    assert (tmp_path / "result.2.json").read_text(encoding="utf-8") == "{}"
 
 
 def test_malformed_result_returns_rc5(monkeypatch, tmp_path, capsys):

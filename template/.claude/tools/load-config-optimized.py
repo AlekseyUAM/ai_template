@@ -37,6 +37,7 @@ import subprocess
 import tempfile
 import hashlib
 import json
+import time
 from collections import OrderedDict
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -58,6 +59,10 @@ _PROPERTY_RE = re.compile(
 _FACET_RE = re.compile(r"\bfacet\s+(?:фиксации|перечисления|движений)",
                        re.IGNORECASE)
 _OTHER_MARKS = ("Исключение XDTO", "Неверное значение перечисления")
+# Транзиентная блокировка ИБ (фоновая обработка/чужой сеанс). Повторяем
+# загрузку: по опыту второй прогон проходит без правок исходников.
+_LOCK_MARK = "Ошибка исключительной блокировки информационной базы"
+_LOCK_RETRY_DELAYS = (30, 60)
 
 def _force_utf8_output() -> None:
     """Перевести stdout/stderr в UTF-8.
@@ -425,8 +430,15 @@ def print_platform_warnings(summary: PlatformWarnings) -> None:
             print(f"  - {mark}: {count}")
 
 
-def run_optimized_load(files: List[str], allow_warnings: bool = False) -> int:
-    """Выполни оптимизированную загрузку конфигурации и проверь предупреждения."""
+def run_optimized_load(files: List[str], allow_warnings: bool = False,
+                       *, retry_delays=_LOCK_RETRY_DELAYS,
+                       sleep=time.sleep) -> int:
+    """Выполни оптимизированную загрузку конфигурации и проверь предупреждения.
+
+    Блокировка ИБ (`Ошибка исключительной блокировки…`) транзиентна: повторяем
+    загрузку по `retry_delays` (по умолчанию 30 и 60 с). `sleep` параметризован
+    для тестов.
+    """
     if not files:
         print("✅ Нет изменённых файлов конфигурации")
         return 0
@@ -462,14 +474,26 @@ def run_optimized_load(files: List[str], allow_warnings: bool = False) -> int:
         # Вывод дочернего процесса перехватывается, печатается в лог как раньше
         # и анализируется: платформа при неверном свойстве метаданных только
         # пишет предупреждение, но завершается кодом 0.
-        result = subprocess.run(
-            batch_cmd() + ["load-config", "src/cf", "--list-file", temp_list],
-            cwd=get_project_root(),
-            capture_output=True, encoding="utf-8", errors="replace",
-        )
-        output = (result.stdout or "") + (result.stderr or "")
-        if output:
-            print(output, end="" if output.endswith("\n") else "\n")
+        attempt = 0
+        while True:
+            result = subprocess.run(
+                batch_cmd() + ["load-config", "src/cf", "--list-file", temp_list],
+                cwd=get_project_root(),
+                capture_output=True, encoding="utf-8", errors="replace",
+            )
+            output = (result.stdout or "") + (result.stderr or "")
+            if output:
+                print(output, end="" if output.endswith("\n") else "\n")
+
+            if (result.returncode != 0 and _LOCK_MARK in output
+                    and attempt < len(retry_delays)):
+                delay = retry_delays[attempt]
+                attempt += 1
+                print(f"⚠️ ИБ заблокирована (попытка {attempt} из "
+                      f"{len(retry_delays)}): повтор через {delay} с")
+                sleep(delay)
+                continue
+            break
 
         warnings = platform_warnings(output)
         print()

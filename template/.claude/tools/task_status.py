@@ -23,6 +23,7 @@ import contextlib
 from datetime import datetime
 import json
 import os
+import re
 import time
 from pathlib import Path
 
@@ -251,6 +252,39 @@ def _close_open_runs(stage: dict, now: str) -> None:
             run["finished_at"] = now
 
 
+_REVIEW_VERDICT_RE = re.compile(
+    r"\|\s*Вердикт\s*\|\s*([^|\n]+?)\s*\|", re.IGNORECASE)
+
+
+def _review_verdict(task_dir) -> str | None:
+    """Вердикт из `REVIEW.md` (строка-ячейка `| Вердикт | … |`), если он есть."""
+    path = Path(task_dir) / "REVIEW.md"
+    if not path.is_file():
+        return None
+    try:
+        match = _REVIEW_VERDICT_RE.search(path.read_text(encoding="utf-8"))
+    except OSError:
+        return None
+    return match.group(1).strip() if match else None
+
+
+def _restart_block(stage: str, task_dir) -> str | None:
+    """Запретить restart ревью, если текущий вердикт — «на доработку».
+
+    Такой возврат обязан идти через `pending`: он архивирует REVIEW.md и
+    увеличивает итерацию; `restart` оставил бы старый вердикт текущим.
+    """
+    if stage != "review":
+        return None
+    verdict = (_review_verdict(task_dir) or "").upper()
+    if "НА ДОРАБОТКУ" in verdict or "НЕ ПРОЙДЕНО" in verdict:
+        return (
+            f"текущий REVIEW.md содержит вердикт «{verdict}». "
+            f"Для возврата на доработку используйте pending "
+            f"(он архивирует REVIEW.md), затем running; restart запрещён.")
+    return None
+
+
 def _restart_stage(stage: dict, data: dict) -> None:
     """Начать новый прогон этапа, закрыв все открытые runs[]."""
     now = _now_iso()
@@ -286,6 +320,9 @@ def _apply_update(data: dict, stage: str, status: str, files, task_dir) -> None:
             if status == "approve":
                 s["approved"] = True
             elif status == "restart":
+                msg = _restart_block(stage, task_dir)
+                if msg:
+                    raise SystemExit("ОШИБКА (restart): " + msg)
                 _restart_stage(s, data)
                 data["stage"] = stage
                 _refresh_overall(data)
