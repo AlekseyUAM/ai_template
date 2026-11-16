@@ -295,6 +295,8 @@ def summarize_transcripts(project_dir: Path, session: SessionFiles,
             "tool_errors": summary["tool_errors"],
             "error_signatures": summary["error_signatures"],
             "test_runs": summary["test_runs"],
+            "edits": summary["edits"],
+            "smoke_runs": summary["smoke_runs"],
         })
     return {"source": source, "main": main, "subagents": subagents}
 
@@ -396,21 +398,27 @@ def _stage_iteration(task_json: dict, name: str) -> int:
 
 
 def _task_log_dirs(project_dir: Path, task) -> list[Path]:
-    """Каталоги `logs/task#<id>` текущей задачи (без чужих задач).
-
-    Если `task.json` содержит числовой `id` (как в реальных задачах) —
-    берётся только `logs/task#<id>`. Иначе используется `identifier`:
-    `logs/task#<ident>` и `logs/task##<ident>`.
-    """
+    """Каталоги логов задачи: по id, identifier и фактической папке."""
     logs = project_dir / "logs"
     raw = task.raw if isinstance(getattr(task, "raw", None), dict) else {}
     task_id = raw.get("id")
-    if isinstance(task_id, int) and not isinstance(task_id, bool):
-        return [logs / f"task#{task_id}"]
     identifier = str(getattr(task, "identifier", "") or "").lstrip("#")
-    if not identifier:
-        return []
-    return [logs / f"task#{identifier}", logs / f"task##{identifier}"]
+    folder = str(getattr(task, "folder", "") or "")
+    candidates = []
+    if identifier:
+        candidates += [logs / f"task#{identifier}", logs / f"task##{identifier}"]
+    if folder:
+        candidates.append(logs / folder)
+    if isinstance(task_id, int) and not isinstance(task_id, bool):
+        candidates += [logs / f"task#{task_id}", logs / f"task##{task_id}"]
+    seen = set()
+    result = []
+    for path in candidates:
+        if path in seen:
+            continue
+        seen.add(path)
+        result.append(path)
+    return result
 
 
 def collect_task_state(project_dir: Path, task) -> dict:
@@ -424,7 +432,8 @@ def collect_task_state(project_dir: Path, task) -> dict:
       - ``archives_by_kind`` — те же архивы по видам (префикс до точки):
         ``review``, ``testing``, ``tests``, ``develop``;
       - ``test_results`` — payload-ы ``result.json`` текущей задачи
-        (только из ``logs/task#<id>``; логи других задач не читаются).
+        (из каталогов по id, identifier и папке задачи без дублей;
+        логи других задач не читаются).
     """
     task_dir = project_dir / "tasks" / task.folder
     files = []
@@ -444,10 +453,15 @@ def collect_task_state(project_dir: Path, task) -> dict:
     for name in archives:
         archives_by_kind[name.split(".", 1)[0].lower()].append(name)
     test_results = []
+    seen = set()
     for log_dir in _task_log_dirs(project_dir, task):
         result_path = log_dir / "result.json"
         if not result_path.is_file():
             continue
+        resolved = result_path.resolve()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
         try:
             data = json.loads(result_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
@@ -513,10 +527,16 @@ def _find_stage(task_json: dict, name: str) -> dict:
 
 
 def cycle_metrics(task_json: dict, state: dict, transcript: dict) -> dict:
-    main = (transcript.get("main") or {})
-    edits = main.get("edits") or {}
-    test_edits = sum(count for path, count in edits.items()
-                     if "ЮнитТесты" in path and "/src/cfe/" in f"/{path}")
+    agents = [transcript.get("main") or {}]
+    agents += [item for item in (transcript.get("subagents") or [])
+               if isinstance(item, dict)]
+    test_runs = sum(int(agent.get("test_runs") or 0) for agent in agents)
+    smoke_runs = sum(int(agent.get("smoke_runs") or 0) for agent in agents)
+    test_edits = 0
+    for agent in agents:
+        for path, count in (agent.get("edits") or {}).items():
+            if "ЮнитТесты" in path and "/src/cfe/" in f"/{path}":
+                test_edits += int(count)
     by_kind = state.get("archives_by_kind") or {}
     return {
         "tests_iteration": _stage_iteration(task_json, "tests"),
@@ -525,8 +545,8 @@ def cycle_metrics(task_json: dict, state: dict, transcript: dict) -> dict:
         "develop_archives": len(by_kind.get("develop") or []),
         "testing_archives": len(by_kind.get("testing") or []),
         "tests_archives": len(by_kind.get("tests") or []),
-        "test_runs": int(main.get("test_runs") or 0),
-        "smoke_runs": int(main.get("smoke_runs") or 0),
+        "test_runs": test_runs,
+        "smoke_runs": smoke_runs,
         "test_module_edits": test_edits,
         "review_verdict": (state.get("verdicts") or {}).get("REVIEW.md"),
     }
@@ -713,7 +733,6 @@ def render_digest(metrics: dict) -> str:
         stream = task.get("stream") or {}
         session = stream.get("session_id")
         lines.append(f"- Агент: turns={stream.get('num_turns')}, "
-                     f"cost={_opt(stream.get('cost_usd'))}, "
                      f"session={_opt(session)}")
         transcript = task.get("transcript") or {}
         main = transcript.get("main") or {}
@@ -775,6 +794,10 @@ def render_digest(metrics: dict) -> str:
             lines.append(f"  - `{Path(path).name}`: error={findings.get('error', 0)}, "
                          f"warning={findings.get('warning', 0)}, "
                          f"info={findings.get('info', 0)}")
+            extract_code = result.get("extract_returncode")
+            if extract_code not in (0, None):
+                lines.append(f"  - ⚠ extract_queries вернул код {extract_code} — "
+                             f"запрос мог не проверяться (см. warnings)")
     env = metrics.get("environment") or {}
     lines += ["", "## Окружение", "",
               f"- Ошибок инструментов: {env.get('tool_errors', 0)}",

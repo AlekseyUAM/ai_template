@@ -85,7 +85,7 @@ if prompt.startswith("Выполни задачу tasks/"):
         "\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
     out.append({"type": "result", "subtype": "success", "session_id": sid,
                 "is_error": False, "result": "done", "duration_ms": 1,
-                "num_turns": 3, "total_cost_usd": 0.1})
+                "num_turns": 3})
 else:
     out.append({"type": "result", "subtype": "success", "session_id": sid + "-a",
                 "is_error": False, "duration_ms": 1,

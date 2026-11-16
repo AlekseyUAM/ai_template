@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
+import bench_metrics as mod
 from bench_metrics import (aggregate_environment, classify_bash,
                            parse_tool_events, summarize_events,
                            summarize_transcripts)
@@ -477,7 +479,7 @@ def test_render_digest_contains_key_sections():
         "tasks": [{
             "folder": "task##001", "limit_minutes": 30, "outcome": "success",
             "duration_sec": 120.0, "exit_code": 0,
-            "stream": {"num_turns": 12, "cost_usd": 0.5},
+            "stream": {"num_turns": 12, "session_id": "s"},
             "stages": [{"name": "develop", "enabled": True, "status": "done",
                         "iteration": 2, "duration_sec": 60.0}],
             "cycles": {"tests_iteration": 2, "review_iteration": 1,
@@ -559,14 +561,12 @@ def test_render_digest_review_iterations_shown():
 def test_render_digest_none_values_rendered_as_dash():
     task = {"folder": "task##002", "limit_minutes": 30, "outcome": "error",
             "duration_sec": 10.0, "exit_code": None,
-            "stream": {"num_turns": 1, "cost_usd": None, "session_id": None},
+            "stream": {"num_turns": 1, "session_id": None},
             "stages": [], "cycles": {}, "transcript": {}}
     text = render_digest(_digest_metrics(task))
     assert "код выхода: `—`" in text
     assert "session=—" in text
-    assert "cost=—" in text
     assert "session=None" not in text
-    assert "cost=None" not in text
     assert "`None`" not in text
 
 
@@ -633,3 +633,54 @@ def test_render_digest_query_findings():
     assert "query-analyze: файлов 1" in text
     assert "  - `Module.bsl`: error=1, warning=0, info=2" in text
     assert "анализаторы не запускались" not in text
+
+
+def test_task_log_dirs_uses_identifier_and_folder(tmp_path):
+    logs = tmp_path / "logs"
+    (logs / "task##002").mkdir(parents=True)
+    task = SimpleNamespace(folder="task##002", identifier="#002",
+                           raw={"id": 24})
+    dirs = mod._task_log_dirs(tmp_path, task)
+    assert logs / "task##002" in dirs
+    assert logs / "task#002" in dirs
+    assert logs / "task#24" in dirs
+    assert logs / "task##24" in dirs
+
+
+def test_cycle_metrics_includes_subagents(tmp_path):
+    main = {"test_runs": 1, "smoke_runs": 1,
+            "edits": {"src/cfe/ЮнитТесты/Module.bsl": 1}}
+    sub = {"test_runs": 3, "smoke_runs": 0,
+           "edits": {"src/cfe/ЮнитТесты/Module.bsl": 2}}
+    metrics = mod.cycle_metrics(
+        {"stages": []}, {}, {"main": main, "subagents": [sub]})
+    assert metrics["test_runs"] == 4
+    assert metrics["smoke_runs"] == 1
+    assert metrics["test_module_edits"] == 3
+
+
+def test_render_digest_warns_on_extract_returncode():
+    task = {"folder": "task##011", "limit_minutes": 30, "outcome": "success",
+            "duration_sec": 5.0, "exit_code": 0, "transcript": {},
+            "analyzers": {"query_analyze": {
+                "skipped": None,
+                "results": {"/p/Module.bsl": {
+                    "findings": {"error": 0, "warning": 0, "info": 0},
+                    "extract_returncode": 1}}}}}
+    text = render_digest(_digest_metrics(task))
+    assert ("  - ⚠ extract_queries вернул код 1 — запрос мог не проверяться "
+            "(см. warnings)") in text
+
+
+def test_render_digest_no_extract_warning_on_success():
+    for code in (0, None):
+        task = {"folder": "task##012", "limit_minutes": 30,
+                "outcome": "success", "duration_sec": 5.0, "exit_code": 0,
+                "transcript": {},
+                "analyzers": {"query_analyze": {
+                    "skipped": None,
+                    "results": {"/p/Module.bsl": {
+                        "findings": {"error": 0, "warning": 0, "info": 0},
+                        "extract_returncode": code}}}}}
+        text = render_digest(_digest_metrics(task))
+        assert "extract_queries вернул код" not in text

@@ -544,9 +544,7 @@ def _stream_metrics(run: ClaudeRun) -> dict:
         "parse_errors": run.stream.parse_errors,
         "duration_ms": result.get("duration_ms"),
         "num_turns": result.get("num_turns"),
-        "cost_usd": result.get("total_cost_usd"),
         "is_error": result.get("is_error"),
-        "usage": result.get("usage"),
     }
 
 
