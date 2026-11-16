@@ -154,6 +154,27 @@ def test_main_no_warning_when_query_text_only_in_comment(tmp_path, capsys):
     assert "извлечено 0 запросов" not in capsys.readouterr().err
 
 
+def test_main_fails_on_invalid_utf8(tmp_path, capsys):
+    path = tmp_path / "Module.bsl"
+    path.write_bytes(b"\xff\xfe")
+    assert main(["-Path", str(path)]) == 2
+    err = capsys.readouterr().err
+    assert "ВНИМАНИЕ" in err
+    assert "не удалось прочитать как UTF-8" in err
+
+
+def test_main_invalid_utf8_skipped_but_others_extracted(tmp_path, capsys):
+    bad = tmp_path / "Bad.bsl"
+    bad.write_bytes(b"\xff\xfe")
+    good = tmp_path / "Good.bsl"
+    good.write_text('\tЗапрос.Текст = "ВЫБРАТЬ 1";\n', encoding="utf-8")
+    assert main(["-Path", str(tmp_path)]) == 2
+    out = capsys.readouterr()
+    assert f"ВНИМАНИЕ: {bad}: не удалось прочитать как UTF-8" in out.err
+    assert "ВЫБРАТЬ 1" in out.out
+    assert main(["-Path", str(tmp_path), "-NoFail"]) == 0
+
+
 def test_main_no_fail_suppresses_loud_exit(tmp_path, capsys):
     path = tmp_path / "Module.bsl"
     path.write_text(

@@ -91,6 +91,12 @@ def test_summarize_transcripts_and_subagent(tmp_path):
         tool_use("2026-01-01T00:00:10+00:00", "s1", "Read",
                  {"file_path": "/p/a.bsl"}),
         tool_result("2026-01-01T00:00:11+00:00", "s1"),
+        tool_use("2026-01-01T00:00:12+00:00", "s2", "Bash",
+                 {"command": "python .claude/tools/run-tests.py cfg.json"}),
+        tool_result("2026-01-01T00:00:40+00:00", "s2"),
+        tool_use("2026-01-01T00:00:41+00:00", "s3", "Edit",
+                 {"file_path": str(project / "src" / "cfe" / "ЮнитТесты" / "Module.bsl")}),
+        tool_result("2026-01-01T00:00:42+00:00", "s3"),
     ])
     (subdir / "agent-a.meta.json").write_text(json.dumps({
         "agentType": "reviewer", "description": "Ревью"}), encoding="utf-8")
@@ -98,7 +104,10 @@ def test_summarize_transcripts_and_subagent(tmp_path):
     assert summary["source"] == "session"
     assert summary["main"]["agent_calls"] == 1
     assert summary["subagents"][0]["agent"] == "reviewer"
-    assert summary["subagents"][0]["tools"] == {"Read": 1}
+    assert summary["subagents"][0]["tools"] == {"Read": 1, "Bash": 1, "Edit": 1}
+    assert summary["subagents"][0]["test_runs"] == 1
+    assert summary["subagents"][0]["smoke_runs"] == 0
+    assert "src/cfe/ЮнитТесты/Module.bsl" in summary["subagents"][0]["edits"]
 
 
 def test_summarize_transcripts_falls_back_to_stream(tmp_path):
@@ -666,10 +675,33 @@ def test_render_digest_warns_on_extract_returncode():
                 "skipped": None,
                 "results": {"/p/Module.bsl": {
                     "findings": {"error": 0, "warning": 0, "info": 0},
-                    "extract_returncode": 1}}}}}
+                    "extract_returncode": 1,
+                    "warnings": "ВНИМАНИЕ: /p/Module.bsl: извлечено 0 запросов"}}}}}
     text = render_digest(_digest_metrics(task))
     assert ("  - ⚠ extract_queries вернул код 1 — запрос мог не проверяться "
-            "(см. warnings)") in text
+            "(предупреждения выше)") in text
+    assert "  - warnings: `ВНИМАНИЕ: /p/Module.bsl: извлечено 0 запросов`" in text
+    assert "см. warnings" not in text
+
+
+def test_render_digest_warnings_truncated_and_absent_when_empty():
+    long_warning = "ВНИМАНИЕ: " + "x" * 500
+    task = {"folder": "task##013", "limit_minutes": 30, "outcome": "success",
+            "duration_sec": 5.0, "exit_code": 0, "transcript": {},
+            "analyzers": {"query_analyze": {
+                "skipped": None,
+                "results": {"/p/A.bsl": {
+                    "findings": {"error": 0, "warning": 0, "info": 0},
+                    "warnings": long_warning},
+                    "/p/B.bsl": {
+                        "findings": {"error": 0, "warning": 0, "info": 0},
+                        "warnings": "  "}}}}}
+    text = render_digest(_digest_metrics(task))
+    # warnings урезаны до 300 символов
+    assert "x" * 290 in text
+    assert "x" * 291 not in text
+    # пустые warnings строку не добавляют
+    assert text.count("  - warnings:") == 1
 
 
 def test_render_digest_no_extract_warning_on_success():

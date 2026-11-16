@@ -394,6 +394,15 @@ def test_check_requires_sha256(monkeypatch):
     assert calls == []
 
 
+def test_check_sha256_cannot_be_omitted(monkeypatch):
+    """sha256 — обязательный позиционный параметр: без него TypeError."""
+    import pytest
+
+    check = _build_check_tool(monkeypatch)
+    with pytest.raises(TypeError):
+        check(code="x")
+
+
 def test_check_valid_sha_calls_run_check(monkeypatch):
     check = _build_check_tool(monkeypatch)
     stub = {"ok": True}

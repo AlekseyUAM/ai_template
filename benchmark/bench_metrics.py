@@ -794,10 +794,14 @@ def render_digest(metrics: dict) -> str:
             lines.append(f"  - `{Path(path).name}`: error={findings.get('error', 0)}, "
                          f"warning={findings.get('warning', 0)}, "
                          f"info={findings.get('info', 0)}")
+            warnings = (result.get("warnings") or "").strip()
+            if warnings:
+                lines.append(f"  - warnings: `{_cell(warnings[:300])}`")
             extract_code = result.get("extract_returncode")
             if extract_code not in (0, None):
                 lines.append(f"  - ⚠ extract_queries вернул код {extract_code} — "
-                             f"запрос мог не проверяться (см. warnings)")
+                             f"запрос мог не проверяться "
+                             f"(предупреждения выше)")
     env = metrics.get("environment") or {}
     lines += ["", "## Окружение", "",
               f"- Ошибок инструментов: {env.get('tool_errors', 0)}",

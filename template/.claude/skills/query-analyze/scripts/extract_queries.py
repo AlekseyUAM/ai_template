@@ -196,10 +196,14 @@ def main(argv=None):
     else:
         targets = [path]
     warnings = []
+    undecodable = []
     for file in targets:
         try:
             with open(file, encoding="utf-8") as fh:
                 source = fh.read()
+        except UnicodeDecodeError:
+            undecodable.append(file)
+            continue
         except OSError:
             continue
         found = extract_queries_from_xml(source) if args.Xml else extract_query_strings(source)
@@ -216,8 +220,13 @@ def main(argv=None):
             f"запроса вручную.",
             file=sys.stderr,
         )
+    for file in undecodable:
+        print(
+            f"ВНИМАНИЕ: {file}: не удалось прочитать как UTF-8 — файл пропущен",
+            file=sys.stderr,
+        )
     print("\n--- 8< ---\n".join(blocks))
-    return 0 if args.NoFail or not warnings else 2
+    return 0 if args.NoFail or not (warnings or undecodable) else 2
 
 
 if __name__ == "__main__":

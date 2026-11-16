@@ -28,8 +28,10 @@ Bridge (`deps/mcp-bsl-lsp-bridge`) не используется: он орие�
 эндпоинт `/mcp`) с одним инструментом `check`, который гоняет BSL LS в режиме
 **CLI `analyze`** с json-репортёром и парсит отчёт.
 
-Поток `check(code, filename="Module.bsl")`:
+Поток `check(sha256, code|file_path, config, filename)`:
 1. временный каталог `src/`, записать `code` в `src/<filename>`;
+   `sha256` обязателен (64 hex, сверяется с текстом до запуска java); `code`
+   или `file_path` — ровно один источник;
 2. `java -jar /opt/bsl-language-server.jar analyze --srcDir <src> --outputDir
    <out> --reporter json -c /config/.bsl-language-server.json`
    (`-c` подхватывает настройки; если конфиг не смонтирован — без `-c`);
@@ -48,7 +50,8 @@ Bridge (`deps/mcp-bsl-lsp-bridge`) не используется: он орие�
 Один общий контейнер bsl_ls обслуживает **все** проекты. Настройки проверок не
 монтируются и не привязаны к карточке: вызывающий агент (Claude Code, работающий
 в корне своего проекта) читает `.bsl-language-server.json` из корня проекта и
-передаёт его содержимое **аргументом** `check(code, config=...)`. Сервер кладёт
+передаёт его содержимое **аргументом** `check(sha256, code, config=...)`.
+Сервер кладёт
 этот текст в корень временной workspace-папки (рядом с кодом), и BSL LS
 подхватывает его как per-workspace-настройки. Контейнеру не нужен ни доступ к ФС
 проектов, ни монтирования, ни поле карточки — он полностью stateless.
