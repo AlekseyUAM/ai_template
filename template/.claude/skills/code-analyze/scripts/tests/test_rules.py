@@ -588,3 +588,130 @@ def test_osn_message_not_flagged():
 
 def test_new_other_type_not_flagged():
     assert "user-message-via-constructor" not in codes("М = Новый Массив;\n")
+
+
+# ── string-concat-in-loop: числовые аккумуляторы ─────────────
+
+def test_numeric_accumulator_in_loop_not_flagged():
+    text = (
+        "Для Каждого Строка Из Товары Цикл\n"
+        "    Сумма = Сумма + Строка.Цена * Строка.Количество;\n"
+        "КонецЦикла;\n"
+    )
+    assert "string-concat-in-loop" not in codes(text)
+
+
+def test_numeric_sebestoimost_accumulator_not_flagged():
+    text = (
+        "Пока Выборка.Следующий() Цикл\n"
+        "    Себестоимость = Себестоимость + Выборка.Стоимость;\n"
+        "КонецЦикла;\n"
+    )
+    assert "string-concat-in-loop" not in codes(text)
+
+
+# ── use-before-assignment ────────────────────────────────────
+
+def test_conditional_assignment_used_after_if_flagged():
+    text = (
+        "Процедура ОбработкаПроведения(Отказ)\n"
+        "    Если МетодСписания = \"ФИФО\" Тогда\n"
+        "        ТекстЗапроса = \"ВЫБРАТЬ 1\";\n"
+        "    КонецЕсли;\n"
+        "    Запрос.Текст = ТекстЗапроса;\n"
+        "КонецПроцедуры\n"
+    )
+    assert "use-before-assignment" in codes(text)
+
+
+def test_conditional_assignment_with_else_not_flagged():
+    text = (
+        "Процедура Тест()\n"
+        "    Если Условие Тогда\n"
+        "        Текст = \"А\";\n"
+        "    Иначе\n"
+        "        Текст = \"Б\";\n"
+        "    КонецЕсли;\n"
+        "    Сообщить(Текст);\n"
+        "КонецПроцедуры\n"
+    )
+    assert "use-before-assignment" not in codes(text)
+
+
+def test_assignment_before_if_not_flagged():
+    text = (
+        "Процедура Тест()\n"
+        "    Текст = \"по умолчанию\";\n"
+        "    Если Условие Тогда\n"
+        "        Текст = \"А\";\n"
+        "    КонецЕсли;\n"
+        "    Сообщить(Текст);\n"
+        "КонецПроцедуры\n"
+    )
+    assert "use-before-assignment" not in codes(text)
+
+
+def test_parameter_used_after_if_not_flagged():
+    text = (
+        "Процедура Тест(Текст)\n"
+        "    Если Условие Тогда\n"
+        "        Текст = \"А\";\n"
+        "    КонецЕсли;\n"
+        "    Сообщить(Текст);\n"
+        "КонецПроцедуры\n"
+    )
+    assert "use-before-assignment" not in codes(text)
+
+
+def test_module_var_used_after_if_not_flagged():
+    text = (
+        "Перем Текст;\n"
+        "Процедура Тест()\n"
+        "    Если Условие Тогда\n"
+        "        Текст = \"А\";\n"
+        "    КонецЕсли;\n"
+        "    Сообщить(Текст);\n"
+        "КонецПроцедуры\n"
+    )
+    assert "use-before-assignment" not in codes(text)
+
+
+def test_loop_var_used_after_if_not_flagged():
+    text = (
+        "Процедура Тест()\n"
+        "    Для Н = 1 По 3 Цикл\n"
+        "        Если Условие Тогда\n"
+        "            Н = Н + 1;\n"
+        "        КонецЕсли;\n"
+        "        Сообщить(Н);\n"
+        "    КонецЦикла;\n"
+        "КонецПроцедуры\n"
+    )
+    assert "use-before-assignment" not in codes(text)
+
+
+def test_two_assignments_not_flagged():
+    text = (
+        "Процедура Тест()\n"
+        "    Если Условие1 Тогда\n"
+        "        Текст = \"А\";\n"
+        "    КонецЕсли;\n"
+        "    Если Условие2 Тогда\n"
+        "        Текст = \"Б\";\n"
+        "    КонецЕсли;\n"
+        "    Сообщить(Текст);\n"
+        "КонецПроцедуры\n"
+    )
+    assert "use-before-assignment" not in codes(text)
+
+
+def test_use_only_inside_branch_not_flagged():
+    text = (
+        "Процедура Тест()\n"
+        "    Если Условие Тогда\n"
+        "        Текст = \"А\";\n"
+        "        Сообщить(Текст);\n"
+        "    КонецЕсли;\n"
+        "КонецПроцедуры\n"
+    )
+    assert "use-before-assignment" not in codes(text)

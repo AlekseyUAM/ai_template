@@ -101,6 +101,14 @@ _NON_STRING_OP_RE = re.compile(
 )
 
 
+# Имена-аккумуляторы чисел: «Сумма = Сумма + …» — арифметика, не строки.
+_NUMERIC_ACCUMULATOR_RE = re.compile(
+    r"(?i)(сумм|стоимост|себестоим|количеств|итог|цен[аы]?|ндс|вес|объ[её]м|"
+    r"ставк|процент|сальдо|остат|оборот|прибыл|убыт|рентабельн|начислен|"
+    r"удержан|дней|часов|минут|секунд)"
+)
+
+
 @rule(code="string-concat-in-loop", severity="warning",
       title="Конкатенация строк в цикле — используйте СтрСоединить")
 def check_string_concat_in_loop(ctx):
@@ -117,8 +125,9 @@ def check_string_concat_in_loop(ctx):
     Чтобы не ловить булевы/сравнительные аккумуляторы (частое ложное срабатывание,
     напр. `Флаг = Флаг Или X + 1 > 0`), находка НЕ выдаётся, если в правой части есть
     операторы сравнения (`<`,`>`,`<=`,`>=`,`<>`) или логические операторы
-    (И/ИЛИ/НЕ/And/Or/Not). Числовые суммы без таких операторов (`Сумма = Сумма + Цена`)
-    отличить от строк по тексту нельзя — эвристика их не разделяет (проверь при ревью).
+    (И/ИЛИ/НЕ/And/Or/Not). Числовые аккумуляторы по имени (`Сумма`, `Стоимость`,
+    `Количество`, `Себестоимость` и т.п., см. _NUMERIC_ACCUMULATOR_RE) не флагуются:
+    для таких имён «= … + …» — арифметика, а не конкатенация строк.
     """
     out = []
     seen = set()
@@ -138,6 +147,9 @@ def check_string_concat_in_loop(ctx):
                 continue
             # Логический/сравнительный аккумулятор — не строки, пропускаем.
             if _NON_STRING_OP_RE.search(rhs):
+                continue
+            # Числовой аккумулятор по имени (Сумма, Стоимость…) — пропускаем.
+            if _NUMERIC_ACCUMULATOR_RE.search(lhs):
                 continue
             seen.add(ln)
             out.append(Finding(
@@ -1007,4 +1019,81 @@ def check_user_message_via_constructor(ctx):
                     "(в клиентском контексте — ОбщегоНазначенияКлиент)."
                 ),
             ))
+    return out
+
+
+# ── use-before-assignment ────────────────────────────────────
+
+_ELSE_RE = re.compile(r"^\s*(Иначе|ИначеЕсли|Else|ElsIf)\b",
+                      re.IGNORECASE | re.UNICODE)
+
+
+def _ident_use_re(name: str):
+    return re.compile(
+        r"(?<![A-Za-zА-Яа-яЁё0-9_])" + re.escape(name)
+        + r"(?![A-Za-zА-Яа-яЁё0-9_])",
+        re.IGNORECASE | re.UNICODE,
+    )
+
+
+@rule(code="use-before-assignment", severity="warning",
+      title="Переменная присваивается только в ветке Если и используется после блока")
+def check_use_before_assignment(ctx):
+    """Флагует локальную переменную, которая инициализируется только внутри
+    `Если` без `Иначе` и используется после `КонецЕсли`.
+
+    Консервативно: параметры, объявления `Перем`, переменные циклов, повторные
+    присваивания и любая ветка `Иначе`/`ИначеЕсли` исключают находку.
+    """
+    out = []
+    model = ctx.model
+    module_vars = {name for name, _line, _export in model.var_declarations}
+    for method in model.methods:
+        params = set(method.params)
+        loop_vars = {
+            loop.loop_var for loop in model.loops
+            if loop.loop_var
+            and method.header_line <= loop.header_line <= method.end_line
+        }
+        skip = params | module_vars | loop_vars
+        assignments = {}
+        for ln in range(method.header_line + 1, method.end_line):
+            m = _ASSIGN_RE.match(ctx.code_line(ln))
+            if not m:
+                continue
+            name = m.group(1)
+            if name in skip:
+                continue
+            assignments.setdefault(name, []).append(ln)
+
+        if_blocks = [
+            block for block in model.all_blocks
+            if block.kind == "if"
+            and method.header_line <= block.header_line <= method.end_line
+        ]
+        for name, lines in assignments.items():
+            if len(lines) != 1:
+                continue
+            assign_line = lines[0]
+            enclosing = [
+                block for block in if_blocks
+                if block.header_line <= assign_line <= block.end_line
+            ]
+            if not enclosing:
+                continue
+            block = max(enclosing, key=lambda item: item.header_line)
+            if any(_ELSE_RE.match(ctx.code_line(ln))
+                   for ln in range(block.header_line, block.end_line + 1)):
+                continue
+            use_re = _ident_use_re(name)
+            for ln in range(block.end_line + 1, method.end_line + 1):
+                if use_re.search(ctx.code_line(ln)):
+                    out.append(Finding(
+                        "use-before-assignment", "warning", ln,
+                        f"Переменная «{name}» присваивается только внутри ветки "
+                        f"Если (строка {assign_line}) без Иначе и используется "
+                        f"после блока. Если условие не выполнится, переменная "
+                        f"останется Неопределено; инициализируйте её до ветвления.",
+                    ))
+                    break
     return out
