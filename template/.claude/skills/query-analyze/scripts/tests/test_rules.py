@@ -240,6 +240,19 @@ def test_no_totals_not_flagged():
     assert "totals-field-not-aggregated" not in _codes(q)
 
 
+@pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
+def test_totals_field_not_aggregated_is_error():
+    q = (
+        "ВЫБРАТЬ Т.Номенклатура КАК Номенклатура, Т.Услуга КАК Услуга "
+        "ИЗ РегистрСведений.Цены КАК Т "
+        "ИТОГИ ПО Номенклатура"
+    )
+    ctx = rules.QueryContext(q)
+    hits = [f for f in rules.run_all(ctx)
+            if f.code == "totals-field-not-aggregated"]
+    assert hits and hits[0].severity == "error"
+
+
 def test_keyword_case_expression_words_not_flagged_as_alias():
     # «Конец», «Выбор», «Когда», «Тогда», «Иначе» как псевдоним поля (КАК Конец)
     # не должны давать ложное срабатывание keyword-lowercase (Fix 2).

@@ -1605,7 +1605,7 @@ def check_order_after_totals(ctx):
 
 # ── ИТОГИ: неагрегированные негруппировочные поля ────
 
-@rule(code="totals-field-not-aggregated", severity="warning",
+@rule(code="totals-field-not-aggregated", severity="error",
       title="Поле выводится при ИТОГИ, но не агрегировано и не входит в группировку — на строках-итогах NULL")
 def check_totals_field_not_aggregated(ctx):
     """Флагует «голое» поле в запросе с ИТОГИ, которое не входит ни в группировку
@@ -1624,8 +1624,8 @@ def check_totals_field_not_aggregated(ctx):
     строках-итогах → находка. Вычисляемые поля (expression) и агрегаты (func) не
     флагуются. Если модель недоступна — правило пропускается.
 
-    Severity=warning: приводит к NULL в данных и, как правило, к runtime-ошибке
-    при обходе результата.
+    Severity=error: приводит к NULL в данных и, как правило, к runtime-ошибке
+    при обходе результата. Находка блокирует приёмку.
     """
     out = []
     for line, distinct, model_dict in iter_query_models(ctx):
@@ -1658,7 +1658,7 @@ def check_totals_field_not_aggregated(ctx):
             if au in group_aliases or pu in group_paths or au in total_aliases:
                 continue
             out.append(Finding(
-                "totals-field-not-aggregated", "warning", line,
+                "totals-field-not-aggregated", "error", line,
                 f"Поле «{alias}» выводится, но в секции ИТОГИ не входит ни в группировку, "
                 f"ни в агрегат — на строках-итогах (обход ПоГруппировкам, строки ОБЩИЕ) "
                 f"оно вернётся как NULL. Добавьте для него агрегат в ИТОГИ "

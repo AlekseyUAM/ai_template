@@ -7,6 +7,7 @@ from extract_queries import (
     extract_queries_from_xml,
     unescape_xml_entities,
 )
+from extract_queries import main
 
 
 def test_multiline_query_with_pipes():
@@ -100,3 +101,64 @@ def test_xml_multiple_queries_line_start():
 
 def test_xml_ignores_non_query():
     assert extract_queries_from_xml("<query>не запрос</query>") == []
+
+
+def test_leading_comment_lines_stripped():
+    src = '\tЗапрос.Текст = "// Комментарий\n// Ещё\nВЫБРАТЬ 1";'
+    res = extract_query_strings(src)
+    assert len(res) == 1
+    assert res[0].text == "ВЫБРАТЬ 1"
+
+
+def test_leading_comment_lines_with_pipes_stripped():
+    src = '\tЗапрос.Текст = "// Комментарий\n|\t// Ещё\n|\tВЫБРАТЬ 1";'
+    res = extract_query_strings(src)
+    assert len(res) == 1
+    assert res[0].text == "ВЫБРАТЬ 1"
+
+
+def test_main_warns_when_query_text_without_literal(tmp_path, capsys):
+    path = tmp_path / "Module.bsl"
+    path.write_text(
+        'Процедура Тест()\n'
+        '\tЗапрос.Текст = СтрШаблон("%1", "не запрос");\n'
+        'КонецПроцедуры\n',
+        encoding="utf-8",
+    )
+    assert main(["-Path", str(path)]) == 2
+    err = capsys.readouterr().err
+    assert "извлечено 0 запросов" in err
+
+
+def test_main_warns_on_new_query_without_literal(tmp_path, capsys):
+    path = tmp_path / "Module.bsl"
+    path.write_text(
+        'Процедура Тест()\n\tЗапрос = Новый Запрос;\n\tЗапрос.Текст = "не запрос";\nКонецПроцедуры\n',
+        encoding="utf-8",
+    )
+    assert main(["-Path", str(path)]) == 2
+    assert "извлечено 0 запросов" in capsys.readouterr().err
+
+
+def test_main_no_warning_when_query_extracted(tmp_path, capsys):
+    path = tmp_path / "Module.bsl"
+    path.write_text('\tЗапрос.Текст = "ВЫБРАТЬ 1";\n', encoding="utf-8")
+    assert main(["-Path", str(path)]) == 0
+    assert "извлечено 0 запросов" not in capsys.readouterr().err
+
+
+def test_main_no_warning_when_query_text_only_in_comment(tmp_path, capsys):
+    path = tmp_path / "Module.bsl"
+    path.write_text('// Запрос.Текст = "ВЫБРАТЬ 1";\nХ = 1;\n', encoding="utf-8")
+    assert main(["-Path", str(path)]) == 0
+    assert "извлечено 0 запросов" not in capsys.readouterr().err
+
+
+def test_main_no_fail_suppresses_loud_exit(tmp_path, capsys):
+    path = tmp_path / "Module.bsl"
+    path.write_text(
+        'Процедура Тест()\n\tЗапрос.Текст = "не запрос";\nКонецПроцедуры\n',
+        encoding="utf-8",
+    )
+    assert main(["-Path", str(path), "-NoFail"]) == 0
+    assert "извлечено 0 запросов" in capsys.readouterr().err

@@ -14,6 +14,58 @@ NAMED_XML_ENTITIES = {"amp": "&", "lt": "<", "gt": ">", "quot": '"', "apos": "'"
 
 _ENTITY_RE = re.compile(r"&(amp|lt|gt|quot|apos|#[xX][0-9a-fA-F]+|#[0-9]+);")
 
+_QUERY_TEXT_RE = re.compile(r"\bЗапрос\s*\.\s*Текст\b", re.IGNORECASE)
+_NEW_QUERY_RE = re.compile(r"\bНовый\s+Запрос\b", re.IGNORECASE)
+
+
+def _strip_leading_comments(text: str) -> str:
+    """Убрать ведущие пустые строки и строки-комментарии //..., а также
+    отступ первой строки (после `|`-снятия он остаётся от `Запрос.Текст = "`)."""
+    lines = text.split("\n")
+    i = 0
+    while i < len(lines):
+        stripped = lines[i].strip()
+        if not stripped or stripped.startswith("//"):
+            i += 1
+            continue
+        break
+    result = lines[i:]
+    if result:
+        result[0] = result[0].lstrip(" \t")
+    return "\n".join(result)
+
+
+def _sanitize_bsl(source: str) -> str:
+    """Заменить строки и комментарии пробелами, сохранив переводы строк."""
+    out = []
+    i, n = 0, len(source)
+    while i < n:
+        ch = source[i]
+        if ch == '"':
+            out.append(" ")
+            i += 1
+            while i < n:
+                c = source[i]
+                if c == '"':
+                    if i + 1 < n and source[i + 1] == '"':
+                        out.append("  ")
+                        i += 2
+                        continue
+                    out.append(" ")
+                    i += 1
+                    break
+                out.append("\n" if c == "\n" else " ")
+                i += 1
+            continue
+        if ch == "/" and i + 1 < n and source[i + 1] == "/":
+            while i < n and source[i] != "\n":
+                out.append(" ")
+                i += 1
+            continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
 
 @dataclass
 class ExtractedQuery:
@@ -103,7 +155,7 @@ def extract_query_strings(bsl_source: str):
                     line += 1
                 raw.append(c)
                 i += 1
-            text = _unpipe("".join(raw))
+            text = _strip_leading_comments(_unpipe("".join(raw)))
             if _starts_with_query_keyword(text):
                 result.append(ExtractedQuery(text, line_start))
             continue
@@ -132,6 +184,8 @@ def main(argv=None):
     parser = argparse.ArgumentParser(allow_abbrev=False)
     parser.add_argument("-Path", required=True)
     parser.add_argument("-Xml", action="store_true", help="извлекать из СКД-XML (<query>)")
+    parser.add_argument("-NoFail", action="store_true",
+                        help="не возвращать код 2 при нулевом извлечении")
     args = parser.parse_args(argv)
     path = args.Path
     blocks = []
@@ -141,6 +195,7 @@ def main(argv=None):
         targets = sorted(_walk(path, ext))
     else:
         targets = [path]
+    warnings = []
     for file in targets:
         try:
             with open(file, encoding="utf-8") as fh:
@@ -150,8 +205,19 @@ def main(argv=None):
         found = extract_queries_from_xml(source) if args.Xml else extract_query_strings(source)
         for q in found:
             blocks.append(f"# {file}:{q.line_start}\n{q.text}")
+        if not args.Xml and not found:
+            sanitized = _sanitize_bsl(source)
+            if _QUERY_TEXT_RE.search(sanitized) or _NEW_QUERY_RE.search(sanitized):
+                warnings.append(file)
+    for file in warnings:
+        print(
+            f"ВНИМАНИЕ: {file}: есть 'Запрос.Текст'/'Новый Запрос', но извлечено "
+            f"0 запросов — query-analyze не проверит запрос. Проверьте текст "
+            f"запроса вручную.",
+            file=sys.stderr,
+        )
     print("\n--- 8< ---\n".join(blocks))
-    return 0
+    return 0 if args.NoFail or not warnings else 2
 
 
 if __name__ == "__main__":
