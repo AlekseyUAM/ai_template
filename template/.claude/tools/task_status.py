@@ -7,8 +7,16 @@
 
 При возврате `develop`/`tests` в `pending` сам архивирует вердикты прошлой
 итерации (`TESTING.md` → `TESTING.<n>.md`, `REVIEW.md` → `REVIEW.<n>.md`).
-Каждый прогон этапа записывается в `stage["runs"]` — история для метрик
-(`iteration` при этом не меняется).
+
+Статусы: `pending → running → done | failed`. `done` разрешён только из
+`running` — этап без пройденной загрузки в ИБ и открытого прогона не
+закрывается. Повторный запуск этапа (в том числе уже `running` или `done`) —
+команда `restart`: закрывает все открытые записи, увеличивает `iteration` и
+открывает новый прогон. Повторный `running` при уже `running` — ошибка.
+
+Каждый прогон этапа записывается в `stage["runs"]`
+(`{"iteration", "started_at", "finished_at"}`) — история для метрик; номер
+записи совпадает с `iteration` этапа на момент прогона.
 """
 import argparse
 import contextlib
@@ -18,7 +26,8 @@ import os
 import time
 from pathlib import Path
 
-VALID = ("pending", "running", "done", "failed", "skipped", "approve")
+VALID = ("pending", "running", "done", "failed", "skipped", "approve",
+         "restart")
 
 LOCK_TIMEOUT = 5.0
 STALE_LOCK_SECONDS = 30.0
@@ -236,20 +245,75 @@ def set_db_update(task_dir: str, phase: str) -> None:
         _atomic_write_json(path, data)
 
 
+def _close_open_runs(stage: dict, now: str) -> None:
+    for run in stage.get("runs") or []:
+        if isinstance(run, dict) and run.get("finished_at") is None:
+            run["finished_at"] = now
+
+
+def _restart_stage(stage: dict, data: dict) -> None:
+    """Начать новый прогон этапа, закрыв все открытые runs[]."""
+    now = _now_iso()
+    runs = stage.get("runs") or []
+    _close_open_runs(stage, now)
+    stage["iteration"] = (
+        int(stage.get("iteration", 1)) + 1 if runs else 1)
+    stage["status"] = "running"
+    stage["started_at"] = now
+    stage["finished_at"] = None
+    stage.setdefault("runs", []).append(
+        {"iteration": stage["iteration"], "started_at": now,
+         "finished_at": None})
+    if stage.get("name") == "develop" and _truthy(data.get("update_db")):
+        data["db_update"] = {"started_at": None, "finished_at": None}
+
+
+def _refresh_overall(data: dict) -> None:
+    overall = _overall_status(data.get("stages", []))
+    data["status"] = overall
+    now = _now_iso()
+    if overall == "running" and not data.get("started_at"):
+        data["started_at"] = now
+    if overall in ("done", "failed"):
+        data["finished_at"] = now
+    elif data.get("finished_at"):
+        data["finished_at"] = None
+
+
 def _apply_update(data: dict, stage: str, status: str, files, task_dir) -> None:
     for s in data.get("stages", []):
         if s["name"] == stage:
             if status == "approve":
                 s["approved"] = True
+            elif status == "restart":
+                _restart_stage(s, data)
+                data["stage"] = stage
+                _refresh_overall(data)
+                return
             else:
                 if status == "running":
+                    if s.get("status") == "running":
+                        raise SystemExit(
+                            f"ОШИБКА (running): этап '{stage}' уже running. "
+                            f"Для нового прогона используйте restart.")
                     msg = _gate_block(data, stage)
                     if msg:
                         raise SystemExit("ОШИБКА (гейт): " + msg)
+                    _close_open_runs(s, _now_iso())
                 if status == "done":
+                    if s.get("status") != "running":
+                        raise SystemExit(
+                            f"ОШИБКА (done): этап '{stage}' не в running "
+                            f"(текущий статус: {s.get('status')}). "
+                            f"Сначала переведите этап в running.")
                     msg = _db_update_block(data, stage, status)
                     if msg:
                         raise SystemExit("ОШИБКА (БД): " + msg)
+                    if not any(run.get("finished_at") is None
+                               for run in (s.get("runs") or [])):
+                        raise SystemExit(
+                            f"ОШИБКА (done): у этапа '{stage}' нет открытого "
+                            f"прогона. Запустите этап через running или restart.")
                 # Архив вердиктов прошлой итерации — ДО изменения статуса: при
                 # конфликте файлов этап и файлы остаются как были.
                 if status == "pending" and stage in AUTO_ARCHIVE_STAGES:
@@ -268,13 +332,16 @@ def _apply_update(data: dict, stage: str, status: str, files, task_dir) -> None:
                 # Тайминги этапа и номер итерации
                 now_stage = _now_iso()
                 if status == "running":
-                    if s.get("finished_at") is not None:
-                        # повторный прогон этапа в цикле develop↔testing/review
+                    # Любой повторный запуск (после done/failed или возврата в
+                    # pending) — новая итерация; первый запуск — iteration 1.
+                    has_history = (bool(s.get("runs"))
+                                   or s.get("finished_at") is not None)
+                    if has_history:
                         s["iteration"] = int(s.get("iteration", 1)) + 1
-                        s["finished_at"] = None
                     else:
                         s.setdefault("iteration", 1)
                     s["started_at"] = now_stage
+                    s["finished_at"] = None
                     # История прогонов для метрик: iteration — как есть, каждый
                     # перевод в running — отдельная запись.
                     s.setdefault("runs", []).append(
@@ -295,22 +362,15 @@ def _apply_update(data: dict, stage: str, status: str, files, task_dir) -> None:
                             run["finished_at"] = now_stage
                             break
             # Пересчитать верхнеуровневый статус задачи по этапам (как на DB-пути
-            # в task_api2.update_stage), иначе он застрянет на начальном значении.
-            overall = _overall_status(data.get("stages", []))
-            data["status"] = overall
+            # в task_api2.update_stage), иначе он застрянет на начальном значении
+            # (_refresh_overall).
             # Отметки времени — ISO 8601 в локальном поясе ОС. В БД их
             # переводит обратно в epoch task_sync; фолбэк для неотмеченных
             # этапов остаётся числовым. started_at ставится при первом
             # переходе задачи в running, finished_at — при терминальном
             # статусе; при возврате в нетерминальный статус снимаем
             # устаревший finished_at.
-            now = _now_iso()
-            if overall == "running" and not data.get("started_at"):
-                data["started_at"] = now
-            if overall in ("done", "failed"):
-                data["finished_at"] = now
-            elif data.get("finished_at"):
-                data["finished_at"] = None
+            _refresh_overall(data)
             return
     raise SystemExit(f"неизвестный этап: {stage}")
 
@@ -330,7 +390,10 @@ def main(argv=None) -> None:
     ap.add_argument("stage")
     ap.add_argument("status",
                     help="pending|running|done|failed|skipped|approve, "
-                         "или start|done для псевдоэтапа db-update")
+                         "restart (новый прогон этапа), "
+                         "или start|done для псевдоэтапа db-update. "
+                         "done — только из running; повторный running "
+                         "без restart — ошибка")
     ap.add_argument("--files", nargs="*", default=[])
     args = ap.parse_args(argv)
     if args.stage == "db-update":

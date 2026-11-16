@@ -29,6 +29,7 @@ def _task(tmp_path):
 def test_cli_sets_status_and_files(tmp_path):
     mod = _load()
     d = _task(tmp_path)
+    mod.main([str(d), "develop", "running"])
     mod.main([str(d), "develop", "done", "--files", "Module.bsl", "Form.bsl"])
     data = json.loads((d / "task.json").read_text(encoding="utf-8"))
     dev = next(s for s in data["stages"] if s["name"] == "develop")
@@ -190,17 +191,59 @@ def test_cli_runs_repeat_running_done(tmp_path):
     assert dev["iteration"] == 2
 
 
-def test_cli_runs_rerun_without_done_keeps_iteration(tmp_path):
-    """Повторный running без done: вторая запись, iteration как прежде не растёт."""
+def test_cli_running_twice_errors(tmp_path):
     mod = _load()
     d = _task(tmp_path)
     mod.main([str(d), "develop", "running"])
+    with pytest.raises(SystemExit, match="restart"):
+        mod.main([str(d), "develop", "running"])
+
+
+def test_cli_done_without_running_errors(tmp_path):
+    mod = _load()
+    d = _task(tmp_path)
+    with pytest.raises(SystemExit, match="running"):
+        mod.main([str(d), "develop", "done"])
+
+
+def test_cli_restart_closes_open_run_and_increments(tmp_path):
+    mod = _load()
+    d = _task(tmp_path)
     mod.main([str(d), "develop", "running"])
-    dev = _stage(json.loads((d / "task.json").read_text(encoding="utf-8")), "develop")
+    mod.main([str(d), "develop", "restart"])
+    dev = _stage(json.loads((d / "task.json").read_text(encoding="utf-8")),
+                 "develop")
+    assert dev["status"] == "running"
+    assert dev["iteration"] == 2
     assert len(dev["runs"]) == 2
-    assert [r["iteration"] for r in dev["runs"]] == [1, 1]
+    assert dev["runs"][0]["finished_at"] is not None
+    assert dev["runs"][1]["iteration"] == 2
     assert dev["runs"][1]["finished_at"] is None
+
+
+def test_cli_restart_from_done_starts_new_iteration(tmp_path):
+    mod = _load()
+    d = _task(tmp_path)
+    mod.main([str(d), "develop", "running"])
+    mod.main([str(d), "develop", "done"])
+    mod.main([str(d), "develop", "restart"])
+    dev = _stage(json.loads((d / "task.json").read_text(encoding="utf-8")),
+                 "develop")
+    assert dev["status"] == "running"
+    assert dev["iteration"] == 2
+    assert all(r["finished_at"] is not None for r in dev["runs"][:-1])
+    assert dev["runs"][-1]["finished_at"] is None
+
+
+def test_cli_restart_first_run_is_iteration_one(tmp_path):
+    mod = _load()
+    d = _task(tmp_path)
+    mod.main([str(d), "develop", "restart"])
+    dev = _stage(json.loads((d / "task.json").read_text(encoding="utf-8")),
+                 "develop")
     assert dev["iteration"] == 1
+    assert dev["runs"][0]["iteration"] == 1
+    assert dev["runs"][0]["finished_at"] is None
 
 
 def _testing_done_task(tmp_path, review_done=False):
@@ -457,8 +500,8 @@ def test_cli_pending_closes_open_run(tmp_path):
     assert dev["runs"][1]["finished_at"] is None
 
 
-def test_cli_pending_keeps_iteration_when_never_finished(tmp_path):
-    """running → pending → running: iteration не растёт (семантика не меняется)."""
+def test_cli_pending_then_running_increments_iteration(tmp_path):
+    """После возврата в pending следующий running — новая итерация."""
     mod = _load()
     d = _task(tmp_path)
     mod.main([str(d), "develop", "running"])
@@ -466,4 +509,5 @@ def test_cli_pending_keeps_iteration_when_never_finished(tmp_path):
     mod.main([str(d), "develop", "running"])
     dev = _stage(json.loads((d / "task.json").read_text(encoding="utf-8")),
                  "develop")
-    assert dev["iteration"] == 1
+    assert dev["iteration"] == 2
+    assert [run["iteration"] for run in dev["runs"]] == [1, 2]

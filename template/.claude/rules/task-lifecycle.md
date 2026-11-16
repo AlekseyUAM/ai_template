@@ -10,7 +10,8 @@ description: Работа с задачей идёт по task.json с обно�
 2. Каждый субагент пишет свой артефакт этапа (`ANALYZE.md`, `ARCHITECT.md`, `TESTS.md`,
    `DEVELOP.md`, `TESTING.md`, `REVIEW.md`, `DOCS.md`) в каталог задачи.
 3. Статус этапа и список изменённых файлов обновляются через
-   `.claude/tools/task_status.py` (см. навык `task-orchestration`).
+   `.claude/tools/task_status.py` (см. навык `task-orchestration`). `done` — только
+   из `running`; для повторного запуска — `restart`.
 
 Отдельную ветку git под задачу не создавай — в проекте одновременно выполняется
 только одна задача, работа идёт в текущей ветке проекта.
