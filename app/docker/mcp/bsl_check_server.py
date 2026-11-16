@@ -5,7 +5,9 @@
 настройкам `.bsl-language-server.json`. Сервер stateless — без индекса и доступа к
 кодовой базе: каждый вызов гоняет BSL Language Server в режиме CLI `analyze` с
 json-репортёром по присланному тексту. Альтернатива тексту — `file_path`: сервер
-читает файл сам, но только если путь виден из контейнера.
+читает файл сам, но только если путь виден из контейнера. Ведущий UTF-8 BOM
+срезается до анализа (BSL LS падает на нём с `ParseError`); `sha256` принимается
+как для файла с BOM, так и для нормализованного текста.
 
 Функции `parse_report`, `prepare_input` и `run_check` специально не зависят от
 пакета `mcp` и легко тестируются без java. Импорт FastMCP выполняется лениво в
@@ -117,6 +119,14 @@ def _summary(diagnostics: list[dict]) -> str:
     return f"Найдено замечаний: {len(diagnostics)} ({', '.join(parts)})."
 
 
+_BOM = "﻿"
+
+
+def _strip_bom(text: str) -> str:
+    """Убрать ведущий UTF-8 BOM: BSL LS падает на `ParseError` с ним."""
+    return text[1:] if text.startswith(_BOM) else text
+
+
 def _sha256_hex(text: str) -> str:
     """SHA-256 текста в UTF-8 (как `sha256sum` по файлу в той же кодировке)."""
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -133,17 +143,32 @@ def _counts(diagnostics: list[dict]) -> dict:
 
 
 def _result(*, ok: bool, summary: str, sha256: str, source: str,
-            raw_bytes: int, diagnostics: list[dict] | None = None) -> dict:
-    """Единый формат ответа: ok/count/counts/diagnostics/summary/sha256/source/bytes."""
+            raw_bytes: int, diagnostics: list[dict] | None = None,
+            bom_removed: bool = False,
+            raw_sha256: str | None = None) -> dict:
+    """Единый формат ответа: ok/count/counts/diagnostics/summary/sha256/source/bytes.
+
+    `sha256` — хэш нормализованного текста (без BOM); `raw_sha256` — хэш
+    исходного текста, если BOM был; `bom_removed` — признак нормализации.
+    """
     diagnostics = diagnostics or []
-    return {"ok": ok, "count": len(diagnostics),
-            "counts": _counts(diagnostics), "diagnostics": diagnostics,
-            "summary": summary, "sha256": sha256, "source": source,
-            "bytes": raw_bytes}
+    result = {"ok": ok, "count": len(diagnostics),
+              "counts": _counts(diagnostics), "diagnostics": diagnostics,
+              "summary": summary, "sha256": sha256, "source": source,
+              "bytes": raw_bytes, "bom_removed": bom_removed}
+    if raw_sha256 and raw_sha256 != sha256:
+        result["raw_sha256"] = raw_sha256
+    return result
 
 
 def prepare_input(code, file_path, sha256, filename):
-    """Проверить аргументы check и вернуть (code, filename, sha, source, error)."""
+    """Проверить аргументы check и вернуть (code, filename, sha, source, error).
+
+    `code` возвращается **исходным** (с BOM): BOM срезает `run_check`, который
+    также сообщает `bom_removed`/`raw_sha256`. Здесь проверяется, что sha256
+    соответствует либо исходному тексту (с BOM), либо нормализованному — так
+    `sha256sum Module.bsl` продолжает работать для BOM-файлов.
+    """
     expected = str(sha256 or "").strip().lower()
     if not expected:
         return None, filename, expected, "code", (
@@ -158,7 +183,7 @@ def prepare_input(code, file_path, sha256, filename):
     source = "code"
     if file_path is not None:
         try:
-            code = Path(file_path).read_text(encoding="utf-8")
+            raw = Path(file_path).read_text(encoding="utf-8")
         except OSError as exc:
             return None, filename, expected, "file", (
                 f"не удалось прочитать file_path: {exc}. В Docker-контейнере "
@@ -166,7 +191,21 @@ def prepare_input(code, file_path, sha256, filename):
         source = "file"
         if filename == "Module.bsl":
             filename = Path(file_path).name
-    return code, filename, expected, source, None
+    else:
+        raw = code if isinstance(code, str) else str(code or "")
+
+    normalized = _strip_bom(raw)
+    actual = _sha256_hex(normalized)
+    raw_sha = _sha256_hex(raw)
+    if expected not in (actual, raw_sha):
+        return None, filename, expected, source, (
+            f"sha256 не совпадает: передан {expected}, фактический {actual} "
+            f"(без BOM) / {raw_sha} (с BOM). Текст не соответствует файлу — "
+            f"не перепечатывай модуль, передай его как есть.")
+    # Возвращаем исходный текст: run_check сам срежет BOM и заполнит
+    # bom_removed/raw_sha256. expected нормализуем к хэшу текста без BOM —
+    # run_check принимает обе формы, но так ответ однозначен.
+    return raw, filename, actual, source, None
 
 
 def run_check(code: str, filename: str, jar: str, config: str | None = None,
@@ -182,43 +221,59 @@ def run_check(code: str, filename: str, jar: str, config: str | None = None,
     `bsl-json.json`. Параметр `run` (по умолчанию `subprocess.run`) позволяет
     подменить запуск в тестах без java. Временный каталог всегда удаляется.
 
+    Ведущий UTF-8 BOM срезается до записи в temp: BSL LS отвечает `ParseError`
+    на начало модуля с BOM. Принимается sha256 как исходного (`raw`) текста, так
+    и нормализованного — `sha256sum Module.bsl` по файлу с BOM продолжает
+    работать. В ответе `sha256` — хэш нормализованного текста; при наличии BOM
+    дополнительно возвращаются `raw_sha256` и `bom_removed=true`.
+
     Если передан `expected_sha256` — он должен быть 64 hex и совпасть с SHA-256
-    `code`; иначе `ok=False` и java не запускается. Внутренний вызов может не
-    передавать хэш (`None`) — обязательность обеспечивает публичный `check`.
+    `code` (в любой из двух форм); иначе `ok=False` и java не запускается.
+    Внутренний вызов может не передавать хэш (`None`) — обязательность
+    обеспечивает публичный `check`.
 
     Сервер stateless: никакого доступа к кодовой базе проекта — только присланные
     код и настройки. Возвращает `{ok, count, counts, diagnostics, summary, sha256,
-    source, bytes}`; при ошибке запуска или отсутствии отчёта — `ok=False` и текст
-    ошибки/stderr в `summary`.
+    source, bytes, bom_removed[, raw_sha256]}`; при ошибке запуска или отсутствии
+    отчёта — `ok=False` и текст ошибки/stderr в `summary`.
     """
-    code = code if isinstance(code, str) else str(code or "")
-    raw_bytes = len(code.encode("utf-8"))
+    raw_code = code if isinstance(code, str) else str(code or "")
+    code = _strip_bom(raw_code)
+    bom_removed = code != raw_code
+    raw_bytes = len(raw_code.encode("utf-8"))
     actual_sha = _sha256_hex(code)
+    raw_sha = _sha256_hex(raw_code)
     if expected_sha256 is not None:
         expected = str(expected_sha256).strip().lower()
         if not _SHA256_RE.match(expected):
             return _result(ok=False, summary="sha256 должен быть 64 hex-символа.",
-                           sha256=actual_sha, source=source, raw_bytes=raw_bytes)
-        if actual_sha != expected:
+                           sha256=actual_sha, source=source, raw_bytes=raw_bytes,
+                           bom_removed=bom_removed, raw_sha256=raw_sha)
+        if expected not in (actual_sha, raw_sha):
             return _result(
                 ok=False,
                 summary=(f"sha256 не совпадает: передан {expected}, фактический "
-                         f"{actual_sha}. Текст не соответствует файлу — не "
-                         f"перепечатывай модуль, передай его как есть."),
-                sha256=actual_sha, source=source, raw_bytes=raw_bytes)
+                         f"{actual_sha} (без BOM) / {raw_sha} (с BOM). Текст не "
+                         f"соответствует файлу — не перепечатывай модуль, передай "
+                         f"его как есть."),
+                sha256=actual_sha, source=source, raw_bytes=raw_bytes,
+                bom_removed=bom_removed, raw_sha256=raw_sha)
     if raw_bytes > MAX_CODE_BYTES:
         return _result(ok=False,
                        summary=f"код слишком большой (> {MAX_CODE_BYTES} байт)",
-                       sha256=actual_sha, source=source, raw_bytes=raw_bytes)
+                       sha256=actual_sha, source=source, raw_bytes=raw_bytes,
+                           bom_removed=bom_removed, raw_sha256=raw_sha)
     if config and len(config.encode("utf-8")) > MAX_CONFIG_BYTES:
         return _result(ok=False,
                        summary=f"config слишком большой (> {MAX_CONFIG_BYTES} байт)",
-                       sha256=actual_sha, source=source, raw_bytes=raw_bytes)
+                       sha256=actual_sha, source=source, raw_bytes=raw_bytes,
+                           bom_removed=bom_removed, raw_sha256=raw_sha)
     filename = Path(filename or "Module.bsl").name or "Module.bsl"
     if filename in _RESERVED_FILENAMES:
         return _result(ok=False,
                        summary=f"имя файла {filename!r} зарезервировано под настройки анализа",
-                       sha256=actual_sha, source=source, raw_bytes=raw_bytes)
+                       sha256=actual_sha, source=source, raw_bytes=raw_bytes,
+                           bom_removed=bom_removed, raw_sha256=raw_sha)
     tmp = tempfile.mkdtemp(prefix="bsl-check-")
     try:
         srcdir = Path(tmp) / "src"
@@ -241,11 +296,13 @@ def run_check(code: str, filename: str, jar: str, config: str | None = None,
         except subprocess.TimeoutExpired:
             return _result(ok=False,
                            summary=f"BSL LS не завершился за {ANALYZE_TIMEOUT_SECONDS} с",
-                           sha256=actual_sha, source=source, raw_bytes=raw_bytes)
+                           sha256=actual_sha, source=source, raw_bytes=raw_bytes,
+                           bom_removed=bom_removed, raw_sha256=raw_sha)
         except Exception as exc:  # java не найдена и т.п.
             return _result(ok=False,
                            summary=f"Не удалось запустить BSL LS: {exc}",
-                           sha256=actual_sha, source=source, raw_bytes=raw_bytes)
+                           sha256=actual_sha, source=source, raw_bytes=raw_bytes,
+                           bom_removed=bom_removed, raw_sha256=raw_sha)
 
         report_path = outdir / "bsl-json.json"
         if not report_path.exists():
@@ -253,17 +310,20 @@ def run_check(code: str, filename: str, jar: str, config: str | None = None,
             code_ = getattr(proc, "returncode", "?")
             return _result(ok=False,
                            summary=stderr or f"Отчёт не создан (код возврата {code_}).",
-                           sha256=actual_sha, source=source, raw_bytes=raw_bytes)
+                           sha256=actual_sha, source=source, raw_bytes=raw_bytes,
+                           bom_removed=bom_removed, raw_sha256=raw_sha)
 
         try:
             report = json.loads(report_path.read_text(encoding="utf-8"))
         except (OSError, ValueError) as exc:
             return _result(ok=False, summary=f"Не удалось прочитать отчёт: {exc}",
-                           sha256=actual_sha, source=source, raw_bytes=raw_bytes)
+                           sha256=actual_sha, source=source, raw_bytes=raw_bytes,
+                           bom_removed=bom_removed, raw_sha256=raw_sha)
 
         diagnostics = parse_report(report, filename)
         return _result(ok=True, summary=_summary(diagnostics),
                        sha256=actual_sha, source=source, raw_bytes=raw_bytes,
+                       bom_removed=bom_removed, raw_sha256=raw_sha,
                        diagnostics=diagnostics)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)

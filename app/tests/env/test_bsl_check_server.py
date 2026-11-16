@@ -321,6 +321,79 @@ def test_prepare_input_missing_file(tmp_path):
     assert "file_path" in error
 
 
+BOM = "﻿"
+
+
+def test_prepare_input_bom_accepts_raw_sha_and_keeps_code():
+    raw = BOM + "ВЫБРАТЬ 1"
+    code, filename, expected, source, error = mod.prepare_input(
+        code=raw, file_path=None, sha256=_sha(raw), filename="Module.bsl")
+    assert error is None
+    assert code == raw  # BOM срезает run_check (для bom_removed/raw_sha256)
+    assert expected == _sha("ВЫБРАТЬ 1")
+    assert source == "code"
+
+
+def test_prepare_input_file_bom_accepts_file_sha(tmp_path):
+    path = tmp_path / "Module.bsl"
+    raw = BOM + "ВЫБРАТЬ 1"
+    path.write_bytes(raw.encode("utf-8"))
+    code, filename, expected, source, error = mod.prepare_input(
+        code=None, file_path=str(path), sha256=_sha(raw),
+        filename="Module.bsl")
+    assert error is None
+    assert code == raw
+    assert expected == _sha("ВЫБРАТЬ 1")
+    assert source == "file"
+
+
+def _fake_json_run(report):
+    def fake_run(cmd, **kwargs):
+        import json as _json
+        outdir = cmd[cmd.index("--outputDir") + 1]
+        Path(outdir).mkdir(parents=True, exist_ok=True)
+        (Path(outdir) / "bsl-json.json").write_text(
+            _json.dumps(report), encoding="utf-8")
+
+        class _R:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+        return _R()
+    return fake_run
+
+
+def test_run_check_bom_accepts_raw_sha_and_strips_bom():
+    raw = BOM + "Код"
+    res = mod.run_check(raw, "Module.bsl", jar="/opt/x.jar",
+                        expected_sha256=_sha(raw),
+                        run=_fake_json_run(_report([])))
+    assert res["ok"] is True
+    assert res["sha256"] == _sha("Код")
+    assert res["raw_sha256"] == _sha(raw)
+    assert res["bom_removed"] is True
+
+
+def test_run_check_bom_accepts_normalized_sha():
+    raw = BOM + "Код"
+    res = mod.run_check(raw, "Module.bsl", jar="/opt/x.jar",
+                        expected_sha256=_sha("Код"),
+                        run=_fake_json_run(_report([])))
+    assert res["ok"] is True
+    assert res["sha256"] == _sha("Код")
+    assert res["bom_removed"] is True
+
+
+def test_run_check_bom_mismatch_rejected_before_java():
+    calls = []
+    res = mod.run_check(BOM + "Код", "Module.bsl", jar="/opt/x.jar",
+                        expected_sha256="0" * 64,
+                        run=lambda *a, **k: calls.append(1))
+    assert res["ok"] is False
+    assert "sha256" in res["summary"]
+    assert calls == []
+
+
 def test_counts_in_result():
     report = _report([{"path": "Module.bsl", "diagnostics": [
         {"range": {"start": {"line": 0, "character": 0},
