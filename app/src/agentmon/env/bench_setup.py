@@ -561,18 +561,38 @@ def _venv_python(project_dir: str) -> str:
     return str(base / suffix)
 
 
-def run_batch_step(project_dir: str, args: list[str], *, prov, log=print) -> None:
-    """Выполнить команду 1c-batch интерпретатором .venv проекта."""
+_DB_LOCK_MARK = "Ошибка исключительной блокировки информационной базы"
+_BATCH_RETRY_DELAYS = (30, 60)
+
+
+def run_batch_step(project_dir: str, args: list[str], *, prov, log=print,
+                   retry_delays=_BATCH_RETRY_DELAYS,
+                   sleep=time.sleep) -> None:
+    """Выполнить команду 1c-batch интерпретатором .venv проекта.
+
+    Транзиентная блокировка ИБ (фоновое задание/чужой сеанс) повторяется по
+    `retry_delays`: без ретрая setup падает на ровном месте.
+    """
     script = (Path(project_dir) / ".claude" / "skills" / "1c-batch"
               / "scripts" / "1c-batch.py")
     cmd = [_venv_python(project_dir), str(script), *args]
-    res = prov.run(cmd, cwd=project_dir)
-    if res.returncode != 0:
+    attempt = 0
+    while True:
+        res = prov.run(cmd, cwd=project_dir)
         tail = ((res.stdout or "") + (res.stderr or "")).strip()[-2000:]
+        if res.returncode == 0:
+            log(f"✓ 1c-batch {args[0]}")
+            return
+        if (_DB_LOCK_MARK in tail and attempt < len(retry_delays)):
+            delay = retry_delays[attempt]
+            attempt += 1
+            log(f"⚠ 1c-batch {args[0]}: ИБ заблокирована — повтор "
+                f"{attempt}/{len(retry_delays)} через {delay} с")
+            sleep(delay)
+            continue
         raise SetupError(
             f"1c-batch {' '.join(args)} завершился с кодом "
             f"{res.returncode}:\n{tail}")
-    log(f"✓ 1c-batch {args[0]}")
 
 
 def default_http_ok(url: str, timeout: float = 5.0) -> bool:
@@ -623,7 +643,7 @@ def _task_max_minutes(data: dict, folder: str) -> int:
 
 
 def _task_identifier(data: dict, folder: str) -> str:
-    """identifier из task.json, иначе номер из имени папки (task##001 → #001)."""
+    """identifier из task.json, иначе номер из имени папки (task#001 → #001)."""
     identifier = str(data.get("identifier") or "").strip()
     if identifier:
         return identifier

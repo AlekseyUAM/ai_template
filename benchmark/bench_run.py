@@ -329,7 +329,7 @@ def discover_tasks(project_dir: Path) -> list[TaskInfo]:
         raise BenchError(f"нет каталога задач: {tasks_root}")
     tasks: list[TaskInfo] = []
     for path in sorted(tasks_root.iterdir(), key=lambda p: p.name):
-        if not path.is_dir() or not path.name.startswith("task##"):
+        if not path.is_dir() or not path.name.startswith("task#"):
             continue
         task_json = path / "task.json"
         if not task_json.is_file():
@@ -339,6 +339,7 @@ def discover_tasks(project_dir: Path) -> list[TaskInfo]:
         except (OSError, json.JSONDecodeError) as exc:
             raise BenchError(f"{path.name}/task.json: {exc}") from exc
         data = data if isinstance(data, dict) else {}
+
         try:
             max_minutes = int(data.get("max_minutes"))
         except (TypeError, ValueError) as exc:
@@ -356,16 +357,17 @@ def discover_tasks(project_dir: Path) -> list[TaskInfo]:
             raw=data,
         ))
     if not tasks:
-        raise BenchError(f"в {tasks_root} нет задач task##*")
+        raise BenchError(f"в {tasks_root} нет задач task#*")
     return tasks
 
 
 def _task_aliases(task: TaskInfo) -> set[str]:
+    folder_number = task.folder.removeprefix("task#").lstrip("#")
     aliases = {
         task.folder,
         task.identifier,
         task.identifier.removeprefix("#"),
-        task.folder.removeprefix("task##"),
+        folder_number,
     }
     aliases.discard("")
     return aliases
@@ -430,9 +432,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--env", help="env-файл; по умолчанию benchmark/test.env")
     parser.add_argument("--task", action="append", default=[],
                         dest="task_selectors",
-                        help="задача: task##001, #001 или 001 (повторяемый)")
+                        help="задача: task#001, #001 или 001 (повторяемый)")
     parser.add_argument("--limit", action="append", default=[], dest="limit_args",
-                        help="лимит в минутах: task##001=30, #002=120 (повторяемый)")
+                        help="лимит в минутах: task#001=30, #002=120 (повторяемый)")
     parser.add_argument("--claude-cmd", default="claude-ds",
                         help="команда агента (по умолчанию claude-ds)")
     parser.add_argument("--analysis-timeout", type=int, default=30,

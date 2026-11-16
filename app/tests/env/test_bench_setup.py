@@ -475,6 +475,26 @@ def test_run_batch_step_uses_project_venv_and_raises_on_error(tmp_path):
     assert cwd == cfg.project_dir
 
 
+def test_run_batch_step_retries_db_lock(tmp_path):
+    cfg = load_config(write_env(tmp_path), repo_root=tmp_path)
+    project = Path(cfg.project_dir)
+    (project / ".venv" / "bin").mkdir(parents=True)
+    (project / ".venv" / "bin" / "python").write_text("")
+    (project / ".claude" / "skills" / "1c-batch" / "scripts").mkdir(parents=True)
+    (project / ".claude" / "skills" / "1c-batch" / "scripts" / "1c-batch.py").write_text("")
+
+    prov = FakeProv([
+        RunResult(1, stdout="Ошибка исключительной блокировки информационной базы"),
+        RunResult(0, stdout="ok"),
+    ])
+    sleeps = []
+    run_batch_step(cfg.project_dir, ["load-config", "/cf"], prov=prov,
+                   retry_delays=(30,), sleep=sleeps.append,
+                   log=lambda line: None)
+    assert len(prov.calls) == 2
+    assert sleeps == [30]
+
+
 def test_check_mcp_url_fails_when_unreachable(tmp_path):
     with pytest.raises(SetupError, match="недоступен"):
         check_mcp_url("http://localhost:9999/hs/mcp", http_ok=lambda url: False)
@@ -496,7 +516,7 @@ from agentmon.store.tasks import TaskRepo
 
 
 def make_tasks(root: Path) -> Path:
-    task_dir = root / "benchmark" / "tasks" / "task##001"
+    task_dir = root / "benchmark" / "tasks" / "task#001"
     task_dir.mkdir(parents=True)
     data = {
         "id": 23,
@@ -550,7 +570,7 @@ def test_import_tasks_copies_rewrites_and_preserves_body(tmp_path):
     item = imported[0]
     assert isinstance(item, ImportedTask)
     assert item.identifier == "#001"
-    assert item.folder == "task##001"
+    assert item.folder == "task#001"
 
     task_row = TaskRepo(store).get(item.task_id)
     assert task_row["project_id"] == project_id
@@ -558,7 +578,7 @@ def test_import_tasks_copies_rewrites_and_preserves_body(tmp_path):
     assert task_row["identifier"] == "#001"
     assert json.loads(task_row["stages_json"])[0]["name"] == "develop"
 
-    task_dir = Path(cfg.project_dir) / "tasks" / "task##001"
+    task_dir = Path(cfg.project_dir) / "tasks" / "task#001"
     assert (task_dir / "extra.txt").read_text(encoding="utf-8") == "extra"
     data = json.loads((task_dir / "task.json").read_text(encoding="utf-8"))
     assert data["id"] == item.task_id
@@ -624,7 +644,7 @@ def test_commit_init_and_baseline(tmp_path):
     init_commit = prov.calls[-1][0]
     assert "commit" in init_commit and "init" in init_commit
 
-    tasks = [ImportedTask(identifier="#001", task_id=7, folder="task##001")]
+    tasks = [ImportedTask(identifier="#001", task_id=7, folder="task#001")]
     commit_baseline(cfg, tasks, prov)
     baseline_commit = prov.calls[-1][0]
     assert "baseline before task#001" in baseline_commit
@@ -1153,7 +1173,7 @@ def test_import_tasks_rejects_non_integer_max_minutes(tmp_path):
         import_tasks(project_id=project_id, cfg=cfg, repo_root=root,
                      store=store, log=lambda line: None)
     message = str(excinfo.value)
-    assert "task##001" in message
+    assert "task#001" in message
     assert "90 мин" in message
     assert TaskRepo(store).list(project_id=project_id) == []
 
@@ -1161,7 +1181,7 @@ def test_import_tasks_rejects_non_integer_max_minutes(tmp_path):
 def test_import_tasks_rejects_zero_max_minutes(tmp_path):
     root, task_dir, cfg, store, project_id = _tasks_root(tmp_path)
     _edit_task(task_dir, max_minutes=0)
-    with pytest.raises(SetupError, match="task##001"):
+    with pytest.raises(SetupError, match="task#001"):
         import_tasks(project_id=project_id, cfg=cfg, repo_root=root,
                      store=store, log=lambda line: None)
 
@@ -1189,7 +1209,7 @@ def test_import_tasks_warns_when_task_md_header_unrecognized(tmp_path):
     lines = []
     imported = import_tasks(project_id=project_id, cfg=cfg, repo_root=root,
                             store=store, log=lines.append)
-    assert any("task##001/TASK.md" in line and "⚠" in line for line in lines)
-    md = (Path(cfg.project_dir) / "tasks" / "task##001" / "TASK.md").read_text(
+    assert any("task#001/TASK.md" in line and "⚠" in line for line in lines)
+    md = (Path(cfg.project_dir) / "tasks" / "task#001" / "TASK.md").read_text(
         encoding="utf-8")
     assert md.startswith("Задача без шапки")

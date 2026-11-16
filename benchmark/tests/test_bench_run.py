@@ -120,8 +120,8 @@ def test_run_claude_timeout_kills_descendants(tmp_path):
 def make_project(root: Path) -> Path:
     project = root / "project"
     tasks = project / "tasks"
-    for folder, ident, minutes in (("task##001", "#001", 30),
-                                   ("task##002", "#002", 60)):
+    for folder, ident, minutes in (("task#001", "#001", 30),
+                                   ("task#002", "#002", 60)):
         task_dir = tasks / folder
         task_dir.mkdir(parents=True)
         (task_dir / "task.json").write_text(json.dumps({
@@ -143,9 +143,9 @@ def test_parse_minutes_is_integer_minutes():
 
 
 def test_parse_limit_arg():
-    assert parse_limit_arg("task##001=30") == ("task##001", 30)
+    assert parse_limit_arg("task#001=30") == ("task#001", 30)
     with pytest.raises(BenchError):
-        parse_limit_arg("task##001")
+        parse_limit_arg("task#001")
     with pytest.raises(BenchError):
         parse_limit_arg("=30")
 
@@ -173,12 +173,12 @@ def test_resolve_project_dir_requires_value(tmp_path):
 def test_discover_and_select(tmp_path):
     project = make_project(tmp_path)
     tasks = discover_tasks(project)
-    assert [t.folder for t in tasks] == ["task##001", "task##002"]
+    assert [t.folder for t in tasks] == ["task#001", "task#002"]
     assert tasks[0].identifier == "#001"
     assert tasks[0].max_minutes == 30
     assert select_tasks(tasks, []) == tasks
-    assert [t.folder for t in select_tasks(tasks, ["#002"])] == ["task##002"]
-    assert [t.folder for t in select_tasks(tasks, ["001"])] == ["task##001"]
+    assert [t.folder for t in select_tasks(tasks, ["#002"])] == ["task#002"]
+    assert [t.folder for t in select_tasks(tasks, ["001"])] == ["task#001"]
     with pytest.raises(BenchError):
         select_tasks(tasks, ["nope"])
 
@@ -190,17 +190,17 @@ def test_empty_selector_does_not_match_any_task(tmp_path):
 
 
 def test_degenerate_identifier_has_no_empty_alias(tmp_path):
-    task = TaskInfo(folder="task##001", path=tmp_path, identifier="#",
+    task = TaskInfo(folder="task#001", path=tmp_path, identifier="#",
                     max_minutes=30, status="", raw={})
     assert "" not in _task_aliases(task)
 
 
 def test_apply_limits_and_duplicates(tmp_path):
     tasks = discover_tasks(make_project(tmp_path))
-    assert apply_limits(tasks, []) == {"task##001": 30, "task##002": 60}
-    assert apply_limits(tasks, ["#001=45"])["task##001"] == 45
+    assert apply_limits(tasks, []) == {"task#001": 30, "task#002": 60}
+    assert apply_limits(tasks, ["#001=45"])["task#001"] == 45
     with pytest.raises(BenchError):
-        apply_limits(tasks, ["#001=45", "task##001=50"])
+        apply_limits(tasks, ["#001=45", "task#001=50"])
     with pytest.raises(BenchError):
         apply_limits(tasks, ["#999=10"])
 
@@ -213,8 +213,8 @@ def test_build_options(tmp_path):
                      "--analysis-timeout", "15"])
     opts = build_options(ns, tmp_path)
     assert opts.project_dir == project.resolve()
-    assert [t.folder for t in opts.tasks] == ["task##001"]
-    assert opts.limits == {"task##001": 30}
+    assert [t.folder for t in opts.tasks] == ["task#001"]
+    assert opts.limits == {"task#001": 30}
     assert opts.analysis_timeout_min == 15
     assert opts.run_dir is None
 

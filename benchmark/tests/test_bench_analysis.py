@@ -16,7 +16,7 @@ def test_build_prompt_has_constraints_and_no_orchestration_trigger(tmp_path):
         manifest_path=tmp_path / "run" / "analysis-inputs.md",
         reference_path=tmp_path / "repo" / "benchmark" / "example.bsl",
         contaminated=False,
-        task_folders=["task##001", "task##002"],
+        task_folders=["task#001", "task#002"],
     )
     assert "не затачивай" in prompt.lower()
     assert "example.bsl" in prompt
@@ -41,14 +41,14 @@ def test_extract_analyst_text():
 
 def test_deterministic_report(tmp_path):
     metrics = {"run": {"run_id": "r1", "project_dir": "/p"},
-               "tasks": [{"folder": "task##001", "outcome": "timeout",
+               "tasks": [{"folder": "task#001", "outcome": "timeout",
                           "duration_sec": 1800, "limit_minutes": 30}],
                "analysis": {}}
     text = deterministic_report(run_id="r1", project_dir=tmp_path,
                                 run_dir=tmp_path / "run", metrics=metrics,
                                 error="аналитик упал")
     assert "аналитик упал" in text
-    assert "task##001" in text
+    assert "task#001" in text
     skipped = deterministic_report(run_id="r1", project_dir=tmp_path,
                                    run_dir=tmp_path / "run", metrics=metrics,
                                    skipped=True)

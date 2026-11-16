@@ -250,6 +250,25 @@ def test_collect_task_state(tmp_path):
     assert "OTHER" not in names
 
 
+def test_collect_task_state_reads_result_with_bom(tmp_path):
+    """1С пишет result.json с UTF-8 BOM; метрики обязаны его разобрать."""
+    project = tmp_path / "project"
+    task_dir = project / "tasks" / "task##001"
+    task_dir.mkdir(parents=True)
+    (task_dir / "task.json").write_text(json.dumps({
+        "id": 23, "identifier": "001", "max_minutes": 30}),
+        encoding="utf-8")
+    logs = project / "logs" / "task#23"
+    logs.mkdir(parents=True)
+    (logs / "result.json").write_text(json.dumps({
+        "Выполнено": True, "ОписаниеОшибки": None,
+        "РезультатТестов": [{"Имя": "A", "Результат": True}]}),
+        encoding="utf-8-sig")
+    state = collect_task_state(project, task_info(project, "task##001"))
+    assert len(state["test_results"]) == 1
+    assert state["test_results"][0]["Выполнено"] is True
+
+
 def test_stage_table_and_cycle_metrics():
     task_json = {"stages": [
         {"name": "tests", "enabled": True, "status": "done", "iteration": 3,

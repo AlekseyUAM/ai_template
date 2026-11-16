@@ -463,7 +463,8 @@ def collect_task_state(project_dir: Path, task) -> dict:
             continue
         seen.add(resolved)
         try:
-            data = json.loads(result_path.read_text(encoding="utf-8"))
+            # 1С пишет result.json с UTF-8 BOM (run-tests.py читает его так же).
+            data = json.loads(result_path.read_text(encoding="utf-8-sig"))
         except (OSError, json.JSONDecodeError):
             continue
         if isinstance(data, dict):

@@ -22,7 +22,7 @@ def make_project(root: Path) -> Path:
     project = root / "project"
     project.mkdir()
     (project / ".gitignore").write_text("/tmp\n", encoding="utf-8")
-    for folder, ident in (("task##001", "#001"), ("task##002", "#002")):
+    for folder, ident in (("task#001", "#001"), ("task#002", "#002")):
         task_dir = project / "tasks" / folder
         task_dir.mkdir(parents=True)
         (task_dir / "TASK.md").write_text(f"# Задача {ident}\n", encoding="utf-8")
@@ -117,11 +117,11 @@ def run_cli(project, fake, values, *extra):
 
 
 def test_task_prompt_triggers_orchestrator():
-    prompt = build_task_prompt("task##001")
-    assert "tasks/task##001" in prompt
+    prompt = build_task_prompt("task#001")
+    assert "tasks/task#001" in prompt
     assert "tasks/task#" in prompt
     assert "task-orchestration" in prompt
-    assert "30 мин" in build_task_prompt("task##001", 30)
+    assert "30 мин" in build_task_prompt("task#001", 30)
 
 
 def test_e2e_success_with_analysis(env):
@@ -137,17 +137,17 @@ def test_e2e_success_with_analysis(env):
     assert [task["outcome"] for task in metrics["tasks"]] == ["success", "success"]
     assert metrics["run"]["contaminated"] is False
     assert (runs[-1] / "digest.md").is_file()
-    assert (runs[-1] / "diffs" / "task##001.diff").is_file()
+    assert (runs[-1] / "diffs" / "task#001.diff").is_file()
 
 
 def test_e2e_stops_after_failure_but_analyzes(env):
     project, fake, marker, values = env
     values = dict(values)
-    values["FAKE_FAIL"] = "task##001"
+    values["FAKE_FAIL"] = "task#001"
     proc = run_cli(project, fake, values)
     assert proc.returncode == 2, proc.stdout + proc.stderr
     assert marker.read_text() == "x"
-    data = json.loads((project / "tasks" / "task##002" / "task.json")
+    data = json.loads((project / "tasks" / "task#002" / "task.json")
                       .read_text(encoding="utf-8"))
     assert data["status"] == "planned"
     assert (project / "tmp" / "RESULT.md").is_file()
@@ -163,7 +163,7 @@ def test_e2e_skip_analysis(env):
 
 def test_e2e_refuses_dirty_project(env):
     project, fake, marker, values = env
-    (project / "tasks" / "task##001" / "DEVELOP.md").write_text("x", encoding="utf-8")
+    (project / "tasks" / "task#001" / "DEVELOP.md").write_text("x", encoding="utf-8")
     proc = run_cli(project, fake, values)
     assert proc.returncode == 1
     assert "не готов" in proc.stderr

@@ -10,9 +10,33 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+
+_LOCK_MARK = "Ошибка исключительной блокировки информационной базы"
+
+
+def run_setup_with_lock_retry(run_setup, *, attempts: int = 2,
+                              delay: float = 30.0, sleep=time.sleep,
+                              log=print):
+    """Повторить `run_setup` при транзиентной блокировке ИБ.
+
+    Повторяем только ошибки с маркером исключительной блокировки; остальные
+    пробрасываем сразу. Проект пересоздаётся (`recreate=True`), поэтому
+    частично созданный каталог не мешает повтору.
+    """
+    for attempt in range(1, attempts + 1):
+        try:
+            return run_setup()
+        except Exception as exc:            # noqa: BLE001 — текст важнее типа
+            if _LOCK_MARK not in str(exc) or attempt >= attempts:
+                raise
+            log(f"⚠ ИБ заблокирована — повтор setup "
+                f"{attempt}/{attempts - 1} через {delay:g} с")
+            sleep(delay)
+    raise AssertionError("недостижимо")
 
 
 def load_repo_env() -> None:
@@ -78,9 +102,11 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     try:
-        result = run_setup(
-            cfg, repo_root=ROOT, store=store, registry=registry,
-            prov=LocalProvisioner(), recreate=True)
+        result = run_setup_with_lock_retry(
+            lambda: run_setup(
+                cfg, repo_root=ROOT, store=store, registry=registry,
+                prov=LocalProvisioner(), recreate=True),
+            log=print)
     except SetupError as exc:
         print(f"✗ {exc}", file=sys.stderr)
         return 1
