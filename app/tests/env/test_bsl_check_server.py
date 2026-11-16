@@ -348,3 +348,73 @@ def test_counts_in_result():
                         expected_sha256=_sha("Код"), run=fake_run)
     assert res["counts"]["Error"] == 1
     assert res["counts"]["Warning"] == 1
+
+
+# --- публичный инструмент check (build_server с подставным FastMCP) ----------
+
+def _build_check_tool(monkeypatch):
+    """Собрать сервер с подставным пакетом `mcp` и вернуть инструмент `check`.
+
+    Пакет `mcp` не установлен в venv, поэтому подменяем `mcp.server.fastmcp`
+    минимальным FastMCP, который запоминает декорированные функции.
+    """
+    import sys
+    import types
+
+    class _FakeFastMCP:
+        def __init__(self, *args, **kwargs):
+            self.tools = {}
+
+        def tool(self, *args, **kwargs):
+            def decorator(fn):
+                self.tools[fn.__name__] = fn
+                return fn
+            return decorator
+
+    fastmcp = types.ModuleType("mcp.server.fastmcp")
+    fastmcp.FastMCP = _FakeFastMCP
+    mcp_pkg = types.ModuleType("mcp")
+    mcp_server = types.ModuleType("mcp.server")
+    mcp_server.fastmcp = fastmcp
+    mcp_pkg.server = mcp_server
+    monkeypatch.setitem(sys.modules, "mcp", mcp_pkg)
+    monkeypatch.setitem(sys.modules, "mcp.server", mcp_server)
+    monkeypatch.setitem(sys.modules, "mcp.server.fastmcp", fastmcp)
+    return mod.build_server().tools["check"]
+
+
+def test_check_requires_sha256(monkeypatch):
+    check = _build_check_tool(monkeypatch)
+    calls = []
+    monkeypatch.setattr(mod, "run_check", lambda *a, **k: calls.append((a, k)))
+
+    res = check(sha256="", code="x")
+    assert res["ok"] is False
+    assert "sha256" in res["summary"]
+    assert calls == []
+
+
+def test_check_valid_sha_calls_run_check(monkeypatch):
+    check = _build_check_tool(monkeypatch)
+    stub = {"ok": True}
+    calls = []
+    monkeypatch.setattr(
+        mod, "run_check",
+        lambda *a, **k: calls.append((a, k)) or stub)
+
+    sha = _sha("x")
+    res = check(sha256=sha, code="x")
+    assert res is stub
+    assert len(calls) == 1
+    assert calls[0][1]["expected_sha256"] == sha
+
+
+def test_check_missing_file_path_errors(monkeypatch, tmp_path):
+    check = _build_check_tool(monkeypatch)
+    calls = []
+    monkeypatch.setattr(mod, "run_check", lambda *a, **k: calls.append((a, k)))
+
+    res = check(sha256=_sha("x"), file_path=str(tmp_path / "nope.bsl"))
+    assert res["ok"] is False
+    assert "file_path" in res["summary"]
+    assert calls == []
