@@ -8,12 +8,12 @@ from pathlib import Path
 import pytest
 
 from bench_metrics import find_session_files, parse_stream
-from bench_run import (BenchError, TaskInfo, _task_aliases, apply_limits,
-                       build_options, changed_files, check_freshness,
-                       collect_diff,
-                       discover_tasks, git_state, parse_args, parse_limit_arg,
-                       parse_minutes, read_env_file, resolve_project_dir,
-                       run_claude, select_tasks)
+from bench_run import (BenchError, TaskInfo, _stream_metrics, _task_aliases,
+                       apply_limits, build_options, changed_files,
+                       check_freshness, collect_diff, discover_tasks,
+                       git_state, parse_args, parse_limit_arg, parse_minutes,
+                       read_env_file, resolve_project_dir, run_claude,
+                       select_tasks)
 
 
 def write_fake_claude(path: Path, body: str) -> Path:
@@ -78,6 +78,24 @@ def test_run_claude_result(tmp_path):
     assert run.timed_out is False
     assert run.stream.result["result"] == "ok"
     assert run.stream.session_id == "sid-2"
+
+
+@pytest.mark.parametrize("tools, expected", [
+    (["Bash", "SendMessage", "Task"], True),
+    (["Bash", "Task"], False),
+])
+def test_stream_metrics_has_sendmessage(tmp_path, tools, expected):
+    fake = write_fake_claude(tmp_path / "fake", "\n".join([
+        "import json",
+        f"print(json.dumps({{'type':'system','subtype':'init',"
+        f"'session_id':'sid-3','tools':{json.dumps(tools)}}}))",
+        f"print(json.dumps({{'type':'result','is_error':False,'result':'ok',"
+        f"'session_id':'sid-3'}}))",
+    ]) + "\n")
+    run = run_claude(cmd=str(fake), prompt="hi", cwd=tmp_path, timeout_sec=10,
+                     stream_path=tmp_path / "out.jsonl",
+                     stderr_path=tmp_path / "err.log")
+    assert _stream_metrics(run)["has_sendmessage"] is expected
 
 
 def test_run_claude_timeout_kills_process(tmp_path):

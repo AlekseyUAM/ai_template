@@ -2,6 +2,8 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 import bench_metrics as mod
 from bench_metrics import (aggregate_environment, classify_bash,
                            parse_tool_events, summarize_events,
@@ -596,6 +598,21 @@ def test_render_digest_none_values_rendered_as_dash():
     assert "session=—" in text
     assert "session=None" not in text
     assert "`None`" not in text
+
+
+@pytest.mark.parametrize("value, expected", [
+    (True, "- SendMessage: да"),
+    (False, "- SendMessage: нет"),
+    (None, "- SendMessage: —"),
+])
+def test_render_digest_sendmessage_metric(value, expected):
+    task = {"folder": "task#001", "limit_minutes": 30, "outcome": "success",
+            "duration_sec": 10.0, "exit_code": 0,
+            "stream": {"num_turns": 1, "session_id": "s",
+                       "has_sendmessage": value},
+            "stages": [], "cycles": {}, "transcript": {}}
+    text = render_digest(_digest_metrics(task))
+    assert expected in text
 
 
 def test_render_digest_warns_on_unsuccessful_outcome():

@@ -735,6 +735,10 @@ def render_digest(metrics: dict) -> str:
         session = stream.get("session_id")
         lines.append(f"- Агент: turns={stream.get('num_turns')}, "
                      f"session={_opt(session)}")
+        has_sendmessage = stream.get("has_sendmessage")
+        lines.append("- SendMessage: " + (
+            "—" if has_sendmessage is None
+            else ("да" if has_sendmessage else "нет")))
         transcript = task.get("transcript") or {}
         main = transcript.get("main") or {}
         lines.append(f"- Источник транскрипта: {transcript.get('source', '—')}, "

@@ -541,12 +541,15 @@ def _write_run_json(run_dir: Path, run_metrics: dict) -> None:
 
 def _stream_metrics(run: ClaudeRun) -> dict:
     result = run.stream.result or {}
+    init = getattr(run.stream, "init", {}) or {}
+    tools = init.get("tools") or []
     return {
         "session_id": run.stream.session_id,
         "parse_errors": run.stream.parse_errors,
         "duration_ms": result.get("duration_ms"),
         "num_turns": result.get("num_turns"),
         "is_error": result.get("is_error"),
+        "has_sendmessage": "SendMessage" in tools,
     }
 
 
