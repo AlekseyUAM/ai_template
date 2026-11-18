@@ -134,6 +134,53 @@ def test_deploy_disabled_1c_md_has_no_validate_query(tmp_path):
     assert "validate_query" not in skill_text(tmp_path, "mcp-usage")
 
 
+# --- деплой: 1c_naparnic ---
+
+def test_deploy_1c_naparnic_adds_ask_1c_ai_to_mcp_usage(tmp_path):
+    conn = ('"1c_naparnic": {"type": "http", '
+            '"url": "http://localhost:8003/mcp"}')
+    content.deploy_content(
+        LocalProvisioner(),
+        cfg(tmp_path, [sel("1c-naparnic", connection=conn)]), update=False)
+    text = skill_text(tmp_path, "mcp-usage")
+    assert "ask_1c_ai" in text
+    assert "mcp__1c_naparnic__*" in text
+    assert "<!-- @if " not in text and "<!-- @endif -->" not in text
+
+
+def test_deploy_without_1c_naparnic_has_no_ask_1c_ai(tmp_path):
+    content.deploy_content(
+        LocalProvisioner(), cfg(tmp_path, [sel("bsl-ls")]), update=False)
+    assert "ask_1c_ai" not in skill_text(tmp_path, "mcp-usage")
+
+
+def test_deploy_disabled_1c_naparnic_has_no_ask_1c_ai(tmp_path):
+    content.deploy_content(
+        LocalProvisioner(),
+        cfg(tmp_path, [sel("1c-naparnic", enabled=False)]), update=False)
+    assert "ask_1c_ai" not in skill_text(tmp_path, "mcp-usage")
+
+
+def test_renamed_1c_naparnic_server_name_substituted(tmp_path):
+    conn = '"my_ai": {"type": "http", "url": "http://localhost:8003/mcp"}'
+    content.deploy_content(
+        LocalProvisioner(),
+        cfg(tmp_path, [sel("1c-naparnic", connection=conn)]), update=False)
+    text = skill_text(tmp_path, "mcp-usage")
+    assert "mcp__my_ai__*" in text
+    assert "mcp__1c_naparnic__*" not in text
+
+
+def test_no_conditional_markers_leak_with_1c_naparnic(tmp_path):
+    content.deploy_content(
+        LocalProvisioner(),
+        cfg(tmp_path, [sel("1c-md"), sel("1c-naparnic")]), update=False)
+    for path in (Path(tmp_path) / ".claude").rglob("*.md"):
+        text = path.read_text(encoding="utf-8")
+        assert "<!-- @if " not in text, path
+        assert "<!-- @endif -->" not in text, path
+
+
 # --- деплой: query-analyze и переходы при обновлении ---
 
 def test_deploy_1c_md_makes_validate_query_first_layer(tmp_path):
