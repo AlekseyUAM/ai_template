@@ -322,6 +322,40 @@ class TestStart:
                 run=fake,
             )
 
+    def test_does_not_pipe_output(self, tmp_path):
+        """Регрессия Windows: pg_ctl start не должен захватывать вывод в pipe.
+
+        Сервер postgres наследует stdout/stderr от pg_ctl; pipe остаётся
+        открытым и subprocess.run зависает на чтении EOF. Вывод должен идти
+        в файлы.
+        """
+        captured: dict = {}
+
+        def fake_run(cmd, **kwargs):
+            captured.update(kwargs)
+            return subprocess.CompletedProcess(cmd, 0, stdout=b"", stderr=b"")
+
+        pg_portable.start(str(tmp_path / "bin"), str(tmp_path / "pgdata"),
+                          5432, str(tmp_path / "pg.log"), run=fake_run)
+
+        assert "capture_output" not in captured
+        assert captured["stdout"] is not subprocess.PIPE
+        assert captured["stderr"] is not subprocess.PIPE
+        assert hasattr(captured["stdout"], "fileno")
+        assert hasattr(captured["stderr"], "fileno")
+
+    def test_error_contains_stderr_from_redirected_file(self, tmp_path):
+        """При rc != 0 stderr читается из перенаправленного файла."""
+        def fake_run(cmd, stdout=None, stderr=None, **kwargs):
+            stderr.write(b"pg_ctl: could not start server")
+            return subprocess.CompletedProcess(cmd, 1, stdout=None, stderr=None)
+
+        with pytest.raises(subprocess.CalledProcessError) as exc_info:
+            pg_portable.start(str(tmp_path / "bin"), str(tmp_path / "pgdata"),
+                              5432, str(tmp_path / "pg.log"), run=fake_run)
+
+        assert "could not start server" in (exc_info.value.stderr or "")
+
 
 # ---------------------------------------------------------------------------
 # status
@@ -542,10 +576,9 @@ class TestPaths:
 
     def test_bin_dir_matches_ensure_binaries(self, tmp_path):
         """bin_dir из paths() совпадает с тем, что возвращает ensure_binaries."""
+        # Без явных system/arch — paths() использует текущую платформу.
         pg_portable.ensure_binaries(
             tmp_path,
-            system="Linux",
-            arch="x86_64",
             download=fake_download([]),
             extract=fake_extract_factory(True),
         )

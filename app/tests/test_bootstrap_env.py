@@ -9,11 +9,19 @@ import warnings
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 # Вставляем корень репо в путь, чтобы `import bootstrap` нашёл bootstrap.py
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(_REPO_ROOT))
 
 import bootstrap  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _isolate_env_file(tmp_path, monkeypatch):
+    """Изолировать bootstrap.ENV_FILE от реального .ai1c.env репозитория."""
+    monkeypatch.setattr(bootstrap, "ENV_FILE", tmp_path / ".ai1c.env")
 
 
 # ---------------------------------------------------------------------------
@@ -178,6 +186,57 @@ class TestSetupDatabaseHostMode:
         # psycopg не устанавливался
         calls_str = [" ".join(str(a) for a in call.args[0]) for call in fake_run.call_args_list]
         assert not any("psycopg[binary]" in c for c in calls_str)
+
+
+class TestSetupDatabaseModeFromEnvFile:
+    """AI1C_PG_MODE можно задать в .ai1c.env (как документирует пример)."""
+
+    def test_host_mode_from_env_file(self, monkeypatch):
+        """Нет переменной окружения, .ai1c.env=host → портативная PG."""
+        bootstrap.ENV_FILE.write_text("AI1C_PG_MODE=host\n", encoding="utf-8")
+        monkeypatch.delenv("AI1C_PG_MODE", raising=False)
+        stub = _make_pg_portable_stub(_SENTINEL_DSN)
+        monkeypatch.setattr(bootstrap, "pg_portable", stub, raising=False)
+        monkeypatch.setattr(bootstrap, "run", MagicMock())
+        monkeypatch.setattr(bootstrap, "venv_python", MagicMock(return_value="/fake/python"))
+
+        dsn, pg_mode = bootstrap.setup_database()
+
+        assert dsn == _SENTINEL_DSN
+        assert pg_mode == "host"
+        stub.provision.assert_called_once()
+
+    def test_docker_mode_from_env_file(self, monkeypatch):
+        """Нет переменной окружения, .ai1c.env=docker → docker-ветка."""
+        bootstrap.ENV_FILE.write_text("AI1C_PG_MODE=docker\n", encoding="utf-8")
+        monkeypatch.delenv("AI1C_PG_MODE", raising=False)
+        monkeypatch.setattr(bootstrap, "docker_available", MagicMock(return_value=True))
+        monkeypatch.setattr(bootstrap, "pg_container_port", MagicMock(return_value=5499))
+        monkeypatch.setattr(bootstrap, "run", MagicMock())
+        monkeypatch.setattr(bootstrap, "venv_python", MagicMock(return_value="/fake/python"))
+        import subprocess as _sp
+        fake_proc = MagicMock()
+        fake_proc.returncode = 0
+        monkeypatch.setattr(_sp, "run", MagicMock(return_value=fake_proc))
+
+        dsn, pg_mode = bootstrap.setup_database()
+
+        assert dsn == "postgresql://ai1c:ai1c@127.0.0.1:5499/ai1c"
+        assert pg_mode == "docker"
+
+    def test_process_env_overrides_env_file(self, monkeypatch):
+        """AI1C_PG_MODE в окружении процесса приоритетнее .ai1c.env."""
+        bootstrap.ENV_FILE.write_text("AI1C_PG_MODE=docker\n", encoding="utf-8")
+        monkeypatch.setenv("AI1C_PG_MODE", "host")
+        stub = _make_pg_portable_stub(_SENTINEL_DSN)
+        monkeypatch.setattr(bootstrap, "pg_portable", stub, raising=False)
+        monkeypatch.setattr(bootstrap, "run", MagicMock())
+        monkeypatch.setattr(bootstrap, "venv_python", MagicMock(return_value="/fake/python"))
+
+        dsn, pg_mode = bootstrap.setup_database()
+
+        assert dsn == _SENTINEL_DSN
+        assert pg_mode == "host"
 
 
 class TestSetupDatabaseDockerMode:

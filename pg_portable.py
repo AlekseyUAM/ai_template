@@ -24,6 +24,7 @@ import re
 import socket
 import subprocess
 import sys
+import tempfile
 import zipfile
 from pathlib import Path
 from typing import Callable
@@ -264,6 +265,12 @@ def start(
 
     Слушает только на 127.0.0.1; использует -w (ждёт готовности).
     Поднимает subprocess.CalledProcessError при ненулевом коде возврата.
+
+    Вывод pg_ctl направляется во временные файлы, а не в pipe
+    (capture_output). На Windows запущенный postgres наследует хэндлы
+    stdout/stderr от pg_ctl; если это pipe, читающая сторона никогда не
+    получит EOF (сервер держит хэндлы открытыми), и subprocess.run зависает
+    навсегда после успешного старта.
     """
     cmd = [
         str(Path(bin_dir) / bin_exe("pg_ctl")),
@@ -273,13 +280,18 @@ def start(
         "-w",
         "start",
     ]
-    result = run(cmd, capture_output=True)
-    rc = result.returncode if hasattr(result, "returncode") else 0
-    if rc != 0:
-        stderr = getattr(result, "stderr", b"")
-        if isinstance(stderr, bytes):
-            stderr = stderr.decode(errors="replace")
-        raise subprocess.CalledProcessError(rc, cmd, stderr=stderr)
+    with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
+        result = run(cmd, stdout=out, stderr=err)
+        rc = result.returncode if hasattr(result, "returncode") else 0
+        if rc != 0:
+            stderr = getattr(result, "stderr", None)
+            if isinstance(stderr, bytes):
+                stderr = stderr.decode(errors="replace")
+            if not stderr:
+                # Реальный subprocess.run пишет stderr в файл — читаем его.
+                err.seek(0)
+                stderr = err.read().decode(errors="replace")
+            raise subprocess.CalledProcessError(rc, cmd, stderr=stderr)
 
 
 def status(

@@ -145,10 +145,32 @@ def pg_container_port() -> int | None:
     return int(out) if r.returncode == 0 and out.isdigit() else None
 
 
+def read_env_file() -> dict[str, str]:
+    """Прочитать .ai1c.env (KEY=value) в dict. Ошибки чтения → пустой dict.
+
+    Нужен, чтобы AI1C_PG_MODE можно было задать в .ai1c.env (как документирует
+    .ai1c.env.example), а не только переменной окружения процесса.
+    Приоритет у процесса — см. setup_database().
+    """
+    try:
+        text = ENV_FILE.read_text(encoding="utf-8")
+    except OSError:
+        return {}
+    values: dict[str, str] = {}
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        key, sep, value = line.partition("=")
+        if sep:
+            values[key.strip()] = value.strip()
+    return values
+
+
 def setup_database() -> tuple[str, str]:
     """Инициализирует базу данных и возвращает (dsn, pg_mode).
 
-    Читает AI1C_PG_MODE из окружения (дефолт «host»):
+    Читает AI1C_PG_MODE из окружения процесса, затем из .ai1c.env (дефолт «host»):
       - «host»   → портативная PostgreSQL через pg_portable.provision(ROOT)
       - «docker» → поднять контейнер ai1c-postgres (прежнее поведение)
     При любой ошибке PG → SQLite-фолбэк; psycopg[binary] ставится только для PG.
@@ -156,7 +178,9 @@ def setup_database() -> tuple[str, str]:
     # Хранилище (store) держим в отдельном файле: реестр использует AGENTMON_DB
     # (app/agentmon.db), и совмещать их нельзя — у таблиц projects разные схемы.
     _SQLITE_PATH = str(ROOT / "app" / "store.db")
-    raw_mode = os.environ.get("AI1C_PG_MODE", "host")
+    raw_mode = (os.environ.get("AI1C_PG_MODE")
+                or read_env_file().get("AI1C_PG_MODE")
+                or "host")
     pg_mode = raw_mode.strip().lower()
     if pg_mode not in ("host", "docker"):
         warn(f"Неизвестное значение AI1C_PG_MODE={raw_mode!r} — буду использовать «host»")
