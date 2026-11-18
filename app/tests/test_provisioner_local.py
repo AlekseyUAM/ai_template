@@ -48,6 +48,18 @@ def test_run_returns_result(tmp_path):
     assert "hi" in res.stdout
 
 
+def test_run_survives_undecodable_output():
+    """Байт, недопустимый в локальной кодировке, не должен ронять run().
+
+    Так ведёт себя git на Windows: пишет UTF-8, а pipe декодируется cp1251.
+    """
+    prov = LocalProvisioner()
+    res = prov.run([sys.executable, "-c",
+                    "import sys; sys.stdout.buffer.write(b'\\x98')"])
+    assert res.returncode == 0
+    assert isinstance(res.stdout, str)
+
+
 def test_which_finds_python():
     prov = LocalProvisioner()
     assert prov.which(Path(sys.executable).name) is not None

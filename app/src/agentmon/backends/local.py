@@ -75,8 +75,11 @@ class LocalProvisioner:
     def run(self, cmd, cwd=None, timeout=None) -> RunResult:
         """Выполнить команду локально. При timeout → RunResult(124, ..., ...\\n<timeout>)."""
         try:
+            # errors="replace": вывод git на Windows — UTF-8, а pipe
+            # декодируется локальной кодировкой (cp1251), и без этого
+            # чтение падает с UnicodeDecodeError.
             proc = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True,
-                                  timeout=timeout)
+                                  errors="replace", timeout=timeout)
             return RunResult(proc.returncode, proc.stdout or "", proc.stderr or "")
         except subprocess.TimeoutExpired as e:
             stdout = (e.stdout or "") if isinstance(e.stdout, str) else ""

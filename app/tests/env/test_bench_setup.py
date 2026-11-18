@@ -1,9 +1,13 @@
 """Тесты подготовки benchmark-окружения (без 1С, Docker и PostgreSQL)."""
+import shutil
+import stat
+import subprocess
 from pathlib import Path
 
 import pytest
 
 from agentmon.env.bench_setup import BenchConfig, SetupError, load_config, parse_env_file
+from agentmon.pycmd import PYTHON_CMD
 
 
 def make_platform(tmp_path: Path) -> Path:
@@ -301,6 +305,48 @@ def test_remove_existing_project_removes_dir_store_registry(tmp_path):
     assert registry.list() == []
 
 
+def test_remove_existing_project_removes_readonly_files(tmp_path):
+    """Git pack-файлы на Windows read-only — удаление не должно падать."""
+    cfg = load_config(write_env(tmp_path), repo_root=tmp_path)
+    project_dir = Path(cfg.project_dir)
+    pack_dir = project_dir / ".git" / "objects" / "pack"
+    pack_dir.mkdir(parents=True)
+    (project_dir / ".1c-devbase.json").write_text("{}", encoding="utf-8")
+    pack = pack_dir / "pack-1.idx"
+    pack.write_text("pack", encoding="utf-8")
+    pack.chmod(stat.S_IREAD)
+
+    remove_existing_project(cfg, store=make_store(tmp_path),
+                            registry=make_registry(tmp_path),
+                            log=lambda line: None)
+
+    assert not project_dir.exists()
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git не установлен")
+def test_remove_existing_project_recovers_git_only_leftover(tmp_path):
+    """После сбоя rmtree остался только .git — маркер виден в HEAD."""
+    cfg = load_config(write_env(tmp_path), repo_root=tmp_path)
+    project_dir = Path(cfg.project_dir)
+    project_dir.mkdir(parents=True)
+    (project_dir / ".1c-devbase.json").write_text("{}", encoding="utf-8")
+    subprocess.run(["git", "init", "-q"], cwd=project_dir, check=True)
+    subprocess.run(["git", "add", "."], cwd=project_dir, check=True)
+    subprocess.run(
+        ["git", "-c", "user.name=t", "-c", "user.email=t@t",
+         "commit", "-qm", "init"],
+        cwd=project_dir, check=True)
+    for entry in project_dir.iterdir():
+        if entry.name != ".git":
+            entry.unlink()
+
+    remove_existing_project(cfg, store=make_store(tmp_path),
+                            registry=make_registry(tmp_path),
+                            log=lambda line: None)
+
+    assert not project_dir.exists()
+
+
 def test_remove_existing_project_refuses_unmarked_dir(tmp_path):
     cfg = load_config(write_env(tmp_path), repo_root=tmp_path)
     project_dir = Path(cfg.project_dir)
@@ -394,6 +440,7 @@ def test_build_env_config_produces_mcp_json(tmp_path):
     servers = build_mcp_json(config.mcp)["mcpServers"]
     assert set(servers) == {"bsl_ls", "1c_platform", "1c-md", "code_index"}
     assert servers["1c_platform"]["type"] == "stdio"
+    assert servers["1c_platform"]["command"] == PYTHON_CMD
     assert servers["1c_platform"]["args"][1] == "http://localhost:8002/sse"
 
 

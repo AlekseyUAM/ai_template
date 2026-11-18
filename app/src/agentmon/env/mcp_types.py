@@ -9,6 +9,8 @@
 """
 from dataclasses import dataclass, field
 
+from ..pycmd import PYTHON_CMD
+
 
 @dataclass(frozen=True)
 class McpType:
@@ -42,7 +44,7 @@ _HTTP_PORT = (
 _SSE_BRIDGE = (
     '"{mcp_name}": {\n'
     '    "type": "stdio",\n'
-    '    "command": "python3",\n'
+    f'    "command": "{PYTHON_CMD}",\n'
     '    "args": [\n'
     '        ".claude/mcp/sse_stdio_bridge.py",\n'
     '        "http://{url}:{port}/sse"\n'

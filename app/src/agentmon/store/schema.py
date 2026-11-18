@@ -1,5 +1,7 @@
 """Переносимая схема БД Фазы 1 (sqlite/postgres)."""
 
+from ..pycmd import PYTHON_CMD
+
 
 def init_schema(db) -> None:
     pk = db.autopk()
@@ -67,6 +69,26 @@ def init_schema(db) -> None:
     })
 
     _ensure_indexes(db)
+    _migrate_bridge_python(db)
+
+
+def _migrate_bridge_python(db) -> None:
+    """Заменить python3 на платформенный интерпретатор в stdio-мосте.
+
+    На Windows `python3` часто — заглушка Microsoft Store: процесс сразу
+    завершается, и MCP-сервер 1c_platform недоступен (CONNECTION_CLOSED).
+    """
+    if PYTHON_CMD == "python3":
+        return
+    rows = db.query(
+        "SELECT id, connection_json FROM mcp_servers "
+        "WHERE connection_json LIKE ? AND connection_json LIKE ?",
+        ["%sse_stdio_bridge.py%", '%"command": "python3"%'])
+    for row in rows:
+        new = row["connection_json"].replace(
+            '"command": "python3"', f'"command": "{PYTHON_CMD}"')
+        db.execute("UPDATE mcp_servers SET connection_json=? WHERE id=?",
+                   [new, row["id"]])
 
 
 def _ensure_indexes(db) -> None:

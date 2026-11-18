@@ -11,6 +11,7 @@ import os
 import re
 import shutil
 import socket
+import stat
 import subprocess
 import time
 import urllib.error
@@ -20,6 +21,7 @@ from pathlib import Path
 from typing import Callable
 from urllib.parse import urlparse
 
+from ..pycmd import PYTHON_CMD
 from .config_schema import SCHEMA_VERSION, EnvConfig, McpSelection
 from .devbase import _parse_connection, git_commit_all, git_init_project
 from .installer import install_environment
@@ -231,7 +233,7 @@ def _connection_platform(url: str) -> str:
     server = json.dumps(
         {
             "type": "stdio",
-            "command": "python3",
+            "command": PYTHON_CMD,
             "args": [".claude/mcp/sse_stdio_bridge.py", url],
         },
         ensure_ascii=False,
@@ -352,6 +354,22 @@ def preflight(cfg: BenchConfig, *, repo_root: Path, store, registry,
 _PROJECT_MARKERS = (".1c-devbase.json", ".claude", "tasks")
 
 
+def _git_head_has_marker(project_dir: Path) -> bool:
+    """Признак проекта остался только в git-истории?
+
+    После прерванного удаления рабочие файлы-маркеры уже стёрты, но HEAD
+    ещё хранит `.1c-devbase.json`. Нет git/репозитория — признака нет.
+    """
+    try:
+        res = subprocess.run(
+            ["git", "-C", str(project_dir), "cat-file", "-e",
+             "HEAD:.1c-devbase.json"],
+            capture_output=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return res.returncode == 0
+
+
 def _assert_deletable(project_dir: Path) -> None:
     """Не дать удалить произвольный непустой каталог вместо benchmark-проекта."""
     if project_dir.is_symlink():
@@ -362,10 +380,28 @@ def _assert_deletable(project_dir: Path) -> None:
     if (resolved == Path("/") or resolved == Path.home().resolve()
             or len(resolved.parts) < 3):
         raise SetupError(f"отказ удалять каталог: {resolved}")
-    if not any((project_dir / marker).exists() for marker in _PROJECT_MARKERS):
+    markers_found = any((project_dir / marker).exists()
+                        for marker in _PROJECT_MARKERS)
+    if not markers_found and not _git_head_has_marker(project_dir):
         raise SetupError(
             f"каталог {project_dir} не похож на benchmark-проект "
             f"(нет {', '.join(_PROJECT_MARKERS)}); удалять не буду.")
+
+
+def _rmtree_force(path: Path) -> None:
+    """Удалить дерево, сняв read-only с файлов.
+
+    Git на Windows создаёт pack-файлы в `.git/objects/pack` доступными только
+    для чтения, и `shutil.rmtree` падает на них с PermissionError.
+    """
+    for root, _dirs, files in os.walk(path):
+        for name in files:
+            entry = Path(root) / name
+            try:
+                entry.chmod(entry.stat().st_mode | stat.S_IWRITE)
+            except OSError:
+                pass
+    shutil.rmtree(path)
 
 
 def remove_existing_project(cfg: BenchConfig, *, store, registry,
@@ -398,7 +434,7 @@ def remove_existing_project(cfg: BenchConfig, *, store, registry,
             log(f"✓ удалена запись проекта из реестра: #{project.id} {project.name}")
 
     if project_dir.exists():
-        shutil.rmtree(project_dir)
+        _rmtree_force(project_dir)
         removed = True
         log(f"✓ удалён каталог проекта: {project_dir}")
 

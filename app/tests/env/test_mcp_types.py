@@ -1,4 +1,5 @@
 from agentmon.env.mcp_types import MCP_TYPES, get_type, build_connection, types_payload
+from agentmon.pycmd import PYTHON_CMD
 
 
 def test_eight_types_present():
@@ -69,6 +70,7 @@ def test_platform_uses_stdio_bridge():
     assert t.defaults["mcp_name"] == "1c_platform"
     assert t.defaults["port"] == 8002
     assert '"type": "stdio"' in t.connection_template
+    assert f'"command": "{PYTHON_CMD}"' in t.connection_template
     assert "sse_stdio_bridge.py" in t.connection_template
     assert "http://{url}:{port}/sse" in t.connection_template
 

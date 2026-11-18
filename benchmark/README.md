@@ -29,10 +29,20 @@
 
 ## Подготовка окружения
 
+Команды выполняются из корня репозитория. Интерпретатор виртуального окружения:
+`.venv/bin/python` на Linux/macOS и `.venv\Scripts\python.exe` на Windows
+(venv создаётся командой `python bootstrap.py`).
+
 1. Скопируйте пример и заполните значения:
 
    ```bash
+   # Linux / macOS
    cp benchmark/example.test.env benchmark/test.env
+   ```
+
+   ```bat
+   :: Windows (cmd)
+   copy benchmark\example.test.env benchmark\test.env
    ```
 
    `benchmark/test.env` содержит пароль 1С и в git не попадает.
@@ -40,8 +50,17 @@
 2. Запустите из корня репозитория:
 
    ```bash
+   # Linux / macOS
    .venv/bin/python benchmark/setup_benchmark.py
    ```
+
+   ```bat
+   :: Windows (cmd)
+   .venv\Scripts\python.exe benchmark\setup_benchmark.py
+   ```
+
+   В PowerShell команда та же, путь можно записать как
+   `.\.venv\Scripts\python.exe .\benchmark\setup_benchmark.py`.
 
    Если проект с таким именем или каталогом уже есть, скрипт сначала проверяет
    конфигурацию и доступность MCP, затем удаляет его каталог, запись в store и
@@ -63,8 +82,14 @@
 После подготовки окружения выполните из корня репозитория:
 
 ```bash
+# Linux / macOS
 .venv/bin/python benchmark/run_benchmark.py \
     --limit task#001=30 --limit task#002=120
+```
+
+```bat
+:: Windows (cmd) — одной строкой, перенос через «\» не работает
+.venv\Scripts\python.exe benchmark\run_benchmark.py --limit task#001=30 --limit task#002=120
 ```
 
 Скрипт выполняет все задачи проекта `tasks/task#*` по очереди в `claude-ds`.
@@ -99,5 +124,11 @@
 Тесты раннера (без 1С, сети и реального `claude`):
 
 ```bash
+# Linux / macOS
 .venv/bin/python -m pytest benchmark/tests -q
+```
+
+```bat
+:: Windows (cmd)
+.venv\Scripts\python.exe -m pytest benchmark\tests -q
 ```
