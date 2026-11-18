@@ -33,39 +33,67 @@ def skill_text(tmp_path, name):
 def test_render_conditionals_keeps_block_when_true():
     text = "до\n<!-- @if 1c-md -->\n\nвнутри\n<!-- @endif -->\n\nпосле\n"
     assert content._render_conditional_blocks(
-        text, True, filename="x.md") == "до\n\nвнутри\n\nпосле\n"
+        text, {"1c-md": True, "1c_naparnic": False}, filename="x.md"
+    ) == "до\n\nвнутри\n\nпосле\n"
 
 
 def test_render_conditionals_drops_block_when_false():
     text = "до\n<!-- @if 1c-md -->\n\nвнутри\n<!-- @endif -->\n\nпосле\n"
     assert content._render_conditional_blocks(
-        text, False, filename="x.md") == "до\n\nпосле\n"
+        text, {"1c-md": False, "1c_naparnic": False}, filename="x.md"
+    ) == "до\n\nпосле\n"
 
 
 def test_render_conditionals_inline_rows():
     text = "| a |\n<!-- @if 1c-md -->\n| b |\n<!-- @endif -->\n| c |\n"
     assert content._render_conditional_blocks(
-        text, True, filename="x.md") == "| a |\n| b |\n| c |\n"
+        text, {"1c-md": True, "1c_naparnic": False}, filename="x.md"
+    ) == "| a |\n| b |\n| c |\n"
     assert content._render_conditional_blocks(
-        text, False, filename="x.md") == "| a |\n| c |\n"
+        text, {"1c-md": False, "1c_naparnic": False}, filename="x.md"
+    ) == "| a |\n| c |\n"
 
 
 def test_render_conditionals_without_markers_unchanged():
     text = "обычный текст\n"
     assert content._render_conditional_blocks(
-        text, True, filename="x.md") == text
+        text, {"1c-md": True, "1c_naparnic": True}, filename="x.md") == text
 
 
 def test_render_conditionals_unclosed_marker_raises():
     with pytest.raises(ValueError, match="x.md"):
         content._render_conditional_blocks(
-            "<!-- @if 1c-md -->\nтекст\n", True, filename="x.md")
+            "<!-- @if 1c-md -->\nтекст\n",
+            {"1c-md": True, "1c_naparnic": True}, filename="x.md")
 
 
 def test_render_conditionals_orphan_endif_raises():
     with pytest.raises(ValueError, match="x.md"):
         content._render_conditional_blocks(
-            "текст\n<!-- @endif -->\n", True, filename="x.md")
+            "текст\n<!-- @endif -->\n",
+            {"1c-md": True, "1c_naparnic": True}, filename="x.md")
+
+
+def test_render_conditionals_naparnic_block():
+    text = ("до\n<!-- @if 1c_naparnic -->\n\nвнутри\n"
+            "<!-- @endif -->\n\nпосле\n")
+    assert content._render_conditional_blocks(
+        text, {"1c-md": False, "1c_naparnic": True}, filename="x.md"
+    ) == "до\n\nвнутри\n\nпосле\n"
+    assert content._render_conditional_blocks(
+        text, {"1c-md": True, "1c_naparnic": False}, filename="x.md"
+    ) == "до\n\nпосле\n"
+
+
+def test_conditional_flags_by_enabled_mcp():
+    assert content.conditional_flags([]) == {
+        "1c-md": False, "1c_naparnic": False}
+    assert content.conditional_flags([sel("1c-md")])["1c-md"] is True
+    assert content.conditional_flags([sel("1c-md-queries")])["1c-md"] is True
+    assert content.conditional_flags([sel("1c-naparnic")]) == {
+        "1c-md": False, "1c_naparnic": True}
+    assert content.conditional_flags(
+        [sel("1c-naparnic", enabled=False)])["1c_naparnic"] is False
 
 
 # --- деплой: mcp-usage ---
@@ -184,8 +212,10 @@ def test_no_conditional_markers_leak_into_project(tmp_path):
 def test_template_markers_are_balanced():
     for path in content.CONTENT_DIR.rglob("*.md"):
         text = path.read_text(encoding="utf-8")
-        content._render_conditional_blocks(text, True, filename=str(path))
-        content._render_conditional_blocks(text, False, filename=str(path))
+        content._render_conditional_blocks(
+            text, {"1c-md": True, "1c_naparnic": True}, filename=str(path))
+        content._render_conditional_blocks(
+            text, {"1c-md": False, "1c_naparnic": False}, filename=str(path))
 
 
 # --- деплой: доступ субагентов ---

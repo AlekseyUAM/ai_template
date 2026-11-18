@@ -31,15 +31,30 @@ _CONDITIONAL_BLOCK = re.compile(
 )
 
 
-def _render_conditional_blocks(text: str, has_1c_md: bool, *,
+# Условие шаблона → id MCP-выборов, включающих блок. Новый сервер: добавьте
+# строку сюда и поставьте в шаблоне маркер <!-- @if <условие> -->.
+_CONDITION_MCP_IDS = {
+    "1c-md": ("1c-md", "1c-md-queries"),
+    "1c_naparnic": ("1c-naparnic",),
+}
+
+
+def conditional_flags(mcp) -> dict[str, bool]:
+    """Какие условные блоки включать — по включённым MCP проекта."""
+    enabled = {getattr(sel, "id", None) for sel in mcp
+               if getattr(sel, "enabled", False)}
+    return {cond: any(mid in enabled for mid in ids)
+            for cond, ids in _CONDITION_MCP_IDS.items()}
+
+
+def _render_conditional_blocks(text: str, conditions: dict[str, bool], *,
                                filename: str = "") -> str:
     """Оставляет/вырезает условные блоки шаблона по составу MCP проекта.
 
-    Сейчас условие одно: `1c-md` — включён MCP вида `1c-md` или
-    `1c-md-queries`. Незакрытый, вложенный или лишний маркер — ValueError:
-    маркеры не должны попасть в развёрнутый проект.
+    `conditions` — карта условие→включено (см. conditional_flags).
+    Незакрытый, вложенный или лишний маркер — ValueError: маркеры не должны
+    попасть в развёрнутый проект.
     """
-    conditions = {"1c-md": has_1c_md}
 
     def repl(match: re.Match) -> str:
         cond = match.group("cond")
@@ -218,7 +233,7 @@ def _render_settings() -> str:
 
 
 def _render_template_texts(prov, claude_dir, overrides, *,
-                           has_1c_md: bool, py_cmd: str) -> None:
+                           conditions: dict[str, bool], py_cmd: str) -> None:
     """Подставляет имена MCP и рендерит условные блоки — пишем на цель.
 
     Обходим текстовые файлы шаблона .claude на мониторе; меняем и пишем на цель
@@ -244,7 +259,7 @@ def _render_template_texts(prov, claude_dir, overrides, *,
         # override `1c-md` → `1c-md-queries` (если сервер назван по-другому)
         # испортил бы имя условия в маркере `<!-- @if 1c-md -->`.
         new = _render_conditional_blocks(
-            text, has_1c_md, filename=rel.as_posix())
+            text, conditions, filename=rel.as_posix())
         for placeholder, actual in overrides.items():
             new = new.replace(placeholder, actual)
         if new != text:
@@ -349,11 +364,8 @@ def deploy_content(prov, config, *, update: bool) -> None:
     # сервера после переименования.
     mcp_subs = mcp_name_overrides(config.mcp)
     subs = {**mcp_subs, "{{CODE_INDEX_REPO}}": config.project_name}
-    has_1c_md = any(
-        getattr(sel, "enabled", False)
-        and sel.id in ("1c-md", "1c-md-queries")
-        for sel in config.mcp
-    )
+    conditions = conditional_flags(config.mcp)
+    has_1c_md = conditions["1c-md"]
     # tools агентов — allow-list: без явной записи mcp__<имя 1c-md>__* субагент
     # не сможет вызвать validate_query, даже если навык его рекомендует. Хвост
     # строки tools дописываем только при включённом 1c-md; имя — фактическое.
@@ -387,7 +399,7 @@ def deploy_content(prov, config, *, update: bool) -> None:
     if not update:
         write_preserving(prov, f"{project_dir}/README.md",
                          _project_readme(config.project_name), update=update)
-    _render_template_texts(prov, claude, subs, has_1c_md=has_1c_md,
+    _render_template_texts(prov, claude, subs, conditions=conditions,
                            py_cmd=_py_cmd(prov, project_dir))
     from .nethasp import deploy_nethasp
     deploy_nethasp(prov, config)
