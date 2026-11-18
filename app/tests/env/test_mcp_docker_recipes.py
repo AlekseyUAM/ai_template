@@ -40,12 +40,21 @@ def test_bsl_ls_params_buildable_no_token():
     assert R.recipe_for("bsl-ls").build is not None
 
 
-def test_naparnic_params_inject_token_prebuilt_only():
+def test_naparnic_params_inject_token_and_build_from_deps():
     p = R.launch_params("1c-naparnic", port=8003, token="SECRET")
     assert p["env"]["SSE_PORT"] == "8003"
     assert p["env"]["ONEC_AI_TOKEN"] == "SECRET"
-    # напарник — только готовый образ (нет Dockerfile в репо)
-    assert R.recipe_for("1c-naparnic").build is None
+    # образ собирается из апстримного Dockerfile.build (исходники — в deps/)
+    b = R.recipe_for("1c-naparnic").build
+    assert b is not None
+    assert (b.dockerfile, b.context) == (
+        "deps/spring-mcp-1c-copilot/Dockerfile.build",
+        "deps/spring-mcp-1c-copilot",
+    )
+    assert b.repo_dir == "deps/spring-mcp-1c-copilot"
+    assert b.repo_url == \
+        "https://github.com/SteelMorgan/spring-mcp-1c-copilot.git"
+    assert b.repo_sha  # пин: сборка не должна уезжать за HEAD
 
 
 def test_code_index_requires_catalog_dir(tmp_path):
@@ -61,7 +70,7 @@ def test_code_index_requires_catalog_dir(tmp_path):
     assert p["env"]["CODE_INDEX_HOME"] == "/data/code-index-home"
     # каталог кодовой базы и home-том смонтированы
     joined = " ".join(p["volumes"])
-    assert f"{catalog}:/repos/src" in joined
+    assert f"{R._docker_host_path(catalog)}:/repos/src" in joined
     assert "/data/code-index-home" in joined
     # сгенерирован daemon.toml с путём внутри контейнера и alias = имя проекта
     daemon = state / "daemon.toml"
@@ -154,6 +163,32 @@ def test_platform_requires_platform_path():
     assert p["env"]["ONEC_PLATFORM_PATH"] == "/opt/1cv8/x"
     assert any("/opt/1cv8/x:/opt/1cv8/x:ro" in v for v in p["volumes"])
     assert p["internal_port"] == 8002
+
+
+def test_platform_windows_path_mounts_to_fixed_container_dir():
+    # Windows-путь нельзя монтировать «сам в себя»: двоеточие диска в target
+    # ломает разбор -v в Docker Desktop («too many colons»). Внутри — /opt/1cv8,
+    # и ONEC_PLATFORM_PATH должен указывать уже на контейнерный путь.
+    win = r"C:\Program Files (x86)\1cv8\8.3.27.2170\bin"
+    p = R.launch_params("1c-platform", port=8002, platform_path=win)
+    assert p["env"]["ONEC_PLATFORM_PATH"] == "/opt/1cv8"
+    assert p["volumes"] == [
+        "C:/Program Files (x86)/1cv8/8.3.27.2170/bin:/opt/1cv8:ro",
+    ]
+
+
+def test_platform_unc_path_uses_container_dir_too():
+    unc = r"\\server\share\1cv8\8.3.27.2170\bin"
+    p = R.launch_params("1c-platform", port=8002, platform_path=unc)
+    assert p["env"]["ONEC_PLATFORM_PATH"] == "/opt/1cv8"
+    assert p["volumes"] == [f"{unc}:/opt/1cv8:ro"]
+
+
+def test_code_index_windows_catalog_path_normalized(tmp_path):
+    catalog = r"C:\Work\Моя конфигурация\src\cf"
+    p = R.launch_params("code-index", port=8004, catalog_dir=catalog,
+                        state_dir=str(tmp_path / "state"), project_name="proj")
+    assert p["volumes"][0] == "C:/Work/Моя конфигурация/src/cf:/repos/src"
 
 
 def test_platform_build_knows_source_repo():

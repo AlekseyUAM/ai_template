@@ -354,6 +354,7 @@ def test_resolve_mcp_cards_reuses_shared_and_creates_project_cards(tmp_path):
 from dataclasses import dataclass
 
 from agentmon.env.bench_setup import (
+    _venv_python,
     base_dump_steps,
     base_load_steps,
     build_create_base_command,
@@ -455,11 +456,21 @@ def test_base_dump_steps():
     ]
 
 
+def make_project_venv(project: Path) -> Path:
+    """Создаёт интерпретатор .venv там же, где его ищет bench_setup.
+
+    Раскладка зависит от ОС: на Windows — Scripts\\python.exe, иначе bin/python.
+    """
+    python = Path(_venv_python(str(project)))
+    python.parent.mkdir(parents=True, exist_ok=True)
+    python.write_text("")
+    return python
+
+
 def test_run_batch_step_uses_project_venv_and_raises_on_error(tmp_path):
     cfg = load_config(write_env(tmp_path), repo_root=tmp_path)
     project = Path(cfg.project_dir)
-    (project / ".venv" / "bin").mkdir(parents=True)
-    (project / ".venv" / "bin" / "python").write_text("")
+    venv_python = make_project_venv(project)
     (project / ".claude" / "skills" / "1c-batch" / "scripts").mkdir(parents=True)
     (project / ".claude" / "skills" / "1c-batch" / "scripts" / "1c-batch.py").write_text("")
 
@@ -469,7 +480,7 @@ def test_run_batch_step_uses_project_venv_and_raises_on_error(tmp_path):
                        prov=prov, log=lambda line: None)
     cmd, cwd = prov.calls[0]
     assert cmd[:2] == [
-        str(project / ".venv" / "bin" / "python"),
+        str(venv_python),
         str(project / ".claude" / "skills" / "1c-batch" / "scripts" / "1c-batch.py"),
     ]
     assert cwd == cfg.project_dir
@@ -478,8 +489,7 @@ def test_run_batch_step_uses_project_venv_and_raises_on_error(tmp_path):
 def test_run_batch_step_retries_db_lock(tmp_path):
     cfg = load_config(write_env(tmp_path), repo_root=tmp_path)
     project = Path(cfg.project_dir)
-    (project / ".venv" / "bin").mkdir(parents=True)
-    (project / ".venv" / "bin" / "python").write_text("")
+    make_project_venv(project)
     (project / ".claude" / "skills" / "1c-batch" / "scripts").mkdir(parents=True)
     (project / ".claude" / "skills" / "1c-batch" / "scripts" / "1c-batch.py").write_text("")
 
@@ -724,8 +734,10 @@ def test_launch_code_index_removes_old_container_with_volumes(tmp_path):
     assert calls[0] == ["docker", "rm", "-f", "-v", CODE_INDEX_CONTAINER]
     assert launched["name"] == CODE_INDEX_CONTAINER
     assert launched["port"] == cfg.code_index_port
+    from agentmon.env.mcp_docker_recipes import _docker_host_path
+
     volumes = launched["volumes"]
-    assert f"{project / 'src' / 'cf'}:/repos/src" in volumes
+    assert f"{_docker_host_path(project / 'src' / 'cf')}:/repos/src" in volumes
     toml = state_root / ".ai1c" / "mcp-state" / "42" / "daemon.toml"
     assert toml.is_file()
     assert f'alias = "{cfg.project_name}"' in toml.read_text(encoding="utf-8")

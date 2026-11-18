@@ -112,6 +112,30 @@ def test_clone_checks_out_pinned_sha(tmp_path):
     assert checkout[-2:] == ["--detach", "a" * 40]
 
 
+def test_clone_fetches_pinned_sha_when_shallow_clone_lacks_it(tmp_path):
+    # --depth 1 приносит только tip ветки: если пин — предок, checkout падает,
+    # и clone должен дотянуть SHA через fetch, а не сдаваться.
+    calls = []
+    checkouts = {"n": 0}
+
+    def fake_run(cmd, **kw):
+        calls.append(cmd)
+        if cmd[:2] == ["git", "clone"]:
+            (tmp_path / "deps" / "repo").mkdir(parents=True, exist_ok=True)
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+        if "fetch" in cmd:
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+        checkouts["n"] += 1
+        return SimpleNamespace(returncode=1 if checkouts["n"] == 1 else 0,
+                               stdout="", stderr="")
+
+    res = mcp_sources.clone(PINNED, tmp_path, run=fake_run)
+    assert res["ok"] is True
+    assert any("fetch" in cmd for cmd in calls)
+    assert sum(1 for cmd in calls if "checkout" in cmd) == 2
+    assert "fetch" in res["log"]
+
+
 def test_clone_removes_dest_on_checkout_failure(tmp_path):
     def fake_run(cmd, **kw):
         if cmd[:2] == ["git", "clone"]:

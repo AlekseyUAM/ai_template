@@ -12,6 +12,34 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 
+# Куда монтируется каталог платформы 1С внутри Linux-контейнера. На Windows
+# хостовый путь (`C:\Program Files (x86)\1cv8\...`) нельзя использовать как
+# target: двоеточие диска ломает разбор `-v host:container` в Docker Desktop
+# («mount denied ... too many colons»). Снаружи — Windows-путь, внутри — этот.
+PLATFORM_CONTAINER_DIR = "/opt/1cv8"
+
+# Windows-путь с диском (`C:\...`, `C:/...`). UNC (`\\server\share`) тоже
+# считаем хостовым Windows-путём, но слэши у него не трогаем.
+_WINDOWS_DRIVE_RE = re.compile(r"^[a-zA-Z]:[\\/]")
+
+
+def _is_windows_host_path(path: str) -> bool:
+    """Похож ли путь на хостовый Windows-путь (диск или UNC)."""
+    return bool(_WINDOWS_DRIVE_RE.match(path)) or path.startswith("\\\\")
+
+
+def _docker_host_path(path) -> str:
+    """Хостовый путь для bind-тома: Windows-диск — с прямыми слэшами.
+
+    Docker Desktop понимает и обратные слэши, но прямые надёжнее при разборе
+    `-v` (особенно в старых клиентах) и одинаково работают на Linux.
+    """
+    s = str(path)
+    if _WINDOWS_DRIVE_RE.match(s):
+        return s.replace("\\", "/")
+    return s
+
+
 def container_name(row) -> str:
     """Имя docker-контейнера для карточки MCP.
 
@@ -71,13 +99,20 @@ RECIPES: dict[str, DockerRecipe] = {
             repo_sha="ac73e52e1fa609d0036cf55068d5dc697ac0ab97",
         ),
     ),
-    # 1С:Напарник — spring-mcp-1c-copilot (Dockerfile в апстриме; только готовый образ).
+    # 1С:Напарник — spring-mcp-1c-copilot: апстримный Dockerfile.build собирает
+    # jar внутри контейнера (сеть нужна только для Gradle-зависимостей).
     "1c-naparnic": DockerRecipe(
         image="copilot-spring-mcp-1c-copilot:latest",
         port_env="SSE_PORT",
         token_env="ONEC_AI_TOKEN",
         needs_host_network=True,   # проксирует запросы к code.1c.ai → нужен внешний DNS
-        build=None,
+        build=BuildSpec(
+            dockerfile="deps/spring-mcp-1c-copilot/Dockerfile.build",
+            context="deps/spring-mcp-1c-copilot",
+            repo_dir="deps/spring-mcp-1c-copilot",
+            repo_url="https://github.com/SteelMorgan/spring-mcp-1c-copilot.git",
+            repo_sha="3001408515337ac697c02f95888694fde2d52e56",
+        ),
     ),
     # Индексированная кодовая база — bsl-indexer (Rust; сборка из deps).
     "code-index": DockerRecipe(
@@ -153,9 +188,17 @@ def launch_params(type_key: str, *, port: int, token=None,
     if recipe.platform_env:
         if not platform_path:
             raise ValueError("для этого вида MCP нужен путь к платформе 1С")
-        env[recipe.platform_env] = platform_path
-        # путь к платформе одинаков внутри и снаружи (сервер читает файлы по нему)
-        volumes.append(f"{platform_path}:{platform_path}:ro")
+        src = str(platform_path)
+        if _is_windows_host_path(src):
+            # Windows-путь не может быть путём внутри Linux-контейнера: двоеточие
+            # диска ломает разбор `-v`, поэтому монтируем в фиксированный каталог,
+            # а серверу сообщаем уже контейнерный путь.
+            target = PLATFORM_CONTAINER_DIR
+        else:
+            # на Linux путь к платформе одинаков внутри и снаружи
+            target = src
+        env[recipe.platform_env] = target
+        volumes.append(f"{_docker_host_path(src)}:{target}:ro")
     if recipe.catalog_mount:
         if not catalog_dir:
             raise ValueError("для code-index нужен каталог кодовой базы")
@@ -170,9 +213,9 @@ def launch_params(type_key: str, *, port: int, token=None,
                          f"http://127.0.0.1:{port}"),
             encoding="utf-8")
         # каталог кодовой базы rw (демон пишет <repo>/.code-index/index.db рядом)
-        volumes.append(f"{catalog_dir}:/repos/src")
+        volumes.append(f"{_docker_host_path(catalog_dir)}:/repos/src")
         # state-том с daemon.toml и runtime демона
-        volumes.append(f"{sp}:/data/code-index-home")
+        volumes.append(f"{_docker_host_path(sp)}:/data/code-index-home")
 
     # сеть хоста нужна серверам с внешним DNS (напр. напарник → code.1c.ai);
     # host-сеть применима на Linux (на Docker Desktop DNS bridge и так работает)

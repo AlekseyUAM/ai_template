@@ -332,6 +332,49 @@ def test_launch_stream_clones_then_builds(tmp_path, monkeypatch):
     assert "Cloning into" in body
     assert body.index("Скачивание исходников") < body.index("Сборка образа")
     assert "Контейнер запущен" in body
+    # пин применяется и в потоковом пути (его использует кнопка в мониторе)
+    assert "checkout --detach" in body
+    assert "Исходники на коммите" in body
+
+
+def test_launch_stream_fetches_pin_when_shallow_clone_lacks_it(tmp_path, monkeypatch):
+    from agentmon.env import mcp_docker, mcp_sources
+    monkeypatch.setattr(mcp_docker, "image_exists", lambda t, **k: False)
+    monkeypatch.setattr(
+        mcp_sources, "clone_cmd",
+        lambda b, rr: ["git", "clone", "--depth", "1", "URL", "DEST"])
+    checkouts = {"n": 0}
+
+    def fake_iter(cmd, **k):
+        if cmd[:2] == ["git", "clone"]:
+            yield mcp_docker.rc_line(0)
+            return
+        if "fetch" in cmd:
+            yield "fetched pinned sha"
+            yield mcp_docker.rc_line(0)
+            return
+        if "checkout" in cmd:
+            checkouts["n"] += 1
+            yield mcp_docker.rc_line(1 if checkouts["n"] == 1 else 0)
+            return
+        if cmd[:3] == ["docker", "rm", "-f"]:
+            yield mcp_docker.rc_line(0)
+            return
+        yield "cid"
+        yield mcp_docker.rc_line(0)
+
+    monkeypatch.setattr(mcp_docker, "iter_output", fake_iter)
+
+    c = make(tmp_path)
+    catalog = tmp_path / "cfg"; catalog.mkdir()
+    mid = c.post("/api/mcp", json={
+        "name": "idx", "kind": "docker", "standard_key": "code-index",
+        "port": 8004, "catalog_dir": str(catalog), "project_name": "proj",
+    }).json()["mcp"]["id"]
+    body = c.post(f"/api/mcp/{mid}/launch/stream", json={"port": 8004}).text
+    assert "fetched pinned sha" in body
+    assert "Исходники на коммите" in body
+    assert "Контейнер запущен" in body
 
 
 def test_launch_stream_clone_failure_aborts_build(tmp_path, monkeypatch):
@@ -419,8 +462,14 @@ def test_launch_stream_skips_clone_when_image_exists(tmp_path, monkeypatch):
 
 
 def test_launch_prebuilt_only_missing_image_reports(tmp_path, monkeypatch):
-    from agentmon.env import mcp_docker
+    # Рецепта «только готовый образ» сейчас нет, но ветка остаётся для будущих
+    # видов — проверяем её на подменённом рецепте без build-спецификации.
+    from agentmon.env import mcp_api, mcp_docker
+    from agentmon.env.mcp_docker_recipes import DockerRecipe
     monkeypatch.setattr(mcp_docker, "image_exists", lambda tag, **k: False)
+    monkeypatch.setattr(mcp_api, "recipe_for",
+                        lambda key: DockerRecipe(image="prebuilt:latest",
+                                                 port_env="PORT"))
     c = make(tmp_path)
     mid = c.post("/api/mcp", json={
         "name": "nap", "kind": "docker", "standard_key": "1c-naparnic", "port": 8003,

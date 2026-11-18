@@ -275,6 +275,16 @@ def build_mcp_router(store) -> APIRouter:
                 yield line + "\n"
         _stream.rc = None
 
+        def _git_stream(cmd):
+            """Стримит git-команду; возвращает rc или None, если git не запустился."""
+            yield f"$ {' '.join(cmd)}\n"
+            try:
+                yield from _stream(cmd)
+            except OSError as exc:
+                yield f"\n✗ Не удалось запустить git: {exc}\n"
+                return None
+            return _stream.rc
+
         def gen():
             yield f"▶ Развёртывание «{name}» (образ {image}, порт {port})\n"
             if need_build and b is None:
@@ -285,17 +295,38 @@ def build_mcp_router(store) -> APIRouter:
                 clone_c = mcp_sources.clone_cmd(b, rr)
                 if clone_c is not None:
                     yield "\n=== Скачивание исходников ===\n"
-                    yield f"$ {' '.join(clone_c)}\n"
-                    try:
-                        yield from _stream(clone_c)
-                    except OSError as exc:
-                        yield f"\n✗ Не удалось запустить git: {exc}\n"
+                    rc = yield from _git_stream(clone_c)
+                    if rc is None:
                         return
-                    if _stream.rc != 0:
+                    if rc != 0:
                         yield (f"\n✗ Ошибка скачивания исходников "
-                               f"(код {_stream.rc})\n")
+                               f"(код {rc})\n")
                         return
                     yield "✓ Исходники скачаны\n"
+                # пин обязателен и для свежего клона, и для уже лежащего deps/
+                checkout = mcp_sources.checkout_cmd(b, rr)
+                if checkout is not None:
+                    rc = yield from _git_stream(checkout)
+                    if rc is None:
+                        return
+                    if rc != 0:
+                        # shallow-клон мог не принести коммит — дотягиваем SHA
+                        rc = yield from _git_stream(
+                            mcp_sources.fetch_pin_cmd(b, rr))
+                        if rc is None:
+                            return
+                        if rc != 0:
+                            yield (f"\n✗ В клоне нет запиненного коммита "
+                                   f"{b.repo_sha}\n")
+                            return
+                        rc = yield from _git_stream(checkout)
+                        if rc is None:
+                            return
+                        if rc != 0:
+                            yield ("\n✗ Не удалось переключиться на "
+                                   f"запиненный коммит {b.repo_sha}\n")
+                            return
+                    yield f"✓ Исходники на коммите {b.repo_sha}\n"
             # снять прежний контейнер с тем же именем (тихо)
             for _ in mcp_docker.iter_output(["docker", "rm", "-f", name]):
                 pass

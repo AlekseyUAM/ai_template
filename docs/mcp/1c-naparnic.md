@@ -4,8 +4,8 @@ MCP-обёртка над 1С:Напарником — внешним ИИ-ас�
 решениям 1С. Проект:
 [SteelMorgan/spring-mcp-1c-copilot](https://github.com/SteelMorgan/spring-mcp-1c-copilot).
 
-- Образ: `copilot-spring-mcp-1c-copilot:latest` (готовится **заранее**: у вида
-  нет Dockerfile в репозитории, кнопка только запускает существующий образ)
+- Образ: `copilot-spring-mcp-1c-copilot:latest` (собирается из апстримного
+  `Dockerfile.build`; исходники при первом запуске клонируются в `deps/`)
 - Переменные: `ONEC_AI_TOKEN` (токен Напарника), `SSE_PORT` (порт)
 - Эндпоинт: `http://<host>:<port>/mcp` (streamable HTTP)
 - Нужен **внешний интернет**: сервер ходит к `code.1c.ai`
@@ -26,23 +26,30 @@ MCP-обёртка над 1С:Напарником — внешним ИИ-ас�
 
 ## Развёртывание кнопкой
 
-Перед первым запуском соберите образ и назовите его так, как ждёт UI:
-
-```bash
-git clone https://github.com/SteelMorgan/spring-mcp-1c-copilot.git
-cd spring-mcp-1c-copilot
-cp env.example .env          # ONEC_AI_TOKEN=..., SSE_PORT=8003
-./scripts/prepare-token-secret.sh
-docker build -f Dockerfile.build -t copilot-spring-mcp-1c-copilot:latest .
-```
-
-После этого «Развернуть в Docker локально» запускает контейнер
+Если образа нет, «Развернуть в Docker локально» клонирует
+`https://github.com/SteelMorgan/spring-mcp-1c-copilot.git` в
+`deps/spring-mcp-1c-copilot` (коммит запинен в `mcp_docker_recipes.py`) и
+собирает `Dockerfile.build`: Gradle-сборка идёт внутри контейнера, поэтому
+нужен исходящий интернет к Maven Central. После сборки запускается контейнер
 `ai1c-mcp-1c_naparnic` с `-e SSE_PORT=<порт>` и `-e ONEC_AI_TOKEN=<токен>`.
 На Linux контейнер идёт в сети хоста (`--network=host`) — так решается проблема
 внешнего DNS в sandbox; на Docker Desktop используется bridge с публикацией
 `127.0.0.1:<порт>`.
 
 ## Ручное развёртывание (в том числе на отдельном сервере)
+
+Соберите образ (на отдельной машине — там же или перенесите через
+`docker save`/`docker load`):
+
+```bash
+git clone https://github.com/SteelMorgan/spring-mcp-1c-copilot.git
+cd spring-mcp-1c-copilot
+docker build -f Dockerfile.build -t copilot-spring-mcp-1c-copilot:latest .
+```
+
+Файлы `env.example` и `scripts/prepare-token-secret.sh` нужны только для
+апстримного `docker compose`; при ручном запуске токен передаётся через
+`ONEC_AI_TOKEN`:
 
 ```bash
 docker run -d --restart unless-stopped \
@@ -53,8 +60,7 @@ docker run -d --restart unless-stopped \
   copilot-spring-mcp-1c-copilot:latest
 ```
 
-На отдельной машине соберите образ там (или перенесите через
-`docker save`/`docker load`) и запустите. Требования:
+Требования:
 
 - исходящий доступ в интернет к `code.1c.ai`;
 - если bridge-сеть не резолвит внешний DNS (как в sandbox), используйте
