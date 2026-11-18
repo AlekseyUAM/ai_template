@@ -117,6 +117,22 @@ def test_load_config_optional_1c_md_and_code_index_overrides(tmp_path):
     assert cfg.code_index_wait_minutes == 120
 
 
+def test_load_config_optional_1c_naparnic(tmp_path):
+    cfg = load_config(write_env(tmp_path), repo_root=tmp_path)
+    assert cfg.one_c_naparnic_url is None
+    cfg = load_config(
+        write_env(tmp_path, MCP_1C_NAPARNIC_URL="http://localhost:8003/mcp"),
+        repo_root=tmp_path)
+    assert cfg.one_c_naparnic_url == "http://localhost:8003/mcp"
+
+
+def test_load_config_rejects_bad_1c_naparnic_url(tmp_path):
+    with pytest.raises(SetupError, match="MCP_1C_NAPARNIC_URL"):
+        load_config(
+            write_env(tmp_path, MCP_1C_NAPARNIC_URL="localhost:8003/mcp"),
+            repo_root=tmp_path)
+
+
 import json
 
 from agentmon.env.bench_setup import (
@@ -189,6 +205,29 @@ def test_preflight_rejects_unreachable_shared_mcp(tmp_path):
         preflight(cfg, repo_root=make_repo_root(tmp_path),
                   store=make_store(tmp_path), registry=make_registry(tmp_path),
                   tcp_ok=lambda url: False)
+
+
+def test_preflight_checks_naparnic_http(tmp_path):
+    cfg = load_config(
+        write_env(tmp_path, MCP_1C_NAPARNIC_URL="http://localhost:8003/mcp"),
+        repo_root=tmp_path)
+    calls = []
+    preflight(cfg, repo_root=make_repo_root(tmp_path),
+              store=make_store(tmp_path), registry=make_registry(tmp_path),
+              tcp_ok=lambda url: True,
+              http_ok=lambda url: calls.append(url) or True)
+    assert calls == ["http://localhost:8003/mcp"]
+
+
+def test_preflight_rejects_unreachable_naparnic(tmp_path):
+    cfg = load_config(
+        write_env(tmp_path, MCP_1C_NAPARNIC_URL="http://localhost:8003/mcp"),
+        repo_root=tmp_path)
+    with pytest.raises(SetupError, match="MCP_1C_NAPARNIC_URL"):
+        preflight(cfg, repo_root=make_repo_root(tmp_path),
+                  store=make_store(tmp_path), registry=make_registry(tmp_path),
+                  tcp_ok=lambda url: True,
+                  http_ok=lambda url: False)
 
 
 def test_preflight_requires_cf_and_extensions(tmp_path):
@@ -307,6 +346,41 @@ def test_build_mcp_plans_with_1c_md(tmp_path):
     assert md.standard_key == "1c-md-queries"
     assert json.loads("{" + md.connection_json + "}")["1c-md"]["url"] == (
         "http://localhost/bench/hs/mcp")
+
+
+def test_build_mcp_plans_with_1c_naparnic(tmp_path):
+    cfg = load_config(
+        write_env(tmp_path, MCP_1C_NAPARNIC_URL="http://ai.local:8003/mcp"),
+        repo_root=tmp_path,
+    )
+    plans = build_mcp_plans(cfg)
+    assert [plan.mcp_name for plan in plans] == [
+        "bsl_ls", "1c_platform", "1c_naparnic", "code_index"]
+    naparnic = plans[2]
+    assert naparnic.standard_key == "1c-naparnic"
+    assert naparnic.kind == "docker"
+    assert naparnic.url == "ai.local"
+    assert naparnic.port == 8003
+    assert json.loads("{" + naparnic.connection_json + "}") == {
+        "1c_naparnic": {
+            "type": "http",
+            "url": "http://ai.local:8003/mcp",
+        }
+    }
+    servers = build_mcp_json(build_env_config(cfg, plans).mcp)["mcpServers"]
+    assert servers["1c_naparnic"] == {
+        "type": "http", "url": "http://ai.local:8003/mcp"}
+
+
+def test_build_mcp_plans_order_with_both_optional(tmp_path):
+    cfg = load_config(
+        write_env(tmp_path,
+                  MCP_1C_MD_URL="http://localhost/bench/hs/mcp",
+                  MCP_1C_NAPARNIC_URL="http://localhost:8003/mcp"),
+        repo_root=tmp_path,
+    )
+    assert [plan.mcp_name for plan in build_mcp_plans(cfg)] == [
+        "bsl_ls", "1c_platform", "1c-md", "1c_naparnic", "code_index"]
 
 
 def test_build_env_config_produces_mcp_json(tmp_path):

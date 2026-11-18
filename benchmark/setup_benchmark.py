@@ -124,6 +124,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  1c_platform: {cfg.platform_url}")
     if cfg.one_c_md_url:
         print(f"  1c-md:       {cfg.one_c_md_url}")
+    if cfg.one_c_naparnic_url:
+        print(f"  1c_naparnic: {cfg.one_c_naparnic_url}")
     return 0
 
 

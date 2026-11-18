@@ -40,8 +40,8 @@ REQUIRED_KEYS = (
     "MCP_1C_PLATFORM_URL", "MCP_CODE_INDEX_PORT",
 )
 OPTIONAL_KEYS = (
-    "MCP_1C_MD_URL", "BENCH_DT_PATH", "MCP_CODE_INDEX_HOST",
-    "CODE_INDEX_WAIT_MINUTES",
+    "MCP_1C_MD_URL", "MCP_1C_NAPARNIC_URL", "BENCH_DT_PATH",
+    "MCP_CODE_INDEX_HOST", "CODE_INDEX_WAIT_MINUTES",
 )
 _VERSION_RE = re.compile(r"(\d+\.\d+\.\d+\.\d+)")
 _URL_RE = re.compile(r"^https?://", re.IGNORECASE)
@@ -69,6 +69,7 @@ class BenchConfig:
     code_index_host: str
     code_index_wait_minutes: int
     one_c_md_url: str | None
+    one_c_naparnic_url: str | None
     dt_path: str | None
 
 
@@ -130,7 +131,8 @@ def load_config(env_path: Path, *, repo_root: Path,
     if unknown:
         warn(f"⚠ неизвестные ключи test.env игнорируются: {', '.join(unknown)}")
 
-    for key in ("MCP_BSL_LS_URL", "MCP_1C_PLATFORM_URL", "MCP_1C_MD_URL"):
+    for key in ("MCP_BSL_LS_URL", "MCP_1C_PLATFORM_URL", "MCP_1C_MD_URL",
+                "MCP_1C_NAPARNIC_URL"):
         value = data.get(key, "")
         if value and not _URL_RE.match(value):
             raise SetupError(f"{key} должен начинаться с http:// или https://")
@@ -193,6 +195,8 @@ def load_config(env_path: Path, *, repo_root: Path,
         code_index_host=(data.get("MCP_CODE_INDEX_HOST") or "localhost").strip(),
         code_index_wait_minutes=wait_minutes,
         one_c_md_url=(data.get("MCP_1C_MD_URL") or "").strip() or None,
+        one_c_naparnic_url=(
+            data.get("MCP_1C_NAPARNIC_URL") or "").strip() or None,
         dt_path=dt_path,
     )
 
@@ -256,6 +260,25 @@ def default_tcp_ok(url: str, timeout: float = 3.0) -> bool:
         return False
 
 
+def default_http_ok(url: str, timeout: float = 5.0) -> bool:
+    """Любой HTTP-ответ (включая 4xx) означает, что сервис слушает."""
+    request = urllib.request.Request(
+        url, headers={"User-Agent": "ai1c-agentmon"})
+    try:
+        with urllib.request.urlopen(request, timeout=timeout):
+            return True
+    except urllib.error.HTTPError:
+        return True
+    except OSError:
+        return False
+
+
+def check_mcp_url(url: str, *, http_ok=default_http_ok, log=print) -> None:
+    if not http_ok(url):
+        raise SetupError(f"1c-md недоступен по адресу {url}")
+    log(f"✓ 1c-md доступен: {url}")
+
+
 def create_project_row(store, cfg: BenchConfig) -> int:
     return ProjectRepo(store).add(
         name=cfg.project_name,
@@ -273,7 +296,8 @@ def create_project_row(store, cfg: BenchConfig) -> int:
 
 
 def preflight(cfg: BenchConfig, *, repo_root: Path, store, registry,
-              tcp_ok=default_tcp_ok, allow_existing: bool = False) -> None:
+              tcp_ok=default_tcp_ok, http_ok=default_http_ok,
+              allow_existing: bool = False) -> None:
     """Проверить всё, что можно проверить до создания каталога и записей БД.
 
     allow_existing=True пропускает проверки уже существующего проекта — режим
@@ -318,6 +342,11 @@ def preflight(cfg: BenchConfig, *, repo_root: Path, store, registry,
                      ("MCP_1C_PLATFORM_URL", cfg.platform_url)):
         if not tcp_ok(url):
             raise SetupError(f"{key}: сервер недоступен по адресу {url}")
+
+    if cfg.one_c_naparnic_url and not http_ok(cfg.one_c_naparnic_url):
+        raise SetupError(
+            "MCP_1C_NAPARNIC_URL: сервер недоступен по адресу "
+            f"{cfg.one_c_naparnic_url}")
 
 
 _PROJECT_MARKERS = (".1c-devbase.json", ".claude", "tasks")
@@ -399,6 +428,17 @@ def build_mcp_plans(cfg: BenchConfig) -> list[McpPlan]:
             connection_json=_connection_http("1c-md", cfg.one_c_md_url),
             purpose=("Произвольные запросы к данным, вся информация об "
                      "актуальных метаданных конфигурации"),
+        ))
+    if cfg.one_c_naparnic_url:
+        naparnic_host, naparnic_port = _url_host_port(cfg.one_c_naparnic_url)
+        plans.append(McpPlan(
+            standard_key="1c-naparnic", mcp_name="1c_naparnic",
+            kind="docker",
+            connection_json=_connection_http("1c_naparnic",
+                                             cfg.one_c_naparnic_url),
+            purpose=("Объяснение логики кода, любые вопросы по информационно-"
+                     "технологическому сопровождению 1С"),
+            url=naparnic_host, port=naparnic_port,
         ))
     plans.append(McpPlan(
         standard_key="code-index", mcp_name="code_index", kind="docker",
@@ -593,25 +633,6 @@ def run_batch_step(project_dir: str, args: list[str], *, prov, log=print,
         raise SetupError(
             f"1c-batch {' '.join(args)} завершился с кодом "
             f"{res.returncode}:\n{tail}")
-
-
-def default_http_ok(url: str, timeout: float = 5.0) -> bool:
-    """Любой HTTP-ответ (включая 4xx) означает, что сервис слушает."""
-    request = urllib.request.Request(
-        url, headers={"User-Agent": "ai1c-agentmon"})
-    try:
-        with urllib.request.urlopen(request, timeout=timeout):
-            return True
-    except urllib.error.HTTPError:
-        return True
-    except OSError:
-        return False
-
-
-def check_mcp_url(url: str, *, http_ok=default_http_ok, log=print) -> None:
-    if not http_ok(url):
-        raise SetupError(f"1c-md недоступен по адресу {url}")
-    log(f"✓ 1c-md доступен: {url}")
 
 
 @dataclass(frozen=True)
@@ -976,10 +997,10 @@ def run_setup(cfg: BenchConfig, *, repo_root: Path, store, registry,
 
     if recreate:
         preflight(cfg, repo_root=repo_root, store=store, registry=registry,
-                  tcp_ok=tcp_ok, allow_existing=True)
+                  tcp_ok=tcp_ok, http_ok=http_ok, allow_existing=True)
         remove_existing_project(cfg, store=store, registry=registry, log=log)
     preflight(cfg, repo_root=repo_root, store=store, registry=registry,
-              tcp_ok=tcp_ok)
+              tcp_ok=tcp_ok, http_ok=http_ok)
 
     state = RollbackState(project_dir=cfg.project_dir)
     try:
