@@ -10,15 +10,21 @@ def test_eight_types_present():
     }
 
 
-def test_docker_code_index_retitled():
+def test_code_index_is_one_native_type():
+    from agentmon.env.mcp_types import get_type, types_payload
     t = get_type("code-index")
-    assert t.title == "Индексированная кодовая база (в Docker локально)"
-    assert t.action == "docker"
+    assert t.action == "local"
+    assert "code_index_dir" in t.fields
+    assert "code_index_dir" in t.required
+    assert "port" in t.required
+    assert "code-index-local" not in {x["key"] for x in types_payload()}
+    legacy = get_type("code-index-local")
+    assert legacy.hidden is True
 
 
 def test_code_index_local_type():
     t = get_type("code-index-local")
-    assert t.title == "Индексированная кодовая база (локально)"
+    assert t.title == "Индексированная кодовая база (локально, legacy)"
     assert t.action == "local"
     assert t.required == ("catalog_dir", "project_name", "code_index_dir", "port")
     for f in ("catalog_dir", "project_name", "code_index_dir", "port"):
@@ -98,9 +104,9 @@ def test_code_index_requires_catalog_dir():
     t = get_type("code-index")
     assert "catalog_dir" in t.fields
     assert "project_name" in t.fields
-    assert t.required == ("catalog_dir", "project_name")
+    assert t.required == ("catalog_dir", "project_name", "code_index_dir", "port")
     assert t.defaults["mcp_name"] == "code_index"
-    assert t.defaults["port"] == 8004
+    assert t.defaults["port"] == 8005
 
 
 def test_build_connection_metadata_uses_defaults():

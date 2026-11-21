@@ -773,9 +773,6 @@ def render_digest(metrics: dict) -> str:
         lines.append(f"- Исход: `{task.get('outcome')}`, код выхода: "
                      f"`{'—' if exit_code is None else exit_code}`, время: "
                      f"{_seconds(task.get('duration_sec'))}")
-        index_status = task.get("index_refresh")
-        if index_status:
-            lines.append(f"- Индекс code_index: `{index_status}`")
         stream = task.get("stream") or {}
         session = stream.get("session_id")
         lines.append(f"- Агент: turns={stream.get('num_turns')}, "

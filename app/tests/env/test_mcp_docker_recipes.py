@@ -1,5 +1,3 @@
-import tomllib
-
 import pytest
 
 from agentmon.env import mcp_docker_recipes as R
@@ -24,8 +22,16 @@ def test_recipe_none_for_non_docker():
 
 
 def test_recipe_present_for_docker_types():
-    for key in ("bsl-ls", "1c-platform", "1c-naparnic", "code-index"):
+    for key in ("bsl-ls", "1c-platform", "1c-naparnic"):
         assert R.recipe_for(key) is not None
+
+
+def test_code_index_has_no_docker_recipe():
+    # code-index разворачивается нативно (code_index_local), рецепта нет
+    assert "code-index" not in R.RECIPES
+    assert R.recipe_for("code-index") is None
+    with pytest.raises(ValueError, match="нет docker-рецепта"):
+        R.launch_params("code-index", port=8004)
 
 
 def test_bsl_ls_params_buildable_no_token():
@@ -57,83 +63,6 @@ def test_naparnic_params_inject_token_and_build_from_deps():
     assert b.repo_sha  # пин: сборка не должна уезжать за HEAD
 
 
-def test_code_index_requires_catalog_dir(tmp_path):
-    with pytest.raises(ValueError, match="катал"):
-        R.launch_params("code-index", port=8004)
-    state = tmp_path / "state"
-    catalog = tmp_path / "cfg"
-    catalog.mkdir()
-    p = R.launch_params("code-index", port=8004,
-                        catalog_dir=str(catalog), state_dir=str(state),
-                        project_name="МойПроект")
-    assert p["env"]["MCP_HTTP_PORT"] == "8004"
-    assert p["env"]["CODE_INDEX_HOME"] == "/data/code-index-home"
-    # каталог кодовой базы и home-том смонтированы
-    joined = " ".join(p["volumes"])
-    assert f"{R._docker_host_path(catalog)}:/repos/src" in joined
-    assert "/data/code-index-home" in joined
-    # сгенерирован daemon.toml с путём внутри контейнера и alias = имя проекта
-    daemon = state / "daemon.toml"
-    assert daemon.exists()
-    text = daemon.read_text(encoding="utf-8")
-    assert 'path = "/repos/src"' in text
-    assert 'alias = "МойПроект"' in text
-    assert "[[cache_targets]]" in text
-    assert 'url = "http://127.0.0.1:8004"' in text
-
-
-def test_code_index_requires_project_name(tmp_path):
-    catalog = tmp_path / "cfg"
-    catalog.mkdir()
-    with pytest.raises(ValueError, match="имя проекта"):
-        R.launch_params("code-index", port=8004,
-                        catalog_dir=str(catalog), state_dir=str(tmp_path / "s"))
-
-
-def test_daemon_toml_interpolates_alias_and_path():
-    text = R._daemon_toml("мой-алиас", "/custom/code/path")
-    assert 'alias = "мой-алиас"' in text
-    assert 'path = "/custom/code/path"' in text
-    # дефолтный /repos/src не должен появляться, если его не передали
-    assert "/repos/src" not in text
-    # без URL инвалидация не настраивается
-    assert "[[cache_targets]]" not in text
-
-
-def test_daemon_toml_has_cache_target_when_url_given():
-    text = R._daemon_toml("мой-алиас", "/custom/code/path",
-                          "http://127.0.0.1:8004")
-    assert "[[cache_targets]]" in text
-    assert 'url = "http://127.0.0.1:8004"' in text
-
-
-def test_daemon_toml_enables_mass_mode_for_object_structure():
-    # mass mode (full_names) выключен по умолчанию: без [mcp].mass_mode_tools
-    # serve отбивает full_names с -32602. Генератор включает его для структуры.
-    text = R._daemon_toml("мой-алиас", "/custom/code/path",
-                          "http://127.0.0.1:8004")
-    assert "[mcp]" in text
-    assert 'mass_mode_tools = ["get_object_structure"]' in text
-    # секция ровно одна и до [[paths]] — иначе TOML припишет ключ чужой таблице
-    assert text.count("[mcp]") == 1
-    assert text.index("[mcp]") < text.index("[[paths]]")
-    # cache_targets не потерян и остаётся до таблиц — ключи daemon.toml не уезжают
-    assert "[[cache_targets]]" in text
-    assert text.index("[[cache_targets]]") < text.index("[mcp]")
-    # TOML корректен и ключ реально лежит в таблице mcp (а не в daemon/paths)
-    parsed = tomllib.loads(text)
-    assert parsed["mcp"]["mass_mode_tools"] == ["get_object_structure"]
-    assert "mass_mode_tools" not in parsed["daemon"]
-    assert parsed["paths"][0]["alias"] == "мой-алиас"
-    # serve читает [mcp] один раз при старте — предупреждение о перезапуске в файле
-    assert "перезапусти контейнер" in text
-    # без URL тоже включено (независимо от cache_targets)
-    text2 = R._daemon_toml("мой-алиас", "/custom/code/path")
-    assert 'mass_mode_tools = ["get_object_structure"]' in text2
-    assert "[[cache_targets]]" not in text2
-    assert tomllib.loads(text2)["mcp"]["mass_mode_tools"] == ["get_object_structure"]
-
-
 def test_naparnic_host_network_on_linux(monkeypatch):
     monkeypatch.setattr(R.sys, "platform", "linux")
     p = R.launch_params("1c-naparnic", port=8003, token="T")
@@ -143,15 +72,6 @@ def test_naparnic_host_network_on_linux(monkeypatch):
 def test_naparnic_no_host_network_on_windows(monkeypatch):
     monkeypatch.setattr(R.sys, "platform", "win32")
     p = R.launch_params("1c-naparnic", port=8003, token="T")
-    assert p["network"] is None
-
-
-def test_code_index_no_host_network(tmp_path, monkeypatch):
-    monkeypatch.setattr(R.sys, "platform", "linux")
-    catalog = tmp_path / "c"; catalog.mkdir()
-    p = R.launch_params("code-index", port=8004,
-                        catalog_dir=str(catalog), state_dir=str(tmp_path / "s"),
-                        project_name="proj")
     assert p["network"] is None
 
 
@@ -184,23 +104,10 @@ def test_platform_unc_path_uses_container_dir_too():
     assert p["volumes"] == [f"{unc}:/opt/1cv8:ro"]
 
 
-def test_code_index_windows_catalog_path_normalized(tmp_path):
-    catalog = r"C:\Work\Моя конфигурация\src\cf"
-    p = R.launch_params("code-index", port=8004, catalog_dir=catalog,
-                        state_dir=str(tmp_path / "state"), project_name="proj")
-    assert p["volumes"][0] == "C:/Work/Моя конфигурация/src/cf:/repos/src"
-
-
 def test_platform_build_knows_source_repo():
     b = R.recipe_for("1c-platform").build
     assert b.repo_dir == "deps/docker_1c_sandbox"
     assert b.repo_url == "https://github.com/AlekseyUAM/docker_1c_sandbox.git"
-
-
-def test_code_index_build_knows_source_repo():
-    b = R.recipe_for("code-index").build
-    assert b.repo_dir == "deps/code-index-mcp"
-    assert b.repo_url == "https://github.com/Regsorm/code-index-mcp.git"
 
 
 def test_bsl_ls_build_has_no_source_repo():

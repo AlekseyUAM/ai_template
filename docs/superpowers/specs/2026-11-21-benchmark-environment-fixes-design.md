@@ -1,5 +1,9 @@
 # Исправление окружения по итогам benchmark-прогона
 
+> **Superseded (2026-11-21):** обход с перезапуском контейнера
+> (`bench_index.py`) удалён — code-index переведён на нативный запуск,
+> см. `docs/superpowers/specs/2026-11-21-native-code-index-design.md`.
+
 Дата: 2026-11-21
 
 ## Проблема

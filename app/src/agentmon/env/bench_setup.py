@@ -10,24 +10,21 @@ import json
 import os
 import re
 import shutil
-import socket
 import stat
 import subprocess
 import time
-import urllib.error
-import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
-from urllib.parse import urlparse
 
 from ..pycmd import PYTHON_CMD
 from .config_schema import SCHEMA_VERSION, EnvConfig, McpSelection
 from .devbase import _parse_connection, git_commit_all, git_init_project
+from . import code_index_bench
+from .code_index_bench import (NativeIndex, start_code_index,
+                               wait_code_index_ready)
 from .installer import install_environment
-from .mcp_docker_recipes import container_name, launch_params, recipe_for
-from . import mcp_docker
-from . import mcp_sources
+from .net_probe import default_http_ok, default_tcp_ok, url_host_port
 from .project_checks import current_env_version, infer_db_kind, validate_name
 from .timefmt import to_local_iso
 from ..paths import same_path
@@ -39,7 +36,7 @@ REQUIRED_KEYS = (
     "BENCH_PROJECT_NAME", "BENCH_PROJECT_DIR", "BENCH_DEVELOPER_ID",
     "BENCH_DEVELOPER_EMAIL", "BENCH_PLATFORM_PATH", "BENCH_DB_CONNECTION",
     "BENCH_DB_USER", "BENCH_DB_PASSWORD", "MCP_BSL_LS_URL",
-    "MCP_1C_PLATFORM_URL", "MCP_CODE_INDEX_PORT",
+    "MCP_1C_PLATFORM_URL", "MCP_CODE_INDEX_PORT", "CODE_INDEX_DIR",
 )
 OPTIONAL_KEYS = (
     "MCP_1C_MD_URL", "MCP_1C_NAPARNIC_URL", "BENCH_DT_PATH",
@@ -70,6 +67,7 @@ class BenchConfig:
     code_index_port: int
     code_index_host: str
     code_index_wait_minutes: int
+    code_index_dir: str          # каталог нативного code-index
     one_c_md_url: str | None
     one_c_naparnic_url: str | None
     dt_path: str | None
@@ -124,7 +122,8 @@ def load_config(env_path: Path, *, repo_root: Path,
 
     missing = [key for key in REQUIRED_KEYS if key not in data]
     empty = [key for key in REQUIRED_KEYS
-             if key != "BENCH_DB_PASSWORD" and not data.get(key, "").strip()]
+             if key != "BENCH_DB_PASSWORD"
+             and key in data and not data[key].strip()]
     if missing or empty:
         raise SetupError(
             "не заданы обязательные ключи: " + ", ".join(missing + empty))
@@ -140,7 +139,7 @@ def load_config(env_path: Path, *, repo_root: Path,
             raise SetupError(f"{key} должен начинаться с http:// или https://")
         if value:
             try:
-                _url_host_port(value)
+                url_host_port(value)
             except ValueError:
                 raise SetupError(
                     f"{key}: некорректный URL {value!r} "
@@ -163,6 +162,22 @@ def load_config(env_path: Path, *, repo_root: Path,
     project_dir = Path(os.path.expanduser(data["BENCH_PROJECT_DIR"].strip()))
     if not project_dir.is_absolute():
         raise SetupError("BENCH_PROJECT_DIR должен быть абсолютным путём")
+
+    code_index_raw = (data.get("CODE_INDEX_DIR") or "").strip()
+    if not code_index_raw:
+        raise SetupError("не задан CODE_INDEX_DIR")
+    code_index_dir = Path(os.path.expanduser(code_index_raw))
+    if not code_index_dir.is_absolute():
+        raise SetupError("CODE_INDEX_DIR должен быть абсолютным путём")
+    # Сравнение разрешённых путей: симлинк на проект или на CODE_INDEX_DIR
+    # иначе прошёл бы проверку, а start_code_index затем удалил бы каталог
+    # внутри проекта.
+    project_real = project_dir.resolve()
+    code_index_real = code_index_dir.resolve()
+    if (code_index_real == project_real
+            or project_real in code_index_real.parents):
+        raise SetupError("CODE_INDEX_DIR не должен находиться внутри "
+                         "BENCH_PROJECT_DIR")
 
     platform_raw = Path(os.path.expanduser(data["BENCH_PLATFORM_PATH"].strip()))
     platform = _resolve_platform(platform_raw)
@@ -196,6 +211,7 @@ def load_config(env_path: Path, *, repo_root: Path,
         code_index_port=port,
         code_index_host=(data.get("MCP_CODE_INDEX_HOST") or "localhost").strip(),
         code_index_wait_minutes=wait_minutes,
+        code_index_dir=str(code_index_dir.resolve()),
         one_c_md_url=(data.get("MCP_1C_MD_URL") or "").strip() or None,
         one_c_naparnic_url=(
             data.get("MCP_1C_NAPARNIC_URL") or "").strip() or None,
@@ -220,6 +236,7 @@ class McpPlan:
     port: int | None = None
     catalog_dir: str | None = None
     project_name: str | None = None
+    code_index_dir: str | None = None
 
 
 def _connection_http(name: str, url: str) -> str:
@@ -239,40 +256,6 @@ def _connection_platform(url: str) -> str:
         ensure_ascii=False,
     )
     return f"\"1c_platform\": {server}"
-
-
-def _url_host_port(url: str) -> tuple[str, int]:
-    """Хост и порт URL; ValueError на некорректном порту (http://host:abc)."""
-    parsed = urlparse(url)
-    port = parsed.port or (443 if parsed.scheme == "https" else 80)
-    if not 1 <= port <= 65535:
-        raise ValueError(f"некорректный порт в URL: {url}")
-    return parsed.hostname or "", port
-
-
-def default_tcp_ok(url: str, timeout: float = 3.0) -> bool:
-    """True, если TCP-соединение с хостом/портом URL устанавливается."""
-    host, port = _url_host_port(url)
-    if not host:
-        return False
-    try:
-        with socket.create_connection((host, port), timeout=timeout):
-            return True
-    except OSError:
-        return False
-
-
-def default_http_ok(url: str, timeout: float = 5.0) -> bool:
-    """Любой HTTP-ответ (включая 4xx) означает, что сервис слушает."""
-    request = urllib.request.Request(
-        url, headers={"User-Agent": "ai1c-agentmon"})
-    try:
-        with urllib.request.urlopen(request, timeout=timeout):
-            return True
-    except urllib.error.HTTPError:
-        return True
-    except OSError:
-        return False
 
 
 def check_mcp_url(url: str, *, http_ok=default_http_ok, log=print) -> None:
@@ -443,7 +426,7 @@ def remove_existing_project(cfg: BenchConfig, *, store, registry,
 
 
 def build_mcp_plans(cfg: BenchConfig) -> list[McpPlan]:
-    bsl_host, bsl_port = _url_host_port(cfg.bsl_ls_url)
+    bsl_host, bsl_port = url_host_port(cfg.bsl_ls_url)
     plans = [
         McpPlan(
             standard_key="bsl-ls", mcp_name="bsl_ls", kind="docker",
@@ -466,7 +449,7 @@ def build_mcp_plans(cfg: BenchConfig) -> list[McpPlan]:
                      "актуальных метаданных конфигурации"),
         ))
     if cfg.one_c_naparnic_url:
-        naparnic_host, naparnic_port = _url_host_port(cfg.one_c_naparnic_url)
+        naparnic_host, naparnic_port = url_host_port(cfg.one_c_naparnic_url)
         plans.append(McpPlan(
             standard_key="1c-naparnic", mcp_name="1c_naparnic",
             kind="docker",
@@ -477,7 +460,7 @@ def build_mcp_plans(cfg: BenchConfig) -> list[McpPlan]:
             url=naparnic_host, port=naparnic_port,
         ))
     plans.append(McpPlan(
-        standard_key="code-index", mcp_name="code_index", kind="docker",
+        standard_key="code-index", mcp_name="code_index", kind="local",
         connection_json=_connection_http(
             "code_index",
             f"http://{cfg.code_index_host}:{cfg.code_index_port}/mcp"),
@@ -486,6 +469,7 @@ def build_mcp_plans(cfg: BenchConfig) -> list[McpPlan]:
         url=cfg.code_index_host, port=cfg.code_index_port,
         catalog_dir=str(Path(cfg.project_dir) / "src" / "cf"),
         project_name=cfg.project_name,
+        code_index_dir=cfg.code_index_dir,
     ))
     return plans
 
@@ -526,10 +510,13 @@ def resolve_mcp_cards(mcp_repo, plans: list[McpPlan], *, project_id: int,
                 continue
             if not _connection_equal(row.get("connection_json"), plan.connection_json):
                 continue
-            if plan.standard_key == "code-index":
+            if plan.standard_key in ("code-index", "code-index-local"):
                 if not same_path(row.get("catalog_dir") or "", plan.catalog_dir or ""):
                     continue
                 if (row.get("project_name") or "") != (plan.project_name or ""):
+                    continue
+                if not same_path(row.get("code_index_dir") or "",
+                                 plan.code_index_dir or ""):
                     continue
             match = row
             break
@@ -548,6 +535,7 @@ def resolve_mcp_cards(mcp_repo, plans: list[McpPlan], *, project_id: int,
             url=plan.url,
             catalog_dir=plan.catalog_dir,
             project_name=plan.project_name,
+            code_index_dir=plan.code_index_dir,
         )
         by_key[plan.standard_key] = mid
         created.append(mid)
@@ -577,6 +565,7 @@ def build_env_config(cfg: BenchConfig, plans: list[McpPlan]) -> EnvConfig:
                 connection=plan.connection_json,
                 catalog_dir=plan.catalog_dir,
                 project_name=plan.project_name,
+                code_index_dir=plan.code_index_dir,
             )
             for plan in plans
         ],
@@ -798,151 +787,11 @@ def commit_baseline(cfg: BenchConfig, tasks: list[ImportedTask], prov) -> None:
         f"baseline before task{tasks[0].identifier}", config=cfg)
 
 
-CODE_INDEX_CONTAINER = "ai1c-mcp-code_index"
-
-
-
-def _build_code_index_image(repo_root: Path, *, run, log=print) -> None:
-    recipe = recipe_for("code-index")
-    build = recipe.build
-    if build is None:
-        raise SetupError(f"образ {recipe.image} отсутствует, а сборка недоступна")
-    cloned = mcp_sources.clone(build, str(repo_root), run=run)
-    if not cloned["ok"]:
-        raise SetupError("не удалось скачать исходники code-index:\n"
-                         + cloned.get("log", ""))
-    built = mcp_docker.build(
-        recipe.image, str(repo_root / build.dockerfile),
-        str(repo_root / build.context), run=run)
-    if not built["ok"]:
-        raise SetupError("не удалось собрать образ code-index:\n"
-                         + built.get("log", ""))
-    log(f"✓ образ code-index собран: {recipe.image}")
-
-
-def launch_code_index(cfg: BenchConfig, *, repo_root: Path, mid: int,
-                      run=subprocess.run, image_exists=None,
-                      launch=mcp_docker.launch, build_image=None,
-                      log=print) -> str:
-    """Пересоздать контейнер code_index и вернуть его имя."""
-    if image_exists is None:
-        image_exists = mcp_docker.image_exists
-    name = container_name({"mcp_name": "code_index"})
-    run(["docker", "rm", "-f", "-v", name], capture_output=True, text=True)
-
-    state_dir = Path(repo_root) / ".ai1c" / "mcp-state" / str(mid)
-    params = launch_params(
-        "code-index",
-        port=cfg.code_index_port,
-        catalog_dir=str(Path(cfg.project_dir) / "src" / "cf"),
-        state_dir=str(state_dir),
-        project_name=cfg.project_name,
-    )
-    if not image_exists(params["image"]):
-        if build_image is None:
-            _build_code_index_image(repo_root, run=run, log=log)
-        else:
-            build_image()
-
-    result = launch(
-        name=name,
-        image=params["image"],
-        port=cfg.code_index_port,
-        internal_port=params["internal_port"],
-        env=params["env"],
-        volumes=params["volumes"],
-        network=params.get("network"),
-        run=run,
-    )
-    if not result.get("ok"):
-        raise SetupError(
-            f"не удалось запустить контейнер {name}:\n{result.get('log', '')}")
-    log(f"✓ контейнер code_index запущен: {name} "
-        f"(порт {cfg.code_index_port})")
-    return name
-
-
-def _daemon_status(name: str, run):
-    result = run(
-        ["docker", "exec", name, "env",
-         "CODE_INDEX_HOME=/data/code-index-home",
-         "bsl-indexer", "daemon", "status", "--json"],
-        capture_output=True, text=True,
-    )
-    if result.returncode != 0:
-        return None
-    try:
-        return json.loads(result.stdout)
-    except (TypeError, ValueError):
-        return None
-
-
-CODE_INDEX_DAEMON_JSON = "/data/code-index-home/daemon.json"
-
-
-def _container_running(name: str, run) -> bool | None:
-    """True — работает; False — точно остановлен; None — проверить не удалось.
-
-    `docker inspect` с rc!=0 или OSError (сбой демона, таймаут) — не повод
-    считать контейнер остановленным: долгая индексация может идти дальше.
-    """
-    try:
-        result = run(["docker", "inspect", "-f", "{{.State.Running}}", name],
-                     capture_output=True, text=True)
-    except OSError:
-        return None
-    if getattr(result, "returncode", 1) != 0:
-        return None
-    return (getattr(result, "stdout", "") or "").strip() == "true"
-
-
-def wait_code_index_ready(name: str, *, cfg: BenchConfig,
-                          run=subprocess.run, sleep=time.sleep,
-                          clock=time.monotonic, log=print) -> None:
-    """Дождаться статуса ready для всех путей (полная первичная индексация)."""
-    deadline = clock() + cfg.code_index_wait_minutes * 60
-    where = (f"{name} (порт {cfg.code_index_port}), "
-             f"детали: docker logs {name}, состояние: {CODE_INDEX_DAEMON_JSON}")
-    last_state = None
-    while True:
-        data = _daemon_status(name, run)
-        if data:
-            paths = data.get("paths") or []
-            errors = [p for p in paths if p.get("status") == "error"]
-            if errors:
-                raise SetupError(
-                    "code_index завершился с ошибкой: "
-                    + ", ".join(
-                        f"{p.get('path')}: {p.get('error') or p.get('message') or p.get('status')}"
-                        for p in errors)
-                    + f"; контейнер {where}")
-            if paths and all(p.get("status") == "ready" for p in paths):
-                log("✓ индекс code_index готов: "
-                    + ", ".join(p.get("path", "?") for p in paths))
-                return
-            state = ", ".join(
-                f"{p.get('path')}: {p.get('status')}" for p in paths)
-            if state != last_state:
-                log(f"… индексация code_index: {state or 'нет данных'}")
-                last_state = state
-        elif _container_running(name, run) is False:
-            raise SetupError(
-                f"контейнер code_index {name} не запущен "
-                f"(порт {cfg.code_index_port}); проверьте "
-                f"`docker logs {name}` и {CODE_INDEX_DAEMON_JSON}")
-        if clock() >= deadline:
-            raise SetupError(
-                "code_index не проиндексировал базу за "
-                f"{cfg.code_index_wait_minutes} мин (контейнер {where}); "
-                "увеличьте CODE_INDEX_WAIT_MINUTES")
-        sleep(15)
-
-
 @dataclass(frozen=True)
 class SetupResult:
     project_id: int
     task_ids: list[int]
-    container: str
+    code_index: str
     project_dir: str
 
 
@@ -952,7 +801,7 @@ class RollbackState:
     project_id: int | None = None
     task_ids: list[int] | None = None
     created_mcp_ids: list[int] | None = None
-    container: str | None = None
+    code_index: NativeIndex | None = None
 
     def __post_init__(self) -> None:
         if self.task_ids is None:
@@ -994,19 +843,12 @@ def rollback(state: RollbackState, *, store, run=subprocess.run,
         except Exception as exc:                       # noqa: BLE001
             warn(f"откат проекта #{state.project_id}: {exc}")
 
-    if state.container:
+    if state.code_index is not None:
         try:
-            res = run(["docker", "rm", "-f", "-v", state.container],
-                      capture_output=True, text=True)
+            code_index_bench.stop_code_index(
+                state.code_index.code_index_dir, run=run, log=log)
         except Exception as exc:                       # noqa: BLE001
-            warn(f"откат контейнера {state.container}: {exc}")
-        else:
-            code = getattr(res, "returncode", 0)
-            if code != 0:
-                tail = ((getattr(res, "stdout", "") or "")
-                        + (getattr(res, "stderr", "") or "")).strip()[-500:]
-                warn(f"откат контейнера {state.container}: docker rm "
-                     f"вернул код {code}: {tail}")
+            warn(f"откат code-index {state.code_index.code_index_dir}: {exc}")
 
     if warnings:
         log("✗ Откат выполнен частично: " + "; ".join(warnings))
@@ -1020,8 +862,9 @@ def run_setup(cfg: BenchConfig, *, repo_root: Path, store, registry,
               prov=None, run=subprocess.run, sleep=time.sleep,
               clock=time.monotonic, log=print, tcp_ok=default_tcp_ok,
               http_ok=default_http_ok, install_env=install_environment,
-              batch_run=run_batch_step, launch_index=launch_code_index,
-              wait_index=wait_code_index_ready, recreate: bool = False) -> SetupResult:
+              batch_run=run_batch_step, launch_index=start_code_index,
+              wait_index=wait_code_index_ready,
+              recreate: bool = False) -> SetupResult:
     """Полный сценарий подготовки проекта. Ошибка → откат записей БД.
 
     recreate=True: предварительно проверить конфигурацию и удалить существующий
@@ -1047,7 +890,7 @@ def run_setup(cfg: BenchConfig, *, repo_root: Path, store, registry,
         state.project_id = project_id
 
         plans = build_mcp_plans(cfg)
-        by_key, _ = resolve_mcp_cards(
+        resolve_mcp_cards(
             McpRepo(store), plans, project_id=project_id,
             project_name=cfg.project_name, log=log,
             created_out=state.created_mcp_ids)
@@ -1072,11 +915,13 @@ def run_setup(cfg: BenchConfig, *, repo_root: Path, store, registry,
         for args in base_dump_steps():
             batch_run(cfg.project_dir, args, prov=prov, log=log)
 
-        log("▶ code_index")
-        container = launch_index(
-            cfg, repo_root=repo_root, mid=by_key["code-index"],
-            run=run, log=log)
-        state.container = container
+        log("▶ code_index (native)")
+        code_index = launch_index(
+            code_index_dir=cfg.code_index_dir,
+            catalog_dir=str(Path(cfg.project_dir) / "src" / "cf"),
+            alias=cfg.project_name, port=cfg.code_index_port,
+            host=cfg.code_index_host, run=run, log=log)
+        state.code_index = code_index
 
         log("▶ git init")
         commit_init(cfg, prov)
@@ -1088,15 +933,16 @@ def run_setup(cfg: BenchConfig, *, repo_root: Path, store, registry,
         commit_baseline(cfg, tasks, prov)
 
         log("▶ ожидание индексации code_index")
-        wait_index(container, cfg=cfg, run=run, sleep=sleep, clock=clock,
-                   log=log)
+        wait_index(code_index, wait_minutes=cfg.code_index_wait_minutes,
+                   host=cfg.code_index_host, port=cfg.code_index_port,
+                   run=run, sleep=sleep, clock=clock, log=log)
 
         registry.add(name=cfg.project_name, path=cfg.project_dir,
                      backend="local")
         return SetupResult(
             project_id=project_id,
             task_ids=[task.task_id for task in tasks],
-            container=container,
+            code_index=str(code_index.code_index_dir),
             project_dir=cfg.project_dir,
         )
     except BaseException:

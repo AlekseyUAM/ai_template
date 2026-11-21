@@ -106,16 +106,24 @@ nohup python run.py > run.log 2>&1 < /dev/null &
   базы), создание `.bsl-language-server.json` с настройками проверок
 - **Справка по платформе** (SSE)
 - **1С:Напарник**
-- **Индексированная кодовая база** (code-index)
+- **Индексированная кодовая база** (code-index) — **нативная**, без Docker
 
 Кнопка **«Развернуть в Docker локально»**: `POST /api/mcp/{id}/launch/stream` собирает
 образ при отсутствии и запускает контейнер, **стримя лог сборки и запуска построчно**
 (FastAPI `StreamingResponse`, UI дописывает лог в реальном времени). Сохранён и
 блокирующий `POST /api/mcp/{id}/launch` (лог целиком). На Linux сборка идёт с
-`--network=host`. Проверено вживую на `code-index` и `bsl-ls`.
+`--network=host`. Проверено вживую на `bsl-ls`, `1c-platform` и `1c-naparnic`.
+
+Индексированная кодовая база разворачивается **нативно**, без Docker:
+`POST /api/mcp/{id}/deploy-local/stream` скачивает бинарь `bsl-indexer`, пишет
+`daemon.toml` в «Каталог code_index» и ставит на автозапуск два процесса
+(демон + MCP-сервер). Один сервис в каталоге обслуживает **несколько баз**
+(несколько `[[paths]]`); порт хранится в `service.json`. Docker-запуск
+code-index больше не поддерживается (`/launch` для него отдаёт 400); старый
+Docker-рецепт описан как legacy в [docs/mcp/code-index.md](docs/mcp/code-index.md).
 
 Инструкции по развёртыванию каждого вида — кнопкой, вручную и на отдельном
-сервере, включая локальный (без Docker) code-index и его alias проекта, —
+сервере, включая нативный code-index и его alias проекта, —
 в [docs/mcp/](docs/mcp/README.md).
 
 ### Система задач
