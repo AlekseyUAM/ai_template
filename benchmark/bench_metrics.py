@@ -792,9 +792,12 @@ def render_digest(metrics: dict) -> str:
             lines.append("- Инструменты: " + ", ".join(
                 f"{name}={count}" for name, count in
                 sorted(main["tools"].items())))
-        skill_calls = int(main.get("mcp_usage_skill_calls") or 0)
-        lines.append(f"- Skill mcp-usage: {'да' if skill_calls else 'нет'} "
-                     f"({skill_calls})")
+        # Строка только для метрик с ключом: старый metrics.json не должен
+        # показывать фиктивное «нет (0)».
+        if "mcp_usage_skill_calls" in main:
+            skill_calls = int(main.get("mcp_usage_skill_calls") or 0)
+            lines.append(f"- Skill mcp-usage: {'да' if skill_calls else 'нет'} "
+                         f"({skill_calls})")
         duplicates = int(main.get("duplicate_calls") or 0)
         if duplicates:
             lines.append(f"- Повторных вызовов инструментов: {duplicates}")
@@ -820,10 +823,14 @@ def render_digest(metrics: dict) -> str:
         if subagents:
             lines += ["", "### Сабагенты", ""]
             for agent in subagents:
+                breakdown = ""
+                if "mcp_errors" in agent and "hook_denials" in agent:
+                    breakdown = (f" (MCP {agent.get('mcp_errors') or 0}, "
+                                 f"хуки {agent.get('hook_denials') or 0})")
                 lines.append(f"- {agent.get('agent')}: "
                              f"{agent.get('description')} — "
                              f"{_seconds(agent.get('duration_sec'))}, "
-                             f"ошибок {agent.get('tool_errors', 0)}, "
+                             f"ошибок {agent.get('tool_errors', 0)}{breakdown}, "
                              f"тестов {agent.get('test_runs', 0)}")
         analyzers = task.get("analyzers")
         lines += ["", "### Анализаторы", ""]
@@ -863,15 +870,20 @@ def render_digest(metrics: dict) -> str:
                              f"запрос мог не проверяться "
                              f"(предупреждения выше)")
     env = metrics.get("environment") or {}
-    lines += ["", "## Окружение", "",
-              f"- Ошибок инструментов: {env.get('tool_errors', 0)} "
-              f"(MCP: {env.get('mcp_errors', 0)}, "
-              f"хуки: {env.get('hook_denials', 0)}, "
-              f"прочие: {max(0, int(env.get('tool_errors', 0)) - int(env.get('mcp_errors', 0)) - int(env.get('hook_denials', 0)))})",
-              f"- «command not found»: {env.get('command_not_found', 0)}",
-              f"- Таймаутов: {env.get('timeouts', 0)}",
-              f"- Ошибок MCP: {env.get('mcp_errors', 0)}",
-              f"- Отказов хуков: {env.get('hook_denials', 0)}"]
+    errors_line = f"- Ошибок инструментов: {env.get('tool_errors', 0)}"
+    env_lines = [errors_line, f"- «command not found»: {env.get('command_not_found', 0)}",
+                 f"- Таймаутов: {env.get('timeouts', 0)}"]
+    # Разбивка MCP/хуки — только если метрики её считали (новый формат);
+    # старый metrics.json без ключей получает простую строку без нулей.
+    if "mcp_errors" in env and "hook_denials" in env:
+        mcp_errors = int(env.get("mcp_errors") or 0)
+        hook_denials = int(env.get("hook_denials") or 0)
+        others = max(0, int(env.get("tool_errors") or 0) - mcp_errors - hook_denials)
+        env_lines[0] += (f" (MCP: {mcp_errors}, хуки: {hook_denials}, "
+                         f"прочие: {others})")
+        env_lines += [f"- Ошибок MCP: {mcp_errors}",
+                      f"- Отказов хуков: {hook_denials}"]
+    lines += ["", "## Окружение", "", *env_lines]
     for item in env.get("error_signatures") or []:
         lines.append(f"- ×{item.get('count')}: {item.get('signature')}")
     return "\n".join(lines).rstrip() + "\n"

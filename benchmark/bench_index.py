@@ -17,12 +17,22 @@ def index_db_path(project_dir: Path) -> Path:
 
 
 def newest_source_mtime(root: Path) -> float | None:
-    newest = None
+    """Новейший mtime среди файлов и каталогов дерева ``root``.
+
+    Каталоги учитываются наравне с файлами: удаление и переименование
+    исходника меняют mtime каталога, а не оставшихся файлов, — иначе
+    устаревший индекс оставался бы «свежим».
+    """
+    try:
+        newest = root.stat().st_mtime
+    except OSError:
+        newest = None
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames if d not in _SKIP_DIRS]
-        for name in filenames:
+        paths = [Path(dirpath, name) for name in (*dirnames, *filenames)]
+        for path in paths:
             try:
-                mtime = (Path(dirpath) / name).stat().st_mtime
+                mtime = path.stat().st_mtime
             except OSError:
                 continue
             if newest is None or mtime > newest:
@@ -45,6 +55,9 @@ def index_is_stale(project_dir: Path) -> bool:
 
 
 def _daemon_status(container: str, run) -> dict | None:
+    # CODE_INDEX_HOME=/data/code-index-home — каталог из Docker-рецепта
+    # code_index (app/src/agentmon/env/mcp_docker_recipes.py); без него
+    # daemon status ищет индекс по умолчанию и не видит данные контейнера.
     try:
         result = run(
             ["docker", "exec", container, "env",

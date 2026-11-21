@@ -1,8 +1,9 @@
 import json
+import os
 from pathlib import Path
 from types import SimpleNamespace
 
-from bench_index import index_is_stale, refresh_index
+from bench_index import index_db_path, index_is_stale, refresh_index
 
 
 def make_project(tmp_path, *, db_after_sources=True):
@@ -28,6 +29,27 @@ def test_index_is_stale_detects_newer_sources(tmp_path):
     assert index_is_stale(make_project(tmp_path)) is False
     project = make_project(tmp_path / "stale", db_after_sources=False)
     assert index_is_stale(project) is True
+
+
+def test_index_is_stale_on_deleted_source_in_subdirectory(tmp_path):
+    """Удаление файла меняет mtime каталога, а не оставшихся файлов."""
+    project = make_project(tmp_path)
+    assert index_is_stale(project) is False
+    subdir = project / "src" / "cf" / "Documents"
+    (subdir / "Анкета.xml").unlink()
+    db_mtime = index_db_path(project).stat().st_mtime
+    os.utime(subdir, (db_mtime + 10, db_mtime + 10))
+    assert index_is_stale(project) is True
+
+
+def test_index_compare_is_strict_on_equal_mtime(tmp_path):
+    """Равенство mtime источника и индекса — индекс ещё свежий (строгое `>`)."""
+    project = make_project(tmp_path)
+    root = project / "src" / "cf"
+    db_mtime = index_db_path(project).stat().st_mtime
+    for path in (root, root / "Documents", root / "Documents" / "Анкета.xml"):
+        os.utime(path, (db_mtime, db_mtime))
+    assert index_is_stale(project) is False
 
 
 def test_refresh_index_skips_fresh_index(tmp_path):

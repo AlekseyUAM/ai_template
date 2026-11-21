@@ -93,8 +93,10 @@ def test_local_settings_example_has_model_overrides(prov, tmp_path):
     content.deploy_content(prov, cfg(tmp_path, []), update=False)
     text = (tmp_path / ".claude" / "settings.local.json.example").read_text(
         encoding="utf-8")
-    assert "modelOverrides" in text
-    assert "claude-sonnet-4-6" in text
+    data = json.loads(text)
+    # modelOverrides — top-level (не env): CLI не читает его из env.
+    assert data["modelOverrides"]["claude-sonnet-4-6"] == "<model-id>"
+    assert "modelOverrides" not in data["env"]
 
 
 def test_copy_tree_handles_binary(prov, tmp_path):

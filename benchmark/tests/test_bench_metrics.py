@@ -222,6 +222,7 @@ def test_hook_denial_is_not_mcp_error(tmp_path):
     env = aggregate_environment([{"transcript": {"main": summary}}])
     assert env["hook_denials"] == 1
     assert env["mcp_errors"] == 0
+    assert env["tool_errors"] == 1  # отказ хука остаётся ошибкой инструмента
 
 
 def test_mcp_error_and_hook_denial_are_disjoint(tmp_path):
@@ -761,6 +762,53 @@ def test_render_digest_query_findings():
     assert "query-analyze: файлов 1" in text
     assert "  - `Module.bsl`: error=1, warning=0, info=2" in text
     assert "анализаторы не запускались" not in text
+
+
+def _digest_with_env(env: dict, *, main: dict | None = None) -> str:
+    task = {"folder": "task#020", "limit_minutes": 30, "outcome": "success",
+            "duration_sec": 5.0, "exit_code": 0, "stages": [], "cycles": {},
+            "transcript": {"main": main or {}}}
+    return render_digest({"run": {}, "tasks": [task], "environment": env})
+
+
+def test_render_digest_old_metrics_hide_new_breakdown():
+    """Старый metrics.json без новых ключей не показывает фиктивные нули."""
+    text = _digest_with_env(
+        {"tool_errors": 2, "command_not_found": 1, "timeouts": 0})
+    assert "Skill mcp-usage" not in text
+    assert "прочие:" not in text
+    assert "Ошибок MCP" not in text
+    assert "Отказов хуков" not in text
+    assert "- Ошибок инструментов: 2\n" in text
+
+
+def test_render_digest_new_metrics_show_skill_and_breakdown():
+    env = {"tool_errors": 4, "mcp_errors": 1, "hook_denials": 2,
+           "command_not_found": 0, "timeouts": 0}
+    text = _digest_with_env(env, main={"mcp_usage_skill_calls": 1})
+    assert "- Skill mcp-usage: да (1)" in text
+    assert ("- Ошибок инструментов: 4 (MCP: 1, хуки: 2, прочие: 1)") in text
+    assert "- Ошибок MCP: 1" in text
+    assert "- Отказов хуков: 2" in text
+    # mcp_usage_skill_calls == 0 (ключ есть) — строка «нет (0)» пишется
+    assert "- Skill mcp-usage: нет (0)" in _digest_with_env(
+        env, main={"mcp_usage_skill_calls": 0})
+
+
+def test_render_digest_subagent_shows_mcp_and_hook_breakdown():
+    task = {"folder": "task#021", "limit_minutes": 30, "outcome": "success",
+            "duration_sec": 5.0, "exit_code": 0, "stages": [], "cycles": {},
+            "transcript": {"main": {}, "subagents": [
+                {"agent": "reviewer", "description": "Ревью",
+                 "duration_sec": 12.0, "tool_errors": 3, "test_runs": 1,
+                 "mcp_errors": 1, "hook_denials": 2},
+                # старый формат без новых ключей — строка как раньше
+                {"agent": "old", "description": "d", "duration_sec": 1.0,
+                 "tool_errors": 1, "test_runs": 0}]}}
+    text = render_digest({"run": {}, "tasks": [task], "environment": {}})
+    assert ("- reviewer: Ревью — 12 с, ошибок 3 (MCP 1, хуки 2), тестов 1"
+            in text)
+    assert "- old: d — 1 с, ошибок 1, тестов 0" in text
 
 
 def test_task_log_dirs_uses_identifier_and_folder(tmp_path):

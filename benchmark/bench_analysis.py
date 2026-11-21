@@ -12,6 +12,10 @@ from bench_metrics import StreamSummary, write_json_atomic
 def prepare_inputs(*, run_dir: Path, metrics: dict,
                    digest_path: Path) -> dict:
     """Снимок входов аналитика: метрики без `analysis` и копия дайджеста."""
+    # Дайджест не найден — ошибка раннера, а не молчаливый пропуск: аналитик
+    # получил бы промпт со ссылкой на несуществующий файл.
+    if not digest_path.is_file():
+        raise FileNotFoundError(f"дайджест не найден: {digest_path}")
     inputs_dir = run_dir / "analysis-inputs"
     inputs_dir.mkdir(parents=True, exist_ok=True)
     snapshot = copy.deepcopy(metrics)
@@ -19,8 +23,7 @@ def prepare_inputs(*, run_dir: Path, metrics: dict,
     metrics_path = inputs_dir / "metrics.json"
     write_json_atomic(metrics_path, snapshot)
     digest_copy = inputs_dir / "digest.md"
-    if digest_path.is_file():
-        shutil.copyfile(digest_path, digest_copy)
+    shutil.copyfile(digest_path, digest_copy)
     return {"metrics_path": metrics_path, "digest_path": digest_copy}
 
 

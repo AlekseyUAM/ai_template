@@ -43,7 +43,13 @@ def _wait_exit(proc: subprocess.Popen, timeout: float) -> bool:
 def _kill_group(proc: subprocess.Popen, pgid: int) -> None:
     """Мягко остановить лидера, затем гарантированно зачистить process group.
 
-    Windows не умеет process group: дерево снимается `taskkill /F /T`.
+    PGID передаётся явно: после реепа лидера его PID/PGID может быть
+    переиспользован, и ``os.getpgid`` в момент убийства зачистил бы чужую
+    группу. Зачистка группы после выхода лидера намеренная: потомки (MCP-
+    бэкенды) могут пережить лидера, поэтому группа добивается SIGKILL.
+
+    Windows не умеет process group: дерево ``cmd → claude → MCP`` может
+    игнорировать мягкие сигналы, поэтому снимается сразу ``taskkill /F /T``.
     """
     if os.name == "nt":
         try:
