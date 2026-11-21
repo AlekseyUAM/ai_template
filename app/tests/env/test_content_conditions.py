@@ -331,7 +331,12 @@ def test_deploy_documents_validate_query_text_format(tmp_path):
 def test_deploy_developer_first_action_and_fallbacks(tmp_path):
     content.deploy_content(LocalProvisioner(), cfg(tmp_path, []), update=False)
     text = checklist_text(tmp_path, "developer")
-    assert "**First action:** invoke the `mcp-usage` skill" in text
+    # The first-action line is injected by the route hook for all stages; the
+    # checklist folds it into the single "Mandatory first step" sentence.
+    assert "**First action:**" not in text
+    assert text.count("invoke the `mcp-usage` skill") == 1
+    assert ("**Mandatory first step before work - the first action before any "
+            "tool call:**") in text
     assert "not in the index" in text
     assert "BOM" in text
 

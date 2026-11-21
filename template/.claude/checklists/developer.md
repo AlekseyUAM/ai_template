@@ -219,13 +219,12 @@ Wrap only your new/changed code, not the whole module.
 
 Skills from `.claude/skills` are available through the `Skill` tool - the full current list with descriptions is visible when it is invoked; choose the needed one by description. Guides: `mcp-usage`, `bsl-coding-standards`, `sdd-tdd-workflow`. 1C operational skills (create/edit/analyze/validate metadata, forms, roles, DCS, templates, XDTO, configurations and extensions, subsystems, interfaces, external data processors and reports), batch operations (`1c-batch`), web publications and database work - look them up by description in this list.
 
-**First action:** invoke the `mcp-usage` skill before any tool call.
 **First exploration call:** `mcp__code_index__list_files(repo=..., path_prefix=...)`,
 not `ls`/`find`/`grep` - the guard denies them.
 **One profile per object:** call `get_object_structure`/`get_object_profile`
 once per object per task and reuse the result.
 
-**Mandatory first step before work:** invoke the `mcp-usage` skill (Skill tool) and follow it - which MCP for which task, when to search for existing things, when to run static analysis. The single source of truth on MCP.
+**Mandatory first step before work - the first action before any tool call:** invoke the `mcp-usage` skill (Skill tool) and follow it - which MCP for which task, when to search for existing things, when to run static analysis. The single source of truth on MCP.
 
 **Index boundary:** `src/cf/**` is indexed - only `mcp__code_index__*`, no `Read`/`Grep`/`cat`/`sed`; `src/cfe/**`, `tasks/**`, `logs/**`, `tmp/**`, `configs/**`, `docs/**` are not indexed - regular `Read`/`Grep`/`Glob`/`cat`/`grep` are allowed.
 If `code_index` says a file/object is not in the index (created in this task)

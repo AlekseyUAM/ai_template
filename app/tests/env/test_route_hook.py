@@ -52,6 +52,18 @@ def test_first_action_is_mcp_usage(tmp_path):
     assert "mcp-usage" in context
 
 
+def test_first_action_is_the_first_line(tmp_path):
+    """The first-action line starts the injected context, before any checklist."""
+    m = _load()
+    root = _project(tmp_path)
+    out = m.build_output(
+        {"prompt": "Выполни задачу tasks/task#100001 ...", "cwd": str(root)})
+    context = out["hookSpecificOutput"]["additionalContext"]
+    first = context.splitlines()[0]
+    assert "First action" in first and "mcp-usage" in first
+    assert context.index("mcp-usage") < context.index("Checklists:")
+
+
 def test_stage_scoped_first_action_is_mcp_usage(tmp_path, monkeypatch):
     m = _load()
     root = _project(tmp_path)

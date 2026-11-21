@@ -135,6 +135,14 @@ def test_task_prompt_triggers_single_agent():
     assert "30 мин" in build_task_prompt("task#001", 30)
 
 
+def test_stage_prompt_first_action_is_mcp_usage(tmp_path):
+    from stage_run import stage_prompt
+    prompt = stage_prompt(tmp_path, "task#001",
+                          {"name": "develop", "subagent": "developer",
+                           "artifact": "DEVELOP.md"}, 30)
+    assert "Первое действие до вызова инструментов — Skill mcp-usage." in prompt
+
+
 def test_e2e_success_with_analysis(env):
     project, fake, marker, values = env
     proc = run_cli(project, fake, values)
