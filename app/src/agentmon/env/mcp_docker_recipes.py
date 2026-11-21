@@ -1,17 +1,15 @@
 """Рецепты запуска стандартных MCP-серверов в Docker (страница «Справочник MCP»).
 
 Для каждого docker-вида задаёт: образ, как собрать его из `deps/` (если можно),
-имя env-переменной порта сервера, статические env, нужен ли токен и его env,
-монтирование каталога кодовой базы. Если каталога исходников нет, он клонируется
+имя env-переменной порта сервера, статические env, нужен ли токен и его env.
+code-index нативного вида здесь нет — он запускается без Docker (см.
+`code_index_local`). Если каталога исходников нет, он клонируется
 перед сборкой (см. `mcp_sources`). Чистые функции (`launch_params`) считают
 параметры запуска из сохранённой карточки MCP и легко тестируются.
 """
 import re
 import sys
 from dataclasses import dataclass, field
-from pathlib import Path
-
-from .code_index_toml import render_daemon_toml as _render_daemon_toml
 
 
 # Куда монтируется каталог платформы 1С внутри Linux-контейнера. На Windows
@@ -70,7 +68,6 @@ class DockerRecipe:
     port_env: str               # env-переменная, задающая порт сервера
     static_env: dict = field(default_factory=dict)
     token_env: str | None = None   # куда положить токен (если вид его требует)
-    catalog_mount: bool = False    # монтировать ли «Каталог кодовой базы»
     platform_env: str | None = None  # env с путём к платформе 1С (+ ro-монтирование)
     needs_host_network: bool = False  # серверу нужен внешний DNS/интернет → сеть хоста
     build: BuildSpec | None = None  # как собрать образ; None → только готовый
@@ -116,37 +113,7 @@ RECIPES: dict[str, DockerRecipe] = {
             repo_sha="3001408515337ac697c02f95888694fde2d52e56",
         ),
     ),
-    # Индексированная кодовая база — bsl-indexer (Rust; сборка из deps).
-    "code-index": DockerRecipe(
-        image="bsl-indexer:local",
-        port_env="MCP_HTTP_PORT",
-        static_env={"MCP_HTTP_HOST": "0.0.0.0",
-                    "CODE_INDEX_HOME": "/data/code-index-home"},
-        catalog_mount=True,
-        build=BuildSpec(
-            dockerfile="deps/code-index-mcp/deploy/docker/Dockerfile",
-            context="deps/code-index-mcp",
-            repo_dir="deps/code-index-mcp",
-            repo_url="https://github.com/Regsorm/code-index-mcp.git",
-            repo_sha="4f55d0d44b4b2789a426a2d2096d6051c0de9c4b",
-        ),
-    ),
 }
-
-def _daemon_toml(alias: str, path: str, cache_target_url: str | None = None) -> str:
-    """Текст daemon.toml для code-index: alias репозитория = имя проекта,
-    path — каталог кодовой базы (в контейнере `/repos/src`, локально — реальный
-    путь на хосте). alias и `repo="..."` в подсказках агенту совпадают.
-    cache_target_url — URL serve, которому демон шлёт инвалидацию кэша.
-    Секция `[mcp]` включает массовый режим (`full_names`) у `get_object_structure`:
-    без неё serve отбивает вызов с `-32602`. serve читает секцию один раз, при
-    старте, — после её появления нужен перезапуск контейнера."""
-    # Секция — только при известном URL: без неё демон не уведомляет serve,
-    # и его кэш результатов держит протухшие ответы до TTL (1 час).
-    port = None
-    if cache_target_url:
-        port = int(str(cache_target_url).rsplit(":", 1)[-1])
-    return _render_daemon_toml(alias, path, port)
 
 
 def recipe_for(type_key: str) -> DockerRecipe | None:
@@ -155,8 +122,7 @@ def recipe_for(type_key: str) -> DockerRecipe | None:
 
 
 def launch_params(type_key: str, *, port: int, token=None,
-                  catalog_dir=None, state_dir=None, platform_path=None,
-                  project_name=None) -> dict:
+                  platform_path=None) -> dict:
     """Считает параметры `mcp_docker.launch` из рецепта и данных карточки.
 
     Возвращает dict: image, internal_port, env, volumes, network.
@@ -185,24 +151,6 @@ def launch_params(type_key: str, *, port: int, token=None,
             target = src
         env[recipe.platform_env] = target
         volumes.append(f"{_docker_host_path(src)}:{target}:ro")
-    if recipe.catalog_mount:
-        if not catalog_dir:
-            raise ValueError("для code-index нужен каталог кодовой базы")
-        if not state_dir:
-            raise ValueError("для code-index нужен state_dir для daemon.toml")
-        if not project_name:
-            raise ValueError("для code-index нужно имя проекта (alias репозитория)")
-        sp = Path(state_dir)
-        sp.mkdir(parents=True, exist_ok=True)
-        (sp / "daemon.toml").write_text(
-            _daemon_toml(project_name, "/repos/src",
-                         f"http://127.0.0.1:{port}"),
-            encoding="utf-8")
-        # каталог кодовой базы rw (демон пишет <repo>/.code-index/index.db рядом)
-        volumes.append(f"{_docker_host_path(catalog_dir)}:/repos/src")
-        # state-том с daemon.toml и runtime демона
-        volumes.append(f"{_docker_host_path(sp)}:/data/code-index-home")
-
     # сеть хоста нужна серверам с внешним DNS (напр. напарник → code.1c.ai);
     # host-сеть применима на Linux (на Docker Desktop DNS bridge и так работает)
     network = None

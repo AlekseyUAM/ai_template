@@ -15,11 +15,14 @@
 | Статический анализ BSL | `bsl-ls` | Docker-контейнер | 8001 | [bsl-ls.md](bsl-ls.md) |
 | Справка по платформе | `1c-platform` | Docker-контейнер | 8002 | [1c-platform.md](1c-platform.md) |
 | 1С:Напарник | `1c-naparnic` | Docker-контейнер | 8003 | [1c-naparnic.md](1c-naparnic.md) |
-| Индексированная кодовая база (в Docker локально) | `code-index` | Docker-контейнер | 8004 | [code-index.md](code-index.md) |
-| Индексированная кодовая база (локально) | `code-index-local` | нативный бинарь на хосте | 8005 | [code-index-local.md](code-index-local.md) |
+| Индексированная кодовая база | `code-index` | **нативный** сервис на хосте (`bsl-indexer`) | 8005 | [code-index-local.md](code-index-local.md) |
+| Индексированная кодовая база (локально, legacy) | `code-index-local` | нативный сервис, то же, что выше | 8005 | [code-index-local.md](code-index-local.md) |
 
-Общее ядро code-index (два процесса, `daemon.toml`, alias проекта) описано
-отдельно: [code-index-common.md](code-index-common.md).
+Общее ядро code-index (два процесса, `daemon.toml`, alias проекта, один
+сервис на несколько баз) описано отдельно:
+[code-index-common.md](code-index-common.md). Docker-развёртывание
+code-index — только справка для уже существующих установок (legacy):
+agentmon его не разворачивает (`/api/mcp/{id}/launch` отдаёт 400).
 
 ## Как подключение попадает в проект
 

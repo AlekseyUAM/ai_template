@@ -1,5 +1,9 @@
 # Исправление окружения по итогам benchmark-прогона — план
 
+> **Superseded (2026-11-21):** обход с перезапуском контейнера
+> (`bench_index.py`) удалён — code-index переведён на нативный запуск,
+> см. `docs/superpowers/specs/2026-11-21-native-code-index-design.md`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Устранить в репозитории дефекты окружения, выявленные прогоном `benchmark/tasks`: stdin-промпты, честные метрики, изоляция аналитика, обновление индекса, `alwaysLoad`, UTF-8 и чеклисты.

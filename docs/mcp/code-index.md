@@ -1,4 +1,8 @@
-# Индексированная кодовая база (в Docker локально) — `code_index`
+# Индексированная кодовая база (в Docker локально) — `code_index` — legacy
+
+> **Legacy.** Docker-развёртывание code-index больше не поддерживается
+> agentmon: на Windows bind-mount не даёт inotify-событий, индекс не
+> обновляется. Используйте нативный вид — см. `code-index-local.md`.
 
 Docker-вариант code-index: один контейнер, внутри — демон-индексатор и
 read-only MCP-сервер (`bsl-indexer`). Каталог кодовой базы — выгрузка

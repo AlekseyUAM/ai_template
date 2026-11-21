@@ -178,13 +178,10 @@ def build_mcp_router(store) -> APIRouter:
                                 detail="порт должен быть в диапазоне 1..65535")
 
         repo_root = Path(__file__).resolve().parents[4]  # app/ -> ai_template/
-        state_dir = repo_root / ".ai1c" / "mcp-state" / str(mid)
         try:
             params = launch_params(
                 type_key, port=port, token=body.get("token") or row.get("token_env"),
-                catalog_dir=row.get("catalog_dir"), state_dir=str(state_dir),
                 platform_path=row.get("platform_path"),
-                project_name=row.get("project_name"),
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc))

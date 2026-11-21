@@ -1,3 +1,5 @@
+import tomllib
+
 from agentmon.env.code_index_toml import (ensure_sections, merge_path,
                                           render_daemon_toml)
 
@@ -8,6 +10,48 @@ def test_render_has_one_path_and_sections():
     assert 'alias = "a"' in text and 'path = "/a"' in text
     assert "[mcp]" in text and "mass_mode_tools" in text
     assert "http://127.0.0.1:8005" in text
+
+
+def test_render_interpolates_alias_and_path():
+    text = render_daemon_toml("мой-алиас", "/custom/code/path")
+    assert 'alias = "мой-алиас"' in text
+    assert 'path = "/custom/code/path"' in text
+    # дефолтный /repos/src не должен появляться, если его не передали
+    assert "/repos/src" not in text
+    # без порта инвалидация кэша не настраивается
+    assert "[[cache_targets]]" not in text
+
+
+def test_render_has_cache_target_when_port_given():
+    text = render_daemon_toml("мой-алиас", "/custom/code/path", 8004)
+    assert "[[cache_targets]]" in text
+    assert 'url = "http://127.0.0.1:8004"' in text
+
+
+def test_render_enables_mass_mode_for_object_structure():
+    # mass mode (full_names) выключен по умолчанию: без [mcp].mass_mode_tools
+    # serve отбивает full_names с -32602. Генератор включает его для структуры.
+    text = render_daemon_toml("мой-алиас", "/custom/code/path", 8004)
+    assert "[mcp]" in text
+    assert 'mass_mode_tools = ["get_object_structure"]' in text
+    # секция ровно одна и до [[paths]] — иначе TOML припишет ключ чужой таблице
+    assert text.count("[mcp]") == 1
+    assert text.index("[mcp]") < text.index("[[paths]]")
+    # cache_targets не потерян и остаётся до таблиц — ключи daemon.toml не уезжают
+    assert "[[cache_targets]]" in text
+    assert text.index("[[cache_targets]]") < text.index("[mcp]")
+    # TOML корректен и ключ реально лежит в таблице mcp (а не в daemon/paths)
+    parsed = tomllib.loads(text)
+    assert parsed["mcp"]["mass_mode_tools"] == ["get_object_structure"]
+    assert "mass_mode_tools" not in parsed["daemon"]
+    assert parsed["paths"][0]["alias"] == "мой-алиас"
+    # serve читает [mcp] один раз при старте — предупреждение о перезапуске в файле
+    assert "перезапусти" in text
+    # без порта тоже включено (независимо от cache_targets)
+    text2 = render_daemon_toml("мой-алиас", "/custom/code/path")
+    assert 'mass_mode_tools = ["get_object_structure"]' in text2
+    assert "[[cache_targets]]" not in text2
+    assert tomllib.loads(text2)["mcp"]["mass_mode_tools"] == ["get_object_structure"]
 
 
 def test_merge_preserves_other_paths_and_sections():
