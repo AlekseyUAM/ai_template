@@ -93,6 +93,7 @@ def test_clean_tolerates_missing_code_index_dir(tmp_path):
 
 def test_start_cleans_first_and_spawns_detached(tmp_path, monkeypatch):
     ci = tmp_path / "ci"; ci.mkdir()
+    (ci / B.BENCHMARK_MARKER).write_text("benchmark\n", encoding="utf-8")
     (ci / "old.txt").write_text("old", encoding="utf-8")
     catalog = tmp_path / "catalog"; catalog.mkdir()
     spawned = []
@@ -314,6 +315,7 @@ def test_start_stops_daemon_when_serve_spawn_fails(tmp_path, monkeypatch):
     bin_path = ci / "bsl-indexer"
     bin_path.parent.mkdir(parents=True)
     bin_path.write_text("bin", encoding="utf-8")
+    (ci / B.BENCHMARK_MARKER).write_text("benchmark\n", encoding="utf-8")
     calls = []
 
     def fake_popen(args, **kwargs):
@@ -352,6 +354,7 @@ def test_start_writes_daemon_pid_before_serve_spawn(tmp_path, monkeypatch):
     bin_path = ci / "bsl-indexer"
     bin_path.parent.mkdir(parents=True)
     bin_path.write_text("bin", encoding="utf-8")
+    (ci / B.BENCHMARK_MARKER).write_text("benchmark\n", encoding="utf-8")
     seen, pids = [], iter([111, 222])
 
     def fake_popen(args, **kwargs):
@@ -371,3 +374,38 @@ def test_start_writes_daemon_pid_before_serve_spawn(tmp_path, monkeypatch):
     assert seen[1] == {"daemon": 111, "serve": None}
     assert json.loads((ci / "benchmark-pids.json").read_text("utf-8")) == {
         "daemon": 111, "serve": 222}
+
+
+# --- benchmark-маркер: не стирать чужой каталог ---
+
+def _start_with(ci, tmp_path, monkeypatch, **extra):
+    catalog = tmp_path / "catalog"; catalog.mkdir(exist_ok=True)
+    bin_path = ci / "bsl-indexer"
+    pids = iter([111, 222])
+    monkeypatch.setattr(B, "_spawn_kwargs", lambda: {})
+    return B.start_code_index(
+        code_index_dir=ci, catalog_dir=catalog, alias="a", port=8005,
+        download=lambda dest, *, log=None: bin_path,
+        popen=lambda *a, **k: SimpleNamespace(pid=next(pids)),
+        run=lambda *a, **k: SimpleNamespace(returncode=0, stdout="",
+                                            stderr=""),
+        log=lambda _m: None, **extra)
+
+
+def test_start_refuses_unmarked_non_empty_dir(tmp_path, monkeypatch):
+    from agentmon.env.bench_setup import SetupError
+    ci = tmp_path / "shared"; ci.mkdir()
+    (ci / "service.db").write_text("foreign", encoding="utf-8")
+    with pytest.raises(SetupError, match="не помечен"):
+        _start_with(ci, tmp_path, monkeypatch)
+    assert (ci / "service.db").is_file()          # чужой каталог цел
+
+
+def test_start_accepts_marked_dir(tmp_path, monkeypatch):
+    ci = tmp_path / "ci"; ci.mkdir()
+    (ci / B.BENCHMARK_MARKER).write_text("benchmark\n", encoding="utf-8")
+    (ci / "old.txt").write_text("old", encoding="utf-8")
+    index = _start_with(ci, tmp_path, monkeypatch)
+    assert index.daemon_pid == 111 and index.serve_pid == 222
+    assert not (ci / "old.txt").exists()
+    assert (ci / B.BENCHMARK_MARKER).is_file()

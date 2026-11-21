@@ -122,7 +122,8 @@ def load_config(env_path: Path, *, repo_root: Path,
 
     missing = [key for key in REQUIRED_KEYS if key not in data]
     empty = [key for key in REQUIRED_KEYS
-             if key != "BENCH_DB_PASSWORD" and not data.get(key, "").strip()]
+             if key != "BENCH_DB_PASSWORD"
+             and key in data and not data[key].strip()]
     if missing or empty:
         raise SetupError(
             "не заданы обязательные ключи: " + ", ".join(missing + empty))
@@ -168,7 +169,13 @@ def load_config(env_path: Path, *, repo_root: Path,
     code_index_dir = Path(os.path.expanduser(code_index_raw))
     if not code_index_dir.is_absolute():
         raise SetupError("CODE_INDEX_DIR должен быть абсолютным путём")
-    if code_index_dir == project_dir or project_dir in code_index_dir.parents:
+    # Сравнение разрешённых путей: симлинк на проект или на CODE_INDEX_DIR
+    # иначе прошёл бы проверку, а start_code_index затем удалил бы каталог
+    # внутри проекта.
+    project_real = project_dir.resolve()
+    code_index_real = code_index_dir.resolve()
+    if (code_index_real == project_real
+            or project_real in code_index_real.parents):
         raise SetupError("CODE_INDEX_DIR не должен находиться внутри "
                          "BENCH_PROJECT_DIR")
 

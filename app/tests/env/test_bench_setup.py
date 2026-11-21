@@ -92,6 +92,45 @@ def test_code_index_dir_must_be_outside_project(tmp_path):
         load_config(env, repo_root=tmp_path)
 
 
+def test_code_index_dir_inside_project_via_symlink(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    link = tmp_path / "project-link"
+    try:
+        link.symlink_to(project, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("символические ссылки недоступны")
+    env = write_env(tmp_path, CODE_INDEX_DIR=str(link / "ci"))
+    with pytest.raises(SetupError, match="внутри"):
+        load_config(env, repo_root=tmp_path)
+
+
+def test_code_index_dir_must_not_alias_project_via_symlink(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    link = tmp_path / "project-link"
+    try:
+        link.symlink_to(project, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("символические ссылки недоступны")
+    env = write_env(
+        tmp_path, BENCH_PROJECT_DIR=str(project), CODE_INDEX_DIR=str(link))
+    with pytest.raises(SetupError, match="внутри"):
+        load_config(env, repo_root=tmp_path)
+
+
+@pytest.mark.parametrize("tail", ["", "CODE_INDEX_DIR=\n",
+                                  "CODE_INDEX_DIR=  \n"])
+def test_load_config_lists_missing_key_once(tmp_path, tail):
+    env = write_env(tmp_path)
+    text = env.read_text(encoding="utf-8").replace(
+        f"CODE_INDEX_DIR={tmp_path / 'ci'}\n", tail)
+    env.write_text(text, encoding="utf-8")
+    with pytest.raises(SetupError) as excinfo:
+        load_config(env, repo_root=tmp_path)
+    assert str(excinfo.value).count("CODE_INDEX_DIR") == 1
+
+
 def test_load_config_allows_empty_password(tmp_path):
     cfg = load_config(write_env(tmp_path), repo_root=tmp_path)
     assert cfg.db_password == ""

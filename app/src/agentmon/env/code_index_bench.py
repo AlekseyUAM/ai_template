@@ -17,6 +17,7 @@ from .net_probe import default_tcp_ok
 PID_FILE = "benchmark-pids.json"
 STOP_TIMEOUT_SEC = 10.0
 LEGACY_CONTAINER = "ai1c-mcp-code_index"
+BENCHMARK_MARKER = ".ai1c-benchmark"
 
 
 @dataclass(frozen=True)
@@ -131,13 +132,27 @@ def clean_code_index(code_index_dir, catalog_dir, *, run=subprocess.run,
             pass
 
 
+def _ensure_benchmark_dir(ci: Path) -> None:
+    """Отказ стереть непустой чужой каталог; пометить каталог как benchmark."""
+    # Локальный импорт: bench_setup импортирует этот модуль (цикл).
+    from .bench_setup import SetupError
+    if ci.exists() and any(ci.iterdir()) and not (ci / BENCHMARK_MARKER).exists():
+        raise SetupError(
+            f"CODE_INDEX_DIR {ci} не помечен как benchmark-каталог; "
+            "укажите отдельный каталог или удалите его вручную")
+    ci.mkdir(parents=True, exist_ok=True)
+    (ci / BENCHMARK_MARKER).write_text("benchmark\n", encoding="utf-8")
+
+
 def start_code_index(*, code_index_dir, catalog_dir, alias, port,
                      host="127.0.0.1", download=download_binary,
                      popen=subprocess.Popen, run=subprocess.run,
                      log=print) -> NativeIndex:
-    clean_code_index(code_index_dir, catalog_dir, run=run, log=log)
     ci = Path(code_index_dir)
+    _ensure_benchmark_dir(ci)
+    clean_code_index(ci, catalog_dir, run=run, log=log)
     ci.mkdir(parents=True, exist_ok=True)
+    (ci / BENCHMARK_MARKER).write_text("benchmark\n", encoding="utf-8")
     binary = download(str(ci), log=log)
     toml_path = ci / "daemon.toml"
     toml_path.write_text(
