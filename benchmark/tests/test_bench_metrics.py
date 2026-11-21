@@ -533,6 +533,32 @@ def test_run_static_analyzers(tmp_path):
     assert query["findings"]["error"] == 1
 
 
+def test_query_analyze_marks_ast_skipped(tmp_path, monkeypatch):
+    import bench_metrics
+    monkeypatch.setattr(bench_metrics.shutil, "which", lambda name: None)
+    project = tmp_path / "project"
+    scripts = project / ".claude" / "skills" / "query-analyze" / "scripts"
+    scripts.mkdir(parents=True)
+    (scripts / "extract_queries.py").write_text("print('ВЫБРАТЬ 1')", encoding="utf-8")
+    (scripts / "analyze_query.py").write_text(
+        "import sys\n"
+        "print('ВНИМАНИЕ: структурные (AST) проверки ПРОПУЩЕНЫ - node', "
+        "file=sys.stderr)\n",
+        encoding="utf-8")
+    target = project / "Module.bsl"
+    target.write_text("Процедура А()\nКонецПроцедуры\n", encoding="utf-8")
+    result = run_static_analyzers(project, ["Module.bsl"], None, tmp_path / "out")
+    query = result["query_analyze"]
+    assert query["ast"]["available"] is False
+    assert query["partial"] is True
+    assert query["results"][str(target.resolve())]["ast_skipped"] is True
+    text = render_digest({"run": {}, "tasks": [{
+        "folder": "task#001", "limit_minutes": 30, "outcome": "success",
+        "duration_sec": 1.0, "exit_code": 0, "stages": [], "cycles": {},
+        "transcript": {"main": {}}, "analyzers": result}], "environment": {}})
+    assert "AST" in text and "неполные" in text
+
+
 def test_run_static_analyzers_missing_script(tmp_path):
     project = tmp_path / "project"
     project.mkdir()

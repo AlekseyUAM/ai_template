@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from collections import Counter
@@ -632,10 +633,16 @@ def run_static_analyzers(project_dir: Path, files: list[str],
     code_result = {"available": code_script.is_file(),
                    "skipped": None if code_script.is_file() else "analyze_code.py не найден",
                    "results": {}}
-    query_result = {"available": extract_script.is_file() and query_script.is_file(),
-                    "skipped": None if extract_script.is_file() and query_script.is_file()
-                    else "analyze_query.py/extract_queries.py не найден",
-                    "results": {}}
+    node_available = shutil.which("node") is not None
+    query_result = {
+        "available": extract_script.is_file() and query_script.is_file(),
+        "skipped": None if extract_script.is_file() and query_script.is_file()
+        else "analyze_query.py/extract_queries.py не найден",
+        "ast": {"available": node_available,
+                "reason": None if node_available else "node не найден в PATH"},
+        "partial": False,
+        "results": {},
+    }
     for target in targets:
         key = str(target)
         if code_script.is_file():
@@ -658,13 +665,20 @@ def run_static_analyzers(project_dir: Path, files: list[str],
             output = extracted["stdout"] + extracted["stderr"] + analyzed["stdout"] + analyzed["stderr"]
             output_path = analyzers_dir / f"{_safe_name(target)}.query.txt"
             output_path.write_text(output, encoding="utf-8")
+            ast_skipped = ("структурные (AST) проверки ПРОПУЩЕНЫ" in output
+                           or "AST недоступен" in output)
             query_result["results"][key] = {
                 "returncode": analyzed["returncode"],
                 "findings": _findings(analyzed["stdout"]),
                 "output_path": str(output_path),
                 "extract_returncode": extracted["returncode"],
                 "warnings": (extracted["stderr"] + analyzed["stderr"]).strip()[:1000],
+                "ast_skipped": ast_skipped,
             }
+            if ast_skipped:
+                query_result["partial"] = True
+    if not node_available and query_result["results"]:
+        query_result["partial"] = True
     return {"code_analyze": code_result, "query_analyze": query_result}
 
 
@@ -828,6 +842,10 @@ def render_digest(metrics: dict) -> str:
             lines.append(f"- query-analyze: пропущен ({query['skipped']})")
         else:
             lines.append(f"- query-analyze: файлов {len(query.get('results') or {})}")
+        if query.get("partial"):
+            lines.append("- ⚠ query-analyze: структурные (AST) проверки "
+                         "пропущены — результаты неполные "
+                         "(установите Node.js)")
         for path, result in (query.get("results") or {}).items():
             findings = result.get("findings") or {}
             lines.append(f"  - `{Path(path).name}`: error={findings.get('error', 0)}, "
