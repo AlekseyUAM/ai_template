@@ -23,7 +23,7 @@ If there are no changed files, the load is skipped.
 
 ## Incremental load (`--state`)
 
-The orchestrator passes `--state logs/task#<id>/load-state.json` - a manifest of "what has
+The stage executor passes `--state logs/task#<id>/load-state.json` - a manifest of "what has
 already been loaded successfully" (`путь → sha256`). Only files changed since the last
 successful load are loaded from the diff. Unchanged metadata and `Configuration.xml`
 do not get into the list - otherwise every task iteration after adding an object

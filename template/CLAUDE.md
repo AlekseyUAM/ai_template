@@ -3,8 +3,9 @@
 - The whole task runs in this thread. **Do not call Agent/Task/SendMessage.**
 - The task is only `tasks/task#<id>/TASK.md`: changes in `src/cf/**` and the stage
   artifact. `.claude/**` - tools and checklists: read only, do not change.
-- `task.json` - list of stages. For each `enabled` stage read
-  `.claude/checklists/<subagent>.md` as a **checklist** and work through it.
+- `task.json` - list of stages. For each `enabled` stage, open the checklist named in
+  its `subagent` field (`.claude/checklists/<subagent>.md`) and work through it
+  yourself; `subagent` is a historical field name for the checklist file.
 - For each stage: complete the items, write the artifact (`DEVELOP.md` etc.),
   update status via `.claude/tools/task_status.py`.
 - Do the infobase load and the tests yourself if they are enabled in `task.json`.

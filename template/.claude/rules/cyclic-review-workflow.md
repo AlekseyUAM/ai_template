@@ -170,7 +170,7 @@ if run history already exists (otherwise it starts at 1). Auto-archiving of
   unchanged modules are not audited again. The full checklist is not repeated for unchanged
   files (see `reviewer.md`, "Step 1a. Re-review (iteration > 1)").
 - A critical/important finding must contain a verbatim quote and `файл:строка`.
-  The orchestrator checks the quote; without it the finding is downgraded to minor.
+  The review stage checks the quote; without it the finding is downgraded to minor.
 - A disputed finding is checked by **one targeted check**, not a new full
   review round; `restart` is not used to bypass a "for rework" verdict -
   only `pending` with verdict archiving (see `single-agent-workflow`).

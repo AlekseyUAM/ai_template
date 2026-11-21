@@ -184,7 +184,7 @@ def _db_update_block(data: dict, stage: str, status: str):
 
 
 # Stages whose return to pending archives the iteration verdicts (TESTING.md,
-# REVIEW.md). DEVELOP.md/TESTS.md are archived by the orchestrator itself.
+# REVIEW.md). DEVELOP.md/TESTS.md are archived by the stage executor itself.
 AUTO_ARCHIVE_STAGES = ("develop", "tests")
 
 

@@ -7,7 +7,8 @@ description: Single-agent task execution according to task.json - stages as chec
 
 ## Source
 `tasks/task#<id>/task.json`: `stages` - list of stages. A stage with `enabled: true` is a
-checklist; `subagent` - the file name in `.claude/checklists/`, `artifact` - the result file.
+checklist; `subagent` (historical field name) - the checklist file name in
+`.claude/checklists/`; `artifact` - the result file.
 Order: `analyze → plan → tests → develop → testing → review → docs`.
 
 ## Stage-scoped process
@@ -22,9 +23,10 @@ The `tests` stage (writing tests) - no more than 30 minutes. `Information` diagn
 query valid and do not loop.
 
 ## Stage
-1. Read `.claude/checklists/<subagent>.md` as a **checklist**.
-2. Work through the checklist's "Steps". Everything it says about the orchestrator or
-   subagent, you perform yourself in this same thread.
+1. Open the checklist named in the stage's `subagent` field
+   (`.claude/checklists/<subagent>.md`) as a **checklist**.
+2. Work through the checklist's "Steps" yourself in this same thread - there is no
+   separate executor to hand work off to.
 3. Write the `artifact` to the task directory.
 4. Update the status:
    `python .claude/tools/task_status.py tasks/task#<id> <этап> running`

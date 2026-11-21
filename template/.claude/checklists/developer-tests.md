@@ -1,13 +1,14 @@
-> **Stage checklist.** This is not a separate agent: you perform every item yourself
-> in the main thread.
+> **Stage checklist.** This is not a separate agent: work through every item yourself in
+> the current thread. Stage names below (`analyze`, `plan`, `tests`, `develop`, `testing`,
+> `review`, `docs`) refer to other stages of the same task, not to handoffs to other agents.
 
 # Test developer
 
-You are a 1C test developer. You write unit tests before implementation (TDD, Red phase): tests
+Role: 1C test developer. Write unit tests before implementation (TDD, Red phase): tests
 must fail while the code is not yet written.
 
 ## When applied
-Stage "writing tests" (before development, Red): after the analyst and architect, before the developer.
+Stage `tests` (before `develop`, Red): after `analyze` and `plan`, before `develop`.
 
 Repeatedly - when the `tests` stage is returned in the loop: the test turned out **defective**
 (in the testing verdict the culprit is the test) or red smoke found a defect before development. Then:
@@ -27,12 +28,11 @@ Repeatedly - when the `tests` stage is returned in the loop: the test turned out
 2. Fix the test module in `src/cfe/ЮнитТесты` without weakening the check to hide
    a real code bug; if needed, update `TESTS.md`. After the fix, perform
    a debug run with `--test` over the failed scenarios, then the full set (smoke) and
-   update the "Smoke" section in `TESTS.md`. The full run of the `testing` stage is done by
-   that stage. Do not edit applied code - that is the developer's area.
-3. On a return to the same stage you will be given a compact re-brief. Do not re-read
-   the whole task again: read the current `TESTS.md` (without suffix), the source of diagnostics
-   per step 1 and edit only the test module. Do not rewrite `TESTS.md` entirely - add
-   an iteration section.
+   update the "Smoke" section in `TESTS.md`. The full run after implementation belongs to
+   the `testing` stage. Do not edit applied code - that is the `develop` stage.
+3. On a return to the same stage, do not re-read the whole task: read the current
+   `TESTS.md` (without suffix), the source of diagnostics per step 1 and edit only the
+   test module. Do not rewrite `TESTS.md` entirely - add an iteration section.
 
 ## Input
 Use the task's existing artifacts: `ANALYZE.md` (specification), `ARCHITECT.md` (technical design). If some of them are absent (not all stages enabled) - rely on `TASK.md` (goal, plan, constraints) as the primary source.
@@ -41,7 +41,7 @@ Use the task's existing artifacts: `ANALYZE.md` (specification), `ARCHITECT.md` 
 Unit tests are arranged as **common modules inside the `ЮнитТесты` extension** - it also
 runs the tests in the test infobase (installed into it separately, downloaded with the "Download
 test extension" button in the project card). The sample is the common module `ЮТ_ТестыПример`,
-already part of `ЮнитТесты`. We do not create a separate extension for tests - we add new modules
+already part of `ЮнитТесты`. Do not create a separate extension for tests - add new modules
 to `ЮнитТесты`.
 
 Extension sources are in `src/cfe/ЮнитТесты` (if they are not yet in the project, unpack
@@ -143,7 +143,7 @@ only `Error` and `Warning` that point to a real defect.
    passes on empty code - it checks nothing, redo it. You perform the red smoke
    yourself (section "Running tests (Red) - you do it yourself"): load the extension,
    run the full set and achieve a correct red result. The full run
-   at the `testing` stage after implementation is led by the executor.
+   after implementation is performed at the `testing` stage.
    Smoke criteria: no test module compilation errors and no setup exceptions; no test
    is green before implementation; red ones fail on an assertion (expected/actual) or on
    the expected absence of not-yet-written functionality; the call under test is not
@@ -166,7 +166,8 @@ only `Error` and `Warning` that point to a real defect.
 7. Record in `TESTS.md`: test module name (the `ИмяМодуля` value), path to the run config
    `configs/task#<id>/test.json`, total number of scenarios of the full set and
    the "Smoke" section with evidence (see section "Running tests (Red) - you do it
-   yourself"). The orchestrator will check this data before closing the `tests` stage.
+   yourself"). The `testing` stage relies on this data; make sure it is complete before
+   `tests done`.
 
 ## Retry after timeout (test module already exists)
 
@@ -183,8 +184,8 @@ If the stage is launched again after a timeout and the task's test module alread
 
 ## Running tests (Red) - you do it yourself
 
-Smoke and debug runs are your job. The orchestrator checks the evidence and
-runs the full run of the `testing` stage after implementation.
+Smoke and debug runs are performed at this stage. The `testing` stage checks the
+evidence and runs the full set after implementation.
 
 ### Full set (smoke)
 
@@ -257,8 +258,7 @@ report: what was done, what result, what hypotheses remain.
 
 Limit - 2-3 "edit -> smoke" cycles. After the third cycle **stop** and return a
 stage report: what was done, what result, what hypotheses remain. Further
-diagnostic cycles without user instruction are forbidden. Do not run tests in parallel
-with the full run of the `testing` stage.
+diagnostic cycles without user instruction are forbidden.
 
 **Diagnostics boundaries.** The test module and its diagnostic probes - only in
 `src/cfe/ЮнитТесты`. It is forbidden to modify `src/cf` (including temporary probes and
@@ -326,7 +326,7 @@ Skills from `.claude/skills` are available through the `Skill` tool - the full c
 **Index boundary:** `src/cf/**` is indexed - only `mcp__code_index__*`, no `Read`/`Grep`/`cat`/`sed`; `src/cfe/**`, `tasks/**`, `logs/**`, `tmp/**`, `configs/**`, `docs/**` are not indexed - regular `Read`/`Grep`/`Glob`/`cat`/`grep` are allowed.
 
 ## Boundaries
-Test writing only (Red). I do not write implementation code - that is the developer.
+Test writing only (Red): do not write implementation code - that is the `develop` stage.
 
 **1C processes.** Never run `pkill -f "1cv8 ENTERPRISE"`: the pattern
 matches its own command line, the shell kills itself (`Exit code 144`) and

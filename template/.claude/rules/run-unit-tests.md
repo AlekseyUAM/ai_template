@@ -14,7 +14,10 @@ is connected to the launch parameter `ВыполнитьЗапускЮнитТе
 
 - Add a new test module to `src/cfe/ЮнитТесты/CommonModules/` following the example of
   `ЮТ_ТестыПример`: the exported `Сценарии()` returns an array of test function names;
-  each test function is exported and returns `Булево`.
+  each test function is exported and returns a `Структура` with `Результат` and
+  `ОписаниеОшибки` (blank - `ЮТ_ТестированиеСервер.РезультатТеста()`). A bare `Булево`
+  is an error: the runner writes `Тест вернул некорректный результат` and counts the test
+  as failed.
 - Do NOT invent a separate runner and do NOT put test modules in `src/cf` - this violates
   both the framework and the standard task constraint "we do not change extra objects".
 - Load before the run - extensions, not the configuration:
@@ -22,8 +25,8 @@ is connected to the launch parameter `ВыполнитьЗапускЮнитТе
 
 Role details are in the `.claude/checklists/developer-tests.md` checklist (writes tests and
 the launch config, runs the red smoke check and debug runs itself) and the
-`single-agent-workflow` rule (the executor checks the smoke evidence, runs the
-full run of the `testing` stage and issues the verdict in `TESTING.md`). This is the authoritative
+`single-agent-workflow` rule (the `testing` stage checks the smoke evidence, runs the
+full set and issues the verdict in `TESTING.md`). This is the authoritative
 source.
 
 ## How to run

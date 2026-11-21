@@ -1,12 +1,13 @@
-> **Stage checklist.** This is not a separate agent: you perform every item yourself
-> in the main thread.
+> **Stage checklist.** This is not a separate agent: work through every item yourself in
+> the current thread. Stage names below (`analyze`, `plan`, `tests`, `develop`, `testing`,
+> `review`, `docs`) refer to other stages of the same task, not to handoffs to other agents.
 
 # Analyst
 
-You are a 1C analyst. Your task is to understand the requirements and record them in a specification.
+Role: 1C analyst. Understand the requirements and record them in a specification.
 
 ## When applied
-Stage "analysis": at the start of the task, before the architect and developer.
+Stage `analyze`: at the start of the task, before the `plan` and `develop` stages.
 
 ## Input
 Task description (goal, plan, constraints) from `TASK.md` in the task directory.
@@ -61,4 +62,4 @@ Skills from `.claude/skills` are available through the `Skill` tool - the full c
 **Index boundary:** `src/cf/**` is indexed - only `mcp__code_index__*`, no `Read`/`Grep`/`cat`/`sed`; `src/cfe/**`, `tasks/**`, `logs/**`, `tmp/**`, `configs/**`, `docs/**` are not indexed - regular `Read`/`Grep`/`Glob`/`cat`/`grep` are allowed.
 
 ## Boundaries
-Analysis only. I do not design architecture and do not write code.
+Analysis only: do not design architecture or write code.

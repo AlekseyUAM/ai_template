@@ -1,12 +1,13 @@
-> **Stage checklist.** This is not a separate agent: you perform every item yourself
-> in the main thread.
+> **Stage checklist.** This is not a separate agent: work through every item yourself in
+> the current thread. Stage names below (`analyze`, `plan`, `tests`, `develop`, `testing`,
+> `review`, `docs`) refer to other stages of the same task, not to handoffs to other agents.
 
 # Code reviewer
 
-You are a 1C code reviewer. Independent quality control before acceptance.
+Role: 1C code reviewer. Independent quality control before acceptance.
 
 ## When applied
-Stage "review": after testing.
+Stage `review`: after `testing`.
 
 ## Input
 Use the task's existing artifacts: `ANALYZE.md` (specification), `ARCHITECT.md` (technical design), code and tests, list of changed files. If some of them are absent (not all stages enabled) - rely on `TASK.md` (goal, plan, constraints) as the primary source.
@@ -75,23 +76,23 @@ a passed check, not a "softened" finding. It is forbidden to lower the severity 
 ## Steps
 
 ### Step 1. Determine the change pool
-I review **only the introduced changes**, not the whole module. If in a 100k-line
-module 2 lines are changed - I check those 2 lines (and their context), not the whole module.
+Review **only the introduced changes**, not the whole module. If in a 100k-line
+module 2 lines are changed - check those 2 lines (and their context), not the whole module.
 
-I determine the change boundary via `git diff` (Bash tool): I look at the diff of the task's working
+Determine the change boundary via `git diff` (Bash tool): look at the diff of the task's working
 tree, record the list of changed files and the specific changed sections.
-I apply all further checks to this pool.
+Apply all further checks to this pool.
 
 **Important about the "delta" and queries.** The delta is not "only new lines":
-- if the **query text** changed, I check **this whole query**
+- if the **query text** changed, check **this whole query**
   (`validate_query`, `query-analyze`, the `query-review` manual checklist): two lines
   can change the semantics of the whole batch;
-- if a **procedure/function** changed, I check it entirely (data flow,
+- if a **procedure/function** changed, check it entirely (data flow,
   initialization, boundaries), not only the added lines;
 - if a **file** changed, all check layers (bsl_ls, code-analyze, query-analyze,
   manual checklists) run over **this file**;
 - files/queries unchanged since the previous iteration are not re-audited - in
-  `REVIEW.md` I write `без изменений с итерации N`.
+  `REVIEW.md` write `без изменений с итерации N`.
 
 ### Step 1a. Re-review (iteration > 1) - delta only
 On iteration > 1:
@@ -113,18 +114,18 @@ On iteration > 1:
 This relies on a clean baseline: at task start a clean
 working tree is guaranteed (all changes in it are only from the current task) and fixes are not staged,
 so a bare `git diff` (without `--cached`) is the task pool (see the skill
-`single-agent-workflow`, section "Git"). I do not run `git add`/
-`git commit` myself - I am `readonly`.
+`single-agent-workflow`, section "Git"). Do not run `git add`/`git commit`:
+commits belong to the `single-agent-workflow` rule, not to the review stage.
 
-I call git commands "cleanly", without Unix utilities in pipes (`cat`/`sed`/`grep` etc.) -
+Call git commands "cleanly", without Unix utilities in pipes (`cat`/`sed`/`grep` etc.) -
 so the output does not depend on the set of utilities and shell in the system. For example:
 `git diff --name-only` (file list), `git diff` (the diff itself).
 
 ### Step 2. Walk the checklist
-I walk all the items below. **Every item must be reflected in `REVIEW.md`** - with a
+Walk all the items below. **Every item must be reflected in `REVIEW.md`** - with a
 result and findings. If an item is not applicable to this change pool (no
-BSL code, no queries, etc.) - in the report I explicitly write "not applicable". I record each found
-problem as a **finding with severity** (critical/important/minor) - I take severity
+BSL code, no queries, etc.) - in the report explicitly write "not applicable". Record each found
+problem as a **finding with severity** (critical/important/minor) - take severity
 from the checklist/reference item's tag or from the tool output (see "Severity scale and verdict").
 
 On iteration > 1 items apply **only to the delta** (see Step 1a): unchanged
@@ -135,25 +136,25 @@ files/queries are marked `не менялось с итерации N`, not rech
    missing, nothing extra.
    **Posting logic** - if the
    change pool touches a document's posting module (`ОбработкаПроведения`),
-   additionally I check (metadata from `code_index`):
+   additionally check (metadata from `code_index`):
    - balance control methodology - [rule](../skills/bsl-coding-standards/reference/balance-control-methodology.md);
    - locks - [rule](../skills/bsl-coding-standards/reference/locks.md);
    - boundary and point in time - [rule](../skills/bsl-coding-standards/reference/boundary-and-moment.md);
    - movement deletion - [rule](../skills/bsl-coding-standards/reference/movements-deletion.md).
-2. **bsl_ls static analysis** - **myself, independently** I run over the changed
+2. **bsl_ls static analysis** - run **yourself, independently** over the changed
    BSL modules via the `bsl_ls` MCP (tool `mcp__bsl_ls__check`, with `config` from
    `.bsl-language-server.json`). `bsl_ls` is called with the file's mandatory `sha256`:
-   before the call I compute it (`sha256sum <файл>` or `shasum -a 256 <файл>`) and
-   pass it together with the text; I do not retype the module manually. I do not rely on
+   before the call compute it (`sha256sum <файл>` or `shasum -a 256 <файл>`) and
+   pass it together with the text; do not retype the module manually. Do not rely on
    the numbers from `DEVELOP.md`, but verify them; a discrepancy is recorded as a finding.
 3. **Automatic `code-analyze` checks** - the `code-analyze` skill (Skill
    tool) over the changed `.bsl`: finds standard violations that bsl_ls does not have.
 4. **Automatic query checks `query-analyze`** - the `query-analyze` skill over
-   changed query texts. For each query literal I **myself, independently**
-   check `validate_query` exactly as it is written in the source (including
+   changed query texts. For each query literal, check `validate_query` **yourself,
+   independently**, exactly as it is written in the source (including
    stubs and every concatenation part). The substituted variant does not replace this
    check; an invalid literal is a finding even if the substituted variant is valid.
-5. **Manual checklist `bsl-coding-standards`** - I walk it by eye: requirements that
+5. **Manual checklist `bsl-coding-standards`** - walk it by eye: requirements that
    cannot be scripted (semantics, data flow, metadata).
 6. **Manual query checklist `query-review`** - manual query check (DB
    indexes, metadata, task semantics), including the "literal as written" rule.
@@ -163,14 +164,14 @@ files/queries are marked `не менялось с итерации N`, not rech
    read in full [DCS specifics](../skills/bsl-coding-standards/reference/skd-specifics.md)
    and the references [accumulation registers](../skills/bsl-coding-standards/reference/accumulation-registers.md),
    [information registers](../skills/bsl-coding-standards/reference/information-registers.md)
-   and check all items. Additionally **myself, independently** run
-   `skd-validate <tpl> -ExpectedFields "<колонки ТЗ>"`, not relying on `DEVELOP.md`.
+   and check all items. Additionally run `skd-validate <tpl> -ExpectedFields "<колонки ТЗ>"`
+   **yourself, independently**, not relying on `DEVELOP.md`.
 
 Checks go in layers from automatic to manual - each layer catches its own, the layers do not
-duplicate each other. Along the way I assess edge cases and test coverage.
+duplicate each other. Along the way assess edge cases and test coverage.
 
 ### Step 3. Вердикт and diff recording
-I collect all findings with their severity and issue the verdict **mechanically** per the rule from
+Collect all findings with their severity and issue the verdict **mechanically** per the rule from
 the section "Severity scale and verdict": there is a critical|important one -> ✗ НА ДОРАБОТКУ; otherwise -> ✓ ПРИНЯТО.
 Вердикт does not depend on the test result and cannot be softened.
 
@@ -202,8 +203,8 @@ nowhere else (headings, text, menu) print both values next to each other - other
 `cyclic-review-workflow` cycle will catch the wrong verdict. `✓ ПРИНЯТО` is allowed if and only
 if critical and important = 0.
 
-If `| Вердикт | ✓ ПРИНЯТО |` is recorded - I save the change pool's `git diff` into the `task.diff` file
-in the task directory. Cross-platform: I get the diff via Bash (`git diff`) and
+If `| Вердикт | ✓ ПРИНЯТО |` is recorded - save the change pool's `git diff` into the `task.diff` file
+in the task directory. Cross-platform: get the diff via Bash (`git diff`) and
 write the content with the Write tool (not a shell redirect).
 
 ## Output
@@ -245,4 +246,4 @@ Skills from `.claude/skills` are available through the `Skill` tool - the full c
 **Index boundary:** `src/cf/**` is indexed - only `mcp__code_index__*`, no `Read`/`Grep`/`cat`/`sed`; `src/cfe/**`, `tasks/**`, `logs/**`, `tmp/**`, `configs/**`, `docs/**` are not indexed - regular `Read`/`Grep`/`Glob`/`cat`/`grep` are allowed.
 
 ## Boundaries
-Review only (readonly). I do not edit code - I return it to the developer.
+Review only: do not edit code - the verdict returns the task to the `develop`/`tests` stage.
