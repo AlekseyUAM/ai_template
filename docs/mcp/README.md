@@ -18,6 +18,10 @@
 | Индексированная кодовая база | `code-index` | **нативный** сервис на хосте (`bsl-indexer`) | 8005 | [code-index-local.md](code-index-local.md) |
 | Индексированная кодовая база (локально, legacy) | `code-index-local` | нативный сервис, то же, что выше | 8005 | [code-index-local.md](code-index-local.md) |
 
+`code-index-local` — скрытый legacy-вид (`hidden` в `mcp_types.py`): стартуется
+из существующих карточек, но в форме «Добавить» вида не предлагается — для
+новых карточек используйте `code-index`.
+
 Общее ядро code-index (два процесса, `daemon.toml`, alias проекта, один
 сервис на несколько баз) описано отдельно:
 [code-index-common.md](code-index-common.md). Docker-развёртывание

@@ -154,7 +154,7 @@ code.1c.ai + интернет, образ собирается из апстри
   Имя проекта — alias репозитория (обязательное), Каталог code_index
   (обязательный), Подключение. Имя в .mcp.json по умолчанию `code_index`; URL по
   умолчанию `localhost`; порт по умолчанию `8005`.
-  Кнопка «Развернуть локально»: скачивает бинарь `bsl-indexer` с GitHub Releases
+  Кнопка «Развернуть»: скачивает бинарь `bsl-indexer` с GitHub Releases
   под хост (Windows x64 / Linux x64 / macOS arm64), пишет `daemon.toml` с реальным
   путём каталога кодовой базы, ставит **user-level автозапуск** двух процессов
   (индексатор `daemon run` и MCP-сервер `serve`; systemd --user / LaunchAgent /

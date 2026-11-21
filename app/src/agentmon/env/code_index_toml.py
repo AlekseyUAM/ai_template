@@ -14,7 +14,7 @@ _URL_KEY = re.compile(r"(?m)^[ \t]*url[ \t]*=[ \t]*.*$")
 _MCP_SECTION = ('[mcp]\n'
                 '# массовый режим: get_object_structure принимает full_names (несколько объектов).\n'
                 '# serve читает секцию один раз при старте — после изменения daemon.toml\n'
-                '# перезапусти контейнер, иначе full_names продолжит отбиваться с -32602.\n'
+                '# перезапусти `serve`, иначе full_names продолжит отбиваться с -32602.\n'
                 'mass_mode_tools = ["get_object_structure"]\n')
 
 

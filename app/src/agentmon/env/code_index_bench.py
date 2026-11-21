@@ -147,13 +147,18 @@ def _ensure_benchmark_dir(ci: Path) -> None:
 def start_code_index(*, code_index_dir, catalog_dir, alias, port,
                      host="127.0.0.1", download=download_binary,
                      popen=subprocess.Popen, run=subprocess.run,
-                     log=print) -> NativeIndex:
+                     tcp_ok=default_tcp_ok, log=print) -> NativeIndex:
     ci = Path(code_index_dir)
     _ensure_benchmark_dir(ci)
     clean_code_index(ci, catalog_dir, run=run, log=log)
     ci.mkdir(parents=True, exist_ok=True)
     (ci / BENCHMARK_MARKER).write_text("benchmark\n", encoding="utf-8")
     binary = download(str(ci), log=log)
+    if tcp_ok(f"http://{host}:{int(port)}"):
+        from .bench_setup import SetupError
+        raise SetupError(
+            f"порт {port} уже занят; остановите старый code-index "
+            "или выберите другой порт")
     toml_path = ci / "daemon.toml"
     toml_path.write_text(
         render_daemon_toml(alias, str(Path(catalog_dir).resolve()), int(port)),
@@ -214,16 +219,18 @@ def wait_code_index_ready(index: NativeIndex, *, wait_minutes: int, host: str,
                 raise SetupError(
                     f"code-index: ошибка индексации {p.get('path', '?')}: "
                     f"{p.get('error') or p.get('message') or 'ошибка индексации'}")
+        # Проверяем свои процессы до «ready»: иначе чужой слушатель на
+        # порту выдал бы готовность за нас.
+        if not _is_our_process(index.daemon_pid, run) or \
+                not _is_our_process(index.serve_pid, run):
+            raise SetupError("native code-index завершился; смотрите "
+                             f"{index.code_index_dir}/daemon.log и serve.log")
         ready = bool(paths) and all(p.get("status") == "ready"
                                     for p in paths)
         if ready and tcp_ok(f"http://{host}:{port}"):
             log("✓ code-index готов: " + ", ".join(
                 p.get("path", "?") for p in paths))
             return
-        if not _is_our_process(index.daemon_pid, run) or \
-                not _is_our_process(index.serve_pid, run):
-            raise SetupError("native code-index завершился; смотрите "
-                             f"{index.code_index_dir}/daemon.log и serve.log")
         if clock() >= deadline:
             raise SetupError(
                 f"code-index не проиндексировал базу за {wait_minutes} мин; "

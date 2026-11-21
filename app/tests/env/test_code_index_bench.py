@@ -409,3 +409,45 @@ def test_start_accepts_marked_dir(tmp_path, monkeypatch):
     assert index.daemon_pid == 111 and index.serve_pid == 222
     assert not (ci / "old.txt").exists()
     assert (ci / B.BENCHMARK_MARKER).is_file()
+
+
+# --- порт занят / чужой слушатель не считается готовностью ---
+
+def test_wait_ready_foreign_listener_is_not_ready(monkeypatch):
+    from agentmon.env.bench_setup import SetupError
+    monkeypatch.setattr(B, "_is_our_process", lambda pid, run: pid == 1)
+    index = B.NativeIndex(Path("/ci"), Path("/ci/bsl-indexer"), 1, 2)
+    status = json.dumps({"paths": [{"path": "/p", "status": "ready"}]})
+    with pytest.raises(SetupError, match="завершился"):
+        B.wait_code_index_ready(index, wait_minutes=1, host="h", port=1,
+                                run=_ready_run(status, []),
+                                sleep=lambda _s: None, clock=_counting_clock(),
+                                tcp_ok=lambda _u: True, log=lambda _m: None)
+
+
+def test_start_refuses_busy_port_before_spawn(tmp_path, monkeypatch):
+    from agentmon.env.bench_setup import SetupError
+    ci = tmp_path / "ci"
+    catalog = tmp_path / "catalog"; catalog.mkdir()
+    bin_path = ci / "bsl-indexer"
+    bin_path.parent.mkdir(parents=True)
+    bin_path.write_text("bin", encoding="utf-8")
+    (ci / B.BENCHMARK_MARKER).write_text("benchmark\n", encoding="utf-8")
+    probed, spawned = [], []
+
+    def fake_popen(args, **kwargs):
+        spawned.append(list(args))
+        return SimpleNamespace(pid=111)
+
+    monkeypatch.setattr(B, "_spawn_kwargs", lambda: {})
+    with pytest.raises(SetupError, match="8005"):
+        B.start_code_index(
+            code_index_dir=ci, catalog_dir=catalog, alias="a", port=8005,
+            download=lambda dest, *, log=None: bin_path, popen=fake_popen,
+            run=lambda *a, **k: SimpleNamespace(returncode=0, stdout="",
+                                                stderr=""),
+            tcp_ok=lambda url: probed.append(url) or True,
+            log=lambda _m: None)
+    assert probed == ["http://127.0.0.1:8005"]
+    assert spawned == []
+    assert not (ci / "benchmark-pids.json").exists()

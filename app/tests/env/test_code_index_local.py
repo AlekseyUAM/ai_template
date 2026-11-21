@@ -224,3 +224,75 @@ def test_second_deploy_forwards_home_to_restart(tmp_path):
         port=8005, home="/h", download=_fake_download, install=_install([]),
         restart=restart, stop=lambda *a, **k: [], run=_ok_run))
     assert restarts == [(L.service_names(ci)[1], str(ci), "/h")]
+
+
+# --- порт, занятый старым сервисом после переноса каталога ---
+
+def test_first_deploy_refuses_when_port_busy(tmp_path):
+    ci = tmp_path / "ci"
+    calls = []
+    with pytest.raises(ValueError, match="8005"):
+        list(L.deploy_local(
+            code_index_dir=str(ci), catalog_dir="/code/a", project_name="a",
+            port=8005, download=_fake_download, install=_install(calls),
+            restart=lambda *a, **k: [], stop=lambda *a, **k: [],
+            tcp_ok=lambda _url: True))
+    assert calls == []                         # до любых install
+    assert not (ci / L.SERVICE_FILE).exists()
+    assert not (ci / "daemon.toml").exists()
+
+
+def test_second_deploy_does_not_probe_port(tmp_path):
+    ci = tmp_path / "ci"
+    list(L.deploy_local(
+        code_index_dir=str(ci), catalog_dir="/code/a", project_name="a",
+        port=8005, download=_fake_download, install=_install([]),
+        restart=lambda *a, **k: [], stop=lambda *a, **k: []))
+    probed = []
+    list(L.deploy_local(
+        code_index_dir=str(ci), catalog_dir="/code/b", project_name="b",
+        port=8005, download=_fake_download, install=_install([]),
+        restart=lambda *a, **k: [], stop=lambda *a, **k: [], run=_ok_run,
+        tcp_ok=lambda url: probed.append(url) or True))
+    assert probed == []                        # сервис уже наш — проба не нужна
+
+
+# --- откат daemon.toml при неудачной первой установке ---
+
+def test_first_install_failure_restores_existing_daemon_toml(tmp_path):
+    ci = tmp_path / "ci"
+    ci.mkdir()
+    old = ('[daemon]\nhttp_host = "127.0.0.1"\nhttp_port = 0\n'
+           'log_level = "info"\n\n[[paths]]\npath = "/code/old"\n'
+           'alias = "old"\nlanguage = "bsl"\n')
+    (ci / "daemon.toml").write_text(old, encoding="utf-8")
+    daemon_name, _serve_name = L.service_names(ci)
+
+    def install(name, argv, *, env, state_dir):
+        if name == daemon_name:
+            return ["install daemon"]
+        raise RuntimeError("install failed")
+
+    with pytest.raises(RuntimeError, match="install failed"):
+        list(L.deploy_local(
+            code_index_dir=str(ci), catalog_dir="/code/a", project_name="a",
+            port=8005, download=_fake_download, install=install,
+            restart=lambda *a, **k: [], stop=lambda *a, **k: []))
+    text = (ci / "daemon.toml").read_text(encoding="utf-8")
+    assert text == old
+    assert text.count("[[paths]]") == 1 and 'alias = "a"' not in text
+    assert not (ci / L.SERVICE_FILE).exists()
+
+
+def test_first_install_failure_removes_created_daemon_toml(tmp_path):
+    ci = tmp_path / "ci"
+
+    def install(name, argv, *, env, state_dir):
+        raise RuntimeError("install failed")
+
+    with pytest.raises(RuntimeError, match="install failed"):
+        list(L.deploy_local(
+            code_index_dir=str(ci), catalog_dir="/code/a", project_name="a",
+            port=8005, download=_fake_download, install=install,
+            restart=lambda *a, **k: [], stop=lambda *a, **k: []))
+    assert not (ci / "daemon.toml").exists()
