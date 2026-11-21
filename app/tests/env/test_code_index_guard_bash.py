@@ -79,6 +79,24 @@ def test_ls_directory_denied(tmp_path):
     d = _decide(root, "ls -R src")
     assert d is not None and d.allow is False
     assert "mcp__code_index__list_files" in d.reason
+    assert ('First call: mcp__code_index__list_files(repo="repo", path_prefix="src")'
+            in d.reason)
+
+
+def test_ls_absolute_indexed_subdir_denied_with_path_prefix(tmp_path):
+    root = _root(tmp_path)
+    d = _decide(root, f"ls {root}/src")
+    assert d is not None and d.allow is False
+    assert 'path_prefix="src"' in d.reason
+
+
+def test_bare_ls_generic_listing_hint(tmp_path):
+    # Root listing has no directory target -> the generic repo-root hint stays.
+    root = _root(tmp_path)
+    _fresh_index(root)
+    d = _decide(root, "ls -la")
+    assert d is not None and d.allow is False
+    assert 'First call: mcp__code_index__list_files(repo="repo", pattern="*")' in d.reason
 
 
 def test_binary_target_skipped(tmp_path):

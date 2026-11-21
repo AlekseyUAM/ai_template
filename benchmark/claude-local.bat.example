@@ -6,5 +6,7 @@ setlocal
 cd /d "%~dp0"
 :: Не тащим Anthropic-окружение из внешних запусков.
 for %%v in (ANTHROPIC_BASE_URL ANTHROPIC_AUTH_TOKEN ANTHROPIC_MODEL ANTHROPIC_SMALL_FAST_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_OPUS_MODEL ANTHROPIC_DEFAULT_HAIKU_MODEL) do set "%%v="
+set "PYTHONUTF8=1"
+set "PYTHONIOENCODING=utf-8"
 claude --dangerously-skip-permissions %*
 endlocal

@@ -32,9 +32,10 @@ for _stream in (sys.stdout, sys.stderr):
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from bench_run import (BenchError, _kill_group, ensure_claude_cmd,  # noqa: E402
+from bench_run import (BenchError, ensure_claude_cmd,  # noqa: E402
                        read_env_file, resolve_project_dir)
 from bench_metrics import parse_stream  # noqa: E402
+from claude_proc import run_claude_process  # noqa: E402
 
 DEFAULT_STAGE_LIMITS = {
     "analyze": 20,
@@ -149,6 +150,7 @@ def stage_prompt(project: Path, folder: str, stage: dict, limit_min: int,
         f"Вход: tasks/{folder}/TASK.md, tasks/{folder}/task.json и артефакты "
         "предыдущих этапов. Не перечитывай всю задачу, если нужного нет в артефактах.",
         f"Чеклист этапа: {checklist} — пройди его.",
+        "Первое действие до вызова инструментов — Skill mcp-usage.",
     ]
     if hint:
         lines.append(hint)
@@ -328,27 +330,14 @@ def run_stage(*, project: Path, folder: str, stage: dict, claude_cmd: str,
     set_status(project, folder, name, "running")
     env = os.environ.copy()
     env["TASK_STAGE"] = name
-    # Флаги — до -p: bat/%* с многострочным prompt иначе может проглотить их.
-    argv = [claude_cmd, "--output-format", "stream-json", "--verbose",
-            "-p", prompt]
-    started = time.monotonic()
     started_epoch = time.time()
-    timed_out = False
-    exit_code: int | None = None
-    with stream_path.open("wb") as out, stderr_path.open("wb") as err:
-        proc = subprocess.Popen(
-            argv, cwd=project, stdin=subprocess.DEVNULL, stdout=out, stderr=err,
-            env=env, start_new_session=True)
-        try:
-            exit_code = proc.wait(timeout=limit_min * 60)
-        except subprocess.TimeoutExpired:
-            timed_out = True
-            _kill_group(proc, proc.pid)
-            try:
-                exit_code = proc.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                exit_code = proc.poll()
-    duration = time.monotonic() - started
+    process = run_claude_process(
+        cmd=claude_cmd, prompt=prompt, cwd=project,
+        timeout_sec=limit_min * 60, stdout_path=stream_path,
+        stderr_path=stderr_path, env=env)
+    exit_code = process.exit_code
+    timed_out = process.timed_out
+    duration = process.duration_sec
     metrics = stream_metrics(stream_path)
     if metrics.get("assistant_events", 0) == 0:
         session_file = find_session_file(project, started_epoch)

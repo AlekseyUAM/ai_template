@@ -67,12 +67,22 @@ def redirect_for_link(link: str, base: str, tool_label: str, ctx) -> Decision | 
         if _is_directory_listing(link) and _listing_dir_changed(
                 link, base, ctx, case_insensitive=ctx.case_insensitive):
             return None
+    listing_hint = ""
+    if _is_directory_listing(link):
+        rel = _listing_rel(link, base, ctx, case_insensitive=ctx.case_insensitive)
+        if rel:
+            listing_hint = (f' First call: {tools.tool("list_files")}'
+                            f'(repo="{alias}", path_prefix="{rel}").')
+        else:
+            listing_hint = (f' First call: {tools.tool("list_files")}'
+                            f'(repo="{alias}", pattern="*").')
     reason = (
         f"{tool_label} on an indexed path (repo='{alias}') is denied. "
         "On indexed files MCP is 3-10x cheaper: use code-index tools "
         f'{tools.tool("grep_code")}/{tools.tool("grep_text")}/{tools.tool("read_file")}/'
         f'{tools.tool("list_files")}(repo="{alias}", ...). '
         f'Repo list - {tools.tool("get_stats")}().'
+        + listing_hint
     )
     return Decision(False, reason)
 
@@ -103,6 +113,29 @@ def _listing_targets(link: str) -> list[str] | None:
             return None
         out.append(tok)
     return out
+
+
+def _listing_rel(link: str, base: str, ctx, *, case_insensitive: bool) -> str:
+    """The first listing target as a path relative to an indexed root; "" if none.
+
+    A mask or a non-indexed target gives "" - the generic `list_files(pattern="*")`
+    hint is kept (the root listing lists only the repo root).
+    """
+    targets = _listing_targets(link)
+    if not targets:
+        return ""
+    for t in targets:
+        t = paths.normalize_msys_drives(t.replace("\\", "/"))
+        if ":/" in t or t.startswith("/"):
+            abs_path = t
+        elif base:
+            abs_path = f"{base.replace(chr(92), '/').rstrip('/')}/{t}"
+        else:
+            continue
+        m = paths.match_indexed(abs_path, ctx.paths, case_insensitive=case_insensitive)
+        if m is not None:
+            return m[1]
+    return ""
 
 
 def _listing_dir_changed(link: str, base: str, ctx, *,

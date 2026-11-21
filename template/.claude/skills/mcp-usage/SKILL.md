@@ -28,12 +28,15 @@ The servers are listed below, each covers its own class of tasks. The general pr
 2. After BSL edits - run `bsl_ls check` (with the mandatory file `sha256`) and fix the findings until clean.
 3. Do not guess platform syntax - `1c_platform`.
 4. `code_index` requires the `repo` parameter (repository alias) in almost every tool. The repository alias of this project is **`{{CODE_INDEX_REPO}}`**, pass it: `repo="{{CODE_INDEX_REPO}}"`. If in the `get_stats` response or in an error text you see a LIST of aliases - there are several repositories, take the needed one from the list.
-5. **Index boundary.** Only `src/cf/**` is indexed. For files inside it, `Read`, `Grep`, `Glob`, `cat`, `sed`, `grep` are forbidden - use `mcp__code_index__*`; get metadata object structure (attributes, tabular sections, dimensions, resources, forms, movements) via `get_object_structure`/`get_object_profile`, `meta-info`/`meta-decompile` or `cf-info`, not by grepping XML. If a raw fragment is needed - `code_index.read_file`. Everything else (`src/cfe/**`, `tasks/**`, `logs/**`, `tmp/**`, `configs/**`, `docs/**`) is **not indexed** - read with ordinary `Read`/`Grep`/`Glob`/`cat`/`grep`.
+5. **Index boundary.** Only `src/cf/**` is indexed. For files inside it, `Read`, `Grep`, `Glob`, `cat`, `sed`, `grep` are forbidden - use `mcp__code_index__*`; get metadata object structure (attributes, tabular sections, dimensions, resources, forms, movements) via `get_object_structure`/`get_object_profile`, `meta-info`/`meta-decompile` or `cf-info`, not by grepping XML. If a raw fragment is needed - `code_index.read_file`. **Exception:** if `code_index` reports that a file/object is not in the index (created in this task) or the index is stale, read that exact path with native `Read`/`meta-info`. The guard allows it; do not build Python workarounds. Everything else (`src/cfe/**`, `tasks/**`, `logs/**`, `tmp/**`, `configs/**`, `docs/**`) is **not indexed** - read with ordinary `Read`/`Grep`/`Glob`/`cat`/`grep`.
 <!-- @if 1c_naparnic -->
 6. For **any** BSL compilation error or unclear method signature - immediately
    `ask_1c_ai`, in parallel with `bsl_ls check` and `1c_platform`; do not guess
    from memory.
 <!-- @endif -->
+7. One `get_object_structure`/`get_object_profile`/`list_files` per object per
+   task - reuse the result; repeat only if the object changed after a return to
+   `develop`.
 
 **Exact tool names** (an error in the name means the call will not go through):
 - `mcp__1c-md__*` - **hyphen**, not `1c_md` (`mcp__1c_md__...` does not exist);
@@ -55,9 +58,14 @@ An index of BSL + metadata + call/data graphs. The richest server; it gets a det
 - The project repository alias is `{{CODE_INDEX_REPO}}`: **pass `repo="{{CODE_INDEX_REPO}}"`** in all tools where it is required. Usually there is one repository - no need to call `get_stats` for the alias. If you see a list of aliases in the response, there are several repositories - choose the needed one from the list.
 - `get_stats` (no parameters) - index statistics / list of connected repos. Useful for controlling index size, not as a mandatory preamble.
 - `health` - liveness of the server and the indexing daemon, if results seem empty/outdated.
-- **Index freshness.** After a file is saved, the index updates in ~2-5 s
-  (debounce 1.5 s + batch 2 s). While reindexing is in progress, a tool may return
-  `{"status": "indexing"}` - retry in a couple of seconds.
+- **Index freshness.** With a working file watcher the index updates in seconds
+  (debounce 1.5 s + batch 2 s). On Windows bind mounts watcher events may be
+  missing: if `health`/`stat_file` disagree or a new object is not found, treat
+  the index as stale and use the native fallback in golden rule 5 (native `Read`/`meta-info`
+  for that exact path). The benchmark runner refreshes the index between tasks.
+- **First exploration call** for `src/cf` is
+  `list_files(repo="...", path_prefix="...")`; `ls`/`find`/`grep` are denied
+  by the code-index guard.
 
 ### 1. Searching "where is feature X implemented" (main entry)
 - **`search_terms`** - the FIRST choice for BSL. Searches procedures by *meaning*, not exact spelling: procedure name (CamelCase is split: `УточнитьДанныеПоШтрихкоду` → `уточнить данные по штрихкоду`), name+synonym of the owner object, comment above the procedure. Query 1-3 word roots: `штрихкод`, `резерв склад`, `расчет цен`. Word forms/substrings from 3 characters, case and ё/е do not matter. Returns `proc_key = '<путь>::<имя>'` - get the body later via `get_function`.
@@ -68,7 +76,7 @@ An index of BSL + metadata + call/data graphs. The richest server; it gets a det
 - **`find_symbol`** (exact name) - WHERE the symbol is defined, without bodies. For common names (standard handlers) always set `path_glob`, otherwise hundreds of locations.
 - **`get_function`** / **`get_class`** - the BODY by exact name (with source). Support mass mode via `names: [...]`. A non-unique name → bodies are omitted, locations are returned + a hint to narrow `path_glob`.
 - **`get_file_summary`** - a file table of contents without bodies (signatures, line ranges, imports). Safe on large modules.
-- **`read_file`** (`repo`+`path`, optional `line_start`/`line_end`) - file content from the index (both text and code via zstd). `stat_file` - file metadata (size, lines, language). `list_files` (`pattern`/`path_prefix`/`language`) - file list.
+- **`read_file`** (`repo`+`path`, optional `line_start`/`line_end`) - file content from the index (both text and code via zstd). `path` is relative to the repository root (`src/cf`), e.g. `Documents/Анкета.xml` or `CommonModules/Х/Ext/Module.bsl`; do not repeat the metadata type (`Documents/Анкета/Documents/Анкета.xml` is wrong). `stat_file` - file metadata (size, lines, language). `list_files` (`pattern`/`path_prefix`/`language`) - file list.
 - **Sign of a stale `read_file`.** If `lines_total` disagrees with `stat_file`,
   the content does not contain the expected fragment or looks like a previous version - this is
   a stale `serve` cache. Compare lines, not bytes: `file_size` may be counted in
@@ -129,6 +137,10 @@ metadata**.
   by the platform (`СхемаЗапроса.УстановитьТекстЗапроса`), without execution and without
   accessing data. Returns `valid` and `message`. This is the most accurate layer of
   syntax and name validation: the platform itself validates against the current infobase composition.
+
+**Text format:** `queryText` is the concatenated query text **without leading
+`|`** and without outer quotes; the tool is not a 1C literal parser. A literal
+with `|` prefixes will fail with a syntax error.
 
 **Important: `validate_query` knows only metadata loaded into the DB.** If in the
 course of development metadata was changed in XML sources and not yet loaded into the

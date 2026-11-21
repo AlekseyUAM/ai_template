@@ -123,6 +123,29 @@ def test_run_claude_result(tmp_path):
     assert run.stream.session_id == "sid-2"
 
 
+def test_run_claude_multiline_prompt_via_stdin(tmp_path):
+    prompt = "Первая строка\nвторая строка\n" + "x" * 5000
+    fake = write_fake_claude(tmp_path / "fake", "\n".join([
+        "import json, sys",
+        "from pathlib import Path",
+        "data = sys.stdin.read()",
+        "Path('prompt.txt').write_text(data, encoding='utf-8')",
+        "Path('argv.json').write_text(json.dumps(sys.argv), encoding='utf-8')",
+        "print(json.dumps({'type':'system','subtype':'init','session_id':'sid-stdin'}))",
+        "print(json.dumps({'type':'result','is_error':False,'result':'ok','session_id':'sid-stdin'}))",
+    ]) + "\n")
+    run = run_claude(cmd=str(fake), prompt=prompt, cwd=tmp_path, timeout_sec=10,
+                     stream_path=tmp_path / "out.jsonl",
+                     stderr_path=tmp_path / "err.log")
+    assert run.exit_code == 0
+    assert (tmp_path / "prompt.txt").read_text(encoding="utf-8") == prompt
+    argv = json.loads((tmp_path / "argv.json").read_text(encoding="utf-8"))
+    assert prompt not in argv
+    assert "-p" in argv
+    assert "--output-format" in argv
+    assert "stream-json" in argv
+
+
 @pytest.mark.parametrize("tools, expected", [
     (["Bash", "SendMessage", "Task"], True),
     (["Bash", "Task"], False),
@@ -276,6 +299,9 @@ def test_build_options(tmp_path):
     assert opts.limits == {"task#001": 30}
     assert opts.analysis_timeout_min == 15
     assert opts.run_dir is None
+    assert opts.index_refresh is True
+    assert parse_args(["--env", str(env), "--task", "#001",
+                       "--no-index-refresh"]).index_refresh is False
 
 
 def git(project: Path, *args: str) -> str:

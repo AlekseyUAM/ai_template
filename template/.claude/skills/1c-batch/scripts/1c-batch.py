@@ -18,6 +18,12 @@ import os
 import sys
 import importlib.util
 
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
+
 SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
 
 

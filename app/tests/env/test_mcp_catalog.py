@@ -20,7 +20,7 @@ def test_managed_http_uses_localhost_url():
     sel = [McpSelection(id="code-index", enabled=True, mode="managed")]
     out = build_mcp_json(sel)["mcpServers"]["code-index"]
     port = CATALOG["code-index"].default_port
-    assert out == {"url": f"http://127.0.0.1:{port}"}
+    assert out == {"url": f"http://127.0.0.1:{port}", "alwaysLoad": True}
 
 
 def test_external_url_is_passed_through():

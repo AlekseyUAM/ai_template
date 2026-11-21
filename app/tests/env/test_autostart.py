@@ -1,6 +1,7 @@
 import pytest
 from pathlib import Path
 from agentmon.env import autostart as A
+from agentmon.env import autostart
 
 
 def test_systemd_unit_has_env_and_exec():
@@ -102,3 +103,34 @@ def test_launchd_plist_escapes_xml():
 def test_systemd_unit_escapes_quotes():
     unit = A.systemd_unit(["/bin/x"], {"K": 'a"b'}, "desc")
     assert 'Environment="K=a\\"b"' in unit
+
+
+def _fake_run(calls):
+    def run(cmd, **kwargs):
+        calls.append(list(cmd))
+        from types import SimpleNamespace
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+    return run
+
+
+def test_stop_linux_stops_disables_and_removes_unit(tmp_path):
+    calls = []
+    autostart.stop("svc", home=tmp_path, platform_name="linux",
+                   run=_fake_run(calls))
+    assert ["systemctl", "--user", "stop", "svc"] in calls
+    assert ["systemctl", "--user", "disable", "svc"] in calls
+
+
+def test_restart_windows_ends_and_runs(tmp_path):
+    calls = []
+    autostart.restart("svc", state_dir=tmp_path, platform_name="win32",
+                      run=_fake_run(calls))
+    assert ["schtasks", "/End", "/TN", "svc"] in calls
+    assert ["schtasks", "/Run", "/TN", "svc"] in calls
+
+
+def test_restart_linux_restarts_unit(tmp_path):
+    calls = []
+    autostart.restart("svc", home=tmp_path, platform_name="linux",
+                      run=_fake_run(calls))
+    assert ["systemctl", "--user", "restart", "svc"] in calls

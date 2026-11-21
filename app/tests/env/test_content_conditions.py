@@ -308,3 +308,43 @@ def test_deploy_checklist_python_invocations_rewritten(tmp_path):
 def test_deploy_no_agents_dir(tmp_path):
     content.deploy_content(LocalProvisioner(), cfg(tmp_path, []), update=False)
     assert not (Path(tmp_path) / ".claude" / "agents").exists()
+
+
+# --- реальное поведение code_index: fallback, формат путей, queryText ---
+
+def test_deploy_documents_index_fallback_and_path_format(tmp_path):
+    content.deploy_content(LocalProvisioner(), cfg(tmp_path, []), update=False)
+    text = skill_text(tmp_path, "mcp-usage")
+    assert "Documents/Анкета.xml" in text
+    assert "not in the index" in text
+    assert "native `Read`" in text
+
+
+def test_deploy_documents_validate_query_text_format(tmp_path):
+    content.deploy_content(
+        LocalProvisioner(), cfg(tmp_path, [sel("1c-md")]), update=False)
+    text = skill_text(tmp_path, "mcp-usage")
+    assert "queryText" in text
+    assert "without leading" in text
+
+
+def test_deploy_developer_first_action_and_fallbacks(tmp_path):
+    content.deploy_content(LocalProvisioner(), cfg(tmp_path, []), update=False)
+    text = checklist_text(tmp_path, "developer")
+    # The first-action line is injected by the route hook for all stages; the
+    # checklist folds it into the single "Mandatory first step" sentence.
+    assert "**First action:**" not in text
+    assert text.count("invoke the `mcp-usage` skill") == 1
+    assert ("**Mandatory first step before work - the first action before any "
+            "tool call:**") in text
+    assert "not in the index" in text
+    assert "BOM" in text
+
+
+def test_deploy_query_analyze_documents_query_text_format(tmp_path):
+    content.deploy_content(
+        LocalProvisioner(), cfg(tmp_path, [sel("1c-md")]), update=False)
+    text = (Path(tmp_path) / ".claude" / "skills" / "query-analyze" / "SKILL.md"
+            ).read_text(encoding="utf-8")
+    assert "without leading `|`" in text
+    assert "not a 1C literal parser" in text

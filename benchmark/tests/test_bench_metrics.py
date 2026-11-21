@@ -146,7 +146,8 @@ def test_aggregate_environment():
 
 
 def test_aggregate_environment_timed_out_and_mcp():
-    tasks = [{"transcript": {"main": {"tool_errors": 3, "error_signatures": [
+    tasks = [{"transcript": {"main": {"tool_errors": 3,
+        "mcp_errors": 1, "hook_denials": 0, "error_signatures": [
         {"signature": "Bash: Command timed out after 2m", "count": 1},
         {"signature": "Bash: command not found", "count": 1},
         {"signature": "mcp__bsl_ls__check: server unavailable", "count": 1}]}}}]
@@ -205,6 +206,53 @@ def test_aggregate_environment_includes_subagent_errors():
     assert env["tool_errors"] == 3
     assert any("Edit: sub" in item["signature"]
                for item in env["error_signatures"])
+
+
+def test_hook_denial_is_not_mcp_error(tmp_path):
+    path = write_jsonl(tmp_path / "t.jsonl", [
+        tool_use("2026-01-01T00:00:00+00:00", "h1", "Bash",
+                 {"command": "ls src/cf"}),
+        tool_result("2026-01-01T00:00:01+00:00", "h1",
+                    "PreToolUse:Bash hook error: use "
+                    "mcp__code_index__list_files(repo='ssl2')", True),
+    ])
+    summary = summarize_events(parse_tool_events(path), tmp_path)
+    assert summary["hook_denials"] == 1
+    assert summary["mcp_errors"] == 0
+    env = aggregate_environment([{"transcript": {"main": summary}}])
+    assert env["hook_denials"] == 1
+    assert env["mcp_errors"] == 0
+    assert env["tool_errors"] == 1  # отказ хука остаётся ошибкой инструмента
+
+
+def test_mcp_error_and_hook_denial_are_disjoint(tmp_path):
+    path = write_jsonl(tmp_path / "t.jsonl", [
+        tool_use("2026-01-01T00:00:00+00:00", "m1", "mcp__bsl_ls__check", {}),
+        tool_result("2026-01-01T00:00:01+00:00", "m1", "server unavailable", True),
+        tool_use("2026-01-01T00:00:02+00:00", "h1", "Bash", {"command": "ls"}),
+        tool_result("2026-01-01T00:00:03+00:00", "h1",
+                    "PreToolUse:Bash hook error: denied", True),
+    ])
+    summary = summarize_events(parse_tool_events(path), tmp_path)
+    assert summary["mcp_errors"] == 1
+    assert summary["hook_denials"] == 1
+
+
+def test_mcp_usage_skill_and_duplicates_counted(tmp_path):
+    path = write_jsonl(tmp_path / "t.jsonl", [
+        tool_use("2026-01-01T00:00:00+00:00", "s1", "Skill",
+                 {"skill": "mcp-usage"}),
+        tool_result("2026-01-01T00:00:01+00:00", "s1", "ok"),
+        tool_use("2026-01-01T00:00:02+00:00", "r1", "Read",
+                 {"file_path": "/p/a.bsl"}),
+        tool_result("2026-01-01T00:00:03+00:00", "r1", "ok"),
+        tool_use("2026-01-01T00:00:04+00:00", "r2", "Read",
+                 {"file_path": "/p/a.bsl"}),
+        tool_result("2026-01-01T00:00:05+00:00", "r2", "ok"),
+    ])
+    summary = summarize_events(parse_tool_events(path), tmp_path)
+    assert summary["mcp_usage_skill_calls"] == 1
+    assert summary["duplicate_calls"] == 1
 
 
 def task_info(project: Path, folder: str) -> TaskInfo:
@@ -486,6 +534,32 @@ def test_run_static_analyzers(tmp_path):
     assert query["findings"]["error"] == 1
 
 
+def test_query_analyze_marks_ast_skipped(tmp_path, monkeypatch):
+    import bench_metrics
+    monkeypatch.setattr(bench_metrics.shutil, "which", lambda name: None)
+    project = tmp_path / "project"
+    scripts = project / ".claude" / "skills" / "query-analyze" / "scripts"
+    scripts.mkdir(parents=True)
+    (scripts / "extract_queries.py").write_text("print('ВЫБРАТЬ 1')", encoding="utf-8")
+    (scripts / "analyze_query.py").write_text(
+        "import sys\n"
+        "print('ВНИМАНИЕ: структурные (AST) проверки ПРОПУЩЕНЫ - node', "
+        "file=sys.stderr)\n",
+        encoding="utf-8")
+    target = project / "Module.bsl"
+    target.write_text("Процедура А()\nКонецПроцедуры\n", encoding="utf-8")
+    result = run_static_analyzers(project, ["Module.bsl"], None, tmp_path / "out")
+    query = result["query_analyze"]
+    assert query["ast"]["available"] is False
+    assert query["partial"] is True
+    assert query["results"][str(target.resolve())]["ast_skipped"] is True
+    text = render_digest({"run": {}, "tasks": [{
+        "folder": "task#001", "limit_minutes": 30, "outcome": "success",
+        "duration_sec": 1.0, "exit_code": 0, "stages": [], "cycles": {},
+        "transcript": {"main": {}}, "analyzers": result}], "environment": {}})
+    assert "AST" in text and "неполные" in text
+
+
 def test_run_static_analyzers_missing_script(tmp_path):
     project = tmp_path / "project"
     project.mkdir()
@@ -550,6 +624,16 @@ def _digest_review_cell(task: dict) -> str:
                if line.startswith(f"| {task['folder']} "))
     cells = [cell.strip() for cell in row.strip("|").split(" | ")]
     return cells[-1]
+
+
+def test_render_digest_shows_index_refresh_only_when_present():
+    task = {"folder": "task##009", "limit_minutes": 30, "outcome": "success",
+            "duration_sec": 5.0, "exit_code": 0, "stages": [], "cycles": {},
+            "transcript": {}}
+    task["index_refresh"] = "ready"
+    assert "- Индекс code_index: `ready`" in render_digest(_digest_metrics(task))
+    task.pop("index_refresh")
+    assert "Индекс code_index" not in render_digest(_digest_metrics(task))
 
 
 def test_render_digest_review_not_done_when_pending():
@@ -678,6 +762,53 @@ def test_render_digest_query_findings():
     assert "query-analyze: файлов 1" in text
     assert "  - `Module.bsl`: error=1, warning=0, info=2" in text
     assert "анализаторы не запускались" not in text
+
+
+def _digest_with_env(env: dict, *, main: dict | None = None) -> str:
+    task = {"folder": "task#020", "limit_minutes": 30, "outcome": "success",
+            "duration_sec": 5.0, "exit_code": 0, "stages": [], "cycles": {},
+            "transcript": {"main": main or {}}}
+    return render_digest({"run": {}, "tasks": [task], "environment": env})
+
+
+def test_render_digest_old_metrics_hide_new_breakdown():
+    """Старый metrics.json без новых ключей не показывает фиктивные нули."""
+    text = _digest_with_env(
+        {"tool_errors": 2, "command_not_found": 1, "timeouts": 0})
+    assert "Skill mcp-usage" not in text
+    assert "прочие:" not in text
+    assert "Ошибок MCP" not in text
+    assert "Отказов хуков" not in text
+    assert "- Ошибок инструментов: 2\n" in text
+
+
+def test_render_digest_new_metrics_show_skill_and_breakdown():
+    env = {"tool_errors": 4, "mcp_errors": 1, "hook_denials": 2,
+           "command_not_found": 0, "timeouts": 0}
+    text = _digest_with_env(env, main={"mcp_usage_skill_calls": 1})
+    assert "- Skill mcp-usage: да (1)" in text
+    assert ("- Ошибок инструментов: 4 (MCP: 1, хуки: 2, прочие: 1)") in text
+    assert "- Ошибок MCP: 1" in text
+    assert "- Отказов хуков: 2" in text
+    # mcp_usage_skill_calls == 0 (ключ есть) — строка «нет (0)» пишется
+    assert "- Skill mcp-usage: нет (0)" in _digest_with_env(
+        env, main={"mcp_usage_skill_calls": 0})
+
+
+def test_render_digest_subagent_shows_mcp_and_hook_breakdown():
+    task = {"folder": "task#021", "limit_minutes": 30, "outcome": "success",
+            "duration_sec": 5.0, "exit_code": 0, "stages": [], "cycles": {},
+            "transcript": {"main": {}, "subagents": [
+                {"agent": "reviewer", "description": "Ревью",
+                 "duration_sec": 12.0, "tool_errors": 3, "test_runs": 1,
+                 "mcp_errors": 1, "hook_denials": 2},
+                # старый формат без новых ключей — строка как раньше
+                {"agent": "old", "description": "d", "duration_sec": 1.0,
+                 "tool_errors": 1, "test_runs": 0}]}}
+    text = render_digest({"run": {}, "tasks": [task], "environment": {}})
+    assert ("- reviewer: Ревью — 12 с, ошибок 3 (MCP 1, хуки 2), тестов 1"
+            in text)
+    assert "- old: d — 1 с, ошибок 1, тестов 0" in text
 
 
 def test_task_log_dirs_uses_identifier_and_folder(tmp_path):

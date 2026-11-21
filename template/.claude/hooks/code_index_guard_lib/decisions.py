@@ -113,6 +113,17 @@ def decide_glob(ti: dict, cwd: str | None, ctx) -> Decision | None:
     candidates = [path, pattern]
     if not path:
         candidates.append(cwd or "")
+    # Target directory for the freshness check: an explicit `path`; without it `cwd`
+    # only for a bare pattern - a relative one like `src/**/*.rs` is not a directory,
+    # and its freshness does not determine what the pattern finds there.
+    if path:
+        target_dir = path
+    elif "/" in pattern.replace("\\", "/"):
+        target_dir = ""
+    else:
+        target_dir = cwd or ""
+    if target_dir and _dir_changed_since_index(target_dir, ctx):
+        return None
     for c in candidates:
         if not c:
             continue
@@ -125,9 +136,33 @@ def decide_glob(ti: dict, cwd: str | None, ctx) -> Decision | None:
                 or (pattern and index_db.excluded_from_index(root, pattern,
                                                              case_insensitive=ci))):
             return None
+        list_files = tools.tool("list_files")
+        hint = (f' First call: {list_files}(repo="{alias}", path_prefix="{rel}").'
+                if rel else f' First call: {list_files}(repo="{alias}", pattern="*").')
         reason = (
             f"Glob is denied on an indexed path (repo='{alias}'). Use the code-index tool "
-            f'{tools.tool("list_files")}(repo="{alias}", pattern="...", language="...").'
+            f'{list_files}(repo="{alias}", pattern="...", language="...").'
+            + hint
+            + " If the index is stale and list_files misses new files, read those "
+            "exact paths with native Read/meta-info."
         )
         return Decision(False, reason)
     return None
+
+
+def _dir_changed_since_index(target: str, ctx) -> bool:
+    """A directory inside an indexed root changed after indexing.
+
+    The same freshness rule as for Bash listings (`redirect.py`): list_files does
+    not know new files -> a native Glob is the only way, do not create a dead end.
+    Only the resolved target directory is checked, not the whole tree.
+    A non-directory target cannot be proven stale: an explicit `path` that Glob
+    cannot find gives nothing to return (the native Glob would be empty anyway).
+    """
+    m = paths.match_indexed(target, ctx.paths, case_insensitive=ctx.case_insensitive)
+    if m is None:
+        return False
+    _alias, rel, root = m
+    if rel and not Path(paths.normalize_msys_drives(target.replace("\\", "/"))).is_dir():
+        return False
+    return index_db.dir_changed_since_index(root, rel)

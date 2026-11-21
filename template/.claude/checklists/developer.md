@@ -48,6 +48,8 @@ the load, one call per changed module and static query text.
    are not yet in the IB (they were added in this task), `validate_query` before the load will return
    "Таблица не найдена". This is a deferred check: record it in `DEVELOP.md` and
    proceed to the load; after the load check the query.
+   **`validate_query` text format.** Pass `queryText` as the concatenated text
+   without leading `|` and without outer quotes.
    **`validate_query` result.** The response contains the `valid` field - it is authoritative:
    `valid: true` - the text is accepted; `valid: false` - a defect of the query text:
    fix the text and check again until `valid: true`. In `DEVELOP.md` record
@@ -69,8 +71,9 @@ the load, one call per changed module and static query text.
 3. After edits run static analysis (rule verify-with-syntax-checker);
    before the call compute the file's sha256 (`sha256sum <файл>` or
    `shasum -a 256 <файл>`) and pass it to `check`. Without `sha256` the tool
-   will reject the call. Do not retype the module manually;
-   for changed modules run `code-analyze`; for static query text
+   will reject the call. Do not retype the module manually. The server strips a
+   leading UTF-8 BOM itself; do not spend a turn checking the BOM manually.
+   For changed modules run `code-analyze`; for static query text
    from the source - one `validate_query` call (substitution of the sort direction
    via `СтрЗаменить` into a valid place does not require a separate validation; for
    queries to new objects `validate_query` is deferred until the IB load).
@@ -216,9 +219,17 @@ Wrap only your new/changed code, not the whole module.
 
 Skills from `.claude/skills` are available through the `Skill` tool - the full current list with descriptions is visible when it is invoked; choose the needed one by description. Guides: `mcp-usage`, `bsl-coding-standards`, `sdd-tdd-workflow`. 1C operational skills (create/edit/analyze/validate metadata, forms, roles, DCS, templates, XDTO, configurations and extensions, subsystems, interfaces, external data processors and reports), batch operations (`1c-batch`), web publications and database work - look them up by description in this list.
 
-**Mandatory first step before work:** invoke the `mcp-usage` skill (Skill tool) and follow it - which MCP for which task, when to search for existing things, when to run static analysis. The single source of truth on MCP.
+**Mandatory first step before work - the first action before any tool call:** invoke the `mcp-usage` skill (Skill tool) and follow it - which MCP for which task, when to search for existing things, when to run static analysis. The single source of truth on MCP.
+
+**First exploration call:** `mcp__code_index__list_files(repo=..., path_prefix=...)`,
+not `ls`/`find`/`grep` - the guard denies them.
+**One profile per object:** call `get_object_structure`/`get_object_profile`
+once per object per task and reuse the result.
 
 **Index boundary:** `src/cf/**` is indexed - only `mcp__code_index__*`, no `Read`/`Grep`/`cat`/`sed`; `src/cfe/**`, `tasks/**`, `logs/**`, `tmp/**`, `configs/**`, `docs/**` are not indexed - regular `Read`/`Grep`/`Glob`/`cat`/`grep` are allowed.
+If `code_index` says a file/object is not in the index (created in this task)
+or the index is stale, use native `Read`/`meta-info` for that exact path; the
+guard allows it.
 
 ## Boundaries
 Implement per the approved design. Scope expansion - through the `plan` stage (architect checklist), not in code.

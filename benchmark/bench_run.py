@@ -6,20 +6,20 @@ import json
 import os
 import re
 import shutil
-import signal
 import subprocess
 import sys
-import time
 from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 
 from bench_analysis import (build_prompt, deterministic_report,
-                            extract_analyst_text, write_report)
+                            extract_analyst_text, prepare_inputs, write_report)
+from bench_index import refresh_index
 from bench_metrics import (aggregate_environment, collect_task_state,
                            cycle_metrics, find_session_files, parse_stream,
                            render_digest, run_static_analyzers, stage_table,
                            summarize_transcripts, write_json_atomic)
+from claude_proc import run_claude_process
 
 
 class BenchError(RuntimeError):
@@ -51,6 +51,7 @@ class RunOptions:
     force: bool
     run_dir: Path | None
     env_file: Path
+    index_refresh: bool = True
 
 
 @dataclass(frozen=True)
@@ -173,117 +174,18 @@ class ClaudeRun:
     session: object
 
 
-def _group_exists(pgid: int | None) -> bool:
-    if pgid is None or os.name == "nt":
-        return False
-    try:
-        os.killpg(pgid, 0)
-        return True
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    except OSError:
-        return False
-
-
-def _wait_exit(proc: subprocess.Popen, timeout: float) -> bool:
-    try:
-        proc.wait(timeout=timeout)
-        return True
-    except subprocess.TimeoutExpired:
-        return False
-
-
-def _kill_group(proc: subprocess.Popen, pgid: int) -> None:
-    """Мягко остановить лидера, затем гарантированно зачистить process group.
-
-    ``run_claude`` запускает процесс с ``start_new_session=True``, поэтому
-    pgid группы равен pid лидера на момент старта. PGID передаётся явно: чтение
-    ``os.getpgid`` в момент убийства опасно — после реепа лидера PID/PGID может
-    быть переиспользован и зачистка задела бы чужую группу.
-
-    Зачистка группы после выхода лидера намеренная: потомки (например,
-    MCP-бэкенды claude) могут игнорировать сигналы или пережить лидера,
-    поэтому группа всё равно добивается SIGKILL.
-
-    Windows не умеет process group и ``os.killpg``; там дерево процессов
-    снимается принудительно через ``taskkill /F /T``. Мягкий ``taskkill /T``
-    на дереве ``cmd → claude → MCP-мосты`` может зависнуть, поэтому /F идёт
-    сразу и сам taskkill ограничен по времени.
-    """
-    if os.name == "nt":
-        try:
-            subprocess.run(
-                ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                check=False, timeout=10)
-        except (OSError, subprocess.TimeoutExpired):
-            pass
-        if proc.poll() is None:
-            try:
-                proc.kill()
-            except OSError:
-                pass
-            _wait_exit(proc, 5)
-        return
-
-    def send(sig: int) -> None:
-        try:
-            os.killpg(pgid, sig)
-        except (ProcessLookupError, OSError):
-            pass
-
-    if proc.poll() is None:
-        send(signal.SIGINT)
-        _wait_exit(proc, 10)
-    if proc.poll() is None:
-        send(signal.SIGTERM)
-        _wait_exit(proc, 5)
-    if _group_exists(pgid):
-        try:
-            os.killpg(pgid, signal.SIGKILL)
-        except (ProcessLookupError, OSError):
-            pass
-    if proc.poll() is None:
-        try:
-            proc.kill()
-        except OSError:
-            pass
-        _wait_exit(proc, 5)
-
-
 def run_claude(*, cmd: str, prompt: str, cwd: Path, timeout_sec: float,
                stream_path: Path, stderr_path: Path,
                extra_args: tuple[str, ...] = ()) -> ClaudeRun:
-    """Запустить claude в отдельной сессии и вернуть результат; таймаут убивает группу."""
-    argv = [cmd, "-p", prompt, "--output-format", "stream-json",
-            "--verbose", *extra_args]
-    stream_path.parent.mkdir(parents=True, exist_ok=True)
-    stderr_path.parent.mkdir(parents=True, exist_ok=True)
-    started = time.monotonic()
-    timed_out = False
-    with stream_path.open("wb") as out, stderr_path.open("wb") as err:
-        proc = subprocess.Popen(
-            argv, cwd=cwd, stdin=subprocess.DEVNULL, stdout=out, stderr=err,
-            start_new_session=True)
-        try:
-            exit_code = proc.wait(timeout=timeout_sec)
-        except subprocess.TimeoutExpired:
-            timed_out = True
-            _kill_group(proc, proc.pid)
-            try:
-                exit_code = proc.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                exit_code = proc.poll()
-        except BaseException:
-            _kill_group(proc, proc.pid)
-            raise
-    duration = time.monotonic() - started
+    """Запустить claude в отдельной сессии и вернуть результат."""
+    result = run_claude_process(
+        cmd=cmd, prompt=prompt, cwd=cwd, timeout_sec=timeout_sec,
+        stdout_path=stream_path, stderr_path=stderr_path,
+        extra_args=extra_args)
     stream = parse_stream(stream_path)
     session = find_session_files(stream.session_id)
-    return ClaudeRun(exit_code=exit_code, timed_out=timed_out,
-                     duration_sec=duration, stream_path=stream_path,
+    return ClaudeRun(exit_code=result.exit_code, timed_out=result.timed_out,
+                     duration_sec=result.duration_sec, stream_path=stream_path,
                      stderr_path=stderr_path, stream=stream, session=session)
 
 
@@ -464,6 +366,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         help="не запускать сессию-аналитик")
     parser.add_argument("--force", action="store_true",
                         help="разрешить прогон на непустом проекте")
+    parser.add_argument("--no-index-refresh", action="store_false",
+                        dest="index_refresh",
+                        help="не обновлять индекс code_index между задачами")
     return parser.parse_args(argv)
 
 
@@ -494,6 +399,7 @@ def build_options(ns: argparse.Namespace, repo_root: Path) -> RunOptions:
         force=bool(ns.force),
         run_dir=None,
         env_file=env_path,
+        index_refresh=bool(ns.index_refresh),
     )
 
 
@@ -511,6 +417,7 @@ def ensure_claude_cmd(cmd: str) -> None:
 
 def build_task_prompt(folder: str, limit_minutes: int | None = None) -> str:
     prompt = (f"Выполни задачу tasks/{folder} по этапам из её task.json. "
+              f"Первое действие до вызова инструментов — Skill mcp-usage. "
               f"Следуй правилу single-agent-workflow и чеклистам этапов. "
               f"Работай по TASK.md, изменения — в src/cf/**; `.claude/**` не меняй.")
     if limit_minutes is not None:
@@ -634,6 +541,10 @@ def execute(options: RunOptions) -> int:
     stopped = False
     for task in options.tasks:
         log(f"▶ {task.folder}: старт (лимит {options.limits[task.folder]} мин)")
+        index_status = refresh_index(options.project_dir,
+                                     enabled=options.index_refresh,
+                                     log=log)
+        log(f"  индекс code_index: {index_status}")
         task_started = _iso_now()
         before = git_state(options.project_dir)
         stream_path = run_dir / "transcripts" / f"{task.folder}.stream.jsonl"
@@ -671,6 +582,7 @@ def execute(options: RunOptions) -> int:
             "duration_sec": round(run.duration_sec, 1),
             "started_at": task_started,
             "finished_at": task_finished,
+            "index_refresh": index_status,
             "stream": _stream_metrics(run),
             "task_json": task_json,
             "stages": stage_table(task_json),
@@ -695,6 +607,7 @@ def execute(options: RunOptions) -> int:
         if outcome != "success":
             stopped = True
             break
+    run_metrics["run"]["finished_at"] = _iso_now()
     run_metrics["environment"] = aggregate_environment(run_metrics["tasks"])
     write_json_atomic(metrics_path, run_metrics)
     _write_run_json(run_dir, run_metrics)
@@ -705,7 +618,6 @@ def execute(options: RunOptions) -> int:
             run_id=run_dir.name, project_dir=options.project_dir,
             run_dir=run_dir, metrics=run_metrics, skipped=True)
         target = write_report(options.project_dir, report)
-        run_metrics["run"]["finished_at"] = _iso_now()
         run_metrics["analysis"] = {"performed": False, "skipped": True,
                                    "result_path": str(target)}
         write_json_atomic(metrics_path, run_metrics)
@@ -713,15 +625,18 @@ def execute(options: RunOptions) -> int:
         log(f"отчёт (без анализа): {target}")
         log.close()
         return 0 if not stopped else 2
+    inputs = prepare_inputs(run_dir=run_dir, metrics=run_metrics,
+                            digest_path=digest_path)
     _inputs_manifest(manifest_path, options.project_dir, options.repo_root,
-                     run_dir, metrics_path, digest_path, reference, options.tasks)
+                     run_dir, inputs["metrics_path"], inputs["digest_path"],
+                     reference, options.tasks)
     prompt = build_prompt(
         run_id=run_dir.name,
         project_dir=options.project_dir,
         repo_root=options.repo_root,
         run_dir=run_dir,
-        metrics_path=metrics_path,
-        digest_path=digest_path,
+        metrics_path=inputs["metrics_path"],
+        digest_path=inputs["digest_path"],
         manifest_path=manifest_path,
         reference_path=reference,
         contaminated=options.force,
@@ -735,8 +650,8 @@ def execute(options: RunOptions) -> int:
         prompt=prompt,
         cwd=options.project_dir,
         timeout_sec=options.analysis_timeout_min * 60,
-        stream_path=run_dir / "transcripts" / "analyst.stream.jsonl",
-        stderr_path=run_dir / "transcripts" / "analyst.stderr.log",
+        stream_path=run_dir / "analysis-transcripts" / "analyst.stream.jsonl",
+        stderr_path=run_dir / "analysis-transcripts" / "analyst.stderr.log",
         extra_args=("--add-dir", str(options.repo_root),
                     "--disallowedTools", "Edit", "MultiEdit", "NotebookEdit",
                     "Write", "Agent"),
@@ -776,10 +691,10 @@ def execute(options: RunOptions) -> int:
                  "данных.\n")
         log("⚠ аналитик изменил git-состояние проекта или репозитория template")
     target = write_report(options.project_dir, text)
-    run_metrics["run"]["finished_at"] = _iso_now()
     run_metrics["analysis"] = {
         "performed": True,
         "skipped": False,
+        "finished_at": _iso_now(),
         "session_id": analyst.stream.session_id,
         "duration_sec": round(analyst.duration_sec, 1),
         "timed_out": analyst.timed_out,

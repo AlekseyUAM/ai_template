@@ -24,8 +24,15 @@ from datetime import datetime, timezone
 import json
 import os
 import re
+import sys
 import time
 from pathlib import Path
+
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
 
 VALID = ("pending", "running", "done", "failed", "skipped", "approve",
          "restart")

@@ -23,7 +23,8 @@ def build_output(event: dict) -> dict:
             "additionalContext": (
                 "[ai1c] BSL module changed - run static analysis "
                 "(skill mcp-usage, MCP bsl_ls, mcp__bsl_ls__check) with the mandatory "
-                "file sha256 (`sha256sum <file>`); do not reprint the module text."),
+                "file sha256 (`sha256sum <file>`); do not reprint the module text."
+                " BOM: no manual check - the server strips a leading UTF-8 BOM."),
         }}
     return {}
 

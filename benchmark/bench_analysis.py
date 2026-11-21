@@ -1,10 +1,30 @@
 """Промпт сессии-аналитика, извлечение ответа и детерминированный отчёт."""
 from __future__ import annotations
 
+import copy
 import os
+import shutil
 from pathlib import Path
 
-from bench_metrics import StreamSummary
+from bench_metrics import StreamSummary, write_json_atomic
+
+
+def prepare_inputs(*, run_dir: Path, metrics: dict,
+                   digest_path: Path) -> dict:
+    """Снимок входов аналитика: метрики без `analysis` и копия дайджеста."""
+    # Дайджест не найден — ошибка раннера, а не молчаливый пропуск: аналитик
+    # получил бы промпт со ссылкой на несуществующий файл.
+    if not digest_path.is_file():
+        raise FileNotFoundError(f"дайджест не найден: {digest_path}")
+    inputs_dir = run_dir / "analysis-inputs"
+    inputs_dir.mkdir(parents=True, exist_ok=True)
+    snapshot = copy.deepcopy(metrics)
+    snapshot.pop("analysis", None)
+    metrics_path = inputs_dir / "metrics.json"
+    write_json_atomic(metrics_path, snapshot)
+    digest_copy = inputs_dir / "digest.md"
+    shutil.copyfile(digest_path, digest_copy)
+    return {"metrics_path": metrics_path, "digest_path": digest_copy}
 
 
 def build_prompt(*, run_id: str, project_dir: Path, repo_root: Path,
@@ -20,7 +40,7 @@ def build_prompt(*, run_id: str, project_dir: Path, repo_root: Path,
 Ты НЕ выполняешь задачи, НЕ запускаешь тесты и загрузку ИБ, НЕ меняешь файлы проекта.
 
 ## Входы (читай только их)
-- Метрики: {metrics_path}
+- Снимок метрик (без поля analysis): {metrics_path}
 - Дайджест: {digest_path}
 - Манифест входов (каталоги задач и артефакты): {manifest_path}
 - Диффы прогона: {run_dir / "diffs"}
@@ -31,6 +51,10 @@ def build_prompt(*, run_id: str, project_dir: Path, repo_root: Path,
 - Задачи прогона: {tasks}
 - Прогон: {run_id}
 - Проект мог быть не свежим (--force): {'да' if contaminated else 'нет'}
+
+## Твоё собственное состояние
+`analysis.*` и `analysis-transcripts/**` — не вход. Это заглушка раннера и твой
+собственный вывод; статус твоей сессии записывается после её завершения.
 
 Разрешено: Read, Grep, Glob, Bash только для чтения логов и запуска
 `.claude/skills/*/scripts/*.py` (code-analyze/query-analyze), MCP `bsl_ls`.

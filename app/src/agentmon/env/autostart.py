@@ -108,3 +108,68 @@ def install_and_start(name, argv, *, env, state_dir, home=None,
     if pf == "darwin":
         return _install_macos(name, argv, env, state_dir, home, run)
     raise ValueError(f"автозапуск не поддержан на платформе {pf}")
+
+
+def stop(name, *, state_dir=None, home=None, run=subprocess.run,
+         platform_name=None):
+    """Остановить и снять автозапуск процесса (best-effort, без исключений)."""
+    home = Path(home) if home is not None else Path.home()
+    pf = platform_name or sys.platform
+    log = []
+    if pf.startswith("win"):
+        _run_logged(run, ["schtasks", "/End", "/TN", name], log, check=False)
+        _run_logged(run, ["schtasks", "/Delete", "/TN", name, "/F"],
+                    log, check=False)
+        if state_dir:
+            try:
+                (Path(state_dir) / f"{name}.cmd").unlink()
+            except OSError:
+                pass
+    elif pf.startswith("linux"):
+        _run_logged(run, ["systemctl", "--user", "stop", name], log, check=False)
+        _run_logged(run, ["systemctl", "--user", "disable", name],
+                    log, check=False)
+        unit = Path(home) / ".config" / "systemd" / "user" / f"{name}.service"
+        try:
+            unit.unlink()
+        except OSError:
+            pass
+        _run_logged(run, ["systemctl", "--user", "daemon-reload"],
+                    log, check=False)
+    elif pf == "darwin":
+        plist = Path(home) / "Library" / "LaunchAgents" / f"{name}.plist"
+        _run_logged(run, ["launchctl", "unload", str(plist)],
+                    log, check=False)
+        try:
+            plist.unlink()
+        except OSError:
+            pass
+    else:
+        raise ValueError(f"автозапуск не поддержан на платформе {pf}")
+    return log
+
+
+def restart(name, *, state_dir=None, home=None, run=subprocess.run,
+            platform_name=None):
+    """Перезапустить ранее установленный сервис."""
+    home = Path(home) if home is not None else Path.home()
+    pf = platform_name or sys.platform
+    log = []
+    if pf.startswith("win"):
+        _run_logged(run, ["schtasks", "/End", "/TN", name], log, check=False)
+        _run_logged(run, ["schtasks", "/Run", "/TN", name], log, check=True)
+    elif pf.startswith("linux"):
+        res = _run_logged(run, ["systemctl", "--user", "restart", name],
+                          log, check=False)
+        if getattr(res, "returncode", 1) != 0:
+            _run_logged(run, ["systemctl", "--user", "enable", "--now", name],
+                        log, check=True)
+    elif pf == "darwin":
+        plist = Path(home) / "Library" / "LaunchAgents" / f"{name}.plist"
+        _run_logged(run, ["launchctl", "unload", str(plist)],
+                    log, check=False)
+        _run_logged(run, ["launchctl", "load", "-w", str(plist)],
+                    log, check=True)
+    else:
+        raise ValueError(f"автозапуск не поддержан на платформе {pf}")
+    return log

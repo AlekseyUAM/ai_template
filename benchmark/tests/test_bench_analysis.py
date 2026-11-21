@@ -1,8 +1,36 @@
 from pathlib import Path
 
+import pytest
+
 from bench_analysis import (build_prompt, deterministic_report,
-                            extract_analyst_text, write_report)
+                            extract_analyst_text, prepare_inputs, write_report)
 from bench_metrics import StreamSummary
+
+
+def test_prepare_inputs_strips_analysis_and_copies_digest(tmp_path):
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    digest = run_dir / "digest.md"
+    digest.write_text("# digest\n", encoding="utf-8")
+    metrics = {"run": {"run_id": "r"}, "analysis": {"performed": False},
+               "tasks": []}
+    inputs = prepare_inputs(run_dir=run_dir, metrics=metrics,
+                            digest_path=digest)
+    import json
+    saved = json.loads(inputs["metrics_path"].read_text(encoding="utf-8"))
+    assert "analysis" not in saved
+    assert saved["run"]["run_id"] == "r"
+    assert inputs["digest_path"].read_text(encoding="utf-8") == "# digest\n"
+    assert inputs["metrics_path"].parent.name == "analysis-inputs"
+
+
+def test_prepare_inputs_raises_when_digest_missing(tmp_path):
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    with pytest.raises(FileNotFoundError):
+        prepare_inputs(run_dir=run_dir, metrics={"run": {}},
+                       digest_path=run_dir / "digest.md")
+    assert not (run_dir / "analysis-inputs" / "metrics.json").exists()
 
 
 def test_build_prompt_has_constraints_and_no_orchestration_trigger(tmp_path):

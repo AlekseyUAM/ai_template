@@ -44,8 +44,7 @@ FAKE = r'''#!/usr/bin/env python3
 import json, os, re, sys
 from pathlib import Path
 
-args = sys.argv[1:]
-prompt = args[args.index("-p") + 1] if "-p" in args else ""
+prompt = sys.stdin.read()
 sid = "fake-session"
 out = []
 
@@ -131,8 +130,17 @@ def test_task_prompt_triggers_single_agent():
     assert "tasks/task#001" in prompt
     assert "tasks/task#" in prompt
     assert "single-agent-workflow" in prompt
+    assert "mcp-usage" in prompt
     assert "чеклист" in prompt
     assert "30 мин" in build_task_prompt("task#001", 30)
+
+
+def test_stage_prompt_first_action_is_mcp_usage(tmp_path):
+    from stage_run import stage_prompt
+    prompt = stage_prompt(tmp_path, "task#001",
+                          {"name": "develop", "subagent": "developer",
+                           "artifact": "DEVELOP.md"}, 30)
+    assert "Первое действие до вызова инструментов — Skill mcp-usage." in prompt
 
 
 def test_e2e_success_with_analysis(env):
@@ -146,9 +154,16 @@ def test_e2e_success_with_analysis(env):
     runs = sorted((project / "tmp" / "benchmark").iterdir())
     metrics = json.loads((runs[-1] / "metrics.json").read_text(encoding="utf-8"))
     assert [task["outcome"] for task in metrics["tasks"]] == ["success", "success"]
+    assert [task["index_refresh"] for task in metrics["tasks"]] == ["fresh", "fresh"]
     assert metrics["run"]["contaminated"] is False
     assert (runs[-1] / "digest.md").is_file()
     assert (runs[-1] / "diffs" / "task#001.diff").is_file()
+    assert (runs[-1] / "analysis-inputs" / "metrics.json").is_file()
+    assert (runs[-1] / "analysis-transcripts" / "analyst.stream.jsonl").is_file()
+    assert not (runs[-1] / "transcripts" / "analyst.stream.jsonl").exists()
+    snapshot = json.loads(
+        (runs[-1] / "analysis-inputs" / "metrics.json").read_text(encoding="utf-8"))
+    assert "analysis" not in snapshot
 
 
 def test_e2e_stops_after_failure_but_analyzes(env):

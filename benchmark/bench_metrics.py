@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from collections import Counter
@@ -202,9 +203,27 @@ def _short_input(event: ToolEvent) -> str:
     return ""
 
 
+def _is_hook_denial(event: ToolEvent) -> bool:
+    return bool(event.is_error and "hook error" in (event.result_text or "").lower())
+
+
 def summarize_events(events: list[ToolEvent], project_dir: Path) -> dict:
     tools = Counter(event.name for event in events)
     errors = [event for event in events if event.is_error]
+    hook_denials = sum(1 for event in errors if _is_hook_denial(event))
+    mcp_errors = sum(1 for event in errors
+                     if event.name.startswith("mcp__")
+                     and not _is_hook_denial(event))
+    skill_calls = sum(
+        1 for event in events
+        if event.name == "Skill"
+        and str(event.input.get("skill") or "") == "mcp-usage")
+    seen_calls: Counter = Counter()
+    for event in events:
+        seen_calls[(event.name, json.dumps(event.input, ensure_ascii=False,
+                                           sort_keys=True, default=str))] += 1
+    duplicate_calls = sum(count - 1 for count in seen_calls.values()
+                          if count > 1)
     signatures: Counter = Counter()
     for event in errors:
         line = next((part.strip() for part in event.result_text.splitlines()
@@ -242,6 +261,10 @@ def summarize_events(events: list[ToolEvent], project_dir: Path) -> dict:
     return {
         "tools": dict(tools),
         "tool_errors": len(errors),
+        "mcp_errors": mcp_errors,
+        "hook_denials": hook_denials,
+        "mcp_usage_skill_calls": skill_calls,
+        "duplicate_calls": duplicate_calls,
         "error_signatures": [
             {"signature": signature, "count": count}
             for signature, count in signatures.most_common(10)],
@@ -293,6 +316,8 @@ def summarize_transcripts(project_dir: Path, session: SessionFiles,
             "duration_sec": duration,
             "tools": summary["tools"],
             "tool_errors": summary["tool_errors"],
+            "mcp_errors": summary["mcp_errors"],
+            "hook_denials": summary["hook_denials"],
             "error_signatures": summary["error_signatures"],
             "test_runs": summary["test_runs"],
             "edits": summary["edits"],
@@ -310,6 +335,8 @@ def _count_timeouts(lowered: str) -> int:
 def aggregate_environment(task_metrics: list[dict]) -> dict:
     signatures: Counter = Counter()
     tool_errors = 0
+    mcp_errors = 0
+    hook_denials = 0
     for task in task_metrics:
         transcript = task.get("transcript") if isinstance(task, dict) else None
         if not isinstance(transcript, dict):
@@ -323,6 +350,8 @@ def aggregate_environment(task_metrics: list[dict]) -> dict:
             agents.extend(item for item in subagents if isinstance(item, dict))
         for agent in agents:
             tool_errors += int(agent.get("tool_errors") or 0)
+            mcp_errors += int(agent.get("mcp_errors") or 0)
+            hook_denials += int(agent.get("hook_denials") or 0)
             for item in agent.get("error_signatures") or []:
                 if not isinstance(item, dict):
                     continue
@@ -335,8 +364,8 @@ def aggregate_environment(task_metrics: list[dict]) -> dict:
             for signature, count in signatures.most_common(10)],
         "command_not_found": lowered.count("command not found"),
         "timeouts": _count_timeouts(lowered),
-        "mcp_errors": sum(count for signature, count in signatures.items()
-                          if "mcp__" in signature),
+        "mcp_errors": mcp_errors,
+        "hook_denials": hook_denials,
     }
 
 
@@ -604,10 +633,16 @@ def run_static_analyzers(project_dir: Path, files: list[str],
     code_result = {"available": code_script.is_file(),
                    "skipped": None if code_script.is_file() else "analyze_code.py не найден",
                    "results": {}}
-    query_result = {"available": extract_script.is_file() and query_script.is_file(),
-                    "skipped": None if extract_script.is_file() and query_script.is_file()
-                    else "analyze_query.py/extract_queries.py не найден",
-                    "results": {}}
+    node_available = shutil.which("node") is not None
+    query_result = {
+        "available": extract_script.is_file() and query_script.is_file(),
+        "skipped": None if extract_script.is_file() and query_script.is_file()
+        else "analyze_query.py/extract_queries.py не найден",
+        "ast": {"available": node_available,
+                "reason": None if node_available else "node не найден в PATH"},
+        "partial": False,
+        "results": {},
+    }
     for target in targets:
         key = str(target)
         if code_script.is_file():
@@ -630,13 +665,20 @@ def run_static_analyzers(project_dir: Path, files: list[str],
             output = extracted["stdout"] + extracted["stderr"] + analyzed["stdout"] + analyzed["stderr"]
             output_path = analyzers_dir / f"{_safe_name(target)}.query.txt"
             output_path.write_text(output, encoding="utf-8")
+            ast_skipped = ("структурные (AST) проверки ПРОПУЩЕНЫ" in output
+                           or "AST недоступен" in output)
             query_result["results"][key] = {
                 "returncode": analyzed["returncode"],
                 "findings": _findings(analyzed["stdout"]),
                 "output_path": str(output_path),
                 "extract_returncode": extracted["returncode"],
                 "warnings": (extracted["stderr"] + analyzed["stderr"]).strip()[:1000],
+                "ast_skipped": ast_skipped,
             }
+            if ast_skipped:
+                query_result["partial"] = True
+    if not node_available and query_result["results"]:
+        query_result["partial"] = True
     return {"code_analyze": code_result, "query_analyze": query_result}
 
 
@@ -731,6 +773,9 @@ def render_digest(metrics: dict) -> str:
         lines.append(f"- Исход: `{task.get('outcome')}`, код выхода: "
                      f"`{'—' if exit_code is None else exit_code}`, время: "
                      f"{_seconds(task.get('duration_sec'))}")
+        index_status = task.get("index_refresh")
+        if index_status:
+            lines.append(f"- Индекс code_index: `{index_status}`")
         stream = task.get("stream") or {}
         session = stream.get("session_id")
         lines.append(f"- Агент: turns={stream.get('num_turns')}, "
@@ -747,6 +792,15 @@ def render_digest(metrics: dict) -> str:
             lines.append("- Инструменты: " + ", ".join(
                 f"{name}={count}" for name, count in
                 sorted(main["tools"].items())))
+        # Строка только для метрик с ключом: старый metrics.json не должен
+        # показывать фиктивное «нет (0)».
+        if "mcp_usage_skill_calls" in main:
+            skill_calls = int(main.get("mcp_usage_skill_calls") or 0)
+            lines.append(f"- Skill mcp-usage: {'да' if skill_calls else 'нет'} "
+                         f"({skill_calls})")
+        duplicates = int(main.get("duplicate_calls") or 0)
+        if duplicates:
+            lines.append(f"- Повторных вызовов инструментов: {duplicates}")
         if main.get("slow_ops"):
             lines += ["", "### Долгие операции", "",
                       "| Инструмент | Вход | Длительность |", "|---|---|---|"]
@@ -769,10 +823,14 @@ def render_digest(metrics: dict) -> str:
         if subagents:
             lines += ["", "### Сабагенты", ""]
             for agent in subagents:
+                breakdown = ""
+                if "mcp_errors" in agent and "hook_denials" in agent:
+                    breakdown = (f" (MCP {agent.get('mcp_errors') or 0}, "
+                                 f"хуки {agent.get('hook_denials') or 0})")
                 lines.append(f"- {agent.get('agent')}: "
                              f"{agent.get('description')} — "
                              f"{_seconds(agent.get('duration_sec'))}, "
-                             f"ошибок {agent.get('tool_errors', 0)}, "
+                             f"ошибок {agent.get('tool_errors', 0)}{breakdown}, "
                              f"тестов {agent.get('test_runs', 0)}")
         analyzers = task.get("analyzers")
         lines += ["", "### Анализаторы", ""]
@@ -794,6 +852,10 @@ def render_digest(metrics: dict) -> str:
             lines.append(f"- query-analyze: пропущен ({query['skipped']})")
         else:
             lines.append(f"- query-analyze: файлов {len(query.get('results') or {})}")
+        if query.get("partial"):
+            lines.append("- ⚠ query-analyze: структурные (AST) проверки "
+                         "пропущены — результаты неполные "
+                         "(установите Node.js)")
         for path, result in (query.get("results") or {}).items():
             findings = result.get("findings") or {}
             lines.append(f"  - `{Path(path).name}`: error={findings.get('error', 0)}, "
@@ -808,11 +870,20 @@ def render_digest(metrics: dict) -> str:
                              f"запрос мог не проверяться "
                              f"(предупреждения выше)")
     env = metrics.get("environment") or {}
-    lines += ["", "## Окружение", "",
-              f"- Ошибок инструментов: {env.get('tool_errors', 0)}",
-              f"- «command not found»: {env.get('command_not_found', 0)}",
-              f"- Таймаутов: {env.get('timeouts', 0)}",
-              f"- Ошибок MCP: {env.get('mcp_errors', 0)}"]
+    errors_line = f"- Ошибок инструментов: {env.get('tool_errors', 0)}"
+    env_lines = [errors_line, f"- «command not found»: {env.get('command_not_found', 0)}",
+                 f"- Таймаутов: {env.get('timeouts', 0)}"]
+    # Разбивка MCP/хуки — только если метрики её считали (новый формат);
+    # старый metrics.json без ключей получает простую строку без нулей.
+    if "mcp_errors" in env and "hook_denials" in env:
+        mcp_errors = int(env.get("mcp_errors") or 0)
+        hook_denials = int(env.get("hook_denials") or 0)
+        others = max(0, int(env.get("tool_errors") or 0) - mcp_errors - hook_denials)
+        env_lines[0] += (f" (MCP: {mcp_errors}, хуки: {hook_denials}, "
+                         f"прочие: {others})")
+        env_lines += [f"- Ошибок MCP: {mcp_errors}",
+                      f"- Отказов хуков: {hook_denials}"]
+    lines += ["", "## Окружение", "", *env_lines]
     for item in env.get("error_signatures") or []:
         lines.append(f"- ×{item.get('count')}: {item.get('signature')}")
     return "\n".join(lines).rstrip() + "\n"
