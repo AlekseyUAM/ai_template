@@ -6,6 +6,8 @@ import re
 _PATH_HEADER = re.compile(r"(?m)^\[\[paths\]\][ \t]*$")
 _ALIAS = re.compile(r'(?m)^[ \t]*alias[ \t]*=[ \t]*"((?:[^"\\]|\\.)*)"')
 _MCP_HEADER = re.compile(r"(?m)^\[mcp\][ \t]*$")
+_PATH_KEY = re.compile(r"(?m)^[ \t]*path[ \t]*=[ \t]*.*$")
+_LANG_KEY = re.compile(r"(?m)^[ \t]*language[ \t]*=[ \t]*.*$")
 
 _MCP_SECTION = ('[mcp]\n'
                 '# массовый режим: get_object_structure принимает full_names (несколько объектов).\n'
@@ -38,6 +40,32 @@ def _path_block(alias: str, path: str, language: str) -> str:
             f"alias = {_quote(alias)}\nlanguage = {_quote(language)}\n")
 
 
+def _set_key(body: str, pattern: re.Pattern, key: str, value: str) -> str:
+    """Заменить значение key в теле блока или добавить ключ в конец."""
+    line = f"{key} = {_quote(value)}"
+    if pattern.search(body):
+        return pattern.sub(lambda _m: line, body, count=1)
+    if body and not body.endswith("\n"):
+        body += "\n"
+    return body + line + "\n"
+
+
+def _update_path_block(segment: str, header_end: int, path: str,
+                       language: str) -> str:
+    """Обновить path/language блока на месте, сохранив прочие строки."""
+    header = segment[:header_end]
+    body = segment[header_end:]
+    # тело блока — до следующего заголовка таблицы, если он есть
+    tail_at = re.search(r"(?m)^\[", body)
+    if tail_at:
+        body, tail = body[:tail_at.start()], body[tail_at.start():]
+    else:
+        tail = ""
+    body = _set_key(body, _PATH_KEY, "path", path)
+    body = _set_key(body, _LANG_KEY, "language", language)
+    return header + body + tail
+
+
 def render_daemon_toml(alias: str, path: str, port: int | None = None) -> str:
     text = ('# Сгенерировано автоматически при развёртывании code-index.\n'
             '[daemon]\nhttp_host = "127.0.0.1"\nhttp_port = 0\n'
@@ -68,7 +96,8 @@ def merge_path(text: str, *, alias: str, path: str,
         body = segment[header_end:]
         match = _ALIAS.search(body)
         if match and _unescape(match.group(1)) == alias:
-            result.append(block)
+            result.append(_update_path_block(segment, header_end,
+                                             path, language))
             found = True
         else:
             result.append(segment)

@@ -38,6 +38,49 @@ def test_merge_escapes_quotes_and_backslashes():
     assert 'path = "C:\\\\x"' in out
 
 
+_WITH_EXTRAS = ('[daemon]\nhttp_port = 0\n\n'
+                '[[paths]]\npath = "/old"\nalias = "a"\nlanguage = "bsl"\n'
+                'git = true\ndebounce_ms = 500  # keep me\n\n'
+                '[[paths]]\npath = "/b"\nalias = "b"\nlanguage = "bsl"\n'
+                'git = true\n')
+
+
+def test_merge_keeps_comments_and_extra_keys():
+    out = merge_path(_WITH_EXTRAS, alias="a", path="/new", language="bsl")
+    assert "# keep me" in out
+    assert "debounce_ms = 500" in out
+    assert out.count("git = true") == 2
+    assert 'path = "/new"' in out and 'path = "/old"' not in out
+
+
+def test_merge_updates_alias_block_in_place():
+    out = merge_path(_WITH_EXTRAS, alias="a", path="/new", language="python")
+    block = out.split("[[paths]]")[1]
+    assert 'alias = "a"' in block
+    assert "git = true" in block and "debounce_ms = 500" in block
+    assert 'path = "/new"' in block and 'language = "python"' in block
+
+
+def test_merge_leaves_other_block_with_same_key_untouched():
+    out = merge_path(_WITH_EXTRAS, alias="a", path="/new", language="bsl")
+    other = out.split("[[paths]]")[2]
+    assert other == _WITH_EXTRAS.split("[[paths]]")[2]
+
+
+def test_merge_adds_missing_path_and_language_keys():
+    text = '[[paths]]\nalias = "a"\ngit = true\n'
+    out = merge_path(text, alias="a", path="/new", language="python")
+    assert out.count("[[paths]]") == 1
+    assert 'path = "/new"' in out and 'language = "python"' in out
+    assert 'alias = "a"' in out and "git = true" in out
+
+
+def test_merge_with_extras_idempotent():
+    once = merge_path(_WITH_EXTRAS, alias="a", path="/new", language="bsl")
+    twice = merge_path(once, alias="a", path="/new", language="bsl")
+    assert once == twice
+
+
 def test_ensure_sections_adds_missing_and_is_idempotent():
     out = ensure_sections('[[paths]]\nalias = "a"\n', 8005)
     assert "[mcp]" in out and "mass_mode_tools" in out
