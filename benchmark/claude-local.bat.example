@@ -1,0 +1,12 @@
+@echo off
+:: Скопируйте в корень benchmark-проекта как claude-local.bat.
+:: Настройки локальной LLM (адрес, токен, модель, лимиты контекста) берутся
+:: из .claude/settings.local.json — см. .claude/settings.local.json.example.
+setlocal
+cd /d "%~dp0"
+:: Не тащим Anthropic-окружение из внешних запусков.
+set "ANTHROPIC_BASE_URL="
+set "ANTHROPIC_AUTH_TOKEN="
+set "ANTHROPIC_MODEL="
+claude --dangerously-skip-permissions %*
+endlocal

@@ -20,7 +20,7 @@ def cfg(tmp_path):
 def test_deploy_places_task_status_tool(prov, tmp_path):
     content.deploy_content(prov, cfg(tmp_path), update=False)
     assert (tmp_path / ".claude" / "tools" / "task_status.py").exists()
-    assert (tmp_path / ".claude" / "agents" / "developer.md").exists()
+    assert (tmp_path / ".claude" / "checklists" / "developer.md").exists()
 
 
 def test_task_and_tool_coexist(prov, tmp_path):

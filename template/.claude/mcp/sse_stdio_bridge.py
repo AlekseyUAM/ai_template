@@ -12,6 +12,15 @@ import time
 import urllib.parse
 from http.client import HTTPConnection
 
+# MCP stdio is UTF-8. Windows consoles/pipes default to cp1251, and a reply
+# with emoji (e.g. "❌ не найдено") used to raise UnicodeEncodeError inside the
+# SSE loop, dropping the response and leaving the caller waiting forever.
+for _stream in (sys.stdin, sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
+
 URL = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8002/sse"
 U = urllib.parse.urlparse(URL)
 HOST = U.hostname or "localhost"

@@ -97,15 +97,24 @@ print("\n".join(json.dumps(x, ensure_ascii=False) for x in out))
 @pytest.fixture
 def env(tmp_path):
     project = make_project(tmp_path)
-    fake = tmp_path / "fake-claude"
-    fake.write_text(FAKE, encoding="utf-8")
-    fake.chmod(0o755)
+    script = tmp_path / "fake-claude.py"
+    script.write_text(FAKE, encoding="utf-8")
+    if os.name == "nt":
+        # Windows не исполняет shebang-скрипты напрямую (WinError 193) —
+        # оборачиваем в .bat, который запускает тот же интерпретатор.
+        fake = tmp_path / "fake-claude.bat"
+        fake.write_text(
+            '@echo off\r\n' + f'"{sys.executable}" "{script}" %*\r\n',
+            encoding="utf-8")
+    else:
+        script.chmod(0o755)
+        fake = script
     home = tmp_path / "home"
     home.mkdir()
     marker = tmp_path / "marker"
     values = dict(os.environ)
-    values.update({"HOME": str(home), "FAKE_MARKER": str(marker),
-                   "PYTHONIOENCODING": "utf-8"})
+    values.update({"HOME": str(home), "USERPROFILE": str(home),
+                   "FAKE_MARKER": str(marker), "PYTHONIOENCODING": "utf-8"})
     return project, fake, marker, values
 
 
@@ -113,14 +122,16 @@ def run_cli(project, fake, values, *extra):
     return subprocess.run(
         [sys.executable, str(CLI), "--project", str(project),
          "--claude-cmd", str(fake), *extra],
-        cwd=REPO, env=values, capture_output=True, text=True, timeout=120)
+        cwd=REPO, env=values, capture_output=True, text=True,
+        encoding="utf-8", timeout=120)
 
 
-def test_task_prompt_triggers_orchestrator():
+def test_task_prompt_triggers_single_agent():
     prompt = build_task_prompt("task#001")
     assert "tasks/task#001" in prompt
     assert "tasks/task#" in prompt
-    assert "task-orchestration" in prompt
+    assert "single-agent-workflow" in prompt
+    assert "чеклист" in prompt
     assert "30 мин" in build_task_prompt("task#001", 30)
 
 

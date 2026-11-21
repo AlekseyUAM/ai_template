@@ -9,7 +9,7 @@ from agentmon.env.scaffold import (scaffold_layout, write_json,
 def test_scaffold_layout_creates_all_dirs(tmp_path):
     prov = LocalProvisioner()
     scaffold_layout(prov, str(tmp_path))
-    for rel in [".claude/agents", ".claude/skills", ".claude/hooks",
+    for rel in [".claude/checklists", ".claude/skills", ".claude/hooks",
                 "src/cf", "src/cfe", "tasks"]:
         assert (tmp_path / rel).is_dir()
 

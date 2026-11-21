@@ -131,8 +131,8 @@ def test_write_and_read_text():
 def test_mkdirs_creates_each_segment():
     sftp = FakeSftpRW()
     prov = SshProvisioner(FakeConn(sftp))
-    prov.mkdirs(["/srv/demo/.claude/agents"])
-    assert "/srv/demo/.claude/agents" in sftp.dirs
+    prov.mkdirs(["/srv/demo/.claude/checklists"])
+    assert "/srv/demo/.claude/checklists" in sftp.dirs
 
 
 def test_run_returns_exit_status_and_output():

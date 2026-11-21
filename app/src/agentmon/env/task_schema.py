@@ -160,7 +160,7 @@ def update_stage(task_dir_path, stage_name, *, status, changed_files=None) -> No
 def task_folder_name(task_id, identifier=None) -> str:
     """Имя каталога задачи: task#{identifier} (v2) или task#{id} (файловые/старые).
 
-    Префикс `task#` обязателен — по нему хук route_to_orchestrator распознаёт
+    Префикс `task#` обязателен — по нему хук route_to_checklists распознаёт
     выполнение задачи (ищет `tasks/task#` или `tasks\\task#` в промпте).
     """
     ident = (identifier or "").strip()
@@ -170,4 +170,5 @@ def task_folder_name(task_id, identifier=None) -> str:
 def orchestration_prompt(task_id, identifier=None) -> str:
     folder = task_folder_name(task_id, identifier)
     return (f"Выполни задачу tasks/{folder} по этапам из её task.json. "
-            f"Следуй навыку task-orchestration.")
+            "Работай в одном потоке по правилу single-agent-workflow; "
+            "чеклисты этапов — в .claude/checklists/.")

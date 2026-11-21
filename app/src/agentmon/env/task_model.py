@@ -7,14 +7,14 @@
 - Общий статус вычисляется на основе статусов этапов
 """
 
-# 7 этапов с подагентом и артефактом
+# 7 этапов с чеклистом и артефактом
 DEFAULT_STAGES = [
     {"name": "analyze", "subagent": "analyst", "artifact": "ANALYZE.md"},
     {"name": "plan", "subagent": "architect", "artifact": "ARCHITECT.md"},
     {"name": "tests", "subagent": "developer-tests", "artifact": "TESTS.md"},
     {"name": "develop", "subagent": "developer", "artifact": "DEVELOP.md"},
-    # У этапа testing нет субагента: прогон тестов и вердикт в TESTING.md ведёт
-    # оркестратор сам (долгая фоновая операция, субагент не умеет её дождаться).
+    # У этапа testing нет отдельного чеклиста: прогон тестов и вердикт в
+    # TESTING.md ведёт исполнитель по правилу single-agent-workflow.
     {"name": "testing", "subagent": "", "artifact": "TESTING.md"},
     {"name": "review", "subagent": "reviewer", "artifact": "REVIEW.md"},
     {"name": "docs", "subagent": "technical-writer", "artifact": "DOCS.md"},
@@ -36,7 +36,7 @@ def build_stages(enabled_names, gated_names=()):
         list[dict]: каждый этап с полями:
             - name: имя этапа
             - enabled: включен ли этап
-            - subagent: имя подагента
+            - subagent: имя чеклиста этапа (историческое поле task.json)
             - artifact: имя артефакта
             - gate: есть ли гейт на этапе
             - approved: одобрен ли гейт (False по умолчанию)

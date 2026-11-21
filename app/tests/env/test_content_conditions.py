@@ -265,51 +265,46 @@ def test_template_markers_are_balanced():
             text, {"1c-md": False, "1c_naparnic": False}, filename=str(path))
 
 
-# --- деплой: доступ субагентов ---
+# --- деплой: имена MCP в чеклистах ---
 
-AGENTS = ("analyst", "architect", "developer", "developer-tests",
-          "reviewer", "technical-writer")
+CHECKLISTS = ("analyst", "architect", "developer", "developer-tests",
+              "reviewer", "technical-writer")
 
 
-def agent_text(tmp_path, name):
-    return (Path(tmp_path) / ".claude" / "agents" / f"{name}.md"
+def checklist_text(tmp_path, name):
+    return (Path(tmp_path) / ".claude" / "checklists" / f"{name}.md"
             ).read_text(encoding="utf-8")
 
 
-def test_deploy_1c_md_adds_tool_to_all_agent_allow_lists(tmp_path):
+def test_deploy_substitutes_bsl_ls_in_checklists(tmp_path):
+    conn = '"bsl_checker": {"type": "http", "url": "http://localhost:8001/mcp"}'
     content.deploy_content(
-        LocalProvisioner(), cfg(tmp_path, [sel("1c-md")]), update=False)
-    for name in AGENTS:
-        text = agent_text(tmp_path, name)
-        assert "mcp__1c-md__*" in text, name
-        assert "{{MCP_1C_MD_TOOLS}}" not in text, name
+        LocalProvisioner(),
+        cfg(tmp_path, [sel("bsl-ls", connection=conn)]), update=False)
+    text = checklist_text(tmp_path, "reviewer")
+    assert "mcp__bsl_checker__check" in text
+    assert "mcp__bsl_ls__" not in text
 
 
-def test_deploy_without_1c_md_agent_tools_unchanged(tmp_path):
+def test_deploy_substitutes_code_index_in_checklists(tmp_path):
+    conn = '"my_ci": {"type": "http", "url": "http://localhost:8002/mcp"}'
+    content.deploy_content(
+        LocalProvisioner(),
+        cfg(tmp_path, [sel("code-index", connection=conn)]), update=False)
+    text = checklist_text(tmp_path, "analyst")
+    assert "mcp__my_ci__*" in text
+    assert "mcp__code_index__*" not in text
+
+
+def test_deploy_checklist_python_invocations_rewritten(tmp_path):
     content.deploy_content(LocalProvisioner(), cfg(tmp_path, []), update=False)
-    for name in AGENTS:
-        text = agent_text(tmp_path, name)
-        assert "mcp__1c-md__*" not in text, name
-        assert "{{MCP_1C_MD_TOOLS}}" not in text, name
-
-
-def test_renamed_1c_md_tool_added_to_agents(tmp_path):
-    conn = '"my_md": {"type": "http", "url": "http://localhost/base/hs/mcp"}'
-    content.deploy_content(
-        LocalProvisioner(), cfg(tmp_path, [sel("1c-md", connection=conn)]),
-        update=False)
-    text = agent_text(tmp_path, "reviewer")
-    assert "mcp__my_md__*" in text
-    assert "mcp__1c-md__*" not in text
-
-
-def test_deploy_agent_with_python_invocations_keeps_render(tmp_path):
-    content.deploy_content(
-        LocalProvisioner(), cfg(tmp_path, [sel("1c-md")]), update=False)
-    text = agent_text(tmp_path, "developer-tests")
-    assert "{{MCP_1C_MD_TOOLS}}" not in text
-    assert "{{MODEL}}" not in text
-    assert "{{EFFORT}}" not in text
-    assert "mcp__1c-md__*" in text
+    text = checklist_text(tmp_path, "developer-tests")
     assert "run-tests.py" in text
     assert ".venv" in text
+    assert "{{" not in text
+    assert not text.startswith("---")
+
+
+def test_deploy_no_agents_dir(tmp_path):
+    content.deploy_content(LocalProvisioner(), cfg(tmp_path, []), update=False)
+    assert not (Path(tmp_path) / ".claude" / "agents").exists()

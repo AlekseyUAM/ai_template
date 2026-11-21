@@ -1,14 +1,15 @@
 from agentmon.env import task_schema as ts
 
 
-def test_orchestration_prompt_mentions_task_and_skill():
+def test_orchestration_prompt_mentions_task_and_rule():
     p = ts.orchestration_prompt("100007")
-    assert "tasks/task#100007" in p and "task-orchestration" in p
+    assert "tasks/task#100007" in p and "single-agent-workflow" in p
+    assert ".claude/checklists/" in p
 
 
 def test_orchestration_prompt_uses_identifier_when_present():
     """v2-задача с идентификатором → каталог task#{identifier} (префикс task# обязателен
-    для распознавания хуком route_to_orchestrator)."""
+    для распознавания хуком route_to_checklists)."""
     p = ts.orchestration_prompt(123, "FEAT-7")
     assert "tasks/task#FEAT-7" in p
 

@@ -3,7 +3,7 @@ import json
 from .mcp_catalog import build_mcp_json
 
 LAYOUT_DIRS = [
-    ".claude/agents", ".claude/skills", ".claude/hooks",
+    ".claude/checklists", ".claude/skills", ".claude/hooks",
     "src/cf", "src/cfe", "tasks",
 ]
 

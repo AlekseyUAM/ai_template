@@ -8,19 +8,19 @@ def test_task_artifacts_rule_lists_all_seven():
         assert a in text, a
 
 def test_developer_tests_names_tests_artifact():
-    text = (TPL / "agents" / "developer-tests.md").read_text(encoding="utf-8")
+    text = (TPL / "checklists" / "developer-tests.md").read_text(encoding="utf-8")
     assert "TESTS.md" in text
 
 
-def test_orchestrator_names_testing_artifact():
-    # Этап testing (и его артефакт TESTING.md) ведёт оркестратор — субагента нет.
-    text = (TPL / "skills" / "task-orchestration" / "SKILL.md").read_text(encoding="utf-8")
+def test_single_agent_rule_names_testing_artifact():
+    # Этап testing (и его артефакт TESTING.md) ведёт исполнитель — субагента нет.
+    text = (TPL / "rules" / "single-agent-workflow.md").read_text(encoding="utf-8")
     assert "TESTING.md" in text
 
 def test_developer_names_develop():
-    text = (TPL / "agents" / "developer.md").read_text(encoding="utf-8")
+    text = (TPL / "checklists" / "developer.md").read_text(encoding="utf-8")
     assert "DEVELOP.md" in text
 
 def test_technical_writer_names_docs():
-    text = (TPL / "agents" / "technical-writer.md").read_text(encoding="utf-8")
+    text = (TPL / "checklists" / "technical-writer.md").read_text(encoding="utf-8")
     assert "DOCS.md" in text

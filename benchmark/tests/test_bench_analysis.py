@@ -21,7 +21,7 @@ def test_build_prompt_has_constraints_and_no_orchestration_trigger(tmp_path):
     assert "не затачивай" in prompt.lower()
     assert "example.bsl" in prompt
     assert "RESULT.md" not in prompt  # отчёт пишет скрипт, не аналитик
-    assert "tasks/task#" not in prompt  # не триггерит route_to_orchestrator
+    assert "tasks/task#" not in prompt  # не триггерит route_to_checklists
     assert "Запрещено: Edit/Write/MultiEdit/NotebookEdit" in prompt
     assert "metrics.json" in prompt
     assert "analysis-inputs.md" in prompt

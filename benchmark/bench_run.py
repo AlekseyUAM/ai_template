@@ -174,7 +174,7 @@ class ClaudeRun:
 
 
 def _group_exists(pgid: int | None) -> bool:
-    if pgid is None:
+    if pgid is None or os.name == "nt":
         return False
     try:
         os.killpg(pgid, 0)
@@ -206,7 +206,28 @@ def _kill_group(proc: subprocess.Popen, pgid: int) -> None:
     Зачистка группы после выхода лидера намеренная: потомки (например,
     MCP-бэкенды claude) могут игнорировать сигналы или пережить лидера,
     поэтому группа всё равно добивается SIGKILL.
+
+    Windows не умеет process group и ``os.killpg``; там дерево процессов
+    снимается принудительно через ``taskkill /F /T``. Мягкий ``taskkill /T``
+    на дереве ``cmd → claude → MCP-мосты`` может зависнуть, поэтому /F идёт
+    сразу и сам taskkill ограничен по времени.
     """
+    if os.name == "nt":
+        try:
+            subprocess.run(
+                ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                check=False, timeout=10)
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+        if proc.poll() is None:
+            try:
+                proc.kill()
+            except OSError:
+                pass
+            _wait_exit(proc, 5)
+        return
+
     def send(sig: int) -> None:
         try:
             os.killpg(pgid, sig)
@@ -490,7 +511,8 @@ def ensure_claude_cmd(cmd: str) -> None:
 
 def build_task_prompt(folder: str, limit_minutes: int | None = None) -> str:
     prompt = (f"Выполни задачу tasks/{folder} по этапам из её task.json. "
-              f"Следуй навыку task-orchestration.")
+              f"Следуй правилу single-agent-workflow и чеклистам этапов. "
+              f"Работай по TASK.md, изменения — в src/cf/**; `.claude/**` не меняй.")
     if limit_minutes is not None:
         prompt += (f" Жёсткий лимит выполнения задачи: {limit_minutes} мин. "
                    f"При нехватке времени приоритет — обязательным пунктам плана.")

@@ -85,3 +85,23 @@ def test_bad_toml_does_not_crash(tmp_path, monkeypatch):
     cfg = config.load_guard_config()
     assert cfg.mcp_prefix == config.DEFAULT_MCP_PREFIX
     assert cfg.local == []
+
+
+def test_parses_max_denies(tmp_path, monkeypatch):
+    p = _write(tmp_path, 'max_denies = 5\n[[local]]\npath = "C:/r"\n')
+    monkeypatch.setenv("CODE_INDEX_GUARD_CONFIG", str(p))
+    assert config.load_guard_config().max_denies == 5
+
+
+def test_max_denies_default_and_nonnegative(tmp_path, monkeypatch):
+    p = _write(tmp_path, '[[local]]\npath = "C:/r"\n')
+    monkeypatch.setenv("CODE_INDEX_GUARD_CONFIG", str(p))
+    assert config.load_guard_config().max_denies == config.DEFAULT_MAX_DENIES
+
+    p = _write(tmp_path, 'max_denies = -3\n')
+    monkeypatch.setenv("CODE_INDEX_GUARD_CONFIG", str(p))
+    assert config.load_guard_config().max_denies == 0
+
+    p = _write(tmp_path, 'max_denies = nonsense\n')
+    monkeypatch.setenv("CODE_INDEX_GUARD_CONFIG", str(p))
+    assert config.load_guard_config().max_denies == config.DEFAULT_MAX_DENIES

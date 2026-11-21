@@ -715,3 +715,134 @@ def test_use_only_inside_branch_not_flagged():
         "КонецПроцедуры\n"
     )
     assert "use-before-assignment" not in codes(text)
+
+
+# ── system-enum-value ─────────────────────────────────────────
+
+def test_system_data_loaded():
+    assert "виддвижениянакопления" in rules.SYSTEM_MEMBERS
+    assert "webцвета" in rules.SYSTEM_MEMBERS
+    assert "символы" in rules.SYSTEM_RESERVED
+
+def test_system_enum_invalid_value_flagged():
+    text = "Движение.ВидДвижения = ВидДвиженияНакопления.Поступление;\n"
+    fs = findings(text)
+    assert any(f.code == "system-enum-value" and f.line == 1 for f in fs)
+
+
+def test_system_enum_prihod_not_flagged():
+    text = "Движение.ВидДвижения = ВидДвиженияНакопления.Приход;\n"
+    assert "system-enum-value" not in codes(text)
+
+
+def test_system_enum_rashod_not_flagged():
+    text = "Движение.ВидДвижения = ВидДвиженияНакопления.Расход;\n"
+    assert "system-enum-value" not in codes(text)
+
+
+def test_system_enum_case_insensitive_not_flagged():
+    text = "Движение.ВидДвижения = виддвижениянакопления.приход;\n"
+    assert "system-enum-value" not in codes(text)
+
+
+def test_system_enum_in_comment_and_string_not_flagged():
+    text = (
+        "// ВидДвиженияНакопления.Поступление запрещено\n"
+        "Текст = \"ВидДвиженияНакопления.Поступление\";\n"
+    )
+    assert "system-enum-value" not in codes(text)
+
+
+def test_system_enum_multiline_flagged():
+    text = (
+        "Движение.ВидДвижения = ВидДвиженияНакопления\n"
+        "    .Поступление;\n"
+    )
+    assert "system-enum-value" in codes(text)
+
+
+def test_system_value_set_valid_value_not_flagged():
+    text = "Цвет = WebЦвета.Белый;\n"
+    assert "system-enum-value" not in codes(text)
+
+
+def test_system_value_set_english_value_not_flagged():
+    text = "Цвет = WebЦвета.White;\n"
+    assert "system-enum-value" not in codes(text)
+
+
+def test_system_value_set_invalid_value_flagged():
+    text = "Цвет = WebЦвета.НесуществующийЦвет;\n"
+    assert "system-enum-value" in codes(text)
+
+
+def test_system_value_set_open_not_flagged():
+    text = "Картинка = БиблиотекаКартинок.ЛюбаяКартинка;\n"
+    assert "system-enum-value" not in codes(text)
+
+
+def test_system_enum_english_name_not_flagged():
+    text = "Движение.ВидДвижения = AccumulationRecordType.Receipt;\n"
+    assert "system-enum-value" not in codes(text)
+
+
+def test_system_enum_english_name_invalid_flagged():
+    text = "Движение.ВидДвижения = AccumulationRecordType.Income;\n"
+    assert "system-enum-value" in codes(text)
+
+
+# ── reserved-system-name ─────────────────────────────────────
+
+def test_reserved_enum_variable_flagged():
+    text = "Перем ВидДвиженияНакопления;\n"
+    fs = findings(text)
+    assert any(f.code == "reserved-system-name" and f.line == 1 for f in fs)
+
+
+def test_reserved_value_set_variable_flagged():
+    text = "Перем ЦветаСтиля;\n"
+    assert "reserved-system-name" in codes(text)
+
+
+def test_reserved_enum_local_variable_flagged():
+    text = "Процедура Тест()\n    ВидДвиженияНакопления = 1;\nКонецПроцедуры\n"
+    assert "reserved-system-name" in codes(text)
+
+
+def test_reserved_value_set_procedure_flagged():
+    text = "Процедура WebЦвета()\nКонецПроцедуры\n"
+    assert "reserved-system-name" in codes(text)
+
+
+def test_reserved_value_set_parameter_flagged():
+    text = "Функция Тест(Символы)\n    Возврат Символы;\nКонецФункции\n"
+    assert "reserved-system-name" in codes(text)
+
+
+def test_reserved_name_case_insensitive_flagged():
+    text = "Перем виддвижениянакопления;\n"
+    assert "reserved-system-name" in codes(text)
+
+
+def test_reserved_name_once_per_module():
+    text = (
+        "Процедура Тест()\n"
+        "    ВидДвиженияНакопления = 1;\n"
+        "    ВидДвиженияНакопления = 2;\n"
+        "КонецПроцедуры\n"
+    )
+    fs = [f for f in findings(text) if f.code == "reserved-system-name"]
+    assert len(fs) == 1
+
+
+def test_reserved_name_comment_and_string_not_flagged():
+    text = (
+        "// ВидДвиженияНакопления — системное перечисление\n"
+        "Текст = \"ВидДвиженияНакопления\";\n"
+    )
+    assert "reserved-system-name" not in codes(text)
+
+
+def test_normal_name_not_flagged():
+    text = "Перем ОбычноеИмяПеременной;\n"
+    assert "reserved-system-name" not in codes(text)

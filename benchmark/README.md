@@ -118,6 +118,38 @@
 
 Качественный анализ выполняет отдельная сессия `claude-ds` с запретом на
 `Edit`/`Write`; она возвращает markdown, который скрипт записывает в `RESULT.md`.
+
+## Поэтапный прогон на локальной LLM
+
+Для локальной модели предпочтителен **stage-scoped** режим: каждый этап
+`task.json` выполняется отдельным процессом `claude -p` с чистым контекстом,
+состояние передаётся через артефакты задачи и `task.json`.
+
+1. Настройте проект на локальную LLM: скопируйте
+   `template/.claude/settings.local.json.example` в
+   `<проект>/.claude/settings.local.json`, подставьте `ANTHROPIC_BASE_URL`,
+   токен и id модели. Файл не коммитится.
+2. Скопируйте `benchmark/claude-local.bat.example` в корень проекта как
+   `claude-local.bat` (Windows) или настройте аналогичную обёртку на
+   Linux/macOS; модель и адрес приходят из `settings.local.json`.
+3. Запустите этапы (лимиты по умолчанию — в `DEFAULT_STAGE_LIMITS`):
+
+   ```bat
+   .venv\Scripts\python.exe benchmark\stage_run.py ^
+     --task task#004 --project D:\projects\test ^
+     --claude-cmd D:\projects\test\claude-local.bat ^
+     --stages analyze,plan,tests --limit-stage tests=30
+   ```
+
+   Раннер останавливается, если этап не дошёл до `done`, не создал артефакт
+   или вышел по таймауту; результаты — в `<проект>/tmp/stage-runs/<run_id>/`
+   (`run.json`, `summary.md`, `<этап>.stream.jsonl`, `<этап>.prompt.txt`).
+   `--dry-run` печатает промпты этапов без запуска.
+
+Порядок этапов по умолчанию: `analyze → plan → tests → develop → testing →
+review → docs`. Для локальной модели этапы `analyze`/`docs` можно отключить в
+`task.json` (`enabled: false`) — раннер выполнит только включённые.
+
 При сбое аналитика отчёт всё равно создаётся — с объективной сводкой и описанием
 ошибки. Старый `RESULT.md` не сохраняется.
 

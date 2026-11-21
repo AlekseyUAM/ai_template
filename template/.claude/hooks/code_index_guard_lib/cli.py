@@ -1,8 +1,12 @@
 """CLI-контракт хука: чистые run/render и fail-safe main."""
+import hashlib
 import json
 import sys
+from pathlib import Path
 
 from .context import GuardContext
+
+_STATE_NAME = "code-index-guard.state.json"
 
 
 def build_context() -> GuardContext:
@@ -64,6 +68,101 @@ def render(decision):
     return json.dumps({"hookSpecificOutput": hs}, ensure_ascii=False)
 
 
+def _state_path() -> Path:
+    """Файл счётчиков отказов рядом с конфигом гарда (в каталоге хуков)."""
+    from .config import guard_config_path
+    return guard_config_path().with_name(_STATE_NAME)
+
+
+def _session_id(payload) -> str:
+    value = payload.get("session_id")
+    return value if isinstance(value, str) else ""
+
+
+def _call_key(payload) -> str:
+    """Ключ вызова: инструмент + хэш значимой части tool_input.
+
+    Для Read ключ — только `file_path` (повторные чтения разных диапазонов
+    одного файла считаются одним вызовом), для Grep/Glob — путь/образец,
+    для команд — сама команда. Так лимит отказов не обходится сменой
+    `offset`/`limit` или форматирования.
+    """
+    tool = str(payload.get("tool_name") or "")
+    ti = payload.get("tool_input") or {}
+    if not isinstance(ti, dict):
+        ti = {}
+    if tool == "Read":
+        key_input = {"file_path": ti.get("file_path")}
+    elif tool in ("Grep", "Glob"):
+        key_input = {k: ti.get(k) for k in ("path", "pattern", "glob")
+                     if k in ti}
+    elif tool in ("Bash", "PowerShell"):
+        key_input = {"command": ti.get("command")}
+    else:
+        key_input = ti
+    raw = json.dumps(key_input, ensure_ascii=False, sort_keys=True, default=str)
+    digest = hashlib.sha1(raw.encode("utf-8", "replace")).hexdigest()
+    return f"{tool}:{digest}"
+
+
+def _load_state(path: Path, session: str) -> dict:
+    """Состояние текущей сессии; при смене сессии счётчики сбрасываются."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        data = {}
+    if not isinstance(data, dict) or data.get("session_id") != session:
+        return {"session_id": session, "entries": {}}
+    entries = data.get("entries")
+    if not isinstance(entries, dict):
+        entries = {}
+    return {"session_id": session, "entries": entries}
+
+
+def _save_state(path: Path, state: dict) -> None:
+    tmp = path.with_name(path.name + ".tmp")
+    try:
+        tmp.write_text(json.dumps(state, ensure_ascii=False) + "\n",
+                       encoding="utf-8")
+        tmp.replace(path)
+    except OSError:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+
+
+def _apply_deny_limit(payload, decision, max_denies):
+    """Разрешает нативный вызов после N отказов подряд — защита от зацикливания.
+
+    Локальная модель может упорно повторять Read/Grep по индексированному пути.
+    Счётчик живёт в файле рядом с конфигом и сбрасывается при смене session_id;
+    ошибки состояния не меняют решение (гард продолжает работать как раньше).
+    """
+    if decision is None or decision.allow or max_denies <= 0:
+        return decision
+    try:
+        from .decisions import Decision
+        path = _state_path()
+        session = _session_id(payload)
+        state = _load_state(path, session)
+        entries = state["entries"]
+        key = _call_key(payload)
+        count = int(entries.get(key) or 0) + 1
+        entries[key] = count
+        _save_state(path, state)
+        if count > max_denies:
+            return Decision(
+                True,
+                f"code-index-guard: для этого вызова уже было {max_denies} "
+                "отказов — разрешаю нативный инструмент, чтобы не зациклиться. "
+                "Дальше предпочитай code_index; alias репозитория — в тексте "
+                "предыдущих deny-сообщений.")
+        return decision
+    except Exception:
+        return decision
+
+
 def main(argv=None):
     try:
         args = list(sys.argv[1:] if argv is None else argv)
@@ -74,7 +173,10 @@ def main(argv=None):
         payload = json.load(sys.stdin)
         if not isinstance(payload, dict):
             return
-        out = render(run(payload, ctx, prefix))
+        decision = _apply_deny_limit(
+            payload, run(payload, ctx, prefix),
+            getattr(ctx.config, "max_denies", 0))
+        out = render(decision)
         if out:
             print(out)
     except Exception:

@@ -1,0 +1,34 @@
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "http://127.0.0.1:8080",
+    "ANTHROPIC_AUTH_TOKEN": "<token>",
+    "ANTHROPIC_API_KEY": "<token>",
+    "ANTHROPIC_MODEL": "<model-id>",
+    "ANTHROPIC_SMALL_FAST_MODEL": "<model-id>",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "<model-id>",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "<model-id>",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "<model-id>",
+    "CLAUDE_CODE_MAX_CONTEXT_TOKENS": "262144",
+    "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "250000",
+    "CLAUDE_CODE_MAX_OUTPUT_TOKENS": "16384",
+    "MAX_MCP_OUTPUT_TOKENS": "8000",
+    "BASH_MAX_OUTPUT_LENGTH": "12000",
+    "CLAUDE_CODE_TOTAL_TOKENS_REMINDER": "off",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
+  },
+  "permissions": {
+    "deny": [
+      "Agent",
+      "Task",
+      "SendMessage",
+      "Workflow",
+      "ListAgents",
+      "ScheduleWakeup",
+      "mcp__1c-md__execute_query"
+    ]
+  },
+  "claudeMdExcludes": [
+    "**/cyclic-review-workflow.md",
+    "**/run-unit-tests.md"
+  ]
+}

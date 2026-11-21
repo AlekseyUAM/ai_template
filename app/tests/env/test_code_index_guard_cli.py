@@ -81,3 +81,68 @@ def test_mcp_prefix_cli_overrides(tmp_path):
     d = cli.run({"tool_name": "Grep", "tool_input": {"pattern": "x"},
                  "cwd": str(root)}, ctx, prefix="mcp__ci__")
     assert "mcp__ci__grep_code" in cli.render(d)
+
+
+def _guard_config(tmp_path, root, max_denies=2):
+    path = tmp_path / "code-index-guard.toml"
+    path.write_text(
+        'mcp_prefix = "mcp__code_index__"\n'
+        f"max_denies = {max_denies}\n"
+        "[[local]]\n"
+        f'path = "{root.as_posix()}"\n'
+        'alias = "repo"\n',
+        encoding="utf-8")
+    return path
+
+
+def _call_main(monkeypatch, payload):
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
+    out = io.StringIO()
+    monkeypatch.setattr(sys, "stdout", out)
+    cli.main([])
+    return out.getvalue()
+
+
+def test_deny_limit_breaks_loop(tmp_path, monkeypatch):
+    root = build_repo(tmp_path)
+    monkeypatch.setenv("CODE_INDEX_GUARD_CONFIG",
+                       str(_guard_config(tmp_path, root, max_denies=2)))
+    payload = {
+        "tool_name": "Read",
+        "tool_input": {"file_path": str(root / "Cargo.toml")},
+        "session_id": "s1",
+        "cwd": str(root),
+    }
+    decisions = []
+    for _ in range(3):
+        data = json.loads(_call_main(monkeypatch, payload))
+        decisions.append(data["hookSpecificOutput"]["permissionDecision"])
+    assert decisions == ["deny", "deny", "allow"]
+    assert (tmp_path / "code-index-guard.state.json").is_file()
+
+
+def test_deny_limit_resets_on_new_session(tmp_path, monkeypatch):
+    root = build_repo(tmp_path)
+    monkeypatch.setenv("CODE_INDEX_GUARD_CONFIG",
+                       str(_guard_config(tmp_path, root, max_denies=2)))
+    tool_input = {"file_path": str(root / "Cargo.toml")}
+    payload = {"tool_name": "Read", "tool_input": tool_input,
+               "session_id": "old", "cwd": str(root)}
+    assert json.loads(_call_main(monkeypatch, payload))[
+        "hookSpecificOutput"]["permissionDecision"] == "deny"
+    # Новая сессия — счётчик сбрасывается, снова deny.
+    payload["session_id"] = "new"
+    assert json.loads(_call_main(monkeypatch, payload))[
+        "hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_deny_limit_zero_never_yields(tmp_path, monkeypatch):
+    root = build_repo(tmp_path)
+    monkeypatch.setenv("CODE_INDEX_GUARD_CONFIG",
+                       str(_guard_config(tmp_path, root, max_denies=0)))
+    payload = {"tool_name": "Read",
+               "tool_input": {"file_path": str(root / "Cargo.toml")},
+               "session_id": "s1", "cwd": str(root)}
+    for _ in range(3):
+        assert json.loads(_call_main(monkeypatch, payload))[
+            "hookSpecificOutput"]["permissionDecision"] == "deny"

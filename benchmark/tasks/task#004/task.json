@@ -20,19 +20,6 @@
   "developer_id": "alex",
   "stages": [
     {
-      "name": "analyze",
-      "enabled": true,
-      "subagent": "analyst",
-      "artifact": "ANALYZE.md",
-      "gate": false,
-      "approved": false,
-      "status": "pending",
-      "changed_files": [],
-      "started_at": null,
-      "finished_at": null,
-      "iteration": 1
-    },
-    {
       "name": "plan",
       "enabled": true,
       "subagent": "architect",
@@ -89,19 +76,6 @@
       "enabled": true,
       "subagent": "reviewer",
       "artifact": "REVIEW.md",
-      "gate": false,
-      "approved": false,
-      "status": "pending",
-      "changed_files": [],
-      "started_at": null,
-      "finished_at": null,
-      "iteration": 1
-    },
-    {
-      "name": "docs",
-      "enabled": true,
-      "subagent": "technical-writer",
-      "artifact": "DOCS.md",
       "gate": false,
       "approved": false,
       "status": "pending",

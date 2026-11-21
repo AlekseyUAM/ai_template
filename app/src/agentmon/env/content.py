@@ -6,12 +6,10 @@ from .scaffold import write_preserving
 from .mcp_catalog import _server_name, mcp_name_overrides
 
 # Шаблон разворачиваемого окружения лежит в корне репозитория (template/).
-# Содержимое .claude-окружения (агенты/скилы/правила/хуки/инструменты) —
-# в template/.claude; в корень проекта кладём README с заголовком-именем проекта.
+# Содержимое .claude-окружения (чеклисты/скилы/правила/хуки/инструменты) —
+# в template/.claude; в корень проекта кладём README, CLAUDE.md и настройки.
 TEMPLATE_DIR = Path(__file__).resolve().parents[4] / "template"
 CONTENT_DIR = TEMPLATE_DIR / ".claude"
-_DEFAULT_MODEL = "claude-sonnet-4-6"
-_DEFAULT_EFFORT = "medium"
 
 # Команда-токен вызова интерпретатора в хуках/доках навыков. Все вызовы имеют вид
 # `python "<путь>"` / `python .claude/...` / `python -m ...`; в прозе `python `
@@ -75,18 +73,22 @@ def _render_conditional_blocks(text: str, conditions: dict[str, bool], *,
 # MCP code-index (а не копируется из шаблона — образец .toml.example остаётся).
 _GUARD_CFG_REL = Path(".claude/hooks/code-index-guard.toml")
 _GUARD_MCP_IDS = ("code-index", "code-index-local")
+# Сколько раз подряд guard может отклонить один и тот же нативный вызов, прежде
+# чем разрешить его. Защита от зацикливания локальных моделей на deny: охранник
+# остаётся, но после N отказов уступает и даёт прочитать файл нативно.
+_GUARD_MAX_DENIES = 2
 
 
 def _is_special(rel: Path) -> bool:
     """Файлы шаблона, которые разворачиваются не копией, а отдельно.
 
-    Агенты рендерятся с подстановкой модели/эффорта, README и settings.json
-    пишутся через write_preserving (с бэкапом при обновлении).
+    README, CLAUDE.md и settings.json пишутся через write_preserving
+    (с бэкапом при обновлении), settings.json — ещё и с подстановкой пути venv.
     """
     parts = rel.parts
     return (
         parts == ("README.md",)
-        or parts[:2] == (".claude", "agents")
+        or parts == ("CLAUDE.md",)
         or parts == (".claude", "settings.json")
         or rel == _GUARD_CFG_REL
     )
@@ -174,6 +176,7 @@ def _guard_config_text(mcp) -> str:
         "# Сгенерировано при развёртывании окружения agentmon.",
         "# Ручные правки будут перезаписаны при обновлении окружения.",
         f'mcp_prefix = "mcp__{actual}__"',
+        f"max_denies = {_GUARD_MAX_DENIES}",
         "",
     ]
     for path, alias in _guard_entries(mcp):
@@ -203,28 +206,6 @@ def _inject_guard_hook(settings_text: str, py_cmd: str) -> str:
     return json.dumps(data, ensure_ascii=False, indent=2) + "\n"
 
 
-def _model_effort(config, name):
-    for a in config.agents:
-        if a.agent == name:
-            return a.model, a.effort
-    return _DEFAULT_MODEL, _DEFAULT_EFFORT
-
-
-def _render_agents(prov, config, agents_dst, overrides: dict | None = None,
-                   *, py_cmd: str | None = None) -> None:
-    prov.mkdirs([agents_dst])
-    for src in sorted((CONTENT_DIR / "agents").glob("*.md")):
-        model, effort = _model_effort(config, src.stem)
-        text = src.read_text(encoding="utf-8")
-        text = text.replace("{{MODEL}}", model).replace("{{EFFORT}}", effort)
-        if overrides:
-            for placeholder, actual in overrides.items():
-                text = text.replace(placeholder, actual)
-        if py_cmd:
-            text = _rewrite_python_text(text, py_cmd)
-        prov.write_text(f"{agents_dst}/{src.name}", text)
-
-
 def _render_settings() -> str:
     # settings.json — часть шаблона (template/.claude/settings.json): единственный
     # источник истины. Читаем его дословно, но пишем через write_preserving
@@ -237,10 +218,9 @@ def _render_template_texts(prov, claude_dir, overrides, *,
     """Подставляет имена MCP и рендерит условные блоки — пишем на цель.
 
     Обходим текстовые файлы шаблона .claude на мониторе; меняем и пишем на цель
-    только изменившиеся. Агенты и settings.json пропускаем: агенты обрабатываются
-    в _render_agents (с учётом model/effort), settings.json — через write_preserving.
-    При записи применяется и подстановка интерпретатора .venv: файл с условными
-    блоками (query-analyze) содержит вызовы `python …`.
+    только изменившиеся. settings.json пропускаем: он пишется через
+    write_preserving. При записи применяется и подстановка интерпретатора .venv:
+    файлы с условными блоками (query-analyze) содержат вызовы `python …`.
     """
     for src in sorted(CONTENT_DIR.rglob("*")):
         if not src.is_file():
@@ -248,8 +228,7 @@ def _render_template_texts(prov, claude_dir, overrides, *,
         rel = src.relative_to(CONTENT_DIR)
         if "__pycache__" in rel.parts:
             continue
-        # agents/ обрабатываются в _render_agents; settings.json — через write_preserving
-        if rel.parts[:1] == ("agents",) or rel.parts == ("settings.json",):
+        if rel.parts == ("settings.json",):
             continue
         try:
             text = src.read_text(encoding="utf-8")
@@ -265,6 +244,25 @@ def _render_template_texts(prov, claude_dir, overrides, *,
         if new != text:
             prov.write_text(f"{claude_dir}/{rel.as_posix()}",
                             _rewrite_python_text(new, py_cmd))
+
+
+def _render_claude_md(prov, project_dir, overrides, *,
+                      conditions: dict[str, bool], py_cmd: str,
+                      update: bool) -> None:
+    """Рендерит корневой CLAUDE.md шаблона (single-agent протокол).
+
+    Файл принадлежит проекту: на обновлении сохраняем прежнюю версию в .bak
+    и не теряем ручные правки пользователя.
+    """
+    src = TEMPLATE_DIR / "CLAUDE.md"
+    if not src.is_file():
+        return
+    text = src.read_text(encoding="utf-8")
+    text = _render_conditional_blocks(text, conditions, filename="CLAUDE.md")
+    for placeholder, actual in overrides.items():
+        text = text.replace(placeholder, actual)
+    text = _rewrite_python_text(text, py_cmd)
+    write_preserving(prov, f"{project_dir}/CLAUDE.md", text, update=update)
 
 
 def venv_python(prov, project_dir) -> str:
@@ -307,10 +305,6 @@ def _rewrite_python_invocations(prov, claude_dir, py_cmd) -> None:
     for src in sorted(CONTENT_DIR.rglob("*.md")):
         rel = src.relative_to(CONTENT_DIR)
         if "__pycache__" in rel.parts:
-            continue
-        # agents/ уже отрендерены _render_agents (включая подстановку python);
-        # повторная запись сырым шаблоном стёрла бы model/effort/MCP-подстановки.
-        if rel.parts[:1] == ("agents",):
             continue
         try:
             text = src.read_text(encoding="utf-8")
@@ -355,25 +349,16 @@ def deploy_content(prov, config, *, update: bool) -> None:
     project_dir = config.project_dir
     claude = f"{project_dir}/.claude"
     # backup=True: обновление не должно молча стирать правки пользователя в
-    # .claude/skills|rules|hooks|tools — прежняя версия остаётся рядом в .bak.
+    # .claude/checklists|skills|rules|hooks|tools — прежняя версия остаётся в .bak.
     prov.put_tree(str(TEMPLATE_DIR), project_dir, skip=_is_special,
                   backup=update)
-    # Имя проекта → alias репозитория code-index в подсказках агенту: берётся из
+    # Имя проекта → alias репозитория code-index в подсказках исполнителю: берётся из
     # записи проекта, стабильно, поэтому подставляем ВСЕГДА. Имена MCP берём из
     # карточки проекта и на обновлении — иначе хук останется с прежним именем
     # сервера после переименования.
     mcp_subs = mcp_name_overrides(config.mcp)
     subs = {**mcp_subs, "{{CODE_INDEX_REPO}}": config.project_name}
     conditions = conditional_flags(config.mcp)
-    has_1c_md = conditions["1c-md"]
-    # tools агентов — allow-list: без явной записи mcp__<имя 1c-md>__* субагент
-    # не сможет вызвать validate_query, даже если навык его рекомендует. Хвост
-    # строки tools дописываем только при включённом 1c-md; имя — фактическое.
-    agent_subs = dict(subs)
-    agent_subs["{{MCP_1C_MD_TOOLS}}"] = (
-        f", mcp__{mcp_subs.get('1c-md', '1c-md')}__*" if has_1c_md else "")
-    _render_agents(prov, config, f"{claude}/agents", overrides=agent_subs,
-                   py_cmd=_py_cmd(prov, project_dir))
     # settings.json — текст JSON, а путь к интерпретатору впечатывается прямо в
     # него. Слэши — прямые: Git Bash на Windows съедает литеральный backslash в
     # команде (claude-code#26759), а JSON-строка требует экранировать кавычки.
@@ -399,6 +384,8 @@ def deploy_content(prov, config, *, update: bool) -> None:
     if not update:
         write_preserving(prov, f"{project_dir}/README.md",
                          _project_readme(config.project_name), update=update)
+    _render_claude_md(prov, project_dir, subs, conditions=conditions,
+                      py_cmd=_py_cmd(prov, project_dir), update=update)
     _render_template_texts(prov, claude, subs, conditions=conditions,
                            py_cmd=_py_cmd(prov, project_dir))
     from .nethasp import deploy_nethasp

@@ -15,5 +15,6 @@ def test_deploy_content_populates_claude(tmp_path):
     prov = LocalProvisioner()
     deploy_content(prov, _config(tmp_path), update=False)
     assert (tmp_path / ".claude" / "settings.json").is_file()
-    assert (tmp_path / ".claude" / "agents").is_dir()
+    assert (tmp_path / ".claude" / "checklists").is_dir()
+    assert (tmp_path / "CLAUDE.md").is_file()
     assert (tmp_path / "README.md").read_text(encoding="utf-8").startswith("## demo")

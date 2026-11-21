@@ -9,8 +9,10 @@
 # проверки, которых в bsl_ls нет. Требования, которые нельзя надёжно
 # заскриптовать, вынесены в ручной чеклист навыка bsl-coding-standards.
 
+import json
 import re
 from dataclasses import dataclass
+from pathlib import Path
 
 import bsl_model
 
@@ -39,6 +41,59 @@ def rule(code, severity, title):
         RULES.append(Rule(code=code, severity=severity, title=title, fn=fn))
         return fn
     return deco
+
+
+# ── Системные перечисления и наборы значений ─────────────────
+
+# Данные генерируются tools/update_system_names.py из справки платформы
+# (.hbk) и лежат рядом с rules.py. Без файла правила просто не срабатывают.
+_SYSTEM_DATA_PATH = Path(__file__).with_name("system_enums.json")
+
+
+def _system_names():
+    """Вернуть (members, samples, reserved) по system_enums.json.
+
+    members: casefold(имя типа) -> set(casefold(значение)) | None (не проверять)
+    samples: casefold(имя типа) -> [значения для сообщения]
+    reserved: casefold(имя типа) -> каноническое имя типа
+    """
+    members, samples, reserved = {}, {}, {}
+    try:
+        data = json.loads(_SYSTEM_DATA_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return members, samples, reserved
+
+    def add_type(name, name_en, ru_values, en_values, allowed):
+        if name:
+            key = name.casefold()
+            members[key] = allowed
+            samples[key] = ru_values[:12]
+            reserved[key] = name
+        if name_en:
+            key = name_en.casefold()
+            members[key] = allowed
+            samples[key] = (en_values or ru_values)[:12]
+            reserved[key] = name
+
+    for name, info in (data.get("enums") or {}).items():
+        values = info.get("values") or []
+        ru_values = [pair[0] for pair in values if pair]
+        en_values = [pair[1] for pair in values if len(pair) > 1 and pair[1]]
+        allowed = {v.casefold() for v in ru_values + en_values} or None
+        add_type(name, info.get("name_en"), ru_values, en_values, allowed)
+
+    for name, info in (data.get("value_sets") or {}).items():
+        values = info.get("values") or []
+        ru_values = [pair[0] for pair in values if pair]
+        en_values = [pair[1] for pair in values if len(pair) > 1 and pair[1]]
+        allowed = None if info.get("open") else (
+            {v.casefold() for v in ru_values + en_values} or None)
+        add_type(name, info.get("name_en"), ru_values, en_values, allowed)
+
+    return members, samples, reserved
+
+
+SYSTEM_MEMBERS, SYSTEM_SAMPLES, SYSTEM_RESERVED = _system_names()
 
 
 class ModuleContext:
@@ -1096,4 +1151,100 @@ def check_use_before_assignment(ctx):
                         f"останется Неопределено; инициализируйте её до ветвления.",
                     ))
                     break
+    return out
+
+
+# ── Системные перечисления/наборы: значения и зарезервированные имена ──
+
+@rule(code="system-enum-value", severity="error",
+      title="Значение системного перечисления/набора значений не существует")
+def check_system_enum_value(ctx):
+    """Флагует <Тип>.<Значение>, если <Тип> — системное перечисление или
+    набор значений, а <Значение> отсутствует в справке платформы.
+
+    Проверка идёт по токенам: строки и комментарии не затрагиваются, регистр
+    не важен. Значения английских имён также принимаются.
+    """
+    out = []
+    toks = ctx.model.tokens
+    n = len(toks)
+    for i, t in enumerate(toks):
+        if t.kind != "ident":
+            continue
+        allowed = SYSTEM_MEMBERS.get(t.value.casefold())
+        if allowed is None:
+            continue
+        if i > 0 and toks[i - 1].kind == "op" and toks[i - 1].value == ".":
+            continue
+        if not (i + 2 < n and toks[i + 1].kind == "op"
+                and toks[i + 1].value == "." and toks[i + 2].kind == "ident"):
+            continue
+        member = toks[i + 2]
+        if member.value.casefold() in allowed:
+            continue
+        sample = SYSTEM_SAMPLES.get(t.value.casefold()) or []
+        if sample:
+            detail = "допустимые значения: " + ", ".join(sample)
+            if len(sample) >= 12:
+                detail += "…"
+        else:
+            detail = "значение отсутствует в справке платформы"
+        out.append(Finding(
+            code="system-enum-value",
+            severity="error",
+            line=member.line,
+            message=f"{t.value}.{member.value} не существует — {detail}.",
+        ))
+    return out
+
+
+@rule(code="reserved-system-name", severity="error",
+      title="Имя совпадает с системным перечислением/набором значений")
+def check_reserved_system_name(ctx):
+    """Флагует переменные, параметры, процедуры/функции и метки циклов,
+    чьё имя совпадает с именем системного перечисления или набора значений.
+
+    Такие имена зарезервированы платформой; одноимённая переменная или метод
+    делает код неоднозначным и ломает обращения к системному типу.
+    Находка — одна на имя в модуле (первое объявление/присваивание).
+    """
+    out = []
+    reported = set()
+
+    def check(name, line):
+        if not name:
+            return
+        key = name.casefold()
+        canonical = SYSTEM_RESERVED.get(key)
+        if not canonical or key in reported:
+            return
+        reported.add(key)
+        out.append(Finding(
+            code="reserved-system-name",
+            severity="error",
+            line=line,
+            message=(
+                f"Имя «{name}» зарезервировано под системное перечисление/"
+                f"набор значений «{canonical}»; выберите другое имя."
+            ),
+        ))
+
+    model = ctx.model
+    for method in model.methods:
+        check(method.name, method.header_line)
+        for param in method.params:
+            check(param, method.header_line)
+    for name, line, _is_export in model.var_declarations:
+        check(name, line)
+    for loop in model.loops:
+        check(loop.loop_var, loop.header_line)
+
+    toks = model.tokens
+    for i, t in enumerate(toks):
+        if t.kind != "ident":
+            continue
+        if i > 0 and toks[i - 1].kind == "op" and toks[i - 1].value == ".":
+            continue
+        if i + 1 < len(toks) and toks[i + 1].kind == "op" and toks[i + 1].value == "=":
+            check(t.value, t.line)
     return out

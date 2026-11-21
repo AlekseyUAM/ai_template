@@ -48,9 +48,10 @@ def test_install_writes_config_and_registers(tmp_path):
         dump_cf=False, dump_cfe=False))
     # ai1c.config.json больше не генерируется — источник истины БД
     assert not (tmp_path / "ai1c.config.json").exists()
-    assert not (tmp_path / "CLAUDE.md").exists()
+    assert (tmp_path / "CLAUDE.md").exists()
+    assert "Single-agent" in (tmp_path / "CLAUDE.md").read_text(encoding="utf-8")
     assert (tmp_path / ".mcp.json").exists()
-    assert (tmp_path / ".claude" / "agents" / "developer.md").exists()
+    assert (tmp_path / ".claude" / "checklists" / "developer.md").exists()
     assert (tmp_path / ".claude" / "hooks" / "bsl_nudge.py").exists()
     assert (tmp_path / ".claude" / "settings.json").exists()
     assert any(e.step == "content" and e.status == "ok" for e in events)

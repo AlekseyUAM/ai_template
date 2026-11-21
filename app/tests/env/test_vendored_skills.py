@@ -3,7 +3,7 @@ SK = Path(__file__).resolve().parents[3] / "template" / ".claude" / "skills"
 
 def test_key_skills_present():
     for n in ("meta-info", "form-edit", "web-test", "1c-batch",
-              "mcp-usage", "task-orchestration"):
+              "mcp-usage"):
         assert (SK / n / "SKILL.md").exists(), n
 
 def test_duplicates_excluded():

@@ -9,3 +9,5 @@ __pycache__/
 build/
 *.egg-info/
 .pytest_cache/
+/.claude/settings.local.json
+/.claude/hooks/code-index-guard.state.json

@@ -12,6 +12,9 @@ from pathlib import Path
 from .paths import norm_prefix
 
 DEFAULT_MCP_PREFIX = "mcp__code_index__"
+# Сколько отказов подряд допускается для одного (session, tool, input), прежде
+# чем пропустить нативный вызов. 0 — не уступать никогда (прежнее поведение).
+DEFAULT_MAX_DENIES = 2
 
 
 @dataclass
@@ -19,6 +22,7 @@ class GuardConfig:
     daemon_toml: str | None = None
     local: list[tuple[str, str]] = field(default_factory=list)
     mcp_prefix: str = DEFAULT_MCP_PREFIX
+    max_denies: int = DEFAULT_MAX_DENIES
 
 
 def guard_config_path() -> Path:
@@ -38,6 +42,7 @@ def load_guard_config() -> GuardConfig:
         daemon_toml=parse_top_level_string(content, "daemon_toml"),
         local=parse_path_blocks(content, "[[local]]"),
         mcp_prefix=parse_top_level_string(content, "mcp_prefix") or DEFAULT_MCP_PREFIX,
+        max_denies=parse_top_level_int(content, "max_denies", DEFAULT_MAX_DENIES),
     )
 
 
@@ -162,3 +167,20 @@ def parse_top_level_string(content: str, key: str) -> str | None:
         if v is not None:
             return v
     return None
+
+
+def parse_top_level_int(content: str, key: str, default: int) -> int:
+    """Первое целое значение top-level ключа `key = N` (отрицательное → 0)."""
+    for line in content.splitlines():
+        rest = line.strip()
+        if not rest.startswith(key):
+            continue
+        rest = rest[len(key):].lstrip()
+        if not rest.startswith("="):
+            continue
+        value = rest[1:].strip().split("#", 1)[0].strip()
+        try:
+            return max(0, int(value))
+        except ValueError:
+            return default
+    return default

@@ -4,6 +4,14 @@ PRICES = {
     "claude-sonnet-4-6": {"input": 3.0,  "output": 15.0, "cache_read": 0.3,  "cache_write": 3.75},
     "claude-haiku-4-5-20251001": {"input": 1.0, "output": 5.0, "cache_read": 0.1, "cache_write": 1.25},
 }
+# Алиасы моделей: Claude Code принимает `sonnet`/`opus`/`haiku` и подставляет
+# ANTHROPIC_DEFAULT_*_MODEL, поэтому один и тот же профиль работает и на
+# не-Anthropic бэкендах. Цена — как у конкретной модели.
+PRICES.update({
+    "opus": PRICES["claude-opus-4-8"],
+    "sonnet": PRICES["claude-sonnet-4-6"],
+    "haiku": PRICES["claude-haiku-4-5-20251001"],
+})
 _ZERO = {"input": 0.0, "output": 0.0, "cache_read": 0.0, "cache_write": 0.0}
 
 

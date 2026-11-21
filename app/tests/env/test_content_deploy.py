@@ -25,12 +25,13 @@ def cfg(tmp_path, agents):
 def test_deploy_copies_content(prov, tmp_path):
     content.deploy_content(prov, cfg(tmp_path, []), update=False)
     c = tmp_path / ".claude"
-    assert (c / "agents" / "developer.md").exists()
+    assert (c / "checklists" / "developer.md").exists()
     assert (c / "skills" / "mcp-usage" / "SKILL.md").exists()
     assert (c / "rules" / "task-artifacts.md").exists()
     assert (c / "hooks" / "bsl_nudge.py").exists()
     assert (c / "settings.json").exists()
-    assert not (tmp_path / "CLAUDE.md").exists()   # CLAUDE.md больше не генерируется
+    assert (tmp_path / "CLAUDE.md").is_file()
+    assert "Single-agent" in (tmp_path / "CLAUDE.md").read_text(encoding="utf-8")
 
 
 def test_deploy_copies_whole_template_tree(prov, tmp_path):
@@ -40,6 +41,8 @@ def test_deploy_copies_whole_template_tree(prov, tmp_path):
     assert (tmp_path / "logs").is_dir()
     assert (tmp_path / "logs" / ".gitkeep").exists()
     assert (tmp_path / ".claude" / "VERSION").exists()
+    assert (tmp_path / ".claude" / "checklists" / "developer.md").exists()
+    assert (tmp_path / "CLAUDE.md").is_file()
 
 
 def test_deploy_writes_project_readme(prov, tmp_path):
@@ -49,18 +52,6 @@ def test_deploy_writes_project_readme(prov, tmp_path):
     assert "setup-venv.py" in readme   # как переподнять .venv на свежем клоне
 
 
-def test_agent_model_effort_rendered(prov, tmp_path):
-    agents = [AgentModel("developer", "claude-opus-4-8", "high")]
-    content.deploy_content(prov, cfg(tmp_path, agents), update=False)
-    text = (tmp_path / ".claude" / "agents" / "developer.md").read_text(encoding="utf-8")
-    assert "{{MODEL}}" not in text and "{{EFFORT}}" not in text
-    assert "claude-opus-4-8" in text and "high" in text
-
-
-def test_agent_without_config_gets_default(prov, tmp_path):
-    content.deploy_content(prov, cfg(tmp_path, []), update=False)
-    text = (tmp_path / ".claude" / "agents" / "analyst.md").read_text(encoding="utf-8")
-    assert "{{MODEL}}" not in text
 
 
 def test_update_leaves_readme_untouched(prov, tmp_path):
@@ -70,6 +61,16 @@ def test_update_leaves_readme_untouched(prov, tmp_path):
     content.deploy_content(prov, cfg(tmp_path, []), update=True)
     assert (tmp_path / "README.md").read_text(encoding="utf-8") == "мой текст\n"
     assert not (tmp_path / "README.md.bak").exists()
+
+
+def test_update_backs_up_claude_md(prov, tmp_path):
+    content.deploy_content(prov, cfg(tmp_path, []), update=False)
+    md = tmp_path / "CLAUDE.md"
+    md.write_text("моя правка\n", encoding="utf-8")
+    content.deploy_content(prov, cfg(tmp_path, []), update=True)
+    bak = md.with_name("CLAUDE.md.bak")
+    assert bak.exists() and "моя правка" in bak.read_text(encoding="utf-8")
+    assert "Single-agent" in md.read_text(encoding="utf-8")
 
 
 def test_settings_registers_hook(prov, tmp_path):
@@ -112,7 +113,7 @@ def test_deploy_substitutes_selected_mcp_name(prov, tmp_path):
     content.deploy_content(prov, config, update=False)
     c = tmp_path / ".claude"
 
-    dev = (c / "agents" / "developer.md").read_text(encoding="utf-8")
+    dev = (c / "checklists" / "reviewer.md").read_text(encoding="utf-8")
     assert "mcp__bsl_checker__" in dev
     assert "mcp__bsl_ls__" not in dev
 
@@ -129,7 +130,7 @@ def test_deploy_leaves_unselected_placeholder(prov, tmp_path):
     config = cfg(tmp_path, [])
     config.mcp = _bsl_renamed()   # code-index НЕ выбран
     content.deploy_content(prov, config, update=False)
-    dev = (tmp_path / ".claude" / "agents" / "developer.md").read_text(encoding="utf-8")
+    dev = (tmp_path / ".claude" / "checklists" / "analyst.md").read_text(encoding="utf-8")
     assert "mcp__code_index__" in dev
 
 
@@ -138,30 +139,10 @@ def test_deploy_update_applies_mcp_substitution(prov, tmp_path):
     config = cfg(tmp_path, [])
     config.mcp = _bsl_renamed()
     content.deploy_content(prov, config, update=True)
-    dev = (tmp_path / ".claude" / "agents" / "developer.md").read_text(encoding="utf-8")
+    dev = (tmp_path / ".claude" / "checklists" / "reviewer.md").read_text(encoding="utf-8")
     assert "mcp__bsl_checker" in dev
     assert "mcp__bsl_ls__" not in dev
 
-
-def test_mcp_rename_does_not_clobber_rendered_agent_model(prov, tmp_path):
-    """Регрессия: mcp-override не должен перетирать отрендеренный model/effort агента.
-
-    При наличии и нестандартной модели агента, и MCP-переименования, финальный файл
-    агента должен иметь оба изменения: подставленную модель и подставленное mcp-имя.
-    """
-    agents = [AgentModel("developer", "claude-opus-4-8", "high")]
-    config = cfg(tmp_path, agents)
-    config.mcp = _bsl_renamed()
-    content.deploy_content(prov, config, update=False)
-    text = (tmp_path / ".claude" / "agents" / "developer.md").read_text(encoding="utf-8")
-    # model/effort подставлены
-    assert "{{MODEL}}" not in text, "{{MODEL}} не заменён — агент перезаписан шаблоном"
-    assert "{{EFFORT}}" not in text, "{{EFFORT}} не заменён — агент перезаписан шаблоном"
-    assert "claude-opus-4-8" in text
-    assert "high" in text
-    # mcp-имя тоже подставлено
-    assert "mcp__bsl_checker__" in text
-    assert "mcp__bsl_ls__" not in text
 
 
 def test_code_index_repo_alias_substituted(prov, tmp_path):
@@ -191,7 +172,7 @@ def test_deploy_no_overrides_when_default_name(prov, tmp_path):
         connection='"bsl_ls": {"type":"http","url":"http://localhost:8001/mcp"}',
     )]
     content.deploy_content(prov, config, update=False)
-    dev = (tmp_path / ".claude" / "agents" / "developer.md").read_text(encoding="utf-8")
+    dev = (tmp_path / ".claude" / "checklists" / "reviewer.md").read_text(encoding="utf-8")
     assert "mcp__bsl_ls__" in dev
 
 
@@ -202,7 +183,7 @@ def test_hook_command_points_to_project_venv(prov, tmp_path):
     content.deploy_content(prov, cfg(tmp_path, []), update=False)
     # settings.json остаётся валидным JSON, а команда хука зовёт интерпретатор .venv
     data = json.loads((tmp_path / ".claude" / "settings.json").read_text(encoding="utf-8"))
-    py = content.venv_python(prov, str(tmp_path))
+    py = content._shell_path(content.venv_python(prov, str(tmp_path)))
     for evt in ("PostToolUse", "UserPromptSubmit"):
         cmd = data["hooks"][evt][0]["hooks"][0]["command"]
         assert cmd.startswith(f'"{py}" ')          # абсолютный путь, не голый python
@@ -230,7 +211,7 @@ def test_skill_docs_use_forward_slashes_on_windows(prov, tmp_path, monkeypatch):
     win_py = r"C:\projects\demo\.venv\Scripts\python.exe"
     monkeypatch.setattr(prov, "venv_python", lambda project_dir: win_py)
     content.deploy_content(prov, cfg(tmp_path, []), update=False)
-    text = (tmp_path / ".claude" / "skills" / "task-orchestration" / "SKILL.md"
+    text = (tmp_path / ".claude" / "skills" / "code-analyze" / "SKILL.md"
             ).read_text(encoding="utf-8")
     assert '"C:/projects/demo/.venv/Scripts/python.exe"' in text
     assert "C:\\projects" not in text
@@ -312,7 +293,7 @@ def test_provision_venv_builds_and_installs(tmp_path):
     assert result is None                               # успех → без предупреждения
     # 1) создание venv интерпретатором цели, 2) pip install -r requirements.txt
     assert prov.calls[0][1:3] == ["-m", "venv"]
-    assert str(tmp_path / ".venv") in prov.calls[0]
+    assert Path(prov.calls[0][-1]).resolve() == (tmp_path / ".venv").resolve()
     assert prov.calls[1][1:5] == ["-m", "pip", "install", "-r"]
     assert prov.calls[1][-1].endswith("requirements.txt")
 

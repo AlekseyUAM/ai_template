@@ -7,6 +7,11 @@ def test_known_model_cost():
     assert cost == 90.0  # 15 + 75
 
 
+def test_model_alias_cost():
+    # Агент рендерится с алиасом `sonnet` — цена должна считаться.
+    assert cost_for("sonnet", 1_000_000, 1_000_000, 0, 0) == 18.0
+
+
 def test_unknown_model_zero():
     assert cost_for("some-unknown-model", 1_000_000, 1_000_000, 0, 0) == 0.0
 
