@@ -148,6 +148,12 @@ def test_e2e_success_with_analysis(env):
     assert metrics["run"]["contaminated"] is False
     assert (runs[-1] / "digest.md").is_file()
     assert (runs[-1] / "diffs" / "task#001.diff").is_file()
+    assert (runs[-1] / "analysis-inputs" / "metrics.json").is_file()
+    assert (runs[-1] / "analysis-transcripts" / "analyst.stream.jsonl").is_file()
+    assert not (runs[-1] / "transcripts" / "analyst.stream.jsonl").exists()
+    snapshot = json.loads(
+        (runs[-1] / "analysis-inputs" / "metrics.json").read_text(encoding="utf-8"))
+    assert "analysis" not in snapshot
 
 
 def test_e2e_stops_after_failure_but_analyzes(env):

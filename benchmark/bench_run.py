@@ -13,7 +13,7 @@ from datetime import datetime
 from pathlib import Path
 
 from bench_analysis import (build_prompt, deterministic_report,
-                            extract_analyst_text, write_report)
+                            extract_analyst_text, prepare_inputs, write_report)
 from bench_metrics import (aggregate_environment, collect_task_state,
                            cycle_metrics, find_session_files, parse_stream,
                            render_digest, run_static_analyzers, stage_table,
@@ -595,6 +595,7 @@ def execute(options: RunOptions) -> int:
         if outcome != "success":
             stopped = True
             break
+    run_metrics["run"]["finished_at"] = _iso_now()
     run_metrics["environment"] = aggregate_environment(run_metrics["tasks"])
     write_json_atomic(metrics_path, run_metrics)
     _write_run_json(run_dir, run_metrics)
@@ -605,7 +606,6 @@ def execute(options: RunOptions) -> int:
             run_id=run_dir.name, project_dir=options.project_dir,
             run_dir=run_dir, metrics=run_metrics, skipped=True)
         target = write_report(options.project_dir, report)
-        run_metrics["run"]["finished_at"] = _iso_now()
         run_metrics["analysis"] = {"performed": False, "skipped": True,
                                    "result_path": str(target)}
         write_json_atomic(metrics_path, run_metrics)
@@ -613,15 +613,18 @@ def execute(options: RunOptions) -> int:
         log(f"отчёт (без анализа): {target}")
         log.close()
         return 0 if not stopped else 2
+    inputs = prepare_inputs(run_dir=run_dir, metrics=run_metrics,
+                            digest_path=digest_path)
     _inputs_manifest(manifest_path, options.project_dir, options.repo_root,
-                     run_dir, metrics_path, digest_path, reference, options.tasks)
+                     run_dir, inputs["metrics_path"], inputs["digest_path"],
+                     reference, options.tasks)
     prompt = build_prompt(
         run_id=run_dir.name,
         project_dir=options.project_dir,
         repo_root=options.repo_root,
         run_dir=run_dir,
-        metrics_path=metrics_path,
-        digest_path=digest_path,
+        metrics_path=inputs["metrics_path"],
+        digest_path=inputs["digest_path"],
         manifest_path=manifest_path,
         reference_path=reference,
         contaminated=options.force,
@@ -635,8 +638,8 @@ def execute(options: RunOptions) -> int:
         prompt=prompt,
         cwd=options.project_dir,
         timeout_sec=options.analysis_timeout_min * 60,
-        stream_path=run_dir / "transcripts" / "analyst.stream.jsonl",
-        stderr_path=run_dir / "transcripts" / "analyst.stderr.log",
+        stream_path=run_dir / "analysis-transcripts" / "analyst.stream.jsonl",
+        stderr_path=run_dir / "analysis-transcripts" / "analyst.stderr.log",
         extra_args=("--add-dir", str(options.repo_root),
                     "--disallowedTools", "Edit", "MultiEdit", "NotebookEdit",
                     "Write", "Agent"),
@@ -676,10 +679,10 @@ def execute(options: RunOptions) -> int:
                  "данных.\n")
         log("⚠ аналитик изменил git-состояние проекта или репозитория template")
     target = write_report(options.project_dir, text)
-    run_metrics["run"]["finished_at"] = _iso_now()
     run_metrics["analysis"] = {
         "performed": True,
         "skipped": False,
+        "finished_at": _iso_now(),
         "session_id": analyst.stream.session_id,
         "duration_sec": round(analyst.duration_sec, 1),
         "timed_out": analyst.timed_out,
