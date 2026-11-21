@@ -7,6 +7,8 @@ from pathlib import Path
 import pytest
 
 from agentmon.env.bench_setup import BenchConfig, SetupError, load_config, parse_env_file
+from agentmon.env import code_index_bench
+from agentmon.env.code_index_bench import NativeIndex
 from agentmon.pycmd import PYTHON_CMD
 
 
@@ -34,6 +36,7 @@ def write_env(tmp_path: Path, **overrides: str) -> Path:
         "MCP_BSL_LS_URL": "http://localhost:8001/mcp",
         "MCP_1C_PLATFORM_URL": "http://localhost:8002/sse",
         "MCP_CODE_INDEX_PORT": "8004",
+        "CODE_INDEX_DIR": str(tmp_path / "ci"),
     }
     values.update(overrides)
     path = tmp_path / "test.env"
@@ -62,8 +65,31 @@ def test_load_config_required_optional_and_defaults(tmp_path):
     assert cfg.code_index_port == 8004
     assert cfg.code_index_host == "localhost"
     assert cfg.code_index_wait_minutes == 360
+    assert cfg.code_index_dir == str((tmp_path / "ci").resolve())
     assert cfg.one_c_md_url is None
     assert cfg.dt_path is None
+
+
+def test_code_index_dir_required(tmp_path):
+    env = write_env(tmp_path)
+    text = env.read_text(encoding="utf-8").replace(
+        f"CODE_INDEX_DIR={tmp_path / 'ci'}\n", "")
+    env.write_text(text, encoding="utf-8")
+    with pytest.raises(SetupError, match="CODE_INDEX_DIR"):
+        load_config(env, repo_root=tmp_path)
+
+
+def test_code_index_dir_must_be_absolute(tmp_path):
+    with pytest.raises(SetupError, match="абсолют"):
+        load_config(
+            write_env(tmp_path, CODE_INDEX_DIR="ci"), repo_root=tmp_path)
+
+
+def test_code_index_dir_must_be_outside_project(tmp_path):
+    project = tmp_path / "project"
+    env = write_env(tmp_path, CODE_INDEX_DIR=str(project / "ci"))
+    with pytest.raises(SetupError, match="внутри"):
+        load_config(env, repo_root=tmp_path)
 
 
 def test_load_config_allows_empty_password(tmp_path):
@@ -368,8 +394,11 @@ def test_build_mcp_plans_without_1c_md(tmp_path):
     assert [plan.mcp_name for plan in plans] == [
         "bsl_ls", "1c_platform", "code_index"]
     code_index = plans[-1]
+    assert code_index.kind == "local"
+    assert code_index.standard_key == "code-index"
     assert code_index.catalog_dir == str(Path(cfg.project_dir) / "src" / "cf")
     assert code_index.project_name == cfg.project_name
+    assert code_index.code_index_dir == str(cfg.code_index_dir)
     assert json.loads("{" + code_index.connection_json + "}") == {
         "code_index": {
             "type": "http",
@@ -470,6 +499,25 @@ def test_resolve_mcp_cards_reuses_shared_and_creates_project_cards(tmp_path):
     assert len(created2) == 1
     assert repo.get(ids["code-index"])["catalog_dir"] != repo.get(
         ids2["code-index"])["catalog_dir"]
+    assert repo.get(ids["code-index"])["code_index_dir"] == cfg.code_index_dir
+    assert repo.get(ids["code-index"])["kind"] == "local"
+
+
+def test_resolve_mcp_cards_matches_code_index_only_by_same_dir(tmp_path):
+    """Другой CODE_INDEX_DIR — новая карточка, даже при равных прочих полях."""
+    store = make_store(tmp_path)
+    cfg = load_config(write_env(tmp_path), repo_root=tmp_path)
+    project_id = create_project_row(store, cfg)
+    repo = McpRepo(store)
+    ids, _ = resolve_mcp_cards(
+        repo, build_mcp_plans(cfg), project_id=project_id,
+        project_name=cfg.project_name)
+    repo.update(ids["code-index"], code_index_dir=str(tmp_path / "other-ci"))
+    ids2, created2 = resolve_mcp_cards(
+        repo, build_mcp_plans(cfg), project_id=project_id,
+        project_name=cfg.project_name)
+    assert len(created2) == 1
+    assert ids2["code-index"] != ids["code-index"]
 
 
 from dataclasses import dataclass
@@ -820,142 +868,50 @@ def test_commit_init_raises_on_commit_failure(tmp_path):
     assert prov.calls[0][0] == ["git", "init"]
 
 
-from agentmon.env.bench_setup import (
-    CODE_INDEX_CONTAINER,
-    launch_code_index,
-    wait_code_index_ready,
-)
+def test_run_setup_uses_native_index(tmp_path):
+    root = make_repo_root(tmp_path)
+    make_tasks(root)
+    cfg = load_config(write_env(tmp_path), repo_root=root)
+    store, registry = make_store(tmp_path), make_registry(tmp_path)
+    launched, waited = [], []
+    from types import SimpleNamespace
 
+    def launch(**kwargs):
+        launched.append(kwargs)
+        return SimpleNamespace(code_index_dir=cfg.code_index_dir)
 
-def test_launch_code_index_removes_old_container_with_volumes(tmp_path):
-    cfg = load_config(write_env(tmp_path), repo_root=tmp_path)
-    project = Path(cfg.project_dir)
-    (project / "src" / "cf").mkdir(parents=True)
-    state_root = tmp_path / "repo"
-    state_root.mkdir()
-    calls = []
-    launched = {}
+    def wait(index, **kwargs):
+        waited.append((index, kwargs))
 
-    def fake_run(cmd, **kwargs):
-        calls.append(list(cmd))
-        return RunResult(1)  # docker rm для отсутствующего контейнера
-
-    def fake_launch(**kwargs):
-        launched.update(kwargs)
-        return {"ok": True, "log": ""}
-
-    name = launch_code_index(
-        cfg, repo_root=state_root, mid=42, run=fake_run,
-        image_exists=lambda image: True, launch=fake_launch,
-        build_image=lambda: (_ for _ in ()).throw(
-            AssertionError("готовая сборка не нужна")),
-        log=lambda line: None,
+    result = run_setup(
+        cfg, repo_root=root, store=store, registry=registry,
+        prov=OrchestratorProv(), tcp_ok=lambda url: True,
+        http_ok=lambda url: True, install_env=fake_install_env,
+        batch_run=lambda project_dir, args, **kwargs: None,
+        launch_index=launch, wait_index=wait, log=lambda line: None,
     )
-    assert name == CODE_INDEX_CONTAINER
-    assert calls[0] == ["docker", "rm", "-f", "-v", CODE_INDEX_CONTAINER]
-    assert launched["name"] == CODE_INDEX_CONTAINER
-    assert launched["port"] == cfg.code_index_port
-    from agentmon.env.mcp_docker_recipes import _docker_host_path
-
-    volumes = launched["volumes"]
-    assert f"{_docker_host_path(project / 'src' / 'cf')}:/repos/src" in volumes
-    toml = state_root / ".ai1c" / "mcp-state" / "42" / "daemon.toml"
-    assert toml.is_file()
-    assert f'alias = "{cfg.project_name}"' in toml.read_text(encoding="utf-8")
-    assert 'path = "/repos/src"' in toml.read_text(encoding="utf-8")
-
-
-def test_launch_code_index_default_image_exists_uses_module_probe(
-        tmp_path, monkeypatch):
-    from agentmon.env import bench_setup, mcp_docker
-    from agentmon.env.mcp_docker_recipes import recipe_for
-
-    cfg = load_config(write_env(tmp_path), repo_root=tmp_path)
-    (Path(cfg.project_dir) / "src" / "cf").mkdir(parents=True)
-    probed = []
-    launched = {}
-
-    def fake_image_exists(tag):
-        probed.append(tag)
-        return True
-
-    def fake_launch(**kwargs):
-        launched.update(kwargs)
-        return {"ok": True, "log": ""}
-
-    monkeypatch.setattr(mcp_docker, "image_exists", fake_image_exists)
-    name = launch_code_index(
-        cfg, repo_root=tmp_path, mid=7,
-        run=lambda cmd, **kwargs: bench_setup.subprocess.CompletedProcess(
-            list(cmd), 0, "", ""),
-        launch=fake_launch,
-        log=lambda line: None,
-    )
-    assert probed == [recipe_for("code-index").image]
-    assert name == CODE_INDEX_CONTAINER
-    assert launched["name"] == CODE_INDEX_CONTAINER
+    assert launched[0]["code_index_dir"] == cfg.code_index_dir
+    assert launched[0]["catalog_dir"].endswith(
+        str(Path("src") / "cf"))
+    assert launched[0]["alias"] == cfg.project_name
+    assert launched[0]["port"] == cfg.code_index_port
+    assert launched[0]["host"] == cfg.code_index_host
+    assert waited[0][0].code_index_dir == cfg.code_index_dir
+    assert waited[0][1]["wait_minutes"] == cfg.code_index_wait_minutes
+    assert waited[0][1]["host"] == cfg.code_index_host
+    assert waited[0][1]["port"] == cfg.code_index_port
+    assert result.code_index == cfg.code_index_dir
 
 
-def test_launch_code_index_raises_when_launch_fails(tmp_path):
-    cfg = load_config(write_env(tmp_path), repo_root=tmp_path)
-    with pytest.raises(SetupError, match="контейнер"):
-        launch_code_index(
-            cfg, repo_root=tmp_path, mid=1,
-            run=lambda cmd, **kwargs: RunResult(),
-            image_exists=lambda image: True,
-            launch=lambda **kwargs: {"ok": False, "log": "boom"},
-            log=lambda line: None,
-        )
+def test_run_setup_defaults_to_native_start_and_wait(tmp_path):
+    from agentmon.env import bench_setup, code_index_bench
 
-
-def test_wait_code_index_ready_returns_when_ready(tmp_path):
-    cfg = load_config(write_env(tmp_path), repo_root=tmp_path)
-    status = json.dumps({
-        "status": "running",
-        "paths": [{"path": "/repos/src", "status": "ready"}],
-    })
-    lines = []
-    wait_code_index_ready(
-        CODE_INDEX_CONTAINER, cfg=cfg,
-        run=lambda cmd, **kwargs: RunResult(0, status),
-        sleep=lambda seconds: None, clock=lambda: 0.0,
-        log=lines.append,
-    )
-    assert any("готов" in line for line in lines)
-
-
-def test_wait_code_index_ready_fails_on_error_status(tmp_path):
-    cfg = load_config(write_env(tmp_path), repo_root=tmp_path)
-    status = json.dumps({
-        "status": "running",
-        "paths": [{"path": "/repos/src", "status": "error"}],
-    })
-    with pytest.raises(SetupError, match="error"):
-        wait_code_index_ready(
-            CODE_INDEX_CONTAINER, cfg=cfg,
-            run=lambda cmd, **kwargs: RunResult(0, status),
-            sleep=lambda seconds: None, clock=lambda: 0.0,
-            log=lambda line: None,
-        )
-
-
-def test_wait_code_index_ready_times_out(tmp_path):
-    cfg = load_config(
-        write_env(tmp_path, CODE_INDEX_WAIT_MINUTES="1"), repo_root=tmp_path)
-    now = [0.0]
-
-    def fake_sleep(seconds):
-        now[0] += seconds
-
-    with pytest.raises(SetupError, match="CODE_INDEX_WAIT_MINUTES"):
-        wait_code_index_ready(
-            CODE_INDEX_CONTAINER, cfg=cfg,
-            run=lambda cmd, **kwargs: RunResult(
-                0, json.dumps({"paths": [
-                    {"path": "/repos/src", "status": "initial_indexing"}]})),
-            sleep=fake_sleep, clock=lambda: now[0],
-            log=lambda line: None,
-        )
+    assert (run_setup.__kwdefaults__["launch_index"]
+            is code_index_bench.start_code_index)
+    assert (run_setup.__kwdefaults__["wait_index"]
+            is code_index_bench.wait_code_index_ready)
+    assert not hasattr(bench_setup, "launch_code_index")
+    assert not hasattr(bench_setup, "CODE_INDEX_CONTAINER")
 
 
 from agentmon.env.bench_setup import RollbackState, run_setup, rollback
@@ -983,6 +939,7 @@ def test_run_setup_happy_path(tmp_path):
     cfg = load_config(write_env(tmp_path), repo_root=root)
     store, registry = make_store(tmp_path), make_registry(tmp_path)
     batch_calls, waited = [], []
+    code_index = NativeIndex(Path(cfg.code_index_dir), Path("bin"), 1, 2)
 
     result = run_setup(
         cfg, repo_root=root, store=store, registry=registry,
@@ -991,17 +948,17 @@ def test_run_setup_happy_path(tmp_path):
         http_ok=lambda url: True,
         install_env=fake_install_env,
         batch_run=lambda project_dir, args, **kwargs: batch_calls.append(args),
-        launch_index=lambda cfg, **kwargs: CODE_INDEX_CONTAINER,
-        wait_index=lambda name, **kwargs: waited.append(name),
+        launch_index=lambda **kwargs: code_index,
+        wait_index=lambda index, **kwargs: waited.append(index),
         log=lambda line: None,
     )
 
     assert result.project_id > 0
-    assert result.container == CODE_INDEX_CONTAINER
+    assert result.code_index == cfg.code_index_dir
     assert result.task_ids and len(result.task_ids) == 1
     assert batch_calls[0][0] == "load-config"
     assert batch_calls[-1][0] == "dump-config"
-    assert waited == [CODE_INDEX_CONTAINER]
+    assert [index.code_index_dir for index in waited] == [Path(cfg.code_index_dir)]
     assert registry.list()[0].path == cfg.project_dir
     assert TaskRepo(store).list(project_id=result.project_id)
 
@@ -1025,8 +982,8 @@ def test_run_setup_recreate_removes_old_project(tmp_path):
         http_ok=lambda url: True,
         install_env=fake_install_env,
         batch_run=lambda project_dir, args, **kwargs: None,
-        launch_index=lambda cfg, **kwargs: CODE_INDEX_CONTAINER,
-        wait_index=lambda name, **kwargs: None,
+        launch_index=lambda **kwargs: NATIVE_INDEX,
+        wait_index=lambda index, **kwargs: None,
         log=lambda line: None,
     )
 
@@ -1054,28 +1011,29 @@ def test_run_setup_recreate_keeps_old_project_if_preflight_fails(tmp_path):
     assert (project_dir / "old.txt").exists()
 
 
-def test_run_setup_rolls_back_db_and_container_on_error(tmp_path):
+def test_run_setup_rolls_back_db_and_stops_native_index_on_error(
+        tmp_path, monkeypatch):
     root = make_repo_root(tmp_path)
     make_tasks(root)
     cfg = load_config(write_env(tmp_path), repo_root=root)
     store, registry = make_store(tmp_path), make_registry(tmp_path)
-    removed = []
+    stopped = []
 
-    def failing_wait(name, **kwargs):
+    def failing_wait(index, **kwargs):
         raise SetupError("индексация не удалась")
 
-    def fake_run(cmd, **kwargs):
-        removed.append(list(cmd))
-        return RunResult()
+    monkeypatch.setattr(
+        code_index_bench, "stop_code_index",
+        lambda code_index_dir, **kwargs: stopped.append(Path(code_index_dir)))
 
     with pytest.raises(SetupError, match="индексация"):
         run_setup(
             cfg, repo_root=root, store=store, registry=registry,
-            prov=OrchestratorProv(), run=fake_run,
+            prov=OrchestratorProv(),
             tcp_ok=lambda url: True, http_ok=lambda url: True,
             install_env=fake_install_env,
             batch_run=lambda project_dir, args, **kwargs: None,
-            launch_index=lambda cfg, **kwargs: CODE_INDEX_CONTAINER,
+            launch_index=lambda **kwargs: NATIVE_INDEX,
             wait_index=failing_wait,
             log=lambda line: None,
         )
@@ -1084,8 +1042,41 @@ def test_run_setup_rolls_back_db_and_container_on_error(tmp_path):
     assert McpRepo(store).list() == []
     assert TaskRepo(store).list() == []
     assert registry.list() == []
-    assert ["docker", "rm", "-f", "-v", CODE_INDEX_CONTAINER] in removed
+    assert stopped == [NATIVE_INDEX.code_index_dir]
     assert Path(cfg.project_dir).exists()
+
+
+def test_run_setup_keeps_index_when_failure_is_before_launch(
+        tmp_path, monkeypatch):
+    """Сбой до запуска индекса не трогает чужой/старый индекс в CODE_INDEX_DIR."""
+    root = make_repo_root(tmp_path)
+    make_tasks(root)
+    cfg = load_config(write_env(tmp_path), repo_root=root)
+    store, registry = make_store(tmp_path), make_registry(tmp_path)
+    stopped = []
+
+    def failing_batch(project_dir, args, **kwargs):
+        raise SetupError("1c-batch упал")
+
+    monkeypatch.setattr(
+        code_index_bench, "stop_code_index",
+        lambda code_index_dir, **kwargs: stopped.append(Path(code_index_dir)))
+
+    with pytest.raises(SetupError, match="1c-batch"):
+        run_setup(
+            cfg, repo_root=root, store=store, registry=registry,
+            prov=OrchestratorProv(),
+            tcp_ok=lambda url: True, http_ok=lambda url: True,
+            install_env=fake_install_env, batch_run=failing_batch,
+            launch_index=lambda **kwargs: (_ for _ in ()).throw(
+                AssertionError("индекс не должен запускаться")),
+            log=lambda line: None,
+        )
+
+    assert stopped == []
+
+
+NATIVE_INDEX = NativeIndex(Path("ci"), Path("bin"), 1, 2)
 
 
 def test_rollback_deletes_created_cards_and_logs_failures(tmp_path):
@@ -1130,36 +1121,51 @@ def test_rollback_deletes_created_cards_and_logs_failures(tmp_path):
     assert removed == []
 
 
-def test_rollback_removes_container_after_db(tmp_path):
+def test_rollback_stops_native_index(tmp_path, monkeypatch):
     cfg = load_config(write_env(tmp_path), repo_root=tmp_path)
     store = make_store(tmp_path)
-    state = RollbackState(project_dir=cfg.project_dir,
-                          container=CODE_INDEX_CONTAINER)
-    removed = []
+    state = RollbackState(project_dir=cfg.project_dir, code_index=NATIVE_INDEX)
+    stopped = []
 
-    rollback(state, store=store,
-             run=lambda cmd, **kwargs: removed.append(list(cmd)),
-             log=lambda line: None)
+    monkeypatch.setattr(
+        code_index_bench, "stop_code_index",
+        lambda code_index_dir, **kwargs: stopped.append(code_index_dir))
 
-    assert removed == [["docker", "rm", "-f", "-v", CODE_INDEX_CONTAINER]]
+    rollback(state, store=store, log=lambda line: None)
+
+    assert stopped == [NATIVE_INDEX.code_index_dir]
 
 
-def test_rollback_reports_failed_container_removal(tmp_path):
+def test_rollback_reports_failed_index_stop(tmp_path, monkeypatch):
     cfg = load_config(write_env(tmp_path), repo_root=tmp_path)
-    state = RollbackState(project_dir=cfg.project_dir,
-                          container=CODE_INDEX_CONTAINER)
+    state = RollbackState(project_dir=cfg.project_dir, code_index=NATIVE_INDEX)
     lines = []
 
-    rollback(state, store=make_store(tmp_path),
-             run=lambda cmd, **kwargs: RunResult(
-                 1, stderr="no such container"),
-             log=lines.append)
+    def failing_stop(code_index_dir, **kwargs):
+        raise OSError("доступ запрещён")
+
+    monkeypatch.setattr(code_index_bench, "stop_code_index", failing_stop)
+
+    rollback(state, store=make_store(tmp_path), log=lines.append)
 
     partial = [line for line in lines if "Откат выполнен частично" in line]
     assert partial, lines
-    assert "1" in partial[0]
-    assert "no such container" in partial[0]
+    assert "доступ запрещён" in partial[0]
     assert not any(line.startswith("✗ Откат выполнен.") for line in lines)
+
+
+def test_rollback_without_index_does_not_stop(tmp_path, monkeypatch):
+    cfg = load_config(write_env(tmp_path), repo_root=tmp_path)
+    state = RollbackState(project_dir=cfg.project_dir)
+    stopped = []
+
+    monkeypatch.setattr(
+        code_index_bench, "stop_code_index",
+        lambda code_index_dir, **kwargs: stopped.append(code_index_dir))
+
+    rollback(state, store=make_store(tmp_path), log=lambda line: None)
+
+    assert stopped == []
 
 
 from agentmon.env.bench_setup import load_env_file
@@ -1186,98 +1192,6 @@ def test_load_config_rejects_malformed_port_in_url(tmp_path):
             repo_root=tmp_path)
 
 
-def _status_run(status=None, *, inspect_running="true", inspect_rc=0):
-    """Фейковый docker run: exec status → status (rc по None), inspect → running.
-
-    Успешный `docker inspect` отдаёт rc=0 и `{{.State.Running}}` в stdout;
-    несуществующий контейнер → rc!=0 и пустой stdout.
-    """
-    def fake_run(cmd, **kwargs):
-        if cmd[:2] == ["docker", "exec"]:
-            if status is None:
-                return RunResult(1, "", "container not found")
-            return RunResult(0, status)
-        if cmd[:3] == ["docker", "inspect", "-f"]:
-            return RunResult(inspect_rc, f"{inspect_running}\n")
-        raise AssertionError(f"неожиданная команда: {cmd}")
-    return fake_run
-
-
-def test_wait_code_index_ready_error_message_includes_diagnostics(tmp_path):
-    cfg = load_config(write_env(tmp_path), repo_root=tmp_path)
-    status = json.dumps({"paths": [
-        {"path": "/repos/src", "status": "error", "error": "disk full"}]})
-    with pytest.raises(SetupError) as excinfo:
-        wait_code_index_ready(
-            CODE_INDEX_CONTAINER, cfg=cfg,
-            run=_status_run(status), sleep=lambda s: None,
-            clock=lambda: 0.0, log=lambda line: None)
-    message = str(excinfo.value)
-    assert "disk full" in message
-    assert CODE_INDEX_CONTAINER in message
-    assert str(cfg.code_index_port) in message
-    assert "/data/code-index-home/daemon.json" in message
-
-
-def test_wait_code_index_ready_fails_fast_when_container_stopped(tmp_path):
-    cfg = load_config(write_env(tmp_path), repo_root=tmp_path)
-    sleeps = []
-    with pytest.raises(SetupError) as excinfo:
-        wait_code_index_ready(
-            CODE_INDEX_CONTAINER, cfg=cfg,
-            run=_status_run(None, inspect_running="false", inspect_rc=0),
-            sleep=sleeps.append, clock=lambda: 0.0,
-            log=lambda line: None)
-    message = str(excinfo.value)
-    assert "не запущен" in message
-    assert CODE_INDEX_CONTAINER in message
-    assert str(cfg.code_index_port) in message
-    assert "/data/code-index-home/daemon.json" in message
-    assert f"docker logs {CODE_INDEX_CONTAINER}" in message
-    assert sleeps == []
-
-
-def test_wait_code_index_ready_keeps_waiting_while_container_runs(tmp_path):
-    cfg = load_config(
-        write_env(tmp_path, CODE_INDEX_WAIT_MINUTES="1"), repo_root=tmp_path)
-    now = [0.0]
-
-    def fake_sleep(seconds):
-        now[0] += seconds
-
-    with pytest.raises(SetupError) as excinfo:
-        wait_code_index_ready(
-            CODE_INDEX_CONTAINER, cfg=cfg,
-            run=_status_run(None, inspect_running="true"),
-            sleep=fake_sleep, clock=lambda: now[0],
-            log=lambda line: None)
-    message = str(excinfo.value)
-    assert "CODE_INDEX_WAIT_MINUTES" in message
-    assert CODE_INDEX_CONTAINER in message
-    assert str(cfg.code_index_port) in message
-    assert "/data/code-index-home/daemon.json" in message
-    assert now[0] >= 60
-
-
-def test_wait_code_index_ready_keeps_waiting_when_inspect_fails(tmp_path):
-    cfg = load_config(
-        write_env(tmp_path, CODE_INDEX_WAIT_MINUTES="1"), repo_root=tmp_path)
-    now = [0.0]
-
-    def fake_sleep(seconds):
-        now[0] += seconds
-
-    with pytest.raises(SetupError) as excinfo:
-        wait_code_index_ready(
-            CODE_INDEX_CONTAINER, cfg=cfg,
-            run=_status_run(None, inspect_running="", inspect_rc=1),
-            sleep=fake_sleep, clock=lambda: now[0],
-            log=lambda line: None)
-    message = str(excinfo.value)
-    assert "не запущен" not in message
-    assert "CODE_INDEX_WAIT_MINUTES" in message
-    assert CODE_INDEX_CONTAINER in message
-    assert now[0] >= 60
 
 
 def _tasks_root(tmp_path):

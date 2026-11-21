@@ -118,8 +118,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  проект:      #{result.project_id} {cfg.project_name}")
     print(f"  каталог:     {result.project_dir}")
     print(f"  задачи:      {', '.join(f'#{tid}' for tid in result.task_ids)}")
-    print(f"  code_index:  {result.container} "
-          f"(порт {cfg.code_index_port})")
+    print(f"  code_index:  {result.code_index} (native)")
     print(f"  bsl_ls:      {cfg.bsl_ls_url}")
     print(f"  1c_platform: {cfg.platform_url}")
     if cfg.one_c_md_url:

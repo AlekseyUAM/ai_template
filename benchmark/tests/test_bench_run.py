@@ -299,9 +299,6 @@ def test_build_options(tmp_path):
     assert opts.limits == {"task#001": 30}
     assert opts.analysis_timeout_min == 15
     assert opts.run_dir is None
-    assert opts.index_refresh is True
-    assert parse_args(["--env", str(env), "--task", "#001",
-                       "--no-index-refresh"]).index_refresh is False
 
 
 def git(project: Path, *args: str) -> str:

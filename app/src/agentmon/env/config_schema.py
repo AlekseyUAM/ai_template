@@ -13,6 +13,7 @@ class McpSelection:
     connection: str | None = None   # фрагмент "<имя>": {...} из справочника MCP
     catalog_dir: str | None = None  # code-index: каталог индексируемой базы
     project_name: str | None = None # code-index: alias репозитория в индексе
+    code_index_dir: str | None = None # code-index: каталог нативного сервиса
 
 
 @dataclass

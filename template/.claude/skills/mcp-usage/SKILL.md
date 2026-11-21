@@ -62,7 +62,8 @@ An index of BSL + metadata + call/data graphs. The richest server; it gets a det
   (debounce 1.5 s + batch 2 s). On Windows bind mounts watcher events may be
   missing: if `health`/`stat_file` disagree or a new object is not found, treat
   the index as stale and use the native fallback in golden rule 5 (native `Read`/`meta-info`
-  for that exact path). The benchmark runner refreshes the index between tasks.
+  for that exact path). In the benchmark, the native deployment updates the
+  index within seconds; if in doubt, use the native fallback.
 - **First exploration call** for `src/cf` is
   `list_files(repo="...", path_prefix="...")`; `ls`/`find`/`grep` are denied
   by the code-index guard.
