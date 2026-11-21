@@ -417,6 +417,7 @@ def ensure_claude_cmd(cmd: str) -> None:
 
 def build_task_prompt(folder: str, limit_minutes: int | None = None) -> str:
     prompt = (f"Выполни задачу tasks/{folder} по этапам из её task.json. "
+              f"Первое действие до вызова инструментов — Skill mcp-usage. "
               f"Следуй правилу single-agent-workflow и чеклистам этапов. "
               f"Работай по TASK.md, изменения — в src/cf/**; `.claude/**` не меняй.")
     if limit_minutes is not None:

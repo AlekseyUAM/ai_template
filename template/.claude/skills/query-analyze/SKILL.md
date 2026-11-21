@@ -24,6 +24,8 @@ If MCP `1c-md` with the `validate_query` tool is available (full tool name -
 2. Call `validate_query` with `{"queryText": "<текст запроса>"}`.
    - `valid: true` - syntax accepted by the platform.
    - `valid: false` - parse `message` and fix the error.
+   - `queryText` is the concatenated query text without leading `|` and without
+     outer quotes; the tool is not a 1C literal parser.
 3. Then run the local `analyze_query.py` - it checks style and optimization rules
    that `validate_query` does not do.
 4. **Every query literal is validated exactly as written in the source**

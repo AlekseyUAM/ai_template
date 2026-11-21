@@ -18,6 +18,13 @@ def test_bsl_edit_nudges():
     assert "mcp__bsl_ls__check" in out["hookSpecificOutput"]["additionalContext"]
 
 
+def test_bom_hint_present():
+    mod = _load()
+    out = mod.build_output({"tool_name": "Edit",
+                            "tool_input": {"file_path": "/p/Module.bsl"}})
+    assert "BOM" in out["hookSpecificOutput"]["additionalContext"]
+
+
 def test_non_bsl_is_silent():
     mod = _load()
     assert mod.build_output({"tool_input": {"file_path": "/p/readme.md"}}) == {}

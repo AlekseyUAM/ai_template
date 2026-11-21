@@ -67,12 +67,17 @@ def redirect_for_link(link: str, base: str, tool_label: str, ctx) -> Decision | 
         if _is_directory_listing(link) and _listing_dir_changed(
                 link, base, ctx, case_insensitive=ctx.case_insensitive):
             return None
+    listing_hint = ""
+    if _is_directory_listing(link):
+        listing_hint = (f' First call: {tools.tool("list_files")}'
+                        f'(repo="{alias}", pattern="*").')
     reason = (
         f"{tool_label} on an indexed path (repo='{alias}') is denied. "
         "On indexed files MCP is 3-10x cheaper: use code-index tools "
         f'{tools.tool("grep_code")}/{tools.tool("grep_text")}/{tools.tool("read_file")}/'
         f'{tools.tool("list_files")}(repo="{alias}", ...). '
         f'Repo list - {tools.tool("get_stats")}().'
+        + listing_hint
     )
     return Decision(False, reason)
 

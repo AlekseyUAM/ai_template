@@ -42,6 +42,26 @@ def test_task_prompt_routes_to_checklists(tmp_path):
     assert "ANALYZE.md" in context and "DEVELOP.md" in context
 
 
+def test_first_action_is_mcp_usage(tmp_path):
+    m = _load()
+    root = _project(tmp_path)
+    out = m.build_output(
+        {"prompt": "Выполни задачу tasks/task#100001 ...", "cwd": str(root)})
+    context = out["hookSpecificOutput"]["additionalContext"]
+    assert "First action" in context
+    assert "mcp-usage" in context
+
+
+def test_stage_scoped_first_action_is_mcp_usage(tmp_path, monkeypatch):
+    m = _load()
+    root = _project(tmp_path)
+    monkeypatch.setenv("TASK_STAGE", "develop")
+    out = m.build_output({"prompt": "tasks/task#100001", "cwd": str(root)})
+    context = out["hookSpecificOutput"]["additionalContext"]
+    assert "First action" in context
+    assert "mcp-usage" in context
+
+
 def test_windows_task_prompt_routes_to_checklists(tmp_path):
     """Windows-путь с обратными слэшами — тот же каталог задачи."""
     m = _load()

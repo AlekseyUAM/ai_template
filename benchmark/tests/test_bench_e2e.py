@@ -130,6 +130,7 @@ def test_task_prompt_triggers_single_agent():
     assert "tasks/task#001" in prompt
     assert "tasks/task#" in prompt
     assert "single-agent-workflow" in prompt
+    assert "mcp-usage" in prompt
     assert "чеклист" in prompt
     assert "30 мин" in build_task_prompt("task#001", 30)
 

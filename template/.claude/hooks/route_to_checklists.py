@@ -50,6 +50,7 @@ def build_output(event: dict) -> dict:
                              only_stage=stage_filter or None)
     if stage_filter:
         parts = [
+            "[ai1c] First action before any tool call: invoke Skill mcp-usage.",
             f"[ai1c] Stage-scoped mode: ONLY stage '{stage_filter}' is executed.",
             f"Task tasks/{folder}. Do not start the following stages; after the artifact and "
             "status done, stop.",
@@ -73,6 +74,7 @@ def build_output(event: dict) -> dict:
         }}
 
     parts = [
+        "[ai1c] First action before any tool call: invoke Skill mcp-usage.",
         "[ai1c] Single-agent mode: do not call Agent/Task; work per rule "
         "single-agent-workflow.",
         f"Task tasks/{folder}: execute the checklist stages yourself, in order, in this thread.",

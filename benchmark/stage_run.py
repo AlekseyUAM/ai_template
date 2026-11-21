@@ -150,6 +150,7 @@ def stage_prompt(project: Path, folder: str, stage: dict, limit_min: int,
         f"Вход: tasks/{folder}/TASK.md, tasks/{folder}/task.json и артефакты "
         "предыдущих этапов. Не перечитывай всю задачу, если нужного нет в артефактах.",
         f"Чеклист этапа: {checklist} — пройди его.",
+        "Первое действие до вызова инструментов — Skill mcp-usage.",
     ]
     if hint:
         lines.append(hint)

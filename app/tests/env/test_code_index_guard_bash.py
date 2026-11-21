@@ -79,6 +79,7 @@ def test_ls_directory_denied(tmp_path):
     d = _decide(root, "ls -R src")
     assert d is not None and d.allow is False
     assert "mcp__code_index__list_files" in d.reason
+    assert 'First call: mcp__code_index__list_files(repo="repo", pattern="*")' in d.reason
 
 
 def test_binary_target_skipped(tmp_path):
