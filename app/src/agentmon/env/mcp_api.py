@@ -145,6 +145,12 @@ def build_mcp_router(store) -> APIRouter:
         if row is None:
             raise HTTPException(status_code=404, detail=f"нет MCP с id={mid}")
 
+        if row.get("standard_key") == "code-index":
+            raise HTTPException(
+                status_code=400,
+                detail="code-index разворачивается нативно; используйте "
+                       "/deploy-local")
+
         # расширение не поднимается через docker
         if row.get("kind") == "extension" or row.get("standard_key") == "1c-md":
             raise HTTPException(status_code=400, detail="это расширение, скачайте cfe")
@@ -199,20 +205,34 @@ def build_mcp_router(store) -> APIRouter:
         row = repo.get(mid)
         if row is None:
             raise HTTPException(status_code=404, detail=f"нет MCP с id={mid}")
-        if row.get("standard_key") != "code-index-local":
+        if row.get("standard_key") not in ("code-index", "code-index-local"):
             raise HTTPException(status_code=400,
-                                detail="это не локальный code-index")
+                                detail="это не code-index")
         missing = [k for k in ("catalog_dir", "project_name",
-                               "code_index_dir", "port") if not row.get(k)]
+                               "code_index_dir") if not row.get(k)]
         if missing:
             raise HTTPException(status_code=400,
                                 detail=f"не заданы поля: {', '.join(missing)}")
+        port = code_index_local.read_service_port(row["code_index_dir"])
+        if port is None:
+            port = row.get("port")
+        if not port:
+            raise HTTPException(status_code=400,
+                                detail="не задан порт и нет service.json")
+        updates = {"kind": "local"}
+        if int(row.get("port") or 0) != int(port):
+            from .mcp_types import build_connection
+            updates["port"] = int(port)
+            updates["connection_json"] = build_connection(
+                "code-index", mcp_name=row.get("mcp_name") or "code_index",
+                url=row.get("url") or "localhost", port=int(port))
+        repo.update(mid, **updates)
         return {
             "mid": mid,
             "code_index_dir": row["code_index_dir"],
             "catalog_dir": row["catalog_dir"],
             "project_name": row["project_name"],
-            "port": int(row["port"]),
+            "port": int(port),
         }
 
     # ── подъём MCP (блокирующе, лог целиком) ──────────────────────────────────

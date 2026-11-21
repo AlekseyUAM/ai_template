@@ -42,18 +42,73 @@ def test_launch_extension_rejected(tmp_path):
     assert r.status_code == 400
 
 
-def test_types_endpoint_lists_eight_with_custom_first(tmp_path):
+def test_types_endpoint_lists_visible_types_with_custom_first(tmp_path):
     data = make(tmp_path).get("/api/mcp/types").json()["types"]
     assert data[0]["key"] == "custom"
     keys = {t["key"] for t in data}
     assert keys == {"custom", "1c-md", "1c-md-queries", "bsl-ls",
-                    "1c-platform", "1c-naparnic", "code-index", "code-index-local"}
+                    "1c-platform", "1c-naparnic", "code-index"}
+
+
+def test_deploy_local_accepts_code_index_and_migrates_kind(tmp_path, monkeypatch):
+    from agentmon.env import code_index_local
+    seen = {}
+    monkeypatch.setattr(
+        code_index_local, "deploy_local",
+        lambda **kw: seen.update(kw) or iter(["ok"]))
+    c = make(tmp_path)
+    ci = tmp_path / "ci"; ci.mkdir()
+    mid = c.post("/api/mcp", json={
+        "name": "idx", "kind": "docker", "standard_key": "code-index",
+        "port": 8005, "catalog_dir": "/code/cfg", "project_name": "proj",
+        "code_index_dir": str(ci),
+    }).json()["mcp"]["id"]
+    r = c.post(f"/api/mcp/{mid}/deploy-local/stream", json={})
+    assert r.status_code == 200 and "ok" in r.text
+    row = c.get("/api/mcp").json()["mcp"]
+    row = next(item for item in row if item["id"] == mid)
+    assert row["kind"] == "local"
+    assert seen["port"] == 8005
+
+
+def test_deploy_local_reuses_service_port(tmp_path, monkeypatch):
+    from agentmon.env import code_index_local
+    seen = {}
+    monkeypatch.setattr(
+        code_index_local, "deploy_local",
+        lambda **kw: seen.update(kw) or iter(["ok"]))
+    c = make(tmp_path)
+    ci = tmp_path / "ci"; ci.mkdir()
+    code_index_local.write_service_port(ci, 8010)
+    mid = c.post("/api/mcp", json={
+        "name": "idx", "kind": "local", "standard_key": "code-index",
+        "port": 8005, "catalog_dir": "/code/cfg", "project_name": "proj",
+        "code_index_dir": str(ci),
+    }).json()["mcp"]["id"]
+    r = c.post(f"/api/mcp/{mid}/deploy-local/stream", json={})
+    assert r.status_code == 200
+    assert seen["port"] == 8010
+    row = next(item for item in c.get("/api/mcp").json()["mcp"]
+               if item["id"] == mid)
+    assert row["port"] == 8010
+    assert "8010" in row["connection_json"]
+
+
+def test_launch_docker_rejects_code_index(tmp_path):
+    c = make(tmp_path)
+    mid = c.post("/api/mcp", json={
+        "name": "idx", "kind": "docker", "standard_key": "code-index",
+        "port": 8004, "catalog_dir": "/code/cfg", "project_name": "proj",
+    }).json()["mcp"]["id"]
+    r = c.post(f"/api/mcp/{mid}/launch", json={})
+    assert r.status_code == 400
+    assert "натив" in r.json()["detail"]
 
 
 def test_create_persists_new_fields(tmp_path):
     c = make(tmp_path)
     r = c.post("/api/mcp", json={
-        "name": "idx", "kind": "docker", "standard_key": "code-index",
+        "name": "idx", "kind": "docker", "standard_key": "bsl-ls",
         "mcp_name": "code_index", "url": "localhost", "port": 8004,
         "catalog_dir": "/src/cfg", "project_name": "МойПроект",
         "connection_json": '"code_index": {"type":"http"}',
@@ -93,28 +148,6 @@ def test_update_new_fields(tmp_path):
     r = c.put(f"/api/mcp/{mid}", json={"url": "example", "mcp_name": "bsl_ls"})
     assert r.status_code == 200
     assert r.json()["mcp"]["url"] == "example"
-
-
-def test_launch_code_index_uses_recipe(tmp_path, monkeypatch):
-    from agentmon.env import mcp_docker
-    calls = {}
-    monkeypatch.setattr(mcp_docker, "image_exists", lambda tag, **k: True)
-    def fake_launch(**kw):
-        calls.update(kw)
-        return {"ok": True, "container": kw["name"], "log": "started"}
-    monkeypatch.setattr(mcp_docker, "launch", fake_launch)
-
-    c = make(tmp_path)
-    catalog = tmp_path / "cfg"; catalog.mkdir()
-    mid = c.post("/api/mcp", json={
-        "name": "idx", "kind": "docker", "standard_key": "code-index",
-        "port": 8004, "catalog_dir": str(catalog), "project_name": "proj",
-    }).json()["mcp"]["id"]
-    r = c.post(f"/api/mcp/{mid}/launch", json={"port": 8004})
-    assert r.status_code == 200 and r.json()["ok"] is True
-    assert calls["image"] == "bsl-indexer:local"
-    assert calls["env"]["MCP_HTTP_PORT"] == "8004"
-    assert any("/repos/src" in v for v in calls["volumes"])
 
 
 def test_launch_builds_image_when_missing(tmp_path, monkeypatch):
@@ -158,7 +191,7 @@ def test_launch_clones_deps_before_build(tmp_path, monkeypatch):
     c = make(tmp_path)
     catalog = tmp_path / "cfg"; catalog.mkdir()
     mid = c.post("/api/mcp", json={
-        "name": "idx", "kind": "docker", "standard_key": "code-index",
+        "name": "idx", "kind": "docker", "standard_key": "bsl-ls",
         "port": 8004, "catalog_dir": str(catalog), "project_name": "proj",
     }).json()["mcp"]["id"]
     r = c.post(f"/api/mcp/{mid}/launch", json={"port": 8004})
@@ -185,7 +218,7 @@ def test_launch_clone_failure_aborts_build(tmp_path, monkeypatch):
     c = make(tmp_path)
     catalog = tmp_path / "cfg"; catalog.mkdir()
     mid = c.post("/api/mcp", json={
-        "name": "idx", "kind": "docker", "standard_key": "code-index",
+        "name": "idx", "kind": "docker", "standard_key": "bsl-ls",
         "port": 8004, "catalog_dir": str(catalog), "project_name": "proj",
     }).json()["mcp"]["id"]
     r = c.post(f"/api/mcp/{mid}/launch", json={"port": 8004})
@@ -208,7 +241,7 @@ def test_launch_skips_clone_when_image_exists(tmp_path, monkeypatch):
     c = make(tmp_path)
     catalog = tmp_path / "cfg"; catalog.mkdir()
     mid = c.post("/api/mcp", json={
-        "name": "idx", "kind": "docker", "standard_key": "code-index",
+        "name": "idx", "kind": "docker", "standard_key": "bsl-ls",
         "port": 8004, "catalog_dir": str(catalog), "project_name": "proj",
     }).json()["mcp"]["id"]
     r = c.post(f"/api/mcp/{mid}/launch", json={"port": 8004})
@@ -259,7 +292,7 @@ def test_launch_stream_streams_run_log(tmp_path, monkeypatch):
     c = make(tmp_path)
     catalog = tmp_path / "cfg"; catalog.mkdir()
     mid = c.post("/api/mcp", json={
-        "name": "idx", "kind": "docker", "standard_key": "code-index",
+        "name": "idx", "kind": "docker", "standard_key": "bsl-ls",
         "port": 8004, "catalog_dir": str(catalog), "project_name": "proj",
     }).json()["mcp"]["id"]
     r = c.post(f"/api/mcp/{mid}/launch/stream", json={"port": 8004})
@@ -324,8 +357,9 @@ def test_launch_stream_clones_then_builds(tmp_path, monkeypatch):
     c = make(tmp_path)
     catalog = tmp_path / "cfg"; catalog.mkdir()
     mid = c.post("/api/mcp", json={
-        "name": "idx", "kind": "docker", "standard_key": "code-index",
+        "name": "idx", "kind": "docker", "standard_key": "1c-platform",
         "port": 8004, "catalog_dir": str(catalog), "project_name": "proj",
+        "platform_path": "/opt/1cv8",
     }).json()["mcp"]["id"]
     body = c.post(f"/api/mcp/{mid}/launch/stream", json={"port": 8004}).text
     assert "=== Скачивание исходников ===" in body
@@ -368,8 +402,9 @@ def test_launch_stream_fetches_pin_when_shallow_clone_lacks_it(tmp_path, monkeyp
     c = make(tmp_path)
     catalog = tmp_path / "cfg"; catalog.mkdir()
     mid = c.post("/api/mcp", json={
-        "name": "idx", "kind": "docker", "standard_key": "code-index",
+        "name": "idx", "kind": "docker", "standard_key": "1c-platform",
         "port": 8004, "catalog_dir": str(catalog), "project_name": "proj",
+        "platform_path": "/opt/1cv8",
     }).json()["mcp"]["id"]
     body = c.post(f"/api/mcp/{mid}/launch/stream", json={"port": 8004}).text
     assert "fetched pinned sha" in body
@@ -397,7 +432,7 @@ def test_launch_stream_clone_failure_aborts_build(tmp_path, monkeypatch):
     c = make(tmp_path)
     catalog = tmp_path / "cfg"; catalog.mkdir()
     mid = c.post("/api/mcp", json={
-        "name": "idx", "kind": "docker", "standard_key": "code-index",
+        "name": "idx", "kind": "docker", "standard_key": "bsl-ls",
         "port": 8004, "catalog_dir": str(catalog), "project_name": "proj",
     }).json()["mcp"]["id"]
     body = c.post(f"/api/mcp/{mid}/launch/stream", json={"port": 8004}).text
@@ -424,7 +459,7 @@ def test_launch_stream_clone_oserror_aborts_build(tmp_path, monkeypatch):
     c = make(tmp_path)
     catalog = tmp_path / "cfg"; catalog.mkdir()
     mid = c.post("/api/mcp", json={
-        "name": "idx", "kind": "docker", "standard_key": "code-index",
+        "name": "idx", "kind": "docker", "standard_key": "bsl-ls",
         "port": 8004, "catalog_dir": str(catalog), "project_name": "proj",
     }).json()["mcp"]["id"]
     body = c.post(f"/api/mcp/{mid}/launch/stream", json={"port": 8004}).text
@@ -453,7 +488,7 @@ def test_launch_stream_skips_clone_when_image_exists(tmp_path, monkeypatch):
     c = make(tmp_path)
     catalog = tmp_path / "cfg"; catalog.mkdir()
     mid = c.post("/api/mcp", json={
-        "name": "idx", "kind": "docker", "standard_key": "code-index",
+        "name": "idx", "kind": "docker", "standard_key": "bsl-ls",
         "port": 8004, "catalog_dir": str(catalog), "project_name": "proj",
     }).json()["mcp"]["id"]
     body = c.post(f"/api/mcp/{mid}/launch/stream", json={"port": 8004}).text

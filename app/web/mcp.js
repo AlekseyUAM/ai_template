@@ -124,7 +124,7 @@ function renderTypeFields() {
         `<button type="button" onclick="deployFromForm()">Развернуть в Docker локально</button>`;
     } else if (t.action === "local") {
       action.innerHTML =
-        `<button type="button" onclick="deployLocalFromForm()">Развернуть локально</button>`;
+        `<button type="button" onclick="deployLocalFromForm()">Развернуть</button>`;
     } else if (t.action === "cfe") {
       action.innerHTML =
         `<button type="button" onclick="downloadFromForm()">Скачать cfe</button>`;
@@ -267,7 +267,8 @@ async function submitAddForm() {
   await loadMcp();
 }
 
-// Кнопка «Развернуть в Docker локально» в форме: сохранить элемент, затем развернуть.
+// Кнопка «Развернуть в Docker локально» в форме: сохранить элемент, затем запустить
+// docker-контейнер (нативный code-index сюда не попадает — у него action=local).
 async function deployFromForm() {
   const id = await createMcp();
   if (id == null) return;
@@ -276,7 +277,8 @@ async function deployFromForm() {
   await streamLaunch(id, {}); // порт/токен/каталог берутся из сохранённого элемента
 }
 
-// Кнопка «Развернуть локально» в форме: сохранить элемент, затем развернуть нативно.
+// Кнопка «Развернуть» (вид с action=local) в форме: сохранить элемент, затем
+// развернуть нативно.
 async function deployLocalFromForm() {
   const id = await createMcp();
   if (id == null) return;
@@ -339,16 +341,18 @@ async function showMcpCard(mcpId) {
 
   // В карточке — без редактируемых полей; действия берут параметры из элемента.
   let controlsHtml = "";
+  // Действие вида приоритетнее mcp.kind: legacy-карточка code-index с kind=docker
+  // разворачивается нативно (сервер мигрирует kind в local при развёртывании).
   const isCfe = (type && type.has_cfe) || mcp.kind === "extension";
-  const isDocker = (type && type.action === "docker") || mcp.kind === "docker";
-  const isLocal = (type && type.action === "local") || mcp.kind === "local";
+  const isDocker = type ? type.action === "docker" : mcp.kind === "docker";
+  const isLocal = type ? type.action === "local" : mcp.kind === "local";
 
   if (isCfe) {
     controlsHtml = `<button type="button" onclick="downloadCfe('${mcp.id}')">Скачать cfe</button>`;
   } else if (isDocker) {
     controlsHtml = `<button type="button" onclick="launchMcp('${mcp.id}')">Развернуть в Docker локально</button>`;
   } else if (isLocal) {
-    controlsHtml = `<button type="button" onclick="deployLocal('${mcp.id}')">Развернуть локально</button>`;
+    controlsHtml = `<button type="button" onclick="deployLocal('${mcp.id}')">Развернуть</button>`;
   }
 
   cardPanel.innerHTML = `

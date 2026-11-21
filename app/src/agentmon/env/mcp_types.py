@@ -19,11 +19,12 @@ class McpType:
     fields: tuple           # поля карточки по порядку
     connection_template: str
     defaults: dict = field(default_factory=dict)
-    action: str | None = None       # "cfe" | "docker" | None
+    action: str | None = None       # "cfe" | "docker" | "local" | None
     cfe_path: str | None = None
     required: tuple = ()             # обязательные поля сверх name
     # Пер-типовые подписи полей: переопределяют глобальные (напр. url→"URL хоста").
     field_labels: dict = field(default_factory=dict)
+    hidden: bool = False             # не показывать в выборе вида (legacy)
 
 
 _HTTP_1C = (
@@ -142,25 +143,7 @@ MCP_TYPES: list[McpType] = [
     ),
     McpType(
         key="code-index",
-        title="Индексированная кодовая база (в Docker локально)",
-        fields=("name", "mcp_name", "purpose", "url", "port",
-                "catalog_dir", "project_name", "connection"),
-        connection_template=_HTTP_PORT,
-        defaults={
-            "mcp_name": "code_index",
-            "url": "localhost",
-            "port": 8004,
-            "purpose": ("Полнотекстовый поиск по функциям и классам, граф "
-                        "вызовов, паспорт объекта, смысловой поиск процедур по "
-                        "именам, синонимам и комментариям"),
-        },
-        action="docker",
-        required=("catalog_dir", "project_name"),
-        field_labels={"project_name": "Имя проекта (alias репозитория)"},
-    ),
-    McpType(
-        key="code-index-local",
-        title="Индексированная кодовая база (локально)",
+        title="Индексированная кодовая база (нативно)",
         fields=("name", "mcp_name", "purpose", "url", "port",
                 "catalog_dir", "project_name", "code_index_dir", "connection"),
         connection_template=_HTTP_PORT,
@@ -177,6 +160,27 @@ MCP_TYPES: list[McpType] = [
         field_labels={"project_name": "Имя проекта (alias репозитория)",
                       "code_index_dir": "Каталог code_index",
                       "port": "Порт code_index"},
+    ),
+    McpType(
+        key="code-index-local",
+        title="Индексированная кодовая база (локально, legacy)",
+        fields=("name", "mcp_name", "purpose", "url", "port",
+                "catalog_dir", "project_name", "code_index_dir", "connection"),
+        connection_template=_HTTP_PORT,
+        defaults={
+            "mcp_name": "code_index",
+            "url": "localhost",
+            "port": 8005,
+            "purpose": ("Полнотекстовый поиск по функциям и классам, граф "
+                        "вызовов, паспорт объекта, смысловой поиск процедур по "
+                        "именам, синонимам и комментариям"),
+        },
+        action="local",
+        required=("catalog_dir", "project_name", "code_index_dir", "port"),
+        field_labels={"project_name": "Имя проекта (alias репозитория)",
+                      "code_index_dir": "Каталог code_index",
+                      "port": "Порт code_index"},
+        hidden=True,
     ),
 ]
 
@@ -228,5 +232,5 @@ def types_payload() -> list[dict]:
             "required": list(t.required),
             "field_labels": dict(t.field_labels),
         }
-        for t in MCP_TYPES
+        for t in MCP_TYPES if not t.hidden
     ]
