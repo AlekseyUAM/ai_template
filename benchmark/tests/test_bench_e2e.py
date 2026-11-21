@@ -44,8 +44,7 @@ FAKE = r'''#!/usr/bin/env python3
 import json, os, re, sys
 from pathlib import Path
 
-args = sys.argv[1:]
-prompt = args[args.index("-p") + 1] if "-p" in args else ""
+prompt = sys.stdin.read()
 sid = "fake-session"
 out = []
 
