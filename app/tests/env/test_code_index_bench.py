@@ -1,5 +1,6 @@
 import json
 import os
+import signal
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -196,3 +197,149 @@ def test_existing_binary_finds_downloaded(tmp_path):
     binary = nested / "bsl-indexer"
     binary.write_text("bin", encoding="utf-8")
     assert R.existing_binary(tmp_path) == binary
+
+
+# --- fix-ревью: дедлайн stop, error-статус, потерянный PID демона ---
+
+class _Clock:
+    """Сценарий времени: значения по одному, дальше — за пределом срока."""
+
+    def __init__(self, values, past=11.0):
+        self.values = list(values)
+        self.past = past
+
+    def __call__(self):
+        return self.values.pop(0) if self.values else self.past
+
+
+def test_stop_gives_up_waiting_after_deadline(tmp_path, monkeypatch):
+    ci = tmp_path / "ci"; ci.mkdir()
+    (ci / "benchmark-pids.json").write_text('{"daemon": 10, "serve": 11}')
+    waits, signals = [], []
+
+    def wait(pids, **kw):
+        waits.append((list(pids), kw["timeout"]))
+        kw["sleep"] = lambda _s: None
+        return B._wait_exit(pids, **kw)
+
+    monkeypatch.setattr(B, "_is_our_process", lambda pid, run: True)
+    monkeypatch.setattr(B, "STOP_TIMEOUT_SEC", 10.0)
+    B.stop_code_index(ci, run=lambda cmd, **k: None,
+                      kill=lambda pid, sig: signals.append((pid, sig)),
+                      clock=_Clock([0.0, 0.0, 10.0, 10.0, 10.0]), wait=wait,
+                      log=lambda _m: None)
+    assert waits == [([10, 11], 10.0)]
+    assert signals == [(10, signal.SIGTERM), (11, signal.SIGTERM),
+                       (10, signal.SIGKILL), (11, signal.SIGKILL)]
+
+
+def test_stop_check_overrunning_deadline_ends_wait():
+    checked = []
+    def check(pid):
+        checked.append(pid)
+        return True
+    alive = B._wait_exit([10], check=check,
+                         clock=_Clock([0.0, 0.0, 10.0]), sleep=lambda _s: None,
+                         timeout=10.0)
+    assert checked == [10]
+    assert alive == [10]
+
+
+def test_wait_ready_fails_fast_on_error_status(monkeypatch):
+    from agentmon.env.bench_setup import SetupError
+    monkeypatch.setattr(B, "_is_our_process", lambda pid, run: True)
+    index = B.NativeIndex(Path("/ci"), Path("/ci/bsl-indexer"), 1, 2)
+    status = json.dumps({"paths": [{"path": "/x", "status": "error",
+                                    "message": "boom"}]})
+    calls = []
+    with pytest.raises(SetupError, match="boom"):
+        B.wait_code_index_ready(index, wait_minutes=360, host="h", port=1,
+                                run=_ready_run(status, calls),
+                                sleep=lambda _s: None,
+                                clock=lambda: 0.0, tcp_ok=lambda _u: True,
+                                log=lambda _m: None)
+    assert len(calls) == 1          # без ожидания таймаута
+
+
+def test_wait_ready_error_uses_error_field_and_fallback(monkeypatch):
+    from agentmon.env.bench_setup import SetupError
+    monkeypatch.setattr(B, "_is_our_process", lambda pid, run: True)
+    index = B.NativeIndex(Path("/ci"), Path("/ci/bsl-indexer"), 1, 2)
+    status = json.dumps({"paths": [{"path": "/x", "status": "error",
+                                    "error": "bad xml"}]})
+    with pytest.raises(SetupError, match="bad xml"):
+        B.wait_code_index_ready(index, wait_minutes=1, host="h", port=1,
+                                run=_ready_run(status, []),
+                                sleep=lambda _s: None, clock=lambda: 0.0,
+                                tcp_ok=lambda _u: True, log=lambda _m: None)
+    status = json.dumps({"paths": [{"path": "/x", "status": "error"}]})
+    with pytest.raises(SetupError, match="ошибка индексации"):
+        B.wait_code_index_ready(index, wait_minutes=1, host="h", port=1,
+                                run=_ready_run(status, []),
+                                sleep=lambda _s: None, clock=lambda: 0.0,
+                                tcp_ok=lambda _u: True, log=lambda _m: None)
+
+
+def test_start_stops_daemon_when_serve_spawn_fails(tmp_path, monkeypatch):
+    ci = tmp_path / "ci"
+    catalog = tmp_path / "catalog"; catalog.mkdir()
+    bin_path = ci / "bsl-indexer"
+    bin_path.parent.mkdir(parents=True)
+    bin_path.write_text("bin", encoding="utf-8")
+    calls = []
+
+    def fake_popen(args, **kwargs):
+        calls.append(list(args))
+        if len(calls) == 2:
+            raise OSError("spawn serve failed")
+        return SimpleNamespace(pid=111)
+
+    stopped = []
+    monkeypatch.setattr(B, "_spawn_kwargs", lambda: {})
+    monkeypatch.setattr(B, "_is_our_process", lambda pid, run: True)
+    real_stop = B.stop_code_index
+
+    def spy_stop(d, **k):
+        stopped.append(Path(d))
+        return real_stop(d, kill=lambda pid, sig: None,
+                         wait=lambda pids, **kw: [], **k)
+
+    monkeypatch.setattr(B, "stop_code_index", spy_stop)
+    with pytest.raises(OSError, match="spawn serve failed"):
+        B.start_code_index(
+            code_index_dir=ci, catalog_dir=catalog, alias="a", port=8005,
+            download=lambda dest, *, log=None: bin_path,
+            popen=fake_popen,
+            run=lambda *a, **k: SimpleNamespace(returncode=0, stdout="",
+                                                stderr=""),
+            log=lambda _m: None)
+    # Реальная очистка: демон остановлен, stale serve-записи нет.
+    assert stopped[-1] == ci
+    assert not (ci / "benchmark-pids.json").exists()
+
+
+def test_start_writes_daemon_pid_before_serve_spawn(tmp_path, monkeypatch):
+    ci = tmp_path / "ci"
+    catalog = tmp_path / "catalog"; catalog.mkdir()
+    bin_path = ci / "bsl-indexer"
+    bin_path.parent.mkdir(parents=True)
+    bin_path.write_text("bin", encoding="utf-8")
+    seen, pids = [], iter([111, 222])
+
+    def fake_popen(args, **kwargs):
+        path = ci / "benchmark-pids.json"
+        seen.append(json.loads(path.read_text("utf-8"))
+                    if path.exists() else None)
+        return SimpleNamespace(pid=next(pids))
+
+    monkeypatch.setattr(B, "_spawn_kwargs", lambda: {})
+    B.start_code_index(
+        code_index_dir=ci, catalog_dir=catalog, alias="a", port=8005,
+        download=lambda dest, *, log=None: bin_path, popen=fake_popen,
+        run=lambda *a, **k: SimpleNamespace(returncode=0, stdout="",
+                                            stderr=""),
+        log=lambda _m: None)
+    assert seen[0] is None                # до spawn демона pid-файла нет
+    assert seen[1] == {"daemon": 111, "serve": None}
+    assert json.loads((ci / "benchmark-pids.json").read_text("utf-8")) == {
+        "daemon": 111, "serve": 222}

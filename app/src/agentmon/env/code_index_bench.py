@@ -40,10 +40,10 @@ def _read_pids(code_index_dir) -> list[int]:
             if isinstance(v, int)]
 
 
-def _write_pids(code_index_dir, daemon: int, serve: int) -> None:
+def _write_pids(code_index_dir, daemon: int,
+                serve: int | None = None) -> None:
     path = _pid_path(code_index_dir)
-    path.write_text(json.dumps({"daemon": int(daemon),
-                                "serve": int(serve)}) + "\n",
+    path.write_text(json.dumps({"daemon": int(daemon), "serve": serve}) + "\n",
                     encoding="utf-8")
 
 
@@ -51,8 +51,8 @@ def _is_our_process(pid: int, run=subprocess.run) -> bool:
     if os.name == "nt":
         try:
             res = run(["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
-                      capture_output=True, text=True)
-        except OSError:
+                      capture_output=True, text=True, timeout=5)
+        except (OSError, subprocess.TimeoutExpired):
             return False
         return "bsl-indexer" in (getattr(res, "stdout", "") or "").lower()
     try:
@@ -69,8 +69,22 @@ def _spawn_kwargs() -> dict:
     return {"start_new_session": True}
 
 
+def _wait_exit(pids, *, check, clock, sleep, timeout) -> list[int]:
+    """PID, которые остались живы после ожидания в пределах timeout."""
+    deadline = clock() + timeout
+    alive = list(pids)
+    while alive:
+        if clock() >= deadline:
+            return alive
+        alive = [pid for pid in alive if check(pid)]
+        if alive:
+            sleep(0.2)
+    return alive
+
+
 def stop_code_index(code_index_dir, *, run=subprocess.run, kill=os.kill,
-                    sleep=time.sleep, clock=time.monotonic, log=print) -> None:
+                    sleep=time.sleep, clock=time.monotonic, log=print,
+                    wait=_wait_exit) -> None:
     pids = [pid for pid in _read_pids(code_index_dir)
             if _is_our_process(pid, run)]
     for pid in pids:
@@ -83,19 +97,15 @@ def stop_code_index(code_index_dir, *, run=subprocess.run, kill=os.kill,
         else:
             try:
                 kill(pid, signal.SIGTERM)
-            except OSError:
+            except (OSError, ValueError):
                 pass
-    alive = list(pids)
-    deadline = clock() + STOP_TIMEOUT_SEC
-    while alive and clock() < deadline:
-        alive = [pid for pid in alive if _is_our_process(pid, run)]
-        if alive:
-            sleep(0.2)
+    alive = wait(pids, check=lambda pid: _is_our_process(pid, run),
+                 clock=clock, sleep=sleep, timeout=STOP_TIMEOUT_SEC)
     if os.name != "nt":
         for pid in alive:
             try:
                 kill(pid, signal.SIGKILL)
-            except OSError:
+            except (OSError, ValueError):
                 pass
     try:
         _pid_path(code_index_dir).unlink()
@@ -138,13 +148,20 @@ def start_code_index(*, code_index_dir, catalog_dir, alias, port,
         daemon = popen([str(binary), "daemon", "run"], cwd=str(ci),
                        env=env, stdout=daemon_log, stderr=subprocess.STDOUT,
                        **_spawn_kwargs())
+    # PID демона пишется до spawn serve: если serve не стартует, демон
+    # не останется сиротой без PID-файла.
+    _write_pids(ci, daemon.pid)
     serve_env = {**env, "MCP_HTTP_HOST": host, "MCP_HTTP_PORT": str(port)}
-    with (ci / "serve.log").open("ab") as serve_log:
-        serve = popen([str(binary), "serve", "--transport", "http",
-                       "--host", host, "--port", str(port),
-                       "--config", str(toml_path)],
-                      cwd=str(ci), env=serve_env, stdout=serve_log,
-                      stderr=subprocess.STDOUT, **_spawn_kwargs())
+    try:
+        with (ci / "serve.log").open("ab") as serve_log:
+            serve = popen([str(binary), "serve", "--transport", "http",
+                           "--host", host, "--port", str(port),
+                           "--config", str(toml_path)],
+                          cwd=str(ci), env=serve_env, stdout=serve_log,
+                          stderr=subprocess.STDOUT, **_spawn_kwargs())
+    except BaseException:
+        stop_code_index(ci, run=run, log=log)
+        raise
     _write_pids(ci, daemon.pid, serve.pid)
     log(f"✓ code-index запущен: daemon pid={daemon.pid}, "
         f"serve pid={serve.pid}, порт {port}")
@@ -177,6 +194,11 @@ def wait_code_index_ready(index: NativeIndex, *, wait_minutes: int, host: str,
     while True:
         data = _daemon_status(index, run)
         paths = (data or {}).get("paths") or []
+        for p in paths:
+            if p.get("status") == "error":
+                raise SetupError(
+                    f"code-index: ошибка индексации {p.get('path', '?')}: "
+                    f"{p.get('error') or p.get('message') or 'ошибка индексации'}")
         ready = bool(paths) and all(p.get("status") == "ready"
                                     for p in paths)
         if ready and tcp_ok(f"http://{host}:{port}"):
