@@ -218,6 +218,13 @@ strata connect claude-code --check  # пробный запрос и вызов 
 (с резервной копией). Для benchmark предпочтителен проектный
 `settings.local.json`, чтобы не менять окружение остальных проектов.
 
+Если Claude Code пишет в stderr `[claude-code:unrecognized_model]`, это
+диагностика, а не ошибка. Погасить её можно в `settings.local.json`:
+
+```json
+"modelOverrides": {"claude-sonnet-4-6": "<фактический id модели>"}
+```
+
 При сбое аналитика отчёт всё равно создаётся — с объективной сводкой и описанием
 ошибки. Старый `RESULT.md` не сохраняется.
 

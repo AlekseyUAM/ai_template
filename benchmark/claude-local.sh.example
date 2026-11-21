@@ -9,4 +9,6 @@ cd "$(dirname "$0")"
 # Не тащим Anthropic-окружение из внешних запусков.
 unset ANTHROPIC_BASE_URL ANTHROPIC_AUTH_TOKEN ANTHROPIC_MODEL ANTHROPIC_SMALL_FAST_MODEL
 unset ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_OPUS_MODEL ANTHROPIC_DEFAULT_HAIKU_MODEL
+export PYTHONUTF8=1
+export PYTHONIOENCODING=utf-8
 exec claude --dangerously-skip-permissions "$@"

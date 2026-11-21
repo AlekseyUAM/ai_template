@@ -67,6 +67,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
+
 # Name of the launch parameter the configuration handles in /C
 LAUNCH_PARAM = "ВыполнитьЗапускЮнитТестов"
 DEFAULT_CONFIG = "configs/test.json"

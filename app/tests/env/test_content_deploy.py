@@ -81,6 +81,22 @@ def test_settings_registers_hook(prov, tmp_path):
     assert "bsl_nudge.py" in cmd
 
 
+def test_settings_sets_utf8_env(prov, tmp_path):
+    content.deploy_content(prov, cfg(tmp_path, []), update=False)
+    data = json.loads((tmp_path / ".claude" / "settings.json")
+                      .read_text(encoding="utf-8"))
+    assert data["env"]["PYTHONUTF8"] == "1"
+    assert data["env"]["PYTHONIOENCODING"] == "utf-8"
+
+
+def test_local_settings_example_has_model_overrides(prov, tmp_path):
+    content.deploy_content(prov, cfg(tmp_path, []), update=False)
+    text = (tmp_path / ".claude" / "settings.local.json.example").read_text(
+        encoding="utf-8")
+    assert "modelOverrides" in text
+    assert "claude-sonnet-4-6" in text
+
+
 def test_copy_tree_handles_binary(prov, tmp_path):
     # place a binary file into a copy of the skills tree path is internal;
     # instead verify deploy still works and a known text skill lands intact
