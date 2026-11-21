@@ -10,22 +10,19 @@ import json
 import os
 import re
 import shutil
-import socket
 import stat
 import subprocess
 import time
-import urllib.error
-import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
-from urllib.parse import urlparse
 
 from ..pycmd import PYTHON_CMD
 from .config_schema import SCHEMA_VERSION, EnvConfig, McpSelection
 from .devbase import _parse_connection, git_commit_all, git_init_project
 from .installer import install_environment
 from .mcp_docker_recipes import container_name, launch_params, recipe_for
+from .net_probe import default_http_ok, default_tcp_ok, url_host_port
 from . import mcp_docker
 from . import mcp_sources
 from .project_checks import current_env_version, infer_db_kind, validate_name
@@ -140,7 +137,7 @@ def load_config(env_path: Path, *, repo_root: Path,
             raise SetupError(f"{key} должен начинаться с http:// или https://")
         if value:
             try:
-                _url_host_port(value)
+                url_host_port(value)
             except ValueError:
                 raise SetupError(
                     f"{key}: некорректный URL {value!r} "
@@ -239,40 +236,6 @@ def _connection_platform(url: str) -> str:
         ensure_ascii=False,
     )
     return f"\"1c_platform\": {server}"
-
-
-def _url_host_port(url: str) -> tuple[str, int]:
-    """Хост и порт URL; ValueError на некорректном порту (http://host:abc)."""
-    parsed = urlparse(url)
-    port = parsed.port or (443 if parsed.scheme == "https" else 80)
-    if not 1 <= port <= 65535:
-        raise ValueError(f"некорректный порт в URL: {url}")
-    return parsed.hostname or "", port
-
-
-def default_tcp_ok(url: str, timeout: float = 3.0) -> bool:
-    """True, если TCP-соединение с хостом/портом URL устанавливается."""
-    host, port = _url_host_port(url)
-    if not host:
-        return False
-    try:
-        with socket.create_connection((host, port), timeout=timeout):
-            return True
-    except OSError:
-        return False
-
-
-def default_http_ok(url: str, timeout: float = 5.0) -> bool:
-    """Любой HTTP-ответ (включая 4xx) означает, что сервис слушает."""
-    request = urllib.request.Request(
-        url, headers={"User-Agent": "ai1c-agentmon"})
-    try:
-        with urllib.request.urlopen(request, timeout=timeout):
-            return True
-    except urllib.error.HTTPError:
-        return True
-    except OSError:
-        return False
 
 
 def check_mcp_url(url: str, *, http_ok=default_http_ok, log=print) -> None:
@@ -443,7 +406,7 @@ def remove_existing_project(cfg: BenchConfig, *, store, registry,
 
 
 def build_mcp_plans(cfg: BenchConfig) -> list[McpPlan]:
-    bsl_host, bsl_port = _url_host_port(cfg.bsl_ls_url)
+    bsl_host, bsl_port = url_host_port(cfg.bsl_ls_url)
     plans = [
         McpPlan(
             standard_key="bsl-ls", mcp_name="bsl_ls", kind="docker",
@@ -466,7 +429,7 @@ def build_mcp_plans(cfg: BenchConfig) -> list[McpPlan]:
                      "актуальных метаданных конфигурации"),
         ))
     if cfg.one_c_naparnic_url:
-        naparnic_host, naparnic_port = _url_host_port(cfg.one_c_naparnic_url)
+        naparnic_host, naparnic_port = url_host_port(cfg.one_c_naparnic_url)
         plans.append(McpPlan(
             standard_key="1c-naparnic", mcp_name="1c_naparnic",
             kind="docker",

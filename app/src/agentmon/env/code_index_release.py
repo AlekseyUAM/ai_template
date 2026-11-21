@@ -98,6 +98,15 @@ def _find_binary(dest, os_marker):
     raise ValueError(f"в архиве не найден {want}")
 
 
+def existing_binary(code_index_dir):
+    """Найти уже скачанный bsl-indexer в каталоге (без сети)."""
+    for name in ("bsl-indexer.exe", "bsl-indexer"):
+        for path in Path(code_index_dir).rglob(name):
+            if path.is_file():
+                return path
+    return None
+
+
 def download_binary(code_index_dir, *, fetch=_default_fetch, log=None,
                     platform_name=None):
     """Скачать bsl-indexer под хост в code_index_dir, вернуть путь к бинарю."""
