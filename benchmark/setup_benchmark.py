@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -52,6 +53,28 @@ def load_repo_env() -> None:
     load_env_file(ROOT / ".ai1c.env", os.environ)
 
 
+def docker_problem(timeout: float = 10.0) -> str | None:
+    """Проверить доступность демона Docker.
+
+    Возвращает None, если демон отвечает, иначе — короткое описание проблемы.
+    Вызов ограничен таймаутом: `docker info` не должен подвешивать скрипт,
+    пока Docker Desktop ещё стартует.
+    """
+    try:
+        result = subprocess.run(
+            ["docker", "info"], stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL, timeout=timeout)
+    except FileNotFoundError:
+        return "не найден CLI docker (установите Docker Desktop)"
+    except subprocess.TimeoutExpired:
+        return f"демон не ответил за {timeout:g} с"
+    except OSError as exc:
+        return f"не удалось запустить docker: {exc}"
+    if result.returncode != 0:
+        return "демон не отвечает (docker info завершился с ошибкой)"
+    return None
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Подготовка benchmark-окружения AgentMon")
@@ -87,12 +110,30 @@ def main(argv: list[str] | None = None) -> int:
         print(f"✗ {exc}", file=sys.stderr)
         return 1
 
+    problem = docker_problem()
+    if problem:
+        print(f"✗ Docker недоступен: {problem}", file=sys.stderr)
+        print("  benchmark-окружение поднимает MCP-серверы и code_index "
+              "в Docker,", file=sys.stderr)
+        print("  поэтому подготовка без Docker невозможна. Запустите "
+              "Docker Desktop", file=sys.stderr)
+        print("  и повторите запуск.", file=sys.stderr)
+        return 1
+
+    # libpq без таймаута может ждать недоступную БД бесконечно: например,
+    # когда Docker остановлен, а порт 5432 ещё держит прокси Docker Desktop.
+    os.environ.setdefault("PGCONNECT_TIMEOUT", "10")
+
     try:
         store = connect(config.DSN)
         init_schema(store)
     except Exception as exc:                           # noqa: BLE001
         print(f"✗ не удалось открыть store {config.DSN}: {exc}",
               file=sys.stderr)
+        if (os.environ.get("AI1C_PG_MODE") or "").strip().lower() == "docker":
+            print("  PostgreSQL настроена в Docker (AI1C_PG_MODE=docker): "
+                  "проверьте,", file=sys.stderr)
+            print("  что контейнер ai1c-postgres запущен.", file=sys.stderr)
         return 1
     try:
         registry = ProjectRegistry(open_db(config.DB_PATH))

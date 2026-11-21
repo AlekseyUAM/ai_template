@@ -1,5 +1,6 @@
 """Ретрай setup_benchmark при транзиентной блокировке ИБ."""
 import importlib.util
+import subprocess
 import sys
 from pathlib import Path
 
@@ -53,6 +54,59 @@ def test_does_not_retry_other_errors():
     else:
         raise AssertionError("ожидали ошибку")
     assert len(attempts) == 1
+
+
+def _completed(returncode):
+    return subprocess.CompletedProcess(["docker", "info"], returncode)
+
+
+def test_docker_problem_none_when_daemon_ok(monkeypatch):
+    mod = _load()
+    monkeypatch.setattr(
+        mod.subprocess, "run", lambda *a, **kw: _completed(0))
+    assert mod.docker_problem() is None
+
+
+def test_docker_problem_reports_missing_cli(monkeypatch):
+    mod = _load()
+
+    def missing(*_args, **_kwargs):
+        raise FileNotFoundError("docker")
+
+    monkeypatch.setattr(mod.subprocess, "run", missing)
+    assert "docker" in mod.docker_problem().lower()
+
+
+def test_docker_problem_reports_stopped_daemon(monkeypatch):
+    mod = _load()
+    monkeypatch.setattr(
+        mod.subprocess, "run", lambda *a, **kw: _completed(1))
+    assert "демон" in mod.docker_problem()
+
+
+def test_docker_problem_passes_timeout(monkeypatch):
+    mod = _load()
+    seen = {}
+
+    def slow(*_args, **kwargs):
+        seen.update(kwargs)
+        raise subprocess.TimeoutExpired("docker info", kwargs["timeout"])
+
+    monkeypatch.setattr(mod.subprocess, "run", slow)
+    problem = mod.docker_problem()
+    assert seen["timeout"] == 10.0
+    assert "не ответил" in problem
+
+
+def test_main_fails_before_store_without_docker(monkeypatch, capsys,
+                                               tmp_path):
+    mod = _load()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(mod, "load_repo_env", lambda: None)
+    monkeypatch.setattr(mod, "docker_problem",
+                        lambda *a, **kw: "демон не отвечает")
+    assert mod.main([]) == 1
+    assert "Docker недоступен" in capsys.readouterr().err
 
 
 def test_gives_up_after_attempts():
