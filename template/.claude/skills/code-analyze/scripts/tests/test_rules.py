@@ -1,4 +1,4 @@
-# Тесты автоматических правил code-analyze.
+# Tests for the automatic code-analyze rules.
 import os
 import sys
 
@@ -45,7 +45,7 @@ def test_concat_outside_loop_not_flagged():
 
 
 def test_concat_reassign_without_self_not_flagged():
-    # «Текст = Другая + Ещё» — аккумулятора нет (нет Текст справа)
+    # "Текст = Другая + Ещё" - no accumulator (no Текст on the right)
     text = (
         "Пока Усл Цикл\n"
         "    Текст = Левое + Правое;\n"
@@ -104,7 +104,7 @@ def test_single_char_loop_counter_not_flagged():
         "    КонецЦикла;\n"
         "КонецПроцедуры\n"
     )
-    # Сч — счётчик цикла (не Перем, не параметр) → не флагуется
+    # Сч - loop counter (not Перем, not a parameter) -> not flagged
     assert "var-name-single-char" not in codes(text)
 
 
@@ -393,7 +393,7 @@ def test_query_execute_outside_loop_not_flagged():
 
 
 def test_global_execute_operator_not_flagged():
-    # Глобальный оператор Выполнить("код") — без точки перед ним, не метод Запроса.
+    # Global Выполнить("code") operator - no dot before it, not a Запрос method.
     text = (
         "Пока Усл Цикл\n"
         "    Выполнить(\"А = 1\");\n"
@@ -423,7 +423,7 @@ def test_query_new_outside_loop_not_flagged():
     assert "query-new-in-loop" not in codes(text)
 
 
-# ── query-execute-in-loop-via-call (глубина 1, в рамках модуля) ─
+# ── query-execute-in-loop-via-call (depth 1, within the module) ─
 
 def test_query_execute_in_loop_via_call_flagged():
     text = (
@@ -469,7 +469,7 @@ def test_query_call_to_method_without_query_not_flagged():
 
 
 def test_qualified_call_in_loop_not_flagged_via_call():
-    # Объект.Метод( в цикле — квалифицированный вызов, не локальный метод модуля.
+    # Объект.Метод( in a loop - qualified call, not a local module method.
     text = (
         "Процедура Главная()\n"
         "    Для Н = 1 По 3 Цикл\n"
@@ -480,7 +480,7 @@ def test_qualified_call_in_loop_not_flagged_via_call():
     assert "query-execute-in-loop-via-call" not in codes(text)
 
 
-# ── query-new-in-loop-via-call (глубина 1, в рамках модуля) ────
+# ── query-new-in-loop-via-call (depth 1, within the module) ────
 
 def test_query_new_in_loop_via_call_flagged():
     text = (
@@ -498,7 +498,7 @@ def test_query_new_in_loop_via_call_flagged():
     assert "query-new-in-loop-via-call" in codes(text)
 
 
-# ── общая проверка серьёзности и позиции ──────────────────────
+# ── general severity and position check ─────────────────────
 
 def test_finding_has_line():
     text = (
@@ -509,14 +509,14 @@ def test_finding_has_line():
     assert fs and fs[0].line == 2
 
 
-# ── severity ключевых правил (блокирующие: important=warning) ──
+# ── severity of key rules (blocking: important=warning) ──────
 
 def _severity(text, code):
     return next(f.severity for f in findings(text) if f.code == code)
 
 
 def test_posting_and_loop_query_rules_are_warning():
-    # Эти правила блокируют приёмку (важная=warning), а не минорная=info.
+    # These rules block acceptance (important=warning), not minor=info.
     write_text = (
         "Процедура ОбработкаПроведения(Отказ, РежимПроведения)\n"
         "    Движения.Остатки.Записать();\n"
@@ -581,7 +581,7 @@ def test_user_message_via_constructor_severity_info():
 
 
 def test_osn_message_not_flagged():
-    # Вызов БСП-функции — не велосипед, не флагуем.
+    # A BSP function call - not a reinvention, not flagged.
     text = "ОбщегоНазначения.СообщитьПользователю(\"Нет остатка\");\n"
     assert "user-message-via-constructor" not in codes(text)
 
@@ -590,7 +590,7 @@ def test_new_other_type_not_flagged():
     assert "user-message-via-constructor" not in codes("М = Новый Массив;\n")
 
 
-# ── string-concat-in-loop: числовые аккумуляторы ─────────────
+# ── string-concat-in-loop: numeric accumulators ──────────────
 
 def test_numeric_accumulator_in_loop_not_flagged():
     text = (

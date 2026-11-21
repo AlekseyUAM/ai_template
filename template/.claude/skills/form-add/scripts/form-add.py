@@ -11,16 +11,16 @@ import uuid
 
 from lxml import etree
 
-# Регистронезависимый ввод: имена параметров и значения choices принимаются
-# в любом регистре (в argparse по умолчанию совпадение точное).
+# Case-insensitive input: option names and choices values are accepted
+# in any case (argparse matching is exact by default).
 def ci_parse_args(parser, argv=None):
-    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
+    """parse_args: option names and choices values are accepted in any case."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
         if tok.startswith('-') and tok.lower() in names:
             argv[i] = names[tok.lower()]
-    # choices — зеркало [ValidateSet]; канонизируем ДО разбора, иначе argparse отвергнет регистр
+    # choices - mirror of [ValidateSet]; canonicalize BEFORE parsing, otherwise argparse rejects the case
     choice_map = {}
     for a in parser._actions:
         if a.choices:
@@ -36,7 +36,7 @@ def ci_parse_args(parser, argv=None):
 
 # ============================================================
 # Support guard (Ext/ParentConfigurations.bin) — see docs/1c-support-state-spec.md
-# Blocks edits of vendor objects "на замке" / read-only configs. Trigger = bin
+# Blocks edits of vendor objects "locked" / read-only configs. Trigger = bin
 # present; reaction from .v8-project.json editingAllowedCheck (deny|warn|off,
 # default deny). Never throws (except sys.exit on deny) — errors degrade to allow.
 # ============================================================
@@ -218,8 +218,8 @@ NSMAP = {
 
 def detect_format_version(d):
     while d:
-        # Автономная внешняя обработка/отчёт: своего Configuration.xml у неё нет, версию несёт
-        # корень самой обработки. Без этого форма и макет внутри обработки 2.21 писались бы 2.17.
+        # Standalone external data processor/report: it has no Configuration.xml of its own, the version
+        # comes from the processor root. Without this, forms and templates inside a 2.21 processor would be written as 2.17.
         ext_path = d + ".xml"
         if os.path.isfile(ext_path):
             with open(ext_path, "r", encoding="utf-8-sig") as f:
@@ -243,14 +243,14 @@ def detect_format_version(d):
 
 
 def format_rank(ver):
-    """"2.20" → 220, "2.9" → 209. Строковое сравнение неверно ("2.9" > "2.17")."""
+    """"2.20" → 220, "2.9" → 209. String comparison is wrong ("2.9" > "2.17")."""
     m = re.match(r'^(\d+)\.(\d+)$', ver or '')
     return int(m.group(1)) * 100 + int(m.group(2)) if m else 0
 
 
 def _detect_xml_style(path):
-    """Стиль существующего файла для round-trip-сохранения: BOM / EOL / регистр encoding /
-    финальный перенос. None → файл новый (сохранить текущее поведение)."""
+    """Style of the existing file for round-trip saving: BOM / EOL / encoding case /
+    final newline. None → new file (keep current behavior)."""
     try:
         raw = open(path, "rb").read()
     except OSError:
@@ -265,21 +265,21 @@ def _detect_xml_style(path):
 
 
 def _finalize_xml_bytes(xml_bytes, style):
-    """Привести байты к стилю оригинала; для НОВОГО файла (style is None) — к канону
-    выгрузки Конфигуратора: encoding="UTF-8", CRLF в разделителях, без перевода в конце."""
+    """Bring bytes to the original's style; for a NEW file (style is None) - to the
+    Configurator dump canon: encoding="UTF-8", CRLF in separators, no trailing newline."""
     enc_decl = style["enc"] if style else "UTF-8"
     xml_bytes = xml_bytes.replace(
         b"<?xml version='1.0' encoding='UTF-8'?>",
         b'<?xml version="1.0" encoding="' + enc_decl.encode("ascii") + b'"?>')
-    # Канонизировать переносы к LF (убирает &#13; от \r в tail'ах)
+    # Canonicalize line endings to LF (removes &#13; from \r in tails)
     xml_bytes = (xml_bytes.replace(b"&#13;\n", b"\n").replace(b"&#13;", b"")
                  .replace(b"\r\n", b"\n").replace(b"\r", b"\n"))
-    # Финальный перенос — как в оригинале (новый файл → нет, канон #57)
+    # Final newline - as in the original (new file → none, canon #57)
     want_final_nl = style["final_nl"] if style else False
     xml_bytes = xml_bytes.rstrip(b"\n")
     if want_final_nl:
         xml_bytes += b"\n"
-    # EOL — как в оригинале (новый файл → CRLF, канон #57)
+    # EOL - as in the original (new file → CRLF, canon #57)
     if (style["crlf"] if style else True):
         xml_bytes = xml_bytes.replace(b"\n", b"\r\n")
     return xml_bytes
@@ -297,20 +297,20 @@ def save_xml_with_bom(tree, path):
 
 
 def write_utf8_bom(path, content):
-    # newline='' — без трансляции: иначе текстовый режим Python дал бы CRLF на Windows
-    # и LF на macOS, то есть вывод навыка зависел бы от ОС.
+    # newline='' - no translation: otherwise Python text mode would give CRLF on Windows
+    # and LF on macOS, i.e. the skill output would depend on the OS.
     with open(path, 'w', encoding='utf-8-sig', newline='') as f:
         f.write(content)
 
 
 
 def write_xml_file(path, content):
-    """XML в каноне выгрузки Конфигуратора: CRLF в разделителях, без перевода в конце.
+    """XML in the Configurator dump canon: CRLF in separators, no trailing newline.
 
-    Копия этой функции есть в каждом навыке-эмиттере (навыки автономны). Держать
-    копии одинаковыми — сознательно: разошедшиеся копии сводят на нет весь смысл.
+    A copy of this function exists in every emitter skill (skills are standalone). Keeping
+    the copies identical is deliberate: diverged copies defeat the whole purpose.
 
-    Модуль .bsl сюда НЕ идёт — он пишется отдельно.
+    The .bsl module does NOT go here - it is written separately.
     """
     text = content.replace('\r\n', '\n').replace('\n', '\r\n').rstrip('\r\n')
     write_utf8_bom(path, text)
@@ -323,11 +323,11 @@ def main():
     parser.add_argument("-ObjectPath", required=True)
     parser.add_argument("-FormName", required=True)
     parser.add_argument("-Synonym", default=None)
-    # Пусто = основная форма вида (primary в таблице): у справочника это форма объекта,
-    # у регистра сведений — форма записи, у журнала — форма списка.
+    # Empty = the kind's primary form (primary in the table): for a catalog it is the object form,
+    # for an information register - the record form, for a journal - the list form.
     parser.add_argument("-Purpose", default="")
-    # Написания с дефисом внутри имени и с двойным дефисом: их принимает алиас
-    # set-default, здесь — перечисление опций, чтобы порты принимали ровно одно и то же.
+    # Spellings with a hyphen inside the name and with a double hyphen: accepted by the
+    # set-default alias; here they are listed as options so ports accept exactly the same.
     parser.add_argument("-SetDefault", "--SetDefault", "--set-default", "-set-default",
                         dest="SetDefault", action="store_true")
     args = ci_parse_args(parser)
@@ -357,8 +357,8 @@ def main():
 
     object_xml_full = os.path.abspath(object_path)
     assert_edit_allowed(object_xml_full, "editable")
-    # Версию берём прежде всего из корня самого объекта — он её несёт всегда, а у автономной
-    # внешней обработки/отчёта подниматься к Configuration.xml просто некуда.
+    # Take the version first of all from the object's own root - it always carries it, while for a
+    # standalone external data processor/report there is simply nowhere to go up to Configuration.xml.
     format_version = None
     with open(object_xml_full, "r", encoding="utf-8-sig") as f:
         obj_head = f.read(2000)
@@ -368,8 +368,8 @@ def main():
     if not format_version:
         format_version = detect_format_version(os.path.dirname(object_xml_full))
 
-    # Объявления пространств имён — одной переменной на корень: места эмиссии их только
-    # подставляют. Правки шапки (как xmlns:pal в формате 2.21) делаются здесь, в одном месте.
+    # Namespace declarations - one variable per root: emission sites only
+    # substitute them. Header edits (like xmlns:pal in format 2.21) are done here, in one place.
     xmlns_decl = (
         'xmlns="http://v8.1c.ru/8.3/MDClasses"'
         ' xmlns:app="http://v8.1c.ru/8.2/managed-application/core"'
@@ -408,9 +408,9 @@ def main():
         ' xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"'
     )
 
-    # 2.21 (8.5) добавила в шапку пространство палитры — ради <Color> у значений перечисления.
-    # Вставляем НА МЕСТО (после lf, перед style): платформа держит объявления по алфавиту,
-    # дописать в конец нельзя.
+    # 2.21 (8.5) added the palette namespace to the header - for <Color> in enum values.
+    # Insert IN PLACE (after lf, before style): the platform keeps declarations alphabetically,
+    # appending at the end is not allowed.
     if format_rank(format_version) >= 221:
         pal = ' xmlns:pal="http://v8.1c.ru/8.1/data/ui/colors/palette" xmlns:style='
         xmlns_decl = xmlns_decl.replace(' xmlns:style=', pal)
@@ -420,17 +420,17 @@ def main():
     tree = etree.parse(object_xml_full, parser_xml)
     root = tree.getroot()
 
-    # --- Таблица видов: вид -> допустимые назначения ---
+    # --- Kind table: kind -> allowed purposes ---
     #
-    # Таблица видов форм. Одна запись на вид вместо разрозненных списков
-    # «поддерживаемые типы», «объектные типы», «обработко-подобные» и «карта типов реквизита»:
-    # раньше они расходились молча, и для DocumentJournal в форму уходило `cfg:.Журнал`.
+    # Form kind table. One record per kind instead of separate lists
+    # "supported types", "object types", "processor-like" and "attribute type map":
+    # previously they diverged silently, and for DocumentJournal `cfg:.Журнал` went into the form.
     #
-    # main_attr — тип главного реквизита, {0} = вид, {1} = имя объекта;
-    #   "DynamicList" — динамический список (добавляется Settings/MainTable);
-    #   None          — произвольная форма, блока Attributes нет вовсе.
-    # slot — свойство объекта под «основную форму»; None — такого свойства у вида нет.
-    # Эталон таблицы — docs/1c-form-spec.md, сверяется гардом check-form-purposes.mjs.
+    # main_attr - main attribute type, {0} = kind, {1} = object name;
+    #   "DynamicList" - dynamic list (Settings/MainTable is added);
+    #   None          - arbitrary form, no Attributes block at all.
+    # slot - object property for the "main form"; None - the kind has no such property.
+    # The table reference is docs/1c-form-spec.md, verified by the check-form-purposes.mjs guard.
 
     form_kinds = {
         "Catalog": {
@@ -559,8 +559,8 @@ def main():
             "Load": {"main_attr": None, "attr_name": None, "slot": "DefaultLoadForm"},
             "Custom": {"main_attr": None, "attr_name": None, "slot": None},
         },
-        # Таблица внешнего источника — единственный вид, чьё имя в ссылках трёхчастное
-        # (Источник.Таблица): подставляется {2}, а не {1}.
+        # External data source table - the only kind whose name in references is three-part
+        # (Источник.Таблица): {2} is substituted, not {1}.
         "Table": {
             "Object": {"main_attr": "ExternalDataSourceTableObject.{2}", "attr_name": "Объект",
                        "slot": "DefaultObjectForm", "saved_data": True, "primary": True},
@@ -572,20 +572,20 @@ def main():
         },
     }
 
-    # Виды, у которых свойство DefaultForm есть, но собственных форм не бывает.
+    # Kinds that have a DefaultForm property but never have their own forms.
     no_own_forms = {
         "Constant": "у константы нет собственных форм — используйте общую форму (CommonForm)",
     }
 
     supported_types = list(form_kinds) + list(no_own_forms)
 
-    # Отдельный факт, не выводимый из таблицы назначений: у форм обработок и отчётов в
-    # метаданных формы есть <ExtendedPresentation>.
+    # A separate fact not derivable from the purpose table: forms of data processors and reports
+    # have <ExtendedPresentation> in the form metadata.
     processor_like_types = ["DataProcessor", "Report", "ExternalDataProcessor", "ExternalReport"]
 
-    # Вид объекта — первый элемент-потомок MetaDataObject, а не первое совпавшее по всему
-    # документу имя. Поиск по документу зависел от порядка перебора видов: у бизнес-процесса
-    # есть свойство <Task>, и он определялся как задача, после чего имя объекта не находилось.
+    # Object kind - the first child element of MetaDataObject, not the first name found across
+    # the whole document. Document-wide search depended on kind iteration order: a business process
+    # has a <Task> property and was detected as a task, after which the object name was not found.
     object_type = None
     object_node = None
     for child in root:
@@ -615,10 +615,10 @@ def main():
         sys.exit(1)
     object_name = name_node.text
 
-    # Ссылка на объект и имя для типов формы. У всех видов это "Вид.Имя", и только
-    # у таблицы внешнего источника — "ExternalDataSource.<Источник>.Table.<Таблица>", а в именах
-    # типов — "<Источник>.<Таблица>". Имя источника в самом файле таблицы не хранится —
-    # единственное место, где навык смотрит на путь: ExternalDataSources/<Источник>/Tables/<Таблица>.xml
+    # Object reference and name for form types. For all kinds this is "Вид.Имя", and only
+    # for an external data source table - "ExternalDataSource.<Источник>.Table.<Таблица>", while in type
+    # names - "<Источник>.<Таблица>". The source name is not stored in the table file itself -
+    # the only place where the skill looks at the path: ExternalDataSources/<Источник>/Tables/<Таблица>.xml
     object_qualified_name = object_name
     object_ref = f"{object_type}.{object_name}"
     table_data_type = "ObjectData"
@@ -642,13 +642,13 @@ def main():
 
     # --- Phase 2: Validate Purpose ---
 
-    # Назначение ищем в таблице регистронезависимо.
+    # Look up the purpose in the table case-insensitively.
     kind_purposes = form_kinds[object_type]
 
-    # Обиходные написания назначения приводим к канону молча: русское название вида формы и
-    # английское с суффиксом Form. Ключ нормализуем — регистр, пробелы и разделители не значимы.
-    # Канон в документации один; здесь только приём ошибочного ввода, чтобы вызов не падал на форме
-    # записи вместо назначения. Применимость назначения к виду объекта проверяется ниже как обычно.
+    # Convert common purpose spellings to the canon silently: the Russian form kind name and
+    # the English one with a Form suffix. Normalize the key - case, spaces and separators do not matter.
+    # There is one canon in the documentation; here it is only lenient input handling so a call does not fail
+    # on the record form instead of the purpose. Whether the purpose applies to the object kind is checked below as usual.
     purpose_synonyms = {
         "формаобъекта": "Object", "формаэлемента": "Object", "формадокумента": "Object",
         "объект": "Object", "элемент": "Object", "документ": "Object", "objectform": "Object",
@@ -673,8 +673,8 @@ def main():
 
     if not purpose:
         if object_type == "Table" and table_data_type == "NonobjectData":
-            # Пометка primary в таблице видов одна на вид, а у таблицы с составным ключом
-            # формы объекта не бывает — основной становится форма записи.
+            # The primary mark in the kind table is one per kind, but a table with a composite key
+            # has no object form - the record form becomes the primary one.
             purpose = "Record"
         else:
             for k, rule in kind_purposes.items():
@@ -693,9 +693,9 @@ def main():
     purpose = purpose_key
     purpose_rule = kind_purposes[purpose]
 
-    # У таблицы внешнего источника набор назначений зависит от вида данных (замерено на
-    # 8.3.24.1691): ObjectData — Object/List/Choice, NonobjectData — Record/List/Choice. Неверная пара
-    # не отвергается схемой формы, а валит загрузку всей конфигурации «Исключением XDTO» без причины.
+    # For an external data source table the purpose set depends on the data kind (measured on
+    # 8.3.24.1691): ObjectData - Object/List/Choice, NonobjectData - Record/List/Choice. A wrong pair
+    # is not rejected by the form schema but crashes the load of the whole configuration with an "XDTO exception" for no reason.
     if object_type == "Table":
         if table_data_type == "NonobjectData" and purpose == "Object":
             print(f"Таблица '{object_name}' с составным ключом (TableDataType=NonobjectData): "
@@ -706,9 +706,9 @@ def main():
                   "формы записи у неё нет — используйте -Purpose Object.", file=sys.stderr)
             sys.exit(1)
 
-    # Гард от повторения дефекта: запись таблицы обязана быть заполненной. Пустой main_attr —
-    # это произвольная форма (законное состояние), а наполовину заполненная запись означала бы,
-    # что таблицу правили невнимательно, и в XML уйдёт мусор вроде `cfg:.Журнал`.
+    # Guard against repeating the defect: a table record must be filled in. Empty main_attr
+    # is an arbitrary form (a legitimate state), while a half-filled record would mean
+    # the table was edited carelessly and garbage like `cfg:.Журнал` would go into the XML.
     if purpose_rule.get("main_attr") and not purpose_rule.get("attr_name"):
         print(f"Внутренняя ошибка таблицы видов: у {object_type}/{purpose} задан main_attr без attr_name",
               file=sys.stderr)
@@ -753,8 +753,8 @@ def main():
         '\t\t\t\t<v8:Value xsi:type="app:ApplicationUsePurpose">PlatformApplication</v8:Value>\n'
         '\t\t\t\t<v8:Value xsi:type="app:ApplicationUsePurpose">MobilePlatformApplication</v8:Value>\n'
         '\t\t\t</UsePurposes>\n'
-        # Использование в режиме совместимости интерфейса — свойство формата 2.21 (8.5),
-        # сразу после UsePurposes (проверено по выгрузке 8.5, до ExtendedPresentation).
+        # Use in interface compatibility mode - a 2.21 (8.5) format property,
+        # right after UsePurposes (verified against an 8.5 dump, before ExtendedPresentation).
         + ('\t\t\t<UseInInterfaceCompatibilityMode>Any</UseInInterfaceCompatibilityMode>\n'
            if format_rank(format_version) >= 221 else '')
         + ('\t\t\t<ExtendedPresentation/>\n' if object_type in processor_like_types else '')
@@ -769,14 +769,14 @@ def main():
 
     form_xml_path = os.path.join(form_ext_dir, "Form.xml")
 
-    # Одна ветка вместо трёх: что писать, решает запись таблицы видов. Раньше тип главного
-    # реквизита брался из отдельной карты, и отсутствие вида в ней давало `cfg:.Имя` — молча.
+    # One branch instead of three: the kind table record decides what to write. Previously the main
+    # attribute type came from a separate map, and a missing kind in it produced `cfg:.Имя` - silently.
     attributes_block = ''
     if purpose_rule.get("main_attr"):
         main_attr_type = purpose_rule["main_attr"].format(object_type, object_name, object_qualified_name)
         main_attr_name = purpose_rule["attr_name"]
 
-        # Динамический список несёт MainTable, остальные типы — SavedData по записи таблицы.
+        # A dynamic list carries MainTable, other types - SavedData per the table record.
         tail_lines = ''
         if main_attr_type == "DynamicList":
             main_table = object_ref
@@ -798,8 +798,8 @@ def main():
             '\t</Attributes>\n'
         )
 
-    # Произвольная форма (main_attr=None) — без блока Attributes вовсе. В типовых это самая
-    # частая форма после объектной: 907 у справочников, 941 у документов, 3482 у отчётов.
+    # Arbitrary form (main_attr=None) - no Attributes block at all. In standard configurations this is the most
+    # common form after the object one: 907 for catalogs, 941 for documents, 3482 for reports.
     form_xml = (
         f'<?xml version="1.0" encoding="UTF-8"?>\n'
         f'<Form {form_ns_decl} version="{format_version}">\n'
@@ -845,9 +845,9 @@ def main():
     if os.path.exists(module_path):
         print(f"[SKIP] Module.bsl already exists: {module_path} — not overwriting")
     else:
-        # Модуль пишем в каноне платформы: CRLF в разделителях строк (корпус: 2643 CRLF,
-        # чисто-LF 0 из 3001). Хвостовой перевод НЕ навязываем — у платформы он
-        # неканоничен (1235 модулей с ним, 766 без).
+        # Write the module in the platform canon: CRLF in line separators (corpus: 2643 CRLF,
+        # pure LF 0 out of 3001). Do NOT impose a trailing newline - on the platform it is
+        # non-canonical (1235 modules with it, 766 without).
         write_utf8_bom(module_path, module_bsl.replace('\r\n', '\n').replace('\n', '\r\n'))
 
     # --- Phase 4: Register in parent object ---
@@ -908,9 +908,9 @@ def main():
     is_first_form_for_purpose = False
     default_value = f"{object_ref}.Form.{form_name}"
 
-    # Свойство «основная форма» — из записи таблицы. Раньше выбиралось по одному purpose без
-    # учёта вида, и для журнала писалось DefaultListForm, которого у журнала нет: слот не
-    # находился, навык молча ничего не делал.
+    # The "main form" property - from the table record. Previously it was chosen by purpose alone without
+    # regard to the kind, and for a journal DefaultListForm was written, which a journal does not have: the slot was
+    # not found and the skill silently did nothing.
     default_prop_name = purpose_rule.get("slot")
 
     default_node = None
@@ -945,8 +945,8 @@ def main():
     if default_updated:
         print(f"{default_prop_name}: {default_value}")
     elif not default_prop_name:
-        # Молчать здесь нельзя: пользователь ждёт, что форма станет основной, а свойства под неё
-        # у платформы нет (форма набора записей, произвольная форма).
+        # Cannot stay silent here: the user expects the form to become the main one, but the platform
+        # has no property for it (record set form, arbitrary form).
         print(f"Основной не назначена: у {object_type} нет свойства для формы с назначением {purpose}")
     print()
 

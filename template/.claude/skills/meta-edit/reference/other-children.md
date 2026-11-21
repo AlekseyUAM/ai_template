@@ -1,23 +1,23 @@
-# Значения перечисления и команды
+# Enum values and commands
 
 ## add-enumValue / add-command
 
-Просто имена (batch через `;;`):
+Just names (batch via `;;`):
 ```bash
 -Operation add-enumValue -Value "Значение1 ;; Значение2 ;; Значение3"
 -Operation add-command -Value "ОткрытьДосье"
 ```
 
-Команда создаётся вместе с заготовкой модуля `Commands/<Имя>/Ext/CommandModule.bsl`.
+A command is created together with a module stub `Commands/<Имя>/Ext/CommandModule.bsl`.
 
-## Формы и макеты — другими навыками
+## Forms and templates - by other skills
 
-Кроме записи в `ChildObjects` у формы и макета есть собственные файлы, поэтому `meta-edit` их
-не добавляет и не удаляет:
+Besides the entry in `ChildObjects`, a form and a template have their own files, so `meta-edit`
+does not add or remove them:
 
-| Что | Добавить | Удалить |
+| What | Add | Remove |
 |-----|----------|---------|
-| Форма | навык `form-add` | навык `form-remove` |
-| Макет | навык `template-add` | навык `template-remove` |
+| Form | the `form-add` skill | the `form-remove` skill |
+| Template | the `template-add` skill | the `template-remove` skill |
 
-Содержимое формы собирает навык `form-compile`.
+The form content is assembled by the `form-compile` skill.

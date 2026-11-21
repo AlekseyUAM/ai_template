@@ -1,27 +1,27 @@
 # HTTPService, WebService (Веб-сервисы)
 
-Модуль обоих — `Ext/Module.bsl`, в нём реализуются обработчики.
+Both modules are `Ext/Module.bsl`, handlers are implemented there.
 
 ## HTTPService (HTTP-сервис)
 
-| Ключ | Умолчание | Значения |
+| Key | Default | Values |
 |------|-----------|----------|
-| `rootURL` | `= name` (в нижнем регистре) | корневой URL |
+| `rootURL` | `= name` (lowercase) | root URL |
 | `reuseSessions` | `DontUse` | `DontUse` / `Use` / `AutoUse` |
-| `sessionMaxAge` | `20` | время жизни сессии, сек |
-| `urlTemplates` | `{}` | шаблоны URL (см. ниже) |
+| `sessionMaxAge` | `20` | session lifetime, sec |
+| `urlTemplates` | `{}` | URL templates (see below) |
 
-`urlTemplates` — объект `{ "ИмяШаблона": def }`, где `def`:
-- строка — URL-путь без методов: `"/health"`;
-- объект: `template` (путь с параметрами `{id}`, по умолчанию `/имяшаблона`), `synonym`, `comment`,
-  `methods` — `{ "ИмяМетода": def }`.
+`urlTemplates` is an object `{ "ИмяШаблона": def }`, where `def` is:
+- a string - a URL path without methods: `"/health"`;
+- an object: `template` (path with parameters `{id}`, default `/имяшаблона`), `synonym`, `comment`,
+  `methods` - `{ "ИмяМетода": def }`.
 
-`methods` — значение либо строка (только HTTP-метод), либо объект: `httpMethod`, `handler`,
+`methods` - the value is either a string (the HTTP method only) or an object: `httpMethod`, `handler`,
 `synonym`, `comment`.
 
-HTTP-методы: `GET`, `POST`, `PUT`, `DELETE`, `PATCH`, `HEAD`, `OPTIONS`, `CONNECT`, `TRACE`, `MERGE`.
-Обработчик по умолчанию именуется `{ИмяШаблона}{ИмяМетода}`; в типовых конфигурациях он часто
-произвольный — тогда задавайте `handler` явно.
+HTTP methods: `GET`, `POST`, `PUT`, `DELETE`, `PATCH`, `HEAD`, `OPTIONS`, `CONNECT`, `TRACE`, `MERGE`.
+The default handler is named `{ИмяШаблона}{ИмяМетода}`; in typical configurations it is often
+arbitrary - then set `handler` explicitly.
 
 ```json
 { "type": "HTTPService", "name": "API", "rootURL": "api",
@@ -33,32 +33,32 @@ HTTP-методы: `GET`, `POST`, `PUT`, `DELETE`, `PATCH`, `HEAD`, `OPTIONS`, `
 
 ## WebService (Веб-сервис, SOAP)
 
-| Ключ | Умолчание | Значения |
+| Key | Default | Values |
 |------|-----------|----------|
-| `namespace` | пусто | URI пространства имён WSDL |
-| `xdtoPackages` | пусто | список пакетов (см. ниже) |
-| `descriptorFileName` | `= name` + `.1cws` | имя файла дескриптора |
+| `namespace` | empty | WSDL namespace URI |
+| `xdtoPackages` | empty | package list (see below) |
+| `descriptorFileName` | `= name` + `.1cws` | descriptor file name |
 | `reuseSessions` | `DontUse` | `DontUse` / `Use` / `AutoUse` |
-| `sessionMaxAge` | `20` | время жизни сессии, сек |
-| `operations` | `{}` | операции (см. ниже) |
+| `sessionMaxAge` | `20` | session lifetime, sec |
+| `operations` | `{}` | operations (see below) |
 
-`xdtoPackages` — **массив** значений: `"XDTOPackage.Имя"` — пакет конфигурации, любое другое
-значение — URI внешнего пространства имён (например `"http://v8.1c.ru/8.3/data/ext"`).
+`xdtoPackages` - an **array** of values: `"XDTOPackage.Имя"` - a configuration package, any other
+value - an external namespace URI (for example `"http://v8.1c.ru/8.3/data/ext"`).
 
-`operations` — объект `{ "ИмяОперации": def }`, где `def`:
-- строка — XDTO-тип возврата без параметров: `"xs:string"`;
-- объект: `returnType` (по умолчанию `xs:string`), `nillable` (bool), `transactioned` (bool),
-  `procedureName` (имя процедуры, по умолчанию = имя операции; синоним ключа — `handler`),
-  `dataLockControlMode` (по умолчанию `Managed`), `synonym`, `comment`, `parameters`.
+`operations` - an object `{ "ИмяОперации": def }`, where `def` is:
+- a string - the XDTO return type without parameters: `"xs:string"`;
+- an object: `returnType` (`xs:string` by default), `nillable` (bool), `transactioned` (bool),
+  `procedureName` (procedure name, by default = the operation name; key synonym - `handler`),
+  `dataLockControlMode` (`Managed` by default), `synonym`, `comment`, `parameters`.
 
-`parameters` — объект `{ "ИмяПараметра": def }`, где `def`:
-- строка — XDTO-тип (`direction` = `In`);
-- объект: `type` (по умолчанию `xs:string`), `nillable` (bool, по умолчанию `true`),
+`parameters` - an object `{ "ИмяПараметра": def }`, where `def` is:
+- a string - an XDTO type (`direction` = `In`);
+- an object: `type` (`xs:string` by default), `nillable` (bool, `true` by default),
   `direction` (`In` / `Out` / `InOut`), `synonym`, `comment`.
 
-XDTO-типы: `xs:string`, `xs:boolean`, `xs:int`, `xs:long`, `xs:decimal`, `xs:dateTime`, `xs:base64Binary`.
-Тип из собственного пространства имён задаётся в нотации Кларка — `"{http://ваш.uri}ИмяТипа"`;
-компилятор сам объявит локальный `xmlns` в теге, как это делает платформа.
+XDTO types: `xs:string`, `xs:boolean`, `xs:int`, `xs:long`, `xs:decimal`, `xs:dateTime`, `xs:base64Binary`.
+A type from its own namespace is specified in Clark notation - `"{http://ваш.uri}ИмяТипа"`;
+the compiler declares the local `xmlns` in the tag itself, as the platform does.
 
 ```json
 { "type": "WebService", "name": "DataExchange", "namespace": "http://www.1c.ru/DataExchange",

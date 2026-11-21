@@ -1,52 +1,52 @@
 ---
 name: xdto-edit
-description: Точечное редактирование пакета XDTO 1С. Используй когда нужно добавить, изменить или удалить тип или свойство в существующем пакете, переименовать пакет, сменить пространство имён
-argument-hint: <PackagePath> -Operation <операция> [-Target <путь>] [-Value <значение>] [-NoValidate]
+description: Point edits of a 1C XDTO package. Use when you need to add, change or delete a type or property in an existing package, rename the package, change the namespace
+argument-hint: <PackagePath> -Operation <operation> [-Target <path>] [-Value <value>] [-NoValidate]
 allowed-tools:
   - Bash
   - Read
   - Glob
 ---
 
-# /xdto-edit — Точечное редактирование пакета XDTO
+# /xdto-edit - Point edits of an XDTO package
 
-Меняет один элемент пакета, не требуя читать и переписывать всю схему — для больших
-пакетов (`EnterpriseData` — около мегабайта) это единственный практичный путь.
+Changes one package element without reading and rewriting the whole schema - for large
+packages (`EnterpriseData` is about a megabyte) this is the only practical path.
 
-Если нужно переработать схему целиком или сперва разобраться, как она устроена, —
-`/xdto-decompile` → правка XSD → `/xdto-compile -Force`.
+If you need to rework the schema entirely or first understand how it is structured, use
+`/xdto-decompile` → edit XSD → `/xdto-compile -Force`.
 
-## Параметры
+## Parameters
 
-| Параметр | Обязательный | Описание |
+| Parameter | Required | Description |
 |----------|--------------|----------|
-| `PackagePath` | да | Каталог пакета, `Ext/Package.bin` или `<Имя>.xml`. Псевдоним — `-Path` |
-| `Operation` | да | Операция из таблицы ниже |
-| `Target` | зависит | Адрес: имя типа или путь `Тип.Свойство` |
-| `Value` | зависит | Фрагмент XSD, литерал, URI или текст. `@путь` — взять содержимое из файла |
-| `NoValidate` | нет | Не запускать `xdto-validate` после правки |
+| `PackagePath` | yes | Package directory, `Ext/Package.bin` or `<Имя>.xml`. Alias - `-Path` |
+| `Operation` | yes | Operation from the table below |
+| `Target` | depends | Address: type name or `Тип.Свойство` path |
+| `Value` | depends | XSD fragment, literal, URI or text. `@путь` - take content from a file |
+| `NoValidate` | no | Do not run `xdto-validate` after the edit |
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/xdto-edit.py" -PackagePath "<путь>" -Operation <op> -Target "<адрес>" -Value "<значение>"
 ```
 
-## Операции
+## Operations
 
-| Операция | `-Target` | `-Value` |
+| Operation | `-Target` | `-Value` |
 |---|---|---|
-| `add-property` | имя типа | `<xs:element>` или `<xs:attribute>` |
-| `replace-property` | `Тип.Свойство` | новое объявление целиком |
-| `remove-property` | `Тип.Свойство` | — |
-| `add-type` | — | `<xs:complexType>` или `<xs:simpleType>` |
-| `remove-type` | имя типа | — |
-| `add-enum` | имя типа значения | литерал |
-| `add-import` | — | URI пространства имён |
-| `rename` | — | новое имя объекта метаданных |
-| `set-synonym` | — | синоним |
-| `set-comment` | — | комментарий |
-| `set-namespace` | — | новый URI пространства имён |
+| `add-property` | type name | `<xs:element>` or `<xs:attribute>` |
+| `replace-property` | `Тип.Свойство` | new declaration entirely |
+| `remove-property` | `Тип.Свойство` | - |
+| `add-type` | - | `<xs:complexType>` or `<xs:simpleType>` |
+| `remove-type` | type name | - |
+| `add-enum` | value type name | literal |
+| `add-import` | - | namespace URI |
+| `rename` | - | new metadata object name |
+| `set-synonym` | - | synonym |
+| `set-comment` | - | comment |
+| `set-namespace` | - | new namespace URI |
 
-Батч через `;;` там, где перечисление осмысленно: `remove-property`, `remove-type`,
+Batch via `;;` where a list makes sense: `remove-property`, `remove-type`,
 `add-enum`, `add-import`.
 
 ```bash
@@ -56,11 +56,11 @@ python "${CLAUDE_SKILL_DIR}/scripts/xdto-edit.py" -PackagePath "<путь>" -Ope
 ... -Operation rename -Value ОбменСБанком
 ```
 
-Содержимое всегда описывается фрагментом XML-схемы — тем же языком, что и в
-`/xdto-compile`. Отдельных параметров вида `-MinOccurs` нет: чтобы поменять свойство,
-дай его новое объявление целиком через `replace-property`.
+Content is always described by an XML schema fragment - the same language as in
+`/xdto-compile`. There are no separate parameters like `-MinOccurs`: to change a property,
+provide its new declaration entirely via `replace-property`.
 
-Ограничение длины и прочие фасеты задаются вложенным типом:
+A length restriction and other facets are set by a nested type:
 
 ```xml
 <xs:element name="Комментарий" minOccurs="0">
@@ -70,34 +70,34 @@ python "${CLAUDE_SKILL_DIR}/scripts/xdto-edit.py" -PackagePath "<путь>" -Ope
 </xs:element>
 ```
 
-Многострочный фрагмент передавай файлом: `-Value "@frag.xsd"`. Инлайн через оболочку
-надёжен только для однострочных фрагментов без вложенных кавычек.
+Pass a multiline fragment as a file: `-Value "@frag.xsd"`. Inline through the shell is
+reliable only for one-line fragments without nested quotes.
 
-## Адресация
+## Addressing
 
-Путь `Тип.Свойство`. Точка безопасна: имена типов и свойств — идентификаторы 1С.
-Путь продолжается внутрь встроенных типов: `ПлатежныйДокумент.ДатаСписано.ИдПлатежа`.
+Path `Тип.Свойство`. The dot is safe: type and property names are 1C identifiers.
+The path continues into inline types: `ПлатежныйДокумент.ДатаСписано.ИдПлатежа`.
 
-Посмотреть, что есть в пакете и как называется нужный тип, — `/xdto-info`.
-Перед правкой типа полезно `/xdto-info -Mode used-by -Name <Тип>`: покажет,
-кого затронет изменение.
+To see what is in the package and what the needed type is called, use `/xdto-info`.
+Before editing a type, `/xdto-info -Mode used-by -Name <Тип>` is useful: it shows
+who the change will affect.
 
-## Что тянет за собой переименование и смена namespace
+## What rename and namespace change entail
 
-`rename` меняет имя в объекте метаданных, переименовывает файл `<Имя>.xml` и каталог
-`<Имя>/`, правит регистрацию в `Configuration.xml`. Новое имя проверяется на
-допустимость как идентификатор 1С и на занятость.
+`rename` changes the name in the metadata object, renames the `<Имя>.xml` file and the
+`<Имя>/` directory, and fixes the registration in `Configuration.xml`. The new name is checked for
+validity as a 1C identifier and for availability.
 
-`set-namespace` меняет `targetNamespace`, все внутренние ссылки на собственные типы
-и `<Namespace>` объекта метаданных. Пакеты, импортирующие старое пространство имён,
-**не изменяются** — при версионировании они и должны продолжать смотреть на прежнее.
-Навык их перечислит; если правка не версионная, поправь их импорты сам.
+`set-namespace` changes `targetNamespace`, all internal references to own types
+and the metadata object's `<Namespace>`. Packages that import the old namespace are
+**not changed** - during versioning they must keep pointing to the old one.
+The skill lists them; if the change is not versioned, fix their imports yourself.
 
-После правки автоматически запускается `/xdto-validate` — отключается через `-NoValidate`.
+After the edit, `/xdto-validate` runs automatically - disable it with `-NoValidate`.
 
-## Типичный workflow
+## Typical workflow
 
-1. `/xdto-info <пакет>` — найти нужный тип
-2. `/xdto-info <пакет> -Mode used-by -Name <Тип>` — если меняешь существующее
+1. `/xdto-info <пакет>` - find the needed type
+2. `/xdto-info <пакет> -Mode used-by -Name <Тип>` - if you change an existing one
 3. `/xdto-edit <пакет> -Operation <op> …`
 4. `/db-load-xml` + `/db-update`

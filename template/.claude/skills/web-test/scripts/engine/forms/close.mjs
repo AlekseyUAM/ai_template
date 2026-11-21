@@ -24,7 +24,7 @@ import { getFormState } from './state.mjs';
 function pickConfirmationLabel(message, save) {
   const question = (String(message || '').match(/[^.!?]*\?/g) || []).pop() || '';
   if (/сохранит/i.test(question)) return save ? 'Да' : 'Нет';   // "…Сохранить изменения?"
-  if (/закрыт/i.test(question)) return 'Да';                     // "…Закрыть согласование?" — Да = закрыть
+  if (/закрыт/i.test(question)) return 'Да';                     // "...Закрыть согласование?" - Да = close
   return save ? 'Да' : 'Нет';                                    // unknown → as before
 }
 

@@ -1,6 +1,6 @@
 ---
 name: cfe-diff
-description: Анализ расширения конфигурации 1С (CFE) — состав, заимствованные объекты, перехватчики, проверка переноса. Используй когда нужно понять что содержит расширение или проверить перенесены ли вставки в конфигурацию
+description: Analysis of a 1C configuration extension (CFE) - composition, borrowed objects, interceptors, transfer check. Use when you need to understand what an extension contains or check whether insertions were transferred to the configuration
 argument-hint: -ExtensionPath <path> -ConfigPath <path> [-Mode A|B]
 allowed-tools:
   - Bash
@@ -8,45 +8,45 @@ allowed-tools:
   - Glob
 ---
 
-# /cfe-diff — Анализ расширения конфигурации
+# /cfe-diff - Configuration extension analysis
 
-Анализирует расширение в двух режимах: обзор изменений (Mode A) или проверка переноса (Mode B).
+Analyzes an extension in two modes: change overview (Mode A) or transfer check (Mode B).
 
-## Параметры
+## Parameters
 
-| Параметр | Описание | По умолчанию |
+| Parameter | Description | Default |
 |----------|----------|--------------|
-| `ExtensionPath` | Путь к расширению (обязат.) | — |
-| `ConfigPath` | Путь к конфигурации (обязат.) | — |
-| `Mode` | `A` (обзор) / `B` (проверка переноса) | `A` |
+| `ExtensionPath` | Path to the extension (required) | - |
+| `ConfigPath` | Path to the configuration (required) | - |
+| `Mode` | `A` (overview) / `B` (transfer check) | `A` |
 
-## Команда
+## Command
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/cfe-diff.py" -ExtensionPath src\cfe\extname -ConfigPath src\cf -Mode A
 ```
 
-## Mode A — обзор расширения
+## Mode A - extension overview
 
-Для каждого объекта показывает:
-- `[BORROWED]` — заимствованный: перехватчики (`&Перед`, `&После`, `&ИзменениеИКонтроль`, `&Вместо`), собственные реквизиты/ТЧ/формы
-- `[OWN]` — собственный: количество реквизитов, ТЧ, форм
+For each object shows:
+- `[BORROWED]` - borrowed: interceptors (`&Перед`, `&После`, `&ИзменениеИКонтроль`, `&Вместо`), own attributes/tabular sections/forms
+- `[OWN]` - own: number of attributes, tabular sections, forms
 
-Для каждой формы заимствованного объекта показывается:
-- `(borrowed)` / `(own)` — заимствованная или собственная форма
-- callType-события формы и элементов
-- callType на командах
+For each form of a borrowed object shows:
+- `(borrowed)` / `(own)` - borrowed or own form
+- callType events of the form and elements
+- callType on commands
 
-## Mode B — проверка переноса
+## Mode B - transfer check
 
-Для каждого `&ИзменениеИКонтроль` извлекает блоки `#Вставка`/`#КонецВставки` из расширения и ищет их в соответствующем модуле конфигурации.
+For each `&ИзменениеИКонтроль` extracts `#Вставка`/`#КонецВставки` blocks from the extension and searches for them in the corresponding configuration module.
 
-Статусы:
-- `[TRANSFERRED]` — код найден в конфигурации
-- `[NOT_TRANSFERRED]` — код не найден
-- `[NEEDS_REVIEW]` — нет блоков `#Вставка` или модуль конфигурации не найден
+Statuses:
+- `[TRANSFERRED]` - code found in the configuration
+- `[NOT_TRANSFERRED]` - code not found
+- `[NEEDS_REVIEW]` - no `#Вставка` blocks or the configuration module not found
 
-## Примеры
+## Examples
 
 ```bash
 # Обзор — что изменено в расширении

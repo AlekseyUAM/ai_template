@@ -1,12 +1,12 @@
-# JSON DSL — режим определений
+# JSON DSL - definition mode
 
-Для сложных и комбинированных операций используйте JSON-файл вместо inline-режима.
+For complex and combined operations use a JSON file instead of inline mode.
 
 ```bash
 python ${CLAUDE_SKILL_DIR}/scripts/meta-edit.py -DefinitionFile "<json>" -ObjectPath "<path>"
 ```
 
-## add — добавить элементы
+## add - add elements
 
 ```json
 {
@@ -27,9 +27,9 @@ python ${CLAUDE_SKILL_DIR}/scripts/meta-edit.py -DefinitionFile "<json>" -Object
 }
 ```
 
-Реквизиты можно задавать shorthand-строками: `"Сумма: Число(15,2) | req, index"`.
+Attributes can be specified as shorthand strings: `"Сумма: Число(15,2) | req, index"`.
 
-## remove — удалить элементы
+## remove - remove elements
 
 ```json
 {
@@ -40,7 +40,7 @@ python ${CLAUDE_SKILL_DIR}/scripts/meta-edit.py -DefinitionFile "<json>" -Object
 }
 ```
 
-## modify — изменить существующие
+## modify - modify existing
 
 ```json
 {
@@ -60,7 +60,7 @@ python ${CLAUDE_SKILL_DIR}/scripts/meta-edit.py -DefinitionFile "<json>" -Object
 }
 ```
 
-## modify — реквизиты внутри ТЧ
+## modify - attributes inside a tabular section
 
 ```json
 {
@@ -78,9 +78,9 @@ python ${CLAUDE_SKILL_DIR}/scripts/meta-edit.py -DefinitionFile "<json>" -Object
 }
 ```
 
-## Комбинирование
+## Combining
 
-Все три операции (`add`, `remove`, `modify`) можно указать в одном JSON-файле:
+All three operations (`add`, `remove`, `modify`) can be specified in one JSON file:
 
 ```json
 {
@@ -96,17 +96,17 @@ python ${CLAUDE_SKILL_DIR}/scripts/meta-edit.py -DefinitionFile "<json>" -Object
 }
 ```
 
-## Позиционная вставка
+## Positional insert
 
 ```json
 { "name": "Склад", "type": "CatalogRef.Склады", "after": "Организация" }
 ```
 
-## Синонимы ключей (case-insensitive)
+## Key synonyms (case-insensitive)
 
-**Операции:** `add`/`добавить`, `remove`/`удалить`, `modify`/`изменить`
+**Operations:** `add`/`добавить`, `remove`/`удалить`, `modify`/`изменить`
 
-| Каноническое | Синонимы |
+| Canonical | Synonyms |
 |-------------|----------|
 | attributes | реквизиты, attrs |
 | tabularSections | табличныеЧасти, тч, ts |
@@ -119,35 +119,35 @@ python ${CLAUDE_SKILL_DIR}/scripts/meta-edit.py -DefinitionFile "<json>" -Object
 | commands | команды |
 | properties | свойства |
 
-Формы и макеты `meta-edit` не добавляет и не удаляет: кроме записи в `ChildObjects` у них есть собственные файлы.
-Форма — навыки `form-add` / `form-remove`, макет — `template-add` / `template-remove`. Команда файла не имеет — её `meta-edit` добавляет сам.
+`meta-edit` does not add or remove forms and templates: besides the entry in `ChildObjects` they have their own files.
+Form - the `form-add` / `form-remove` skills, template - `template-add` / `template-remove`. A command has no file - `meta-edit` adds it itself.
 
-## Составные типы
+## Composite types
 
-Для полей с несколькими допустимыми типами — массив в `type`:
+For fields with several allowed types - an array in `type`:
 
 ```json
 { "name": "Значение", "type": ["Строка", "Число(15,2)", "Дата", "CatalogRef.Контрагенты"] }
 ```
 
-В inline-формате — через `+`:
+In inline format - via `+`:
 ```
 "Значение: Строка + Число(15,2) + Дата + CatalogRef.Контрагенты"
 ```
 
-## Синонимы типов
+## Type synonyms
 
 `Строка(200)`, `Число(15,2)`, `Булево`, `Дата`, `ДатаВремя`, `ХранилищеЗначения`, `СправочникСсылка.XXX`, `ДокументСсылка.XXX`, `ПеречислениеСсылка.XXX`, `ОпределяемыйТип.XXX`.
 
-## Поддерживаемые типы объектов
+## Supported object types
 
-| Тип объекта | Допустимые add-типы |
+| Object type | Allowed add types |
 |-------------|-------------------|
 | Catalog, Document, ExchangePlan, ChartOf*, BP, Task, Report, DP | attributes, tabularSections, commands |
 | Enum | enumValues, commands |
-| *Register (4 типа) | dimensions, resources, attributes, commands |
+| *Register (4 types) | dimensions, resources, attributes, commands |
 | DocumentJournal | columns, commands |
 | ExternalDataSource | tables, functions |
-| Table (таблица внешнего источника) | fields, commands |
+| Table (external data source table) | fields, commands |
 
-У `Constant` добавлять нечего: единственный её ребёнок — форма, а форму добавляет навык `form-add`.
+There is nothing to add for a `Constant`: its only child is a form, and the form is added by the `form-add` skill.

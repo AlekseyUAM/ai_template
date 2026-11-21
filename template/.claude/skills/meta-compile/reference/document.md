@@ -9,45 +9,45 @@
   "tabularSections": { "Товары": ["Номенклатура: CatalogRef.Номенклатура", "Количество: Number(15,3)"] } }
 ```
 
-| Ключ | Умолчание | Значения |
+| Key | Default | Values |
 |------|-----------|----------|
-| `comment` | пусто | строка |
-| `numerator` | пусто | ссылка на нумератор `DocumentNumerator.X` |
+| `comment` | empty | string |
+| `numerator` | empty | reference to the numerator `DocumentNumerator.X` |
 | `numberType` | `String` | `String` / `Number` |
-| `numberLength` | `11` | длина номера |
+| `numberLength` | `11` | number length |
 | `numberAllowedLength` | `Variable` | `Variable` / `Fixed` |
 | `numberPeriodicity` | `Year` | `Nonperiodical` / `Day` / `Month` / `Quarter` / `Year` |
 | `checkUnique` | `true` | bool |
 | `autonumbering` | `true` | bool |
-| `posting` | `Allow` | `Allow` / `Deny` (проведение) |
-| `realTimePosting` | `Deny` | `Allow` / `Deny` (оперативное проведение) |
+| `posting` | `Allow` | `Allow` / `Deny` (posting) |
+| `realTimePosting` | `Deny` | `Allow` / `Deny` (real-time posting) |
 | `registerRecordsDeletion` | `AutoDelete` | `AutoDelete` / `AutoDeleteOnUnpost` / `AutoDeleteOff` |
 | `registerRecordsWritingOnPost` | `WriteSelected` | `WriteModified` / `WriteSelected` |
-| `sequenceFilling` | `AutoFill` | заполнение последовательностей |
+| `sequenceFilling` | `AutoFill` | sequence filling |
 | `postInPrivilegedMode` | `true` | bool |
 | `unpostInPrivilegedMode` | `true` | bool |
 | `createOnInput` | `Use` | `Auto` / `Use` / `DontUse` |
 | `dataLockControlMode` | `Managed` | `Automatic` / `Managed` |
 | `fullTextSearch` | `Use` | `Use` / `DontUse` |
 | `dataHistory` | `DontUse` | `Use` / `DontUse` |
-| `registerRecords` | `[]` | движения: список ссылок `["AccumulationRegister.ОстаткиТоваров", "InformationRegister.Цены"]` |
+| `registerRecords` | `[]` | movements: list of references `["AccumulationRegister.ОстаткиТоваров", "InformationRegister.Цены"]` |
 | `useStandardCommands` | `true` | bool |
 | `includeHelpInContents` | `false` | bool |
-| `attributes` / `tabularSections` | `[]` / `{}` | реквизиты / табличные части |
+| `attributes` / `tabularSections` | `[]` / `{}` | attributes / tabular sections |
 
-Формы: `defaultObjectForm`, `defaultListForm`, `defaultChoiceForm`, `auxiliary*` (см. `catalog.md`).
-Реквизиты и ТЧ — `attributes.md`. Представления, команды, характеристики, `basedOn`, `standardAttributes`,
-`inputByString`, `dataLockFields` — `blocks.md`.
+Forms: `defaultObjectForm`, `defaultListForm`, `defaultChoiceForm`, `auxiliary*` (see `catalog.md`).
+Attributes and tabular sections - `attributes.md`. Presentations, commands, characteristics, `basedOn`, `standardAttributes`,
+`inputByString`, `dataLockFields` - `blocks.md`.
 
-## DocumentJournal (Журнал документов)
+## DocumentJournal (Document journal)
 
-| Ключ | Умолчание | Значения |
+| Key | Default | Values |
 |------|-----------|----------|
-| `registeredDocuments` | `[]` | документы журнала: `["Document.Встреча", "Document.Звонок"]` |
-| `columns` | `[]` | графы журнала (см. ниже) |
+| `registeredDocuments` | `[]` | journal documents: `["Document.Встреча", "Document.Звонок"]` |
+| `columns` | `[]` | journal columns (see below) |
 
-Графа — строка `"Имя"` или объект `{ name, synonym, indexing, references }`, где `indexing` — `Index`/`DontIndex`,
-`references` — пути к реквизитам документов, отображаемым в графе.
+A column is a string `"Имя"` or an object `{ name, synonym, indexing, references }`, where `indexing` is `Index`/`DontIndex`,
+`references` are paths to document attributes displayed in the column.
 
 ```json
 { "type": "DocumentJournal", "name": "Взаимодействия",
@@ -56,24 +56,24 @@
                 "references": ["Document.Встреча.Attribute.Организация"] }] }
 ```
 
-## Sequence (Последовательность документов)
+## Sequence (Document sequence)
 
-| Ключ | Умолчание | Значения |
+| Key | Default | Values |
 |------|-----------|----------|
-| `moveBoundaryOnPosting` | `DontMove` | сдвиг границы при проведении |
-| `documents` | `[]` | документы последовательности (список ссылок) |
-| `registerRecords` | `[]` | движения (список ссылок) |
+| `moveBoundaryOnPosting` | `DontMove` | boundary movement on posting |
+| `documents` | `[]` | sequence documents (list of references) |
+| `registerRecords` | `[]` | movements (list of references) |
 | `dataLockControlMode` | `Managed` | `Automatic` / `Managed` |
-| `dimensions` | `[]` | измерения `{name, type, documentMap[], registerRecordsMap[]}` |
+| `dimensions` | `[]` | dimensions `{name, type, documentMap[], registerRecordsMap[]}` |
 
-`documentMap` / `registerRecordsMap` — пути к реквизитам документов / движениям, соответствующим измерению.
+`documentMap` / `registerRecordsMap` - paths to document attributes / movements corresponding to the dimension.
 
-## DocumentNumerator (Нумератор документов)
+## DocumentNumerator (Document numerator)
 
-| Ключ | Умолчание | Значения |
+| Key | Default | Values |
 |------|-----------|----------|
 | `numberType` | `String` | `String` / `Number` |
-| `numberLength` | `11` | длина номера |
+| `numberLength` | `11` | number length |
 | `numberAllowedLength` | `Variable` | `Variable` / `Fixed` |
 | `numberPeriodicity` | `Year` | `Nonperiodical` / `Day` / … / `Year` |
 | `checkUnique` | `true` | bool |

@@ -1,21 +1,21 @@
-# Разметка: области координатами и колоночные раскладки
+# Layout: areas by coordinates and column sets
 
-Читать, когда область не описывается диапазоном подряд идущих строк или когда части документа нужны разные ширины колонок.
+Read when an area is not described by a range of consecutive rows or when parts of the document need different column widths.
 
-## Именованные области координатами (`namedAreas[]`)
+## Named areas by coordinates (`namedAreas[]`)
 
-Для областей, которые диапазоном подряд идущих строк не описываются: полоса колонок, прямоугольник, ячейка, а также пересекающиеся с другими.
+For areas that are not described by a range of consecutive rows: a band of columns, a rectangle, a cell, and also ones overlapping with others.
 
-| Поле | Обяз. | Описание |
+| Field | Required | Description |
 |------|:-----:|----------|
-| `name` | да | Имя области |
-| `rows` | \* | Строки: число или диапазон `"N-M"`, 1-based |
-| `cols` | \* | Колонки: число или диапазон `"N-M"`, 1-based |
-| `columnSet` | нет | Колоночная раскладка области. Без ключа выводится из накрытых строк, `""` — привязки нет |
+| `name` | yes | Area name |
+| `rows` | \* | Rows: a number or range `"N-M"`, 1-based |
+| `cols` | \* | Columns: a number or range `"N-M"`, 1-based |
+| `columnSet` | no | Column set of the area. Without the key it is derived from the covered rows, `""` - no binding |
 
-\* Обязательна хотя бы одна из осей.
+\* At least one of the axes is required.
 
-**Тип области не указывается** — он следует из того, какие оси заданы, как в `ТабличныйДокумент.Область()`: только строки → полоса строк, только колонки → полоса колонок, обе оси → прямоугольник, одиночные значения по обеим осям → одна ячейка.
+**The area type is not specified** - it follows from which axes are set, as in `ТабличныйДокумент.Область()`: rows only -> a band of rows, columns only -> a band of columns, both axes -> a rectangle, single values on both axes -> one cell.
 
 ```json
 "namedAreas": [
@@ -25,14 +25,14 @@
 ]
 ```
 
-Диапазон — та же грамматика, что у `columnWidths`, но **только** число или `"N-M"`: список через запятую запрещён, область непрерывна. Имя обязательно, и хотя бы одна ось должна быть задана; нарушение любого из этих правил → ненулевой код выхода и сообщение в stderr.
+The range has the same grammar as `columnWidths`, but **only** a number or `"N-M"`: a comma-separated list is forbidden, the area is continuous. The name is required, and at least one axis must be set; violating any of these rules -> a non-zero exit code and a message to stderr.
 
-## Колоночные раскладки (`columnSets`)
+## Column sets (`columnSets`)
 
-Группа строк может иметь собственные ширины колонок — в 1С это «индивидуальная ширина колонок».
-Документные `columns` и `columnWidths` описывают раскладку по умолчанию; дополнительные
-объявляются в `columnSets`, а область ссылается на нужную ключом `columnSet` — так же, как
-ячейка ссылается на `styles` через `style`.
+A group of rows can have its own column widths - in 1C this is "individual column width".
+Document-level `columns` and `columnWidths` describe the default set; additional ones
+are declared in `columnSets`, and an area refers to the needed one with the `columnSet` key - just as
+a cell refers to `styles` via `style`.
 
 ```json
 {
@@ -49,26 +49,26 @@
 }
 ```
 
-Раскладка описывается той же парой полей, что и документная: `columns` — количество колонок
-(у раскладок оно обычно разное), `columnWidths` — ширины. Ключ словаря — имя раскладки;
-в макетах, полученных декомпиляцией, это идентификатор из исходного файла, при описании
-с нуля — любая строка.
+A set is described by the same pair of fields as the document one: `columns` - the number of columns
+(it is usually different for sets), `columnWidths` - the widths. The dictionary key is the set name;
+in templates produced by decompilation it is an identifier from the source file, when describing
+from scratch - any string.
 
-Все строки области получают раскладку области, поэтому одна область не может смешивать
-раскладки. Позиции колонок (`col`, `span`) проверяются по ширине раскладки СВОЕЙ области,
-а не документной.
+All rows of an area get the area's set, so one area cannot mix
+sets. Column positions (`col`, `span`) are checked against the width of the area's OWN set,
+not the document one.
 
-Ссылка на необъявленную раскладку → ненулевой код выхода и сообщение в stderr.
+A reference to an undeclared set -> a non-zero exit code and a message to stderr.
 
-## Стиль колонки (`columnStyles`)
+## Column style (`columnStyles`)
 
-Колонка несёт то же оформление, что ячейка и строка. Ключи — та же грамматика диапазонов,
-что у `columnWidths`; значение — имя стиля.
+A column carries the same formatting as a cell and a row. Keys use the same range grammar
+as `columnWidths`; the value is a style name.
 
 ```json
 "columnWidths": { "1": 30, "2-3": 15 },
 "columnStyles": { "1": "по-центру", "4": "скрытая" }
 ```
 
-Внутри `columnSets` работает тот же ключ. Ширина и стиль независимы: колонка может иметь
-только ширину, только стиль или и то, и другое.
+The same key works inside `columnSets`. Width and style are independent: a column can have
+only a width, only a style, or both.

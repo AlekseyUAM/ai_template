@@ -11,18 +11,18 @@ from lxml import etree
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
-# Регистронезависимый ввод: имена параметров и значения choices принимаются
-# в любом регистре (в argparse по умолчанию совпадение точное).
+# Case-insensitive input: option names and choices values are accepted
+# in any case (argparse matching is exact by default).
 
 def parse_json_input(text, source, expected=None, inline=False):
-    """Разбор пользовательского JSON: одна строка в stderr вместо traceback (issue #80).
+    """Parse user JSON: one line on stderr instead of a traceback (issue #80).
 
-    expected заполняем только для полиморфного входа: у файла подсказка
-    была бы наполнителем — имя файла и текст парсера самодостаточны. inline печатает ещё и то,
-    что доехало: у файла такого вопроса нет, он лежит на диске и его видно целиком.
+    expected is filled only for polymorphic input: for a file the hint
+    would be filler - the file name and the parser text are self-sufficient. inline also prints what
+    actually arrived: for a file there is no such question, it lies on disk and is fully visible.
 
-    Импорты внутри тела: копия функции живёт в навыках с разными именами модулей
-    (skd-decompile импортирует json локально как _json), а тело обязано быть одинаковым.
+    Imports inside the body: a copy of the function lives in skills with different module names
+    (skd-decompile imports json locally as _json), and the body must be identical.
     """
     import json as _pj
     import sys as _psys
@@ -46,10 +46,10 @@ def parse_json_input(text, source, expected=None, inline=False):
 
 
 def read_json_file(path):
-    """Чтение входного JSON-файла с кодировкой из BOM (issue #80).
+    """Read the input JSON file with encoding from the BOM (issue #80).
 
-    BOM — объявление самого файла, поэтому ему верим; без BOM ждём строгий UTF-8. Кодовую
-    страницу не подбираем: угаданное имя уехало бы в метаданные молча.
+    The BOM is the file's own declaration, so we trust it; without a BOM we expect strict UTF-8. We do
+    not guess a code page: a guessed name would silently go into the metadata.
     """
     import os as _pos
     import sys as _psys
@@ -76,9 +76,9 @@ def read_json_file(path):
 
 
 class CIDict(dict):
-    # Ключи храним КАК ЕСТЬ: часть из них — имена объектов (табличные части, стандартные
-    # реквизиты), они попадают в XML. Регистронезависим только поиск. Порядок вставки
-    # сохраняется — от него зависит порядок эмиссии.
+    # Keep keys AS IS: some of them are object names (tabular sections, standard
+    # attributes) that go into the XML. Only lookup is case-insensitive. Insertion order
+    # is preserved - emission order depends on it.
     def _actual(self, key):
         if not isinstance(key, str) or dict.__contains__(self, key):
             return key
@@ -101,11 +101,11 @@ class CIDict(dict):
         return dict.pop(self, self._actual(key), *default)
 
     def __setitem__(self, key, value):
-        # запись по ключу, отличающемуся регистром, обновляет существующий, а не плодит дубль
+        # writing by a key with a different case updates the existing one instead of creating a duplicate
         dict.__setitem__(self, self._actual(key), value)
 
 def ci_json(obj):
-    """Рекурсивно оборачивает разобранный JSON: словари → CIDict, списки обходятся."""
+    """Recursively wrap parsed JSON: dicts → CIDict, lists are walked."""
     if isinstance(obj, dict):
         return CIDict((k, ci_json(v)) for k, v in obj.items())
     if isinstance(obj, list):
@@ -113,13 +113,13 @@ def ci_json(obj):
     return obj
 
 def ci_parse_args(parser, argv=None):
-    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
+    """parse_args: option names and choices values are accepted in any case."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
         if tok.startswith('-') and tok.lower() in names:
             argv[i] = names[tok.lower()]
-    # choices — зеркало [ValidateSet]; канонизируем ДО разбора, иначе argparse отвергнет регистр
+    # choices - mirror of [ValidateSet]; canonicalize BEFORE parsing, otherwise argparse rejects the case
     choice_map = {}
     for a in parser._actions:
         if a.choices:
@@ -134,7 +134,7 @@ def ci_parse_args(parser, argv=None):
 
 # ============================================================
 # Support guard (Ext/ParentConfigurations.bin) — see docs/1c-support-state-spec.md
-# Blocks edits of vendor objects "на замке" / read-only configs. Trigger = bin
+# Blocks edits of vendor objects "locked" / read-only configs. Trigger = bin
 # present; reaction from .v8-project.json editingAllowedCheck (deny|warn|off,
 # default deny). Never throws (except sys.exit on deny) — errors degrade to allow.
 # ============================================================
@@ -347,13 +347,13 @@ def local_name(node):
 # ── helpers ──────────────────────────────────────────────────
 
 def esc_xml(s):
-    # Эскейп ЗНАЧЕНИЯ АТРИБУТА: & < > и кавычка — внутри "..." литеральная " невалидна.
+    # Escape an ATTRIBUTE VALUE: & < > and quote - inside "..." a literal " is invalid.
     return s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;')
 
 
 def esc_xml_text(s):
-    """Экранирование ТЕКСТА элемента: только & < > . Кавычки платформа в тексте не экранирует
-    (92142 сырых кавычки на корпус, ни одной &quot;); &quot; она принимает, но нормализует обратно."""
+    """Escape element TEXT: only & < > . The platform does not escape quotes in text
+    (92142 raw quotes in the corpus, not a single &quot;); it accepts &quot; but normalizes it back."""
     return s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
 
 
@@ -482,7 +482,7 @@ def new_cmd_id():
 
 new_id = new_elem_id  # alias for element emitters
 
-# ── 5. Fragment helpers (эмиттеры из form-compile) ──
+# ── 5. Fragment helpers (emitters from form-compile) ──
 
 xml_lines = []
 
@@ -511,33 +511,33 @@ _FORM_TYPE_SYNONYMS = {
 }
 
 
-# Алиас на локальный словарь: тело resolve_type_str ниже — общая реализация,
-# одинаковая во всех навыках (реестр в tests/skills/check-inline-drift.mjs).
+# Alias to the local dict: the body of resolve_type_str below is a shared implementation,
+# identical across all skills (registry in tests/skills/check-inline-drift.mjs).
 TYPE_SYNONYMS = _FORM_TYPE_SYNONYMS
 
 
 def resolve_type_str(type_str):
     if not type_str:
         return type_str
-    # Прощающий ввод: ведущий префикс приходит копипастой из выгрузки. Без срезания он ломает
-    # поиск в словаре — русское имя типа остаётся непереведённым, и платформа отвечает
-    # «Неизвестное имя типа». cfg: снимаем всегда — он однозначно означает текущую конфигурацию.
-    # Сгенерированный dNpM: (в корпусе на этом URI встречаются d4p1, d5p1, d6p1 — имя префикса
-    # платформа выдаёт по порядку объявления) снимаем ТОЛЬКО у ссылочных типов, с точкой:
-    # сам по себе префикс многозначен — в формах d5p1:Chart, d5p1:TextDocument,
-    # d5p1:GeographicalSchema адресуют чужие пространства имён, и там он часть значения.
+    # Lenient input: the leading prefix arrives by copy-paste from a dump. Without stripping it breaks
+    # the dictionary lookup - the Russian type name stays untranslated and the platform answers
+    # "Unknown type name". We always strip cfg: - it unambiguously means the current configuration.
+    # The generated dNpM: (in the corpus this URI has d4p1, d5p1, d6p1 - the platform assigns the prefix name
+    # in declaration order) is stripped ONLY for reference types, with a dot:
+    # the prefix alone is ambiguous - in forms d5p1:Chart, d5p1:TextDocument,
+    # d5p1:GeographicalSchema address other namespaces, and there it is part of the value.
     if type_str.startswith('cfg:'):
         type_str = type_str[4:]
     elif '.' in type_str and re.match(r'^d\d+p\d+:', type_str):
         type_str = type_str[type_str.index(':') + 1:]
-    # Хвосты, которые дописывает вывод meta-info к множествам типов: суффикс обобщённого метатипа
-    # и счётчик состава. Копипаста строки оттуда — обычный путь, поэтому хвост снимаем молча.
-    # Срезаем ТОЛЬКО эти известные формы: круглые скобки заняты параметризованными типами
-    # (Число(15,2)), слепой срез скобок сломал бы их.
+    # Tails that meta-info output appends to type sets: the generic metatype suffix
+    # and the composition counter. Copy-pasting a string from there is a normal path, so we strip the tail silently.
+    # We cut ONLY these known forms: parentheses are used by parameterized types
+    # (Число(15,2)), a blind parentheses cut would break them.
     type_str = re.sub(r'\s*\((?:все|all)\)\s*$', '', type_str, flags=re.IGNORECASE).strip()
     type_str = re.sub(r'\s*[—-]\s*(?:типов|types):\s*\d+\s*$', '', type_str, flags=re.IGNORECASE).strip()
     type_str = re.sub(r'\s*\((?:типов|types):\s*\d+\)\s*$', '', type_str, flags=re.IGNORECASE).strip()
-    # Параметризованные типы: Number(15,2), Строка(100)
+    # Parameterized types: Number(15,2), Строка(100)
     m = re.match(r'^([^(]+)\((.+)\)$', type_str)
     if m:
         base_name = m.group(1).strip()
@@ -546,7 +546,7 @@ def resolve_type_str(type_str):
         if resolved:
             return f'{resolved}({params})'
         return type_str
-    # Ссылочные типы: СправочникСсылка.Организации -> CatalogRef.Организации
+    # Reference types: СправочникСсылка.Организации -> CatalogRef.Организации
     if '.' in type_str:
         dot_idx = type_str.index('.')
         prefix = type_str[:dot_idx]
@@ -555,7 +555,7 @@ def resolve_type_str(type_str):
         if resolved:
             return f'{resolved}{suffix}'
         return type_str
-    # Простое имя
+    # Simple name
     resolved = TYPE_SYNONYMS.get(type_str.lower())
     if resolved:
         return resolved
@@ -702,7 +702,7 @@ def get_element_name(el, type_key):
 
 
 def _assert_edit_unique(name, seen, ctx):
-    # Уникальность имён внутри JSON-определения (1С: своя коллекция — свой неймспейс).
+    # Name uniqueness within the JSON definition (1C: its own collection - its own namespace).
     if name in seen:
         print(f"[ERROR] Duplicate {ctx} '{name}' in JSON definition — names must be unique in 1C form")
         sys.exit(1)
@@ -1332,8 +1332,8 @@ if elements_list:
     # Detect indent level
     child_indent = get_child_indent(target_ci)
 
-    # Имена элементов уникальны (требование 1С). Сначала — внутри самого JSON-определения
-    # (рекурсивно по children/columns).
+    # Element names are unique (1C requirement). First - within the JSON definition itself
+    # (recursively over children/columns).
     def _walk_elem_names(el, seen):
         tk = None
         for key in ELEMENT_KEYS:
@@ -1351,7 +1351,7 @@ if elements_list:
     for el in elements_list:
         _walk_elem_names(el, dsl_elem_names)
 
-    # Затем — против уже существующих элементов формы (дубль = битый XML, форма не откроется).
+    # Then - against the form's existing elements (a duplicate = broken XML, the form will not open).
     for el in elements_list:
         type_key = None
         for key in ELEMENT_KEYS:
@@ -1419,8 +1419,8 @@ if attrs_list:
     if not attr_child_indent:
         attr_child_indent = "\t\t"
 
-    # Уникальность имён реквизитов: внутри JSON-определения (+ колонки в пределах реквизита) и
-    # против уже существующих реквизитов формы.
+    # Attribute name uniqueness: within the JSON definition (+ columns within an attribute) and
+    # against the form's existing attributes.
     dsl_attr_names = set()
     for attr in attrs_list:
         _assert_edit_unique(str(attr["name"]), dsl_attr_names, "attribute name")
@@ -1493,7 +1493,7 @@ if cmds_list:
     if not cmd_child_indent:
         cmd_child_indent = "\t\t"
 
-    # Уникальность имён команд: внутри JSON-определения и против существующих команд формы.
+    # Command name uniqueness: within the JSON definition and against the form's existing commands.
     dsl_cmd_names = set()
     for cmd in cmds_list:
         _assert_edit_unique(str(cmd["name"]), dsl_cmd_names, "command name")
@@ -1634,7 +1634,7 @@ if elem_events_list:
 
 # ── 13. Save ────────────────────────────────────────────────
 
-# Round-trip: определить стиль исходного файла (на диске он ещё не перезаписан).
+# Round-trip: determine the source file's style (on disk it is not overwritten yet).
 try:
     _fe_raw = open(resolved_form_path, "rb").read()
 except OSError:
@@ -1650,18 +1650,18 @@ else:
     _fe_bom, _fe_crlf, _fe_enc, _fe_final_nl = True, False, "utf-8", True
 
 xml_bytes = etree.tostring(tree, xml_declaration=True, encoding="UTF-8")
-# Восстановить регистр encoding как в оригинале.
+# Restore the encoding case as in the original.
 xml_bytes = xml_bytes.replace(
     b"<?xml version='1.0' encoding='UTF-8'?>",
     b'<?xml version="1.0" encoding="' + _fe_enc.encode("ascii") + b'"?>')
-# Канонизировать переносы к LF (убирает &#13; от \r в tail'ах).
+# Canonicalize line endings to LF (removes &#13; from \r in tails).
 xml_bytes = (xml_bytes.replace(b"&#13;\n", b"\n").replace(b"&#13;", b"")
              .replace(b"\r\n", b"\n").replace(b"\r", b"\n"))
-# Финальный перенос — как в оригинале.
+# Final newline - as in the original.
 xml_bytes = xml_bytes.rstrip(b"\n")
 if _fe_final_nl:
     xml_bytes += b"\n"
-# EOL — как в оригинале.
+# EOL - as in the original.
 if _fe_crlf:
     xml_bytes = xml_bytes.replace(b"\n", b"\r\n")
 # Write preserving BOM as in original.

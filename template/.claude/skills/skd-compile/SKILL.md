@@ -1,6 +1,6 @@
 ---
 name: skd-compile
-description: Компиляция схемы компоновки данных 1С (СКД) из компактного JSON-определения. Используй когда нужно создать СКД с нуля
+description: Compile a 1C data composition schema (DCS) from a compact JSON definition. Use when you need to create a DCS from scratch
 argument-hint: "[-DefinitionFile <json> | -Value <json-string>] -OutputPath <Template.xml>"
 allowed-tools:
   - Bash
@@ -9,17 +9,17 @@ allowed-tools:
   - Glob
 ---
 
-# /skd-compile — генерация СКД из JSON DSL
+# /skd-compile - DCS generation from JSON DSL
 
-Принимает JSON-определение схемы компоновки данных → генерирует Template.xml (DataCompositionSchema).
+Accepts a JSON data composition schema definition -> generates Template.xml (DataCompositionSchema).
 
-## Параметры и команда
+## Parameters and command
 
-| Параметр | Описание |
+| Parameter | Description |
 |----------|----------|
-| `DefinitionFile` | Путь к JSON-файлу с определением СКД (взаимоисключающий с Value) |
-| `Value` | JSON-строка с определением СКД (взаимоисключающий с DefinitionFile) |
-| `OutputPath` | Путь к выходному Template.xml |
+| `DefinitionFile` | Path to the JSON file with the DCS definition (mutually exclusive with Value) |
+| `Value` | JSON string with the DCS definition (mutually exclusive with DefinitionFile) |
+| `OutputPath` | Path to the output Template.xml |
 
 ```bash
 # Из файла
@@ -29,21 +29,21 @@ python "${CLAUDE_SKILL_DIR}/scripts/skd-compile.py" -DefinitionFile "<json>" -Ou
 python "${CLAUDE_SKILL_DIR}/scripts/skd-compile.py" -Value '<json-string>' -OutputPath "<Template.xml>"
 ```
 
-## Перед созданием отчёта
+## Before creating a report
 
-Перед созданием отчёта на СКД прочитай целиком:
-[особенности СКД](../bsl-coding-standards/reference/skd-specifics.md),
-[регистры накопления](../bsl-coding-standards/reference/accumulation-registers.md),
-[регистры сведений](../bsl-coding-standards/reference/information-registers.md).
+Before creating a DCS report, read in full:
+[DCS specifics](../bsl-coding-standards/reference/skd-specifics.md),
+[accumulation registers](../bsl-coding-standards/reference/accumulation-registers.md),
+[information registers](../bsl-coding-standards/reference/information-registers.md).
 
-Состав полей и выборки — строго по ТЗ; собственную форму отчёта не добавляй без требования ТЗ.
-После компиляции прогони `skd-validate -ExpectedFields "<колонки ТЗ>"` и `skd-info -Mode variant`.
+The field composition and selection strictly follow the specification; do not add a custom report form without a specification requirement.
+After compilation, run `skd-validate -ExpectedFields "<колонки ТЗ>"` and `skd-info -Mode variant`.
 
-## JSON DSL — краткий справочник
+## JSON DSL - quick reference
 
-Справочник ниже. Все примеры компилируемы как есть.
+The reference is below. All examples compile as is.
 
-### Корневая структура
+### Root structure
 
 ```json
 {
@@ -58,19 +58,19 @@ python "${CLAUDE_SKILL_DIR}/scripts/skd-compile.py" -Value '<json-string>' -Outp
 }
 ```
 
-Умолчания: `dataSources` → авто `ИсточникДанных1/Local`; `settingsVariants` → авто "Основной" с деталями.
+Defaults: `dataSources` -> auto `ИсточникДанных1/Local`; `settingsVariants` -> auto "Основной" with details.
 
-### Наборы данных
+### Data sets
 
-Тип по ключу: `query` → DataSetQuery, `objectName` → DataSetObject, `items` → DataSetUnion.
+Type by key: `query` -> DataSetQuery, `objectName` -> DataSetObject, `items` -> DataSetUnion.
 
 ```json
 { "name": "Продажи", "query": "ВЫБРАТЬ ...", "fields": [...] }
 ```
 
-Запрос поддерживает `@file` — ссылку на внешний .sql файл вместо inline-текста: `"query": "@queries/sales.sql"`. Путь разрешается относительно JSON-файла, затем CWD.
+The query supports `@file` - a reference to an external .sql file instead of inline text: `"query": "@queries/sales.sql"`. The path is resolved relative to the JSON file, then CWD.
 
-**DataSetObject** — внешний набор данных (без источника-запроса). Поля описываются явно; данные передаются вторым параметром `ПроцессорКомпоновкиДанных.Инициализировать(Макет, Новый Структура("<objectName>", ТЗ), ...)`.
+**DataSetObject** - an external data set (without a query source). Fields are described explicitly; data is passed as the second parameter `ПроцессорКомпоновкиДанных.Инициализировать(Макет, Новый Структура("<objectName>", ТЗ), ...)`.
 
 ```json
 { "name": "ЖурналОшибок", "objectName": "ЖурналОшибок", "fields": [
@@ -79,9 +79,9 @@ python "${CLAUDE_SKILL_DIR}/scripts/skd-compile.py" -Value '<json-string>' -Outp
 ]}
 ```
 
-`name` — имя набора в схеме, `objectName` — ключ в структуре передачи данных.
+`name` - the set name in the schema, `objectName` - the key in the data transfer structure.
 
-### Поля — shorthand и объектная форма
+### Fields - shorthand and object form
 
 ```
 "Наименование"                              — просто имя
@@ -90,46 +90,46 @@ python "${CLAUDE_SKILL_DIR}/scripts/skd-compile.py" -Value '<json-string>' -Outp
 "Служебное: string #noFilter #noOrder"       — + ограничения
 ```
 
-Объектная форма — когда нужен title или другие свойства:
+Object form - when a title or other properties are needed:
 ```json
 { "field": "ОстатокНаНачалоПериода", "title": "Остаток на начало периода" }
 ```
-`dataPath` автоматически берётся из `field`, если не указан явно.
+`dataPath` is taken from `field` automatically if not specified explicitly.
 
-Многоязычный заголовок: `"title": { "ru": "...", "en": "..." }`. Применимо везде, где принимается title/presentation (поля, calculatedFields, parameters, settingsVariants, availableValues и пр.). Строка эквивалентна `{ "ru": "..." }`.
+Multilingual title: `"title": { "ru": "...", "en": "..." }`. Applies wherever title/presentation is accepted (fields, calculatedFields, parameters, settingsVariants, availableValues, etc.). A string is equivalent to `{ "ru": "..." }`.
 
-Типы: `string`, `string(N)`, `decimal`, `decimal(D)`, `decimal(D,F)`, `boolean`, `date`, `dateTime`, `CatalogRef.X`, `DocumentRef.X`, `EnumRef.X`, `StandardPeriod`. Ссылочные типы эмитируются с inline namespace `d5p1:` (`http://v8.1c.ru/8.1/data/enterprise/current-config`). Сборка EPF со ссылочными типами требует базу с соответствующей конфигурацией.
+Types: `string`, `string(N)`, `decimal`, `decimal(D)`, `decimal(D,F)`, `boolean`, `date`, `dateTime`, `CatalogRef.X`, `DocumentRef.X`, `EnumRef.X`, `StandardPeriod`. Reference types are emitted with the inline namespace `d5p1:` (`http://v8.1c.ru/8.1/data/enterprise/current-config`). Building an EPF with reference types requires an infobase with the corresponding configuration.
 
-`decimal` без скобок = `10,2` (деньги по умолчанию), `decimal(N)` = `N,0` (целое); `,nonneg` в конце скобок → AllowedSign=Nonnegative.
+`decimal` without parentheses = `10,2` (money by default), `decimal(N)` = `N,0` (integer); `,nonneg` at the end of the parentheses -> AllowedSign=Nonnegative.
 
-Составной тип (несколько типов значений) — массив в объектной форме: `"type": ["CatalogRef.A", "CatalogRef.B"]`. Квалификаторы (`(N)`, `(D,F)`) применяются к каждому элементу.
+Composite type (several value types) - an array in the object form: `"type": ["CatalogRef.A", "CatalogRef.B"]`. Qualifiers (`(N)`, `(D,F)`) apply to each element.
 
-Роли (shorthand или объект):
+Roles (shorthand or object):
 
-- `@`-флаги: `@dimension`, `@account`, `@balance`, `@period`, `@required`, `@autoOrder`, `@ignoreNullValues`
+- `@` flags: `@dimension`, `@account`, `@balance`, `@period`, `@required`, `@autoOrder`, `@ignoreNullValues`
 - KV: `balanceGroupName`, `balanceType` (`OpeningBalance`/`ClosingBalance`), `parentDimension`, `accountTypeExpression`, `expression`, `orderType` (`Asc`/`Desc`), `periodNumber`, `periodType`
 
 ```
 "Сумма: decimal(15,2) @balance balanceGroupName=Сумма balanceType=OpeningBalance"
 ```
 
-Ограничения: `#noField`, `#noFilter`, `#noGroup`, `#noOrder`.
+Restrictions: `#noField`, `#noFilter`, `#noGroup`, `#noOrder`.
 
-В объектной форме: `"useRestriction": { "field": true, "condition": true, "group": true, "order": true }` или `"restrict": ["noField", "noFilter"]`.
+In the object form: `"useRestriction": { "field": true, "condition": true, "group": true, "order": true }` or `"restrict": ["noField", "noFilter"]`.
 
-Дополнительные ключи объектной формы:
-- `"presentationExpression": "<выражение>"` — что показывать вместо значения поля. Исходное значение остаётся «под капотом» для перехода/расшифровки.
-- `"appearance": { "<параметр>": "<значение>" }` — оформление колонки по умолчанию (применяется во всех вариантах настроек). Ключи — параметры платформы (`ГоризонтальноеПоложение`, `МинимальнаяШирина`, `Формат`, `Текст` и т.п.).
-- `"orderExpression": { "expression": "<выражение>", "orderType": "Asc"/"Desc", "autoOrder": true/false }` — сортировка поля по выражению (например `ЕстьNULL(Поле.Порядок, 10000)`).
+Additional object form keys:
+- `"presentationExpression": "<выражение>"` - what to show instead of the field value. The original value remains "under the hood" for navigation/decryption.
+- `"appearance": { "<параметр>": "<значение>" }` - column formatting by default (applied in all settings variants). Keys are platform parameters (`ГоризонтальноеПоложение`, `МинимальнаяШирина`, `Формат`, `Текст`, etc.).
+- `"orderExpression": { "expression": "<выражение>", "orderType": "Asc"/"Desc", "autoOrder": true/false }` - sorting the field by an expression (for example `ЕстьNULL(Поле.Порядок, 10000)`).
 
 ```json
 { "field": "Сумма", "title": "Сумма продажи", "type": "decimal(15,2)",
   "appearance": { "ГоризонтальноеПоложение": "Right", "МинимальнаяШирина": "80" } }
 ```
 
-### Вычисляемые поля (calculatedFields)
+### Calculated fields (calculatedFields)
 
-Shorthand: `"Имя [Заголовок]: тип = Выражение #noField #noFilter #noGroup #noOrder"` — все части кроме имени опциональны.
+Shorthand: `"Имя [Заголовок]: тип = Выражение #noField #noFilter #noGroup #noOrder"` - all parts except the name are optional.
 
 ```json
 "calculatedFields": [
@@ -139,18 +139,18 @@ Shorthand: `"Имя [Заголовок]: тип = Выражение #noField #
 ]
 ```
 
-Объектная форма — когда нужна `appearance`:
+Object form - when `appearance` is needed:
 ```json
 { "name": "Маржа", "title": "Маржа", "expression": "Цена - Закупка", "type": "decimal(15,2)", "useRestriction": "#noField #noFilter" }
 ```
 
-### Итоги (shorthand)
+### Totals (shorthand)
 
 ```json
 "totalFields": ["Количество: Сумма", "Стоимость: Сумма(Кол * Цена)"]
 ```
 
-### Параметры (shorthand + @autoDates)
+### Parameters (shorthand + @autoDates)
 
 ```json
 "parameters": [
@@ -158,16 +158,16 @@ Shorthand: `"Имя [Заголовок]: тип = Выражение #noField #
 ]
 ```
 
-Shorthand: `"Имя [Заголовок]: тип = значение @флаги"`. `[Заголовок]` опциональный — добавляет `<title>` (LocalStringType).
+Shorthand: `"Имя [Заголовок]: тип = значение @флаги"`. `[Заголовок]` is optional - adds `<title>` (LocalStringType).
 
-Флаги shorthand:
-- `@autoDates` — добавляет к параметру StandardPeriod пару дат `НачалоПериода`/`КонецПериода`, вычисляемых из него. Используй их в тексте запроса как `&НачалоПериода`/`&КонецПериода`; пользователь выбирает только сам период. По умолчанию сам параметр получает `use=Always` и `denyIncompleteValues=true` (чтобы производные даты всегда были заполнены); в объектной форме можно явно переопределить.
-- `@valueList` — `<valueListAllowed>true</valueListAllowed>` — разрешает передавать список значений (при значении-списке ниже подразумевается автоматически)
-- `@hidden` — скрытый параметр: `availableAsField=false` + исключается из `"dataParameters": "auto"`
+Shorthand flags:
+- `@autoDates` - adds to a StandardPeriod parameter a pair of dates `НачалоПериода`/`КонецПериода` computed from it. Use them in the query text as `&НачалоПериода`/`&КонецПериода`; the user selects only the period itself. By default the parameter itself gets `use=Always` and `denyIncompleteValues=true` (so the derived dates are always filled); in the object form you can override this explicitly.
+- `@valueList` - `<valueListAllowed>true</valueListAllowed>` - allows passing a value list (for a list value below it is implied automatically)
+- `@hidden` - hidden parameter: `availableAsField=false` + excluded from `"dataParameters": "auto"`
 
-Объектная форма: `title`, `hidden: true`, `valueListAllowed: true`, `availableAsField: false`, `denyIncompleteValues: true`, `use: "Always"`.
+Object form: `title`, `hidden: true`, `valueListAllowed: true`, `availableAsField: false`, `denyIncompleteValues: true`, `use: "Always"`.
 
-Значение-список: несколько значений по умолчанию через запятую в `значение` (для запятой внутри значения — кавычки `'...'`). В объектной форме — массив в `value`.
+List value: several default values separated by commas in `значение` (for a comma inside a value - quotes `'...'`). In the object form - an array in `value`.
 
 ```json
 "parameters": [
@@ -175,9 +175,9 @@ Shorthand: `"Имя [Заголовок]: тип = значение @флаги"
 ]
 ```
 
-Если значения по умолчанию нет — пропусти `=` в shorthand или укажи `"value": null` в объектной форме.
+If there is no default value - omit `=` in the shorthand or specify `"value": null` in the object form.
 
-Список допустимых значений (availableValues):
+List of allowed values (availableValues):
 
 ```json
 {
@@ -194,9 +194,9 @@ Shorthand: `"Имя [Заголовок]: тип = значение @флаги"
 }
 ```
 
-В варианте настроек `"dataParameters": "auto"` выводит все не-hidden параметры с `userSettingID`. Значения по умолчанию наследуются и остаются активными; параметры без значения по умолчанию отключаются (пользователь включит их в настройках).
+In a settings variant `"dataParameters": "auto"` outputs all non-hidden parameters with `userSettingID`. Default values are inherited and remain active; parameters without a default value are disabled (the user will enable them in settings).
 
-### Фильтры — shorthand
+### Filters - shorthand
 
 ```json
 "filter": [
@@ -206,11 +206,11 @@ Shorthand: `"Имя [Заголовок]: тип = значение @флаги"
 ]
 ```
 
-Формат: `"Поле оператор значение @флаги"`. Значение `_` = пустое (placeholder). Флаги: `@off` (use=false), `@user` (userSettingID=auto), `@quickAccess`, `@normal`, `@inaccessible`.
+Format: `"Поле оператор значение @флаги"`. The value `_` = empty (placeholder). Flags: `@off` (use=false), `@user` (userSettingID=auto), `@quickAccess`, `@normal`, `@inaccessible`.
 
-В объектной форме доступны: `viewMode`, `userSettingID`, `userSettingPresentation`.
+Available in the object form: `viewMode`, `userSettingID`, `userSettingPresentation`.
 
-Группы фильтров (Or/And/Not):
+Filter groups (Or/And/Not):
 ```json
 { "group": "Or", "items": [
   { "group": "And", "items": [
@@ -221,7 +221,7 @@ Shorthand: `"Имя [Заголовок]: тип = значение @флаги"
 ]}
 ```
 
-### Параметры данных — shorthand
+### Data parameters - shorthand
 
 ```json
 "dataParameters": [
@@ -230,18 +230,18 @@ Shorthand: `"Имя [Заголовок]: тип = значение @флаги"
 ]
 ```
 
-Формат: `"Имя [= значение] @флаги"`. Для StandardPeriod варианты (LastMonth, ThisYear и т.д.) распознаются автоматически.
+Format: `"Имя [= значение] @флаги"`. For StandardPeriod variants (LastMonth, ThisYear, etc.) are recognized automatically.
 
-### Структура — string shorthand
+### Structure - string shorthand
 
 ```json
 "structure": "Организация > details"
 "structure": "Организация > Номенклатура > details"
 ```
 
-`>` разделяет уровни группировки. `details` (или `детали`) = детальные записи. `selection` и `order` по умолчанию `["Auto"]` на каждом уровне.
+`>` separates grouping levels. `details` (or `детали`) = detail records. `selection` and `order` default to `["Auto"]` at each level.
 
-Объектная форма — для сложных случаев (именованные группировки, selection/filter на уровне группировки, таблицы, диаграммы):
+Object form - for complex cases (named groupings, selection/filter at grouping level, tables, charts):
 
 ```json
 "structure": [
@@ -254,9 +254,9 @@ Shorthand: `"Имя [Заголовок]: тип = значение @флаги"
 ]
 ```
 
-`type` по умолчанию `"group"` (можно не указывать). `groupFields` — алиас для `groupBy`. Поддержка `name`, `selection`, `order`, `filter`, `outputParameters`, рекурсивных `children`.
+`type` defaults to `"group"` (can be omitted). `groupFields` is an alias for `groupBy`. Supports `name`, `selection`, `order`, `filter`, `outputParameters`, recursive `children`.
 
-### Варианты настроек
+### Settings variants
 
 ```json
 "settingsVariants": [{
@@ -282,7 +282,7 @@ Shorthand: `"Имя [Заголовок]: тип = значение @флаги"
 }]
 ```
 
-### Условное оформление (conditionalAppearance)
+### Conditional appearance (conditionalAppearance)
 
 ```json
 "conditionalAppearance": [
@@ -297,15 +297,15 @@ Shorthand: `"Имя [Заголовок]: тип = значение @флаги"
 ]
 ```
 
-Типы значений appearance: `style:XXX`/`web:XXX`/`win:XXX` → Color, `true`/`false` → Boolean, параметр `Формат`/`Текст`/`Заголовок` → LocalStringType, прочее → String.
+Appearance value types: `style:XXX`/`web:XXX`/`win:XXX` -> Color, `true`/`false` -> Boolean, the `Формат`/`Текст`/`Заголовок` parameter -> LocalStringType, anything else -> String.
 
-Типы значений фильтра: `Перечисление.*`/`Справочник.*`/`ПланСчетов.*`/`Документ.*` → DesignTimeValue (автодетект).
+Filter value types: `Перечисление.*`/`Справочник.*`/`ПланСчетов.*`/`Документ.*` -> DesignTimeValue (auto-detected).
 
-OrGroup в фильтре: `{"group": "Or", "items": ["условие1", "условие2"]}`.
+OrGroup in a filter: `{"group": "Or", "items": ["условие1", "условие2"]}`.
 
-Folder в selection: `{"folder": "Поступление", "items": ["ПолеА", "ПолеБ"]}` → SelectedItemFolder с lwsTitle и placement=Auto.
+Folder in selection: `{"folder": "Поступление", "items": ["ПолеА", "ПолеБ"]}` -> SelectedItemFolder with lwsTitle and placement=Auto.
 
-### Итоги с привязкой к группировкам
+### Totals bound to groupings
 
 ```json
 "totalFields": [
@@ -313,9 +313,9 @@ Folder в selection: `{"folder": "Поступление", "items": ["ПолеА
 ]
 ```
 
-### Шаблоны вывода — компактный DSL
+### Output templates - compact DSL
 
-Вместо raw XML (`template`) — табличное описание через `rows` + именованный стиль `style`:
+Instead of raw XML (`template`) - a tabular description via `rows` + a named style `style`:
 
 ```json
 "templates": [
@@ -343,9 +343,9 @@ Folder в selection: `{"folder": "Поступление", "items": ["ПолеА
 ]
 ```
 
-Синтаксис ячеек: `"текст"` — статика, `"{Имя}"` — параметр, `"|"` — объединение с ячейкой выше, `">"` — объединение с ячейкой слева, `null` — пустая.
+Cell syntax: `"текст"` - static, `"{Имя}"` - parameter, `"|"` - merge with the cell above, `">"` - merge with the cell on the left, `null` - empty.
 
-Двухуровневая шапка с горизонтальным объединением:
+Two-level header with horizontal merging:
 ```json
 "rows": [
   ["Вид актива", "Остаток начало", "Поступление", ">", ">", ">", "Выбытие", ">", ">", "Остаток конец"],
@@ -354,15 +354,15 @@ Folder в selection: `{"folder": "Поступление", "items": ["ПолеА
 ]
 ```
 
-Встроенные стили: `header` (фон, центр, перенос), `data` (фон группы), `subheader` (без фона, центр), `total` (без фона). Все — Arial 10, рамки Solid 1px, цвета через стили платформы.
+Built-in styles: `header` (background, center, wrap), `data` (group background), `subheader` (no background, center), `total` (no background). All - Arial 10, Solid 1px borders, colors via platform styles.
 
-Пользовательские стили: файл `skd-styles.json` рядом с JSON-определением, в текущей директории, или в `presets/skills/skd/skd-styles.json` (поиск вверх от OutputPath). Первый найденный файл побеждает. Все допустимые ключи и формат цветов — в `examples/skd-styles.json`.
+Custom styles: a `skd-styles.json` file next to the JSON definition, in the current directory, or in `presets/skills/skd/skd-styles.json` (searched upward from OutputPath). The first file found wins. All allowed keys and the color format are in `examples/skd-styles.json`.
 
-Raw XML (`"template": "<...>"`) остаётся как fallback. Детект: если есть `rows` — DSL, иначе — raw.
+Raw XML (`"template": "<...>"`) remains as a fallback. Detection: if `rows` is present - DSL, otherwise - raw.
 
-### Расшифровка (drilldown) в параметрах шаблона
+### Decryption (drilldown) in template parameters
 
-Ключ `drilldown` в параметре шаблона автоматически генерирует `DetailsAreaTemplateParameter` и привязку `Расшифровка` в appearance ячеек:
+The `drilldown` key in a template parameter automatically generates `DetailsAreaTemplateParameter` and a `Расшифровка` binding in cell appearance:
 
 ```json
 "parameters": [
@@ -370,9 +370,9 @@ Raw XML (`"template": "<...>"`) остаётся как fallback. Детект: 
 ]
 ```
 
-Генерирует: `ExpressionAreaTemplateParameter` (обычный) + `DetailsAreaTemplateParameter` с именем `Расшифровка_ПоступлениеСырья`, `fieldExpression` по полю `ИмяРесурса`, `mainAction=DrillDown`. Ячейки `{Сырье}` автоматически получают appearance `Расшифровка = Расшифровка_ПоступлениеСырья`.
+Generates: `ExpressionAreaTemplateParameter` (regular) + `DetailsAreaTemplateParameter` with the name `Расшифровка_ПоступлениеСырья`, `fieldExpression` by the field `ИмяРесурса`, `mainAction=DrillDown`. Cells `{Сырье}` automatically get the appearance `Расшифровка = Расшифровка_ПоступлениеСырья`.
 
-### Привязки макетов к группировкам
+### Template bindings to groupings
 
 ```json
 "groupTemplates": [
@@ -382,13 +382,13 @@ Raw XML (`"template": "<...>"`) остаётся как fallback. Детект: 
 ]
 ```
 
-`groupField` — привязка к полю группировки, `groupName` — к именованной группировке в структуре варианта.
+`groupField` - binding to a grouping field, `groupName` - to a named grouping in the variant structure.
 
-`templateType`: `Header` (строки данных) → `<groupTemplate>`, `OverallHeader` (итоги) → `<groupTemplate>`, `GroupHeader` (шапка) → `<groupHeaderTemplate>`.
+`templateType`: `Header` (data rows) -> `<groupTemplate>`, `OverallHeader` (totals) -> `<groupTemplate>`, `GroupHeader` (header) -> `<groupHeaderTemplate>`.
 
-## Примеры
+## Examples
 
-### Минимальный
+### Minimal
 
 ```json
 {
@@ -399,7 +399,7 @@ Raw XML (`"template": "<...>"`) остаётся как fallback. Детект: 
 }
 ```
 
-### С запросом из внешнего файла (@file)
+### With a query from an external file (@file)
 
 ```json
 {
@@ -410,7 +410,7 @@ Raw XML (`"template": "<...>"`) остаётся как fallback. Детект: 
 }
 ```
 
-### С ресурсами, параметрами и @autoDates
+### With resources, parameters and @autoDates
 
 ```json
 {
@@ -437,7 +437,7 @@ Raw XML (`"template": "<...>"`) остаётся как fallback. Детект: 
 }
 ```
 
-## Верификация
+## Verification
 
 ```
 /skd-validate <OutputPath>                  — валидация структуры XML

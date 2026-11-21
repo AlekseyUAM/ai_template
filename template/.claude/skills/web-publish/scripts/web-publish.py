@@ -1,12 +1,12 @@
 #!/usr/bin/env python
-# web-publish v1.12 — Publish 1C infobase via Apache (+_version_dir/_version_key: общий эталон db-семейства)
+# web-publish v1.12 — Publish 1C infobase via Apache (+_version_dir/_version_key: shared db-family reference)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 
 """
-Публикация информационной базы 1С через Apache HTTP Server.
-Генерирует default.vrd и настраивает httpd.conf для веб-доступа
-к информационной базе 1С. При необходимости скачивает portable Apache.
-Идемпотентный — повторный вызов обновляет конфигурацию.
+Publish a 1C infobase via Apache HTTP Server.
+Generates default.vrd and configures httpd.conf for web access
+to the 1C infobase. Downloads portable Apache when needed.
+Idempotent - a repeated call updates the configuration.
 """
 
 import argparse
@@ -24,16 +24,16 @@ import zipfile
 
 import psutil
 
-# Регистронезависимый ввод: имена параметров и значения choices принимаются
-# в любом регистре (в argparse по умолчанию совпадение точное).
+# Case-insensitive input: parameter names and choices values are accepted
+# in any case (argparse matches exactly by default).
 def ci_parse_args(parser, argv=None):
-    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
+    """parse_args: parameter names and choices values are accepted in any case."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
         if tok.startswith('-') and tok.lower() in names:
             argv[i] = names[tok.lower()]
-    # choices — зеркало [ValidateSet]; канонизируем ДО разбора, иначе argparse отвергнет регистр
+    # choices mirrors [ValidateSet]; canonicalize BEFORE parsing, otherwise argparse rejects the case
     choice_map = {}
     for a in parser._actions:
         if a.choices:
@@ -47,10 +47,10 @@ def ci_parse_args(parser, argv=None):
 
 
 
-# --- Запись базы в .v8-project.json ---
-# Модель не передаёт ни путь к платформе конкретной базы, ни реквизиты хранилища: скрипт
-# сопоставляет параметры соединения с записью в databases[] и берёт их оттуда. Тот же приём,
-# что в cf-edit.py (сопоставление по configSrc).
+# --- Database record in .v8-project.json ---
+# The model passes neither the platform path of a specific database nor the repository
+# credentials: the script matches the connection parameters against a record in databases[]
+# and takes them from there. The same technique as in cf-edit.py (matching by configSrc).
 def _sg_find_v8project(start_dir):
     d = start_dir
     for _ in range(20):
@@ -75,7 +75,7 @@ def same_path(a, b):
 
 
 def find_project_database(args):
-    """Запись базы в реестре, соответствующая переданному соединению. None, если не найдена."""
+    """The database record in the registry matching the given connection. None if not found."""
     pf = _sg_find_v8project(os.getcwd())
     if not pf:
         return None
@@ -97,8 +97,9 @@ def find_project_database(args):
 def _find_project_v8path(args):
     """Walk up from CWD to find .v8-project.json and read its v8path.
 
-    v8path записи базы сильнее корневого: в одном проекте базы живут на разных версиях
-    платформы, а версию формата выгрузки задаёт та платформа, которая выгружает.
+    The v8path of a database record is stronger than the root one: in one project databases
+    live on different platform versions, and the dump format version is set by the platform
+    that performs the dump.
     """
     db = find_project_database(args)
     if db and db.get("v8path"):
@@ -408,8 +409,8 @@ def main():
     # --- Global block (Listen + LoadModule) ---
     global_marker_start = '# --- 1C: global ---'
     global_marker_end = '# --- End: global ---'
-    # Адреса привязки, вписанные в наш блок руками (Listen 127.0.0.1:port + Listen [::1]:port),
-    # при перезаписи сохраняем все — меняется только порт
+    # Bind addresses written into our block by hand (Listen 127.0.0.1:port + Listen [::1]:port)
+    # are all preserved on rewrite - only the port changes
     listen_hosts = []
     global_pattern = re.escape(global_marker_start) + r'([\s\S]*?)' + re.escape(global_marker_end)
     m = re.search(global_pattern, conf_content)
@@ -421,7 +422,7 @@ def main():
     if not listen_hosts:
         listen_hosts = ['']
     listen_lines = '\n'.join(f'Listen {h}:{port}' if h else f'Listen {port}' for h in listen_hosts)
-    # URL — по первому адресу; «все интерфейсы» → localhost
+    # URL - by the first address; "all interfaces" -> localhost
     first_host = listen_hosts[0]
     url_host = first_host if first_host and first_host not in ('0.0.0.0', '*', '[::]') else 'localhost'
     global_block = (

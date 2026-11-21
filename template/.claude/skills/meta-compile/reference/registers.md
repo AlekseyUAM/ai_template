@@ -1,7 +1,7 @@
-# Регистры: Information, Accumulation, Accounting, Calculation
+# Registers: Information, Accumulation, Accounting, Calculation
 
-**Измерения и ресурсы** задаются как реквизиты (shorthand `"Имя: Тип | флаги"` или объектная форма, см.
-`attributes.md`). Флаги измерений: `master`, `mainFilter`, `denyIncomplete`, `useInTotals` (регистр накопления).
+**Dimensions and resources** are specified as attributes (shorthand `"Имя: Тип | флаги"` or object form, see
+`attributes.md`). Dimension flags: `master`, `mainFilter`, `denyIncomplete`, `useInTotals` (accumulation register).
 
 ```json
 "dimensions": ["Организация: CatalogRef.Организации | master, mainFilter"],
@@ -10,13 +10,13 @@
 
 ## InformationRegister (Регистр сведений)
 
-| Ключ | Умолчание | Значения |
+| Key | Default | Values |
 |------|-----------|----------|
 | `writeMode` | `Independent` | `Independent` / `RecorderSubordinate` |
 | `periodicity` | `Nonperiodical` | `Nonperiodical` / `Second` / `Day` / `Month` / `Quarter` / `Year` / `RecorderPosition` |
-| `mainFilterOnPeriod` | `false` | bool (основной отбор по периоду) |
+| `mainFilterOnPeriod` | `false` | bool (main filter by period) |
 | `dataLockControlMode` | `Managed` | `Automatic` / `Managed` |
-| `dimensions` / `resources` / `attributes` | `[]` | измерения / ресурсы / реквизиты |
+| `dimensions` / `resources` / `attributes` | `[]` | dimensions / resources / attributes |
 
 ```json
 { "type": "InformationRegister", "name": "КурсыВалют", "periodicity": "Day",
@@ -26,12 +26,12 @@
 
 ## AccumulationRegister (Регистр накопления)
 
-| Ключ | Умолчание | Значения |
+| Key | Default | Values |
 |------|-----------|----------|
-| `registerType` | `Balance` | `Balance` (остатки) / `Turnovers` (обороты) |
-| `enableTotalsSplitting` | `true` | bool (разделение итогов) |
+| `registerType` | `Balance` | `Balance` (balances) / `Turnovers` (turnovers) |
+| `enableTotalsSplitting` | `true` | bool (totals splitting) |
 | `dataLockControlMode` | `Managed` | `Automatic` / `Managed` |
-| `dimensions` / `resources` / `attributes` | `[]` | измерения / ресурсы / реквизиты |
+| `dimensions` / `resources` / `attributes` | `[]` | dimensions / resources / attributes |
 
 ```json
 { "type": "AccumulationRegister", "name": "ОстаткиТоваров", "registerType": "Balance",
@@ -41,13 +41,13 @@
 
 ## AccountingRegister (Регистр бухгалтерии)
 
-| Ключ | Умолчание | Значения |
+| Key | Default | Values |
 |------|-----------|----------|
-| `chartOfAccounts` | — | **обязательно**: ссылка на план счетов `ChartOfAccounts.X` |
-| `correspondence` | `false` | bool (корреспонденция) |
-| `periodAdjustmentLength` | `0` | длина периода корректировки |
+| `chartOfAccounts` | - | **required**: reference to the chart of accounts `ChartOfAccounts.X` |
+| `correspondence` | `false` | bool (correspondence) |
+| `periodAdjustmentLength` | `0` | adjustment period length |
 | `dataLockControlMode` | `Managed` | `Automatic` / `Managed` |
-| `dimensions` / `resources` / `attributes` | `[]` | измерения / ресурсы / реквизиты |
+| `dimensions` / `resources` / `attributes` | `[]` | dimensions / resources / attributes |
 
 ```json
 { "type": "AccountingRegister", "name": "Хозрасчетный",
@@ -57,15 +57,15 @@
 
 ## CalculationRegister (Регистр расчёта)
 
-| Ключ | Умолчание | Значения |
+| Key | Default | Values |
 |------|-----------|----------|
-| `chartOfCalculationTypes` | — | **обязательно**: ссылка на ПВР `ChartOfCalculationTypes.X` |
-| `periodicity` | `Month` | периодичность |
-| `actionPeriod` | `false` | bool (период действия) |
-| `basePeriod` | `false` | bool (базовый период) |
-| `schedule` | пусто | ссылка на регистр сведений графиков |
+| `chartOfCalculationTypes` | - | **required**: reference to the chart of calculation types `ChartOfCalculationTypes.X` |
+| `periodicity` | `Month` | periodicity |
+| `actionPeriod` | `false` | bool (action period) |
+| `basePeriod` | `false` | bool (base period) |
+| `schedule` | empty | reference to the schedule information register |
 | `dataLockControlMode` | `Managed` | `Automatic` / `Managed` |
-| `dimensions` / `resources` / `attributes` | `[]` | измерения / ресурсы / реквизиты |
+| `dimensions` / `resources` / `attributes` | `[]` | dimensions / resources / attributes |
 
 ```json
 { "type": "CalculationRegister", "name": "Начисления",
@@ -73,4 +73,4 @@
   "dimensions": ["Сотрудник: CatalogRef.Сотрудники"], "resources": ["Сумма: Number(15,2)"] }
 ```
 
-> **AccountingRegister** требует план счетов, **CalculationRegister** — план видов расчёта (и оба — документ-регистратор).
+> **AccountingRegister** requires a chart of accounts, **CalculationRegister** - a chart of calculation types (and both - a recorder document).

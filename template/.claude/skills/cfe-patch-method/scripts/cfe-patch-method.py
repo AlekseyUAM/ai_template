@@ -10,16 +10,16 @@ import sys
 import tempfile
 import xml.etree.ElementTree as ET
 
-# Регистронезависимый ввод: имена параметров и значения choices принимаются
-# в любом регистре (в argparse по умолчанию совпадение точное).
+# Case-insensitive input: parameter names and choices values are accepted
+# in any case (in argparse exact match is the default).
 def ci_parse_args(parser, argv=None):
-    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
+    """parse_args: parameter names and choices values are accepted in any case."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
         if tok.startswith('-') and tok.lower() in names:
             argv[i] = names[tok.lower()]
-    # choices — зеркало [ValidateSet]; канонизируем ДО разбора, иначе argparse отвергнет регистр
+    # choices - a mirror of [ValidateSet]; we canonicalize BEFORE parsing, otherwise argparse rejects the case
     choice_map = {}
     for a in parser._actions:
         if a.choices:
@@ -42,7 +42,7 @@ TYPE_DIR_MAP = {
     "InformationRegister": "InformationRegisters", "AccumulationRegister": "AccumulationRegisters",
     "AccountingRegister": "AccountingRegisters", "CalculationRegister": "CalculationRegisters",
     "CommonForm": "CommonForms",
-    # Прощающий ввод: имя каталога принимается наравне с именем типа (Catalogs.X ≡ Catalog.X).
+    # Forgiving input: the directory name is accepted on par with the type name (Catalogs.X ≡ Catalog.X).
     "Catalogs": "Catalogs",
     "Documents": "Documents",
     "Enums": "Enums",
@@ -150,15 +150,15 @@ CONTEXT_RE = re.compile(
 )
 
 
-# --- Пометка расширенного свойства (<xr:PropertyState>) ---
-# Свойство появилось в формате 2.19 (8.3.26): на 2.18 и ниже платформа молча выбрасывает элемент
-# при загрузке. С 2.19 Конфигуратор ставит его сам при выгрузке. Правило: флаг ставит тот, кто
-# создал файл модуля, — здесь это мы. Имя свойства = базовое имя файла модуля.
-# Копии этих функций есть в cfe-borrow (навыки автономны); держать их одинаковыми — сознательно.
+# --- Extended property marker (<xr:PropertyState>) ---
+# The property appeared in format 2.19 (8.3.26): on 2.18 and below the platform silently drops the element
+# on load. Since 2.19 Configurator sets it itself on export. Rule: the flag is set by the one who
+# created the module file - here it is us. The property name = the base name of the module file.
+# Copies of these functions exist in cfe-borrow (skills are autonomous); keeping them identical is deliberate.
 def detect_format_version(d):
     while d:
-        # Автономная внешняя обработка/отчёт: своего Configuration.xml у неё нет, версию несёт
-        # корень самой обработки. Без этого форма и макет внутри обработки 2.21 писались бы 2.17.
+        # An autonomous external data processor/report: it has no Configuration.xml of its own, the version is carried by
+        # the root of the data processor itself. Without this, a form and a template inside a 2.21 data processor would be written as 2.17.
         ext_path = d + ".xml"
         if os.path.isfile(ext_path):
             with open(ext_path, "r", encoding="utf-8-sig") as f:
@@ -182,7 +182,7 @@ def detect_format_version(d):
 
 
 def format_rank(ver):
-    """"2.20" → 220, "2.9" → 209. Строковое сравнение неверно ("2.9" > "2.17")."""
+    """"2.20" -> 220, "2.9" -> 209. String comparison is wrong ("2.9" > "2.17")."""
     m = re.match(r'^(\d+)\.(\d+)$', ver or '')
     return int(m.group(1)) * 100 + int(m.group(2)) if m else 0
 
@@ -206,8 +206,8 @@ def set_property_state_flag(obj_file, property_name, format_version):
         text = fh.read()
     nl = "\r\n" if "\r\n" in text else "\n"
 
-    # ПЕРВЫЙ <InternalInfo> в файле — собственный у объекта: у реквизитов и подобъектов свои,
-    # но они лежат ниже, внутри <ChildObjects>.
+    # The FIRST <InternalInfo> in the file - the object's own: attributes and subobjects have their own,
+    # but they are lower, inside <ChildObjects>.
     empty = re.search(r"([ \t]*)<InternalInfo\s*/>", text)
     opened = re.search(r"([ \t]*)<InternalInfo>(.*?)</InternalInfo>", text, re.S)
 
@@ -221,7 +221,7 @@ def set_property_state_flag(obj_file, property_name, format_version):
             return
         ind = opened.group(1)
         block = build_property_state_xml(property_name, ind + "\t")
-        # Дописываем в КОНЕЦ InternalInfo: у Конфигуратора PropertyState идёт после GeneratedType.
+        # We append to the END of InternalInfo: in Configurator PropertyState goes after GeneratedType.
         close_at = opened.end() - len("</InternalInfo>") - len(ind)
         text = text[:close_at] + block + nl + text[close_at:]
     else:
@@ -231,8 +231,8 @@ def set_property_state_flag(obj_file, property_name, format_version):
         fh.write(text)
 
 
-# Модуль формы сюда не попадает: у формы флаг называется Form и ставится при заимствовании,
-# а не при появлении модуля (замер на 8.3.26 — пустой модуль формы платформа не выгружает).
+# A form module does not belong here: for a form the flag is called Form and is set at borrowing,
+# not when the module appears (measured on 8.3.26 - the platform does not export an empty form module).
 def get_module_flag_target(rel_parts, ext_root):
     if len(rel_parts) != 4 or rel_parts[2] != "Ext":
         return None
@@ -259,7 +259,7 @@ def get_module_rel_path(module_path):
     if obj_type == "CommonModule":
         return [dir_name, obj_name, "Ext", "Module.bsl"]
     if dir_name == "CommonForms":
-        # Общая форма — сама форма: модуль лежит прямо у неё, без Forms/<Имя>
+        # A common form is the form itself: the module lies directly with it, without Forms/<Имя>
         return [dir_name, obj_name, "Ext", "Form", "Module.bsl"]
     if len(parts) >= 4 and parts[2] == "Form":
         form_name = parts[3]
@@ -1062,7 +1062,7 @@ def main():
 
     place_new(ext_bsl, ext_lines, ext_exists, method["chain"], core, method["lang"])
 
-    # Модуль в расширении есть — отражаем это в метаданных объекта (формат ≥ 2.19).
+    # The module exists in the extension - we reflect this in the object metadata (format >= 2.19).
     flag_target = get_module_flag_target(rel_parts, extension_path)
     if flag_target:
         set_property_state_flag(flag_target["file"], flag_target["property"],

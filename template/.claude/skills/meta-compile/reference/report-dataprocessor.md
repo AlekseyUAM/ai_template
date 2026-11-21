@@ -1,28 +1,28 @@
 # Report, DataProcessor (Отчёты и Обработки)
 
-Почти идентичны по составу: реквизиты, табличные части, формы, макеты, команды. Модуль объекта — `Ext/ObjectModule.bsl`.
-Реквизиты и ТЧ — `attributes.md`; команды — `blocks.md`.
+Almost identical in composition: attributes, tabular sections, forms, templates, commands. The object module is `Ext/ObjectModule.bsl`.
+Attributes and tabular sections - `attributes.md`; commands - `blocks.md`.
 
-Ссылки на формы/схемы/хранилища пишутся **как есть** (имя формы может быть буквально «Форма»).
+References to forms/schemas/storages are written **as is** (the form name may literally be "Форма").
 
 ## Report (Отчёт)
 
-> **Форма отчёта.** Не создавай собственную `ФормаОтчета` и не назначай `defaultForm`,
-> если этого нет в ТЗ: платформа автоматически строит форму отчёта по СКД. Собственная
-> форма — лишний объект и риск неработоспособности; добавляй её только по явному
-> требованию и проверяй отдельно.
+> **Report form.** Do not create your own `ФормаОтчета` and do not assign `defaultForm`,
+> unless the specification requires it: the platform builds the report form automatically from the DCS. A custom
+> form is an extra object and a risk of malfunction; add it only on an explicit
+> requirement and validate it separately.
 
-| Ключ | Умолчание | Значения |
+| Key | Default | Values |
 |------|-----------|----------|
-| `comment` | пусто | строка |
-| `useStandardCommands` | `true` | bool (доступность через стандартный командный интерфейс) |
-| `mainDataCompositionSchema` | пусто | основной макет СКД (`Report.X.Template.ОсновнаяСхемаКомпоновкиДанных`) |
-| `defaultForm` / `auxiliaryForm` | пусто | основная / вспомогательная форма |
-| `defaultSettingsForm` / `auxiliarySettingsForm` / `defaultVariantForm` | пусто | формы настроек / вариантов |
-| `variantsStorage` / `settingsStorage` | пусто | хранилища вариантов / настроек (`SettingsStorage.X`) |
-| `extendedPresentation` / `explanation` | пусто | представление / пояснение (ML) |
+| `comment` | empty | string |
+| `useStandardCommands` | `true` | bool (availability via the standard command interface) |
+| `mainDataCompositionSchema` | empty | main DCS template (`Report.X.Template.ОсновнаяСхемаКомпоновкиДанных`) |
+| `defaultForm` / `auxiliaryForm` | empty | main / auxiliary form |
+| `defaultSettingsForm` / `auxiliarySettingsForm` / `defaultVariantForm` | empty | settings / variant forms |
+| `variantsStorage` / `settingsStorage` | empty | variant / settings storages (`SettingsStorage.X`) |
+| `extendedPresentation` / `explanation` | empty | presentation / explanation (ML) |
 | `includeHelpInContents` | `false` | bool |
-| `attributes` / `tabularSections` | `[]` / `{}` | реквизиты / табличные части |
+| `attributes` / `tabularSections` | `[]` / `{}` | attributes / tabular sections |
 
 ```json
 { "type": "Report", "name": "АнализПродаж", "useStandardCommands": false,
@@ -32,19 +32,19 @@
 
 ## DataProcessor (Обработка)
 
-| Ключ | Умолчание | Значения |
+| Key | Default | Values |
 |------|-----------|----------|
-| `comment` | пусто | строка |
+| `comment` | empty | string |
 | `useStandardCommands` | `true` | bool |
-| `defaultForm` / `auxiliaryForm` | пусто | основная / вспомогательная форма |
-| `extendedPresentation` / `explanation` | пусто | представление / пояснение (ML) |
+| `defaultForm` / `auxiliaryForm` | empty | main / auxiliary form |
+| `extendedPresentation` / `explanation` | empty | presentation / explanation (ML) |
 | `includeHelpInContents` | `false` | bool |
-| `attributes` / `tabularSections` | `[]` / `{}` | реквизиты / табличные части |
+| `attributes` / `tabularSections` | `[]` / `{}` | attributes / tabular sections |
 
 ```json
 { "type": "DataProcessor", "name": "ЗагрузкаТаблиц", "useStandardCommands": false,
   "attributes": [{ "name": "Таблица", "type": "ValueTree" }, { "name": "Произвольные", "type": "" }] }
 ```
 
-> Реквизиты отчётов/обработок допускают платформенные типы-коллекции: `ValueTable`, `ValueTree`, `ValueList`,
-> `StandardPeriod`, `SpreadsheetDocument` и др., а также `"type": ""` — реквизит без типа.
+> Attributes of reports/data processors allow platform collection types: `ValueTable`, `ValueTree`, `ValueList`,
+> `StandardPeriod`, `SpreadsheetDocument`, etc., as well as `"type": ""` - an attribute without a type.

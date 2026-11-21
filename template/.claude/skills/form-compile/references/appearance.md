@@ -1,59 +1,59 @@
-# Оформление
+# Appearance
 
-Два независимых механизма: **оформление элемента** (постоянные цвета/шрифт/граница на конкретном элементе) и **условное оформление формы** (`conditionalAppearance` — правила, применяемые при выполнении условия).
+Two independent mechanisms: **element appearance** (permanent colors/font/border on a specific element) and **conditional form appearance** (`conditionalAppearance` - rules applied when a condition holds).
 
-## Оформление элемента (цвета / шрифты / граница)
+## Element appearance (colors / fonts / border)
 
-Свойства задаются прямо на элементе. Применимо к полям (`input`/`check`/`radio`/`labelField`/`picField`/`calendar`), декорациям (`label`/`picture`), кнопкам (`button`), группам (`group`/`columnGroup`), страницам (`page`/`pages`), попапам (`popup`) и таблицам (`table`). Каждое свойство необязательно.
+Properties are set directly on the element. Applies to fields (`input`/`check`/`radio`/`labelField`/`picField`/`calendar`), decorations (`label`/`picture`), buttons (`button`), groups (`group`/`columnGroup`), pages (`page`/`pages`), popups (`popup`) and tables (`table`). Each property is optional.
 
-| Ключ | Что задаёт |
+| Key | What it sets |
 |------|-----------|
-| `textColor` | Цвет текста |
-| `backColor` | Цвет фона |
-| `borderColor` | Цвет рамки |
-| `font` | Шрифт |
-| `border` | Граница |
-| `titleTextColor` / `titleBackColor` / `titleFont` | Цвет текста / цвет фона / шрифт заголовка колонки (`labelField`, колонки таблицы); у `page`/`pages`/`popup` — `titleTextColor`/`titleFont` заголовка страницы/попапа |
-| `footerTextColor` / `footerBackColor` / `footerFont` | Цвет текста / цвет фона / шрифт подвала колонки |
+| `textColor` | Text color |
+| `backColor` | Background color |
+| `borderColor` | Border color |
+| `font` | Font |
+| `border` | Border |
+| `titleTextColor` / `titleBackColor` / `titleFont` | Column title text color / background color / font (`labelField`, table columns); for `page`/`pages`/`popup` - `titleTextColor`/`titleFont` of the page/popup title |
+| `footerTextColor` / `footerBackColor` / `footerFont` | Column footer text color / background color / font |
 
-Те же свойства доступны и через словарь `appearance` элемента — под русскими именами параметров платформы: `ЦветТекста`, `ЦветФона`, `ЦветРамки`, `Шрифт`, `Граница`, `ЦветТекстаЗаголовка`, `ЦветФонаЗаголовка`, `ШрифтЗаголовка`, `ЦветТекстаПодвала`, `ЦветФонаПодвала`, `ШрифтПодвала`. Это та же запись, что и в правилах условного оформления (ниже) и в `appearance` поля дин-списка.
+The same properties are also available via the element's `appearance` dictionary - under the Russian platform parameter names: `ЦветТекста`, `ЦветФона`, `ЦветРамки`, `Шрифт`, `Граница`, `ЦветТекстаЗаголовка`, `ЦветФонаЗаголовка`, `ШрифтЗаголовка`, `ЦветТекстаПодвала`, `ЦветФонаПодвала`, `ШрифтПодвала`. This is the same record as in the conditional appearance rules (below) and in the `appearance` of a dynamic list field.
 
-### Цвет
+### Color
 
-Строка в одной из форм:
+A string in one of the forms:
 
-| Форма | Значение |
+| Form | Value |
 |-------|----------|
-| `web:Имя` | Цвет из web-палитры, напр. `web:Red`, `web:FireBrick`, `web:HoneyDew` |
-| `win:Имя` | Системный цвет Windows, напр. `win:MenuBar`, `win:ButtonText`, `win:DisabledText` |
-| `style:ИмяСтиля` | Ссылка на элемент стиля конфигурации/платформы, напр. `style:FormBackColor`, `style:BorderColor` |
-| `#RRGGBB` | RGB-hex, напр. `#FF0000` |
+| `web:Имя` | Color from the web palette, e.g. `web:Red`, `web:FireBrick`, `web:HoneyDew` |
+| `win:Имя` | Windows system color, e.g. `win:MenuBar`, `win:ButtonText`, `win:DisabledText` |
+| `style:ИмяСтиля` | Reference to a configuration/platform style item, e.g. `style:FormBackColor`, `style:BorderColor` |
+| `#RRGGBB` | RGB hex, e.g. `#FF0000` |
 
-Имя должно существовать в своей палитре (несуществующий web-/win-цвет или ссылка на отсутствующий `style:`-элемент — ошибка загрузки формы).
+The name must exist in its palette (a nonexistent web-/win-color or a reference to a missing `style:` item is a form load error).
 
-### Шрифт (`font` / `titleFont` / `footerFont`)
+### Font (`font` / `titleFont` / `footerFont`)
 
-- Строка `"style:ИмяСтиля"` — шрифт из элемента стиля. Минимальная форма.
-- Объект — задаются только нужные атрибуты:
+- The string `"style:ИмяСтиля"` - a font from a style item. Minimal form.
+- An object - only the needed attributes are set:
 
-| Ключ | Назначение |
+| Key | Purpose |
 |------|-----------|
-| `ref` | Ссылка на стиль (`"style:X"`) или системный шрифт (`"sys:…"`) |
-| `faceName` | Имя гарнитуры (для собственного шрифта) |
-| `height` | Размер |
-| `bold` / `italic` / `underline` / `strikeout` | `true`/`false` — начертание |
-| `scale` | Масштаб, % |
-| `kind` | `Absolute` (собственный шрифт — с `faceName`+`height`) / `WindowsFont` (системный — с `ref:"sys:…"`) |
+| `ref` | Reference to a style (`"style:X"`) or a system font (`"sys:…"`) |
+| `faceName` | Typeface name (for a custom font) |
+| `height` | Size |
+| `bold` / `italic` / `underline` / `strikeout` | `true`/`false` - style |
+| `scale` | Scale, % |
+| `kind` | `Absolute` (custom font - with `faceName`+`height`) / `WindowsFont` (system - with `ref:"sys:…"`) |
 
 ```json
 { "label": "Внимание!", "textColor": "web:FireBrick",
   "font": { "faceName": "Arial", "height": 12, "bold": true, "kind": "Absolute", "scale": 100 } }
 ```
 
-### Граница (`border`)
+### Border (`border`)
 
-- Строка `"style:ИмяСтиля"` (или объект `{ "ref": "style:X" }`) — граница из стиля.
-- Объект `{ "width": N, "style": "..." }` — собственная граница. `style` — один из: `Single`, `Double`, `Underline`, `DoubleUnderline`, `Overline`, `Embossed`, `Indented`, `WithoutBorder`.
+- The string `"style:ИмяСтиля"` (or the object `{ "ref": "style:X" }`) - a border from a style.
+- The object `{ "width": N, "style": "..." }` - a custom border. `style` - one of: `Single`, `Double`, `Underline`, `DoubleUnderline`, `Overline`, `Embossed`, `Indented`, `WithoutBorder`.
 
 ```json
 { "input": "Цена", "path": "Объект.Цена", "textColor": "#FF0000",
@@ -61,9 +61,9 @@
 { "labelField": "Код", "titleTextColor": "web:HoneyDew", "border": "style:ControlBorder" }
 ```
 
-## Условное оформление формы (`conditionalAppearance`)
+## Conditional form appearance (`conditionalAppearance`)
 
-Форменный ключ верхнего уровня — массив правил. Каждое правило применяет оформление к перечисленным полям, когда выполняется его условие.
+The top-level form key is an array of rules. Each rule applies appearance to the listed fields when its condition holds.
 
 ```json
 "conditionalAppearance": [
@@ -73,19 +73,19 @@
 ]
 ```
 
-| Ключ | Тип | Назначение |
+| Key | Type | Purpose |
 |------|-----|-----------|
-| `selection` | array | Имена форматируемых полей формы |
-| `filter` | array | Условие применения (грамматика — ниже) |
-| `appearance` | object | Словарь «параметр платформы: значение» |
-| `presentation` | string / object | Подпись правила в списке настроек |
-| `use` | bool | `false` — правило отключено |
-| `viewMode` | string | Режим отображения настройки |
-| `userSettingID` | string | Идентификатор пользовательской настройки; `"auto"` — сгенерировать |
+| `selection` | array | Names of the form fields to format |
+| `filter` | array | Application condition (grammar below) |
+| `appearance` | object | "platform parameter: value" dictionary |
+| `presentation` | string / object | Rule caption in the settings list |
+| `use` | bool | `false` - the rule is disabled |
+| `viewMode` | string | Setting display mode |
+| `userSettingID` | string | Custom setting ID; `"auto"` - generate |
 
 ### filter
 
-Та же грамматика, что в отборе списка — shorthand `"Поле оператор значение @флаги"` или объект:
+The same grammar as in a list filter - shorthand `"Поле оператор значение @флаги"` or an object:
 
 ```json
 "filter": [
@@ -95,21 +95,21 @@
 ]
 ```
 
-- **Операторы:** `=` `<>` `>` `>=` `<` `<=`, `in` / `notIn`, `inHierarchy`, `contains` / `notContains`, `beginsWith` / `notBeginsWith`, `like` / `notLike` (`%`-шаблон), `filled` / `notFilled`.
-- **Флаги:** `@off` (отключён), `@user`, `@quickAccess`; `_` = пустое значение.
-- **Группа:** `{ "group": "And"|"Or"|"Not", "items": [...], "use"? }`.
-- **Дата-значение:** ISO-дата `"2024-01-01T00:00:00"` — фиксированная дата; именованный относительный период — строкой `"BeginningOfThisWeek"` с `"valueType": "v8:StandardBeginningDate"` (варианты `BeginningOfThisDay`/`BeginningOfThisWeek`/`BeginningOfThisMonth`/`BeginningOfThisYear`/…).
+- **Operators:** `=` `<>` `>` `>=` `<` `<=`, `in` / `notIn`, `inHierarchy`, `contains` / `notContains`, `beginsWith` / `notBeginsWith`, `like` / `notLike` (`%` pattern), `filled` / `notFilled`.
+- **Flags:** `@off` (disabled), `@user`, `@quickAccess`; `_` = empty value.
+- **Group:** `{ "group": "And"|"Or"|"Not", "items": [...], "use"? }`.
+- **Date value:** ISO date `"2024-01-01T00:00:00"` - a fixed date; a named relative period - by the string `"BeginningOfThisWeek"` with `"valueType": "v8:StandardBeginningDate"` (options `BeginningOfThisDay`/`BeginningOfThisWeek`/`BeginningOfThisMonth`/`BeginningOfThisYear`/…).
 
 ### appearance
 
-Словарь «параметр платформы: значение». Имена параметров — русские: `ЦветТекста`, `ЦветФона`, `Шрифт`, `Граница`, `Текст`, `Заголовок`, `Формат`, `ВидимостьЭлемента`, `Доступность` и другие параметры оформления компоновки.
+"platform parameter: value" dictionary. Parameter names are Russian: `ЦветТекста`, `ЦветФона`, `Шрифт`, `Граница`, `Текст`, `Заголовок`, `Формат`, `ВидимостьЭлемента`, `Доступность` and other layout appearance parameters.
 
-Значения:
-- **Цвет** (`ЦветТекста`/`ЦветФона`/…) и **шрифт** (`Шрифт`) — те же формы, что в оформлении элемента выше (`web:`/`win:`/`style:`/`#RRGGBB`; шрифт — строка `"style:X"` или объект).
-- **Текстовые параметры** (`Текст`/`Заголовок`/`Формат`) — по форме значения:
-  - голая строка → нелокализованный литерал (`""` → пустое значение);
-  - объект `{ "ru": "...", "en": "..." }` → локализуемая строка;
-  - объект `{ "field": "путь" }` → ссылка на поле компоновки.
+Values:
+- **Color** (`ЦветТекста`/`ЦветФона`/…) and **font** (`Шрифт`) - the same forms as in element appearance above (`web:`/`win:`/`style:`/`#RRGGBB`; font - the string `"style:X"` or an object).
+- **Text parameters** (`Текст`/`Заголовок`/`Формат`) - depending on the value form:
+  - a bare string -> a non-localized literal (`""` -> empty value);
+  - the object `{ "ru": "...", "en": "..." }` -> a localizable string;
+  - the object `{ "field": "путь" }` -> a reference to a layout field.
 
 ```json
 "conditionalAppearance": [
@@ -120,4 +120,4 @@
 ]
 ```
 
-> Условное оформление **самого дин-списка** задаётся не здесь, а в `settings.conditionalAppearance` реквизита-списка — см. `references/dynamic-list.md`.
+> Conditional appearance of the **dynamic list itself** is set not here but in `settings.conditionalAppearance` of the list attribute - see `references/dynamic-list.md`.

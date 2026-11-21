@@ -1,63 +1,63 @@
-# Методика контроля остатков
+# Balance control methodology
 
-Контроль остатков при проведении документа реализуется одной из двух методик.
-Выбор методики определяет порядок действий в `ОбработкаПроведения` и схему блокировок.
-Состав регистров, их измерения/ресурсы и режим разделения итогов — в `code_index`.
+Balance control during document posting is implemented by one of two methodologies.
+The choice of methodology determines the order of actions in `ОбработкаПроведения` and the lock scheme.
+Register composition, their dimensions/resources and the totals split mode are in `code_index`.
 
-## Старая методика (блокировка дольше)
+## Old methodology (longer lock)
 
-Порядок:
-1. Установить управляемую блокировку (`БлокировкаДанных`) на читаемые данные —
-   **исключительную**, если дальше эти данные будут изменяться.
-2. Прочитать текущие остатки запросом.
-3. Проверить достаточность остатков.
-4. Сформировать и записать движения.
+Order:
+1. Set a managed lock (`БлокировкаДанных`) on the read data -
+   **exclusive** if these data will be modified later.
+2. Read the current balances by a query.
+3. Check balance sufficiency.
+4. Form and write movements.
 
-Блокировка держится от чтения до конца транзакции → интервал блокировки длинный.
+The lock is held from reading until the end of the transaction → the lock interval is long.
 
-**Когда применяется:** когда данные регистра нужны для формирования самих движений —
-значения движений зависят от текущего состояния остатков. Классический случай —
-партионный учёт/списание себестоимости: нужно прочитать остатки партий, чтобы
-рассчитать сумму списания. См. [Блокировки](locks.md).
+**When it applies:** when register data is needed to form the movements themselves -
+movement values depend on the current state of balances. The classic case is
+batch accounting/cost write-off: you need to read batch balances to
+calculate the write-off amount. See [Locks](locks.md).
 
-## Новая методика (блокировка короче)
+## New methodology (shorter lock)
 
-Порядок:
-1. Сформировать движения (не читая предварительно остатки).
-2. Для контролируемых наборов: `Движения.<Регистр>.БлокироватьДляИзменения = Истина`.
-3. Записать движения (`Движения.Записать()`).
-4. Запросом найти **отрицательные** остатки на границу своего документа
+Order:
+1. Form movements (without reading balances beforehand).
+2. For controlled sets: `Движения.<Регистр>.БлокироватьДляИзменения = Истина`.
+3. Write movements (`Движения.Записать()`).
+4. Find **negative** balances by a query at your document's boundary
    (`Новый Граница(МоментВремени(), ВидГраницы.Включая)`).
-5. При наличии отрицательных остатков — `Отказ = Истина` с сообщением пользователю.
+5. If there are negative balances - `Отказ = Истина` with a message to the user.
 
-`БлокироватьДляИзменения = Истина` отключает разделитель итогов (колонку-splitter) по
-записываемому набору измерений от момента записи до конца транзакции — это не чтение с
-блокировкой, а защита итогов. Интервал «блокировки» короткий → выше параллельность.
+`БлокироватьДляИзменения = Истина` disables the totals splitter (splitter column) for
+the written dimension set from the moment of writing until the end of the transaction - this is not
+a read with a lock but protection of totals. The "lock" interval is short → higher concurrency.
 
-**Когда применяется:** когда все данные для формирования движений есть в самом документе
-(движения не зависят от текущих остатков), а контроль нужен лишь на неотрицательность.
+**When it applies:** when all data for forming movements is in the document itself
+(movements do not depend on current balances), and control is needed only for non-negativity.
 
-## Отличия по блокировкам
+## Differences in locking
 
-| | Старая методика | Новая методика |
+| | Old methodology | New methodology |
 |---|---|---|
-| Явная блокировка | `БлокировкаДанных` **до** чтения остатков | `БлокироватьДляИзменения = Истина` на записи |
-| Чтение остатков | до записи своих движений | после записи своих движений (на границу) |
-| Длительность | вся транзакция | от записи до конца транзакции |
-| Параллельность | ниже | выше |
+| Explicit lock | `БлокировкаДанных` **before** reading balances | `БлокироватьДляИзменения = Истина` on write |
+| Balance reading | before writing own movements | after writing own movements (at the boundary) |
+| Duration | the whole transaction | from write to the end of the transaction |
+| Concurrency | lower | higher |
 
-## Порядок при нескольких регистрах
+## Order with several registers
 
-- Сначала записать регистры, НЕ требующие контроля остатков (`БлокироватьДляИзменения = Ложь`),
-  в стабильном порядке.
-- В конце — регистры с контролем (`БлокироватьДляИзменения = Истина`) и запрос контроля
-  отрицательных остатков. Контроль остатков — как можно ближе к концу транзакции.
-- Разделение итогов не ускоряет сценарий с контролем остатков (при контроле эффекта нет).
+- First write registers that do NOT require balance control (`БлокироватьДляИзменения = Ложь`),
+  in a stable order.
+- At the end - registers with control (`БлокироватьДляИзменения = Истина`) and the negative
+  balance control query. Balance control - as close to the transaction end as possible.
+- Totals split does not speed up a scenario with balance control (there is no effect with control).
 
-## Типичные ошибки (сигналы для ревью)
+## Typical errors (review signals)
 
-- [критичная] **Старая методика:** чтение остатков без предшествующей управляемой блокировки.
-- [критичная] **Новая методика:** `БлокироватьДляИзменения` установлен **после** `Записать()` (не действует).
-- [критичная] **Новая методика:** контроль отрицательных остатков своего документа без корректной границы
-  (не учтены собственные движения) — см. [Граница и момент времени](boundary-and-moment.md).
-- [важная] **Обе методики:** запрос остатков/`Выполнить()` в цикле вместо одного запроса по списку.
+- [critical] **Old methodology:** reading balances without a preceding managed lock.
+- [critical] **New methodology:** `БлокироватьДляИзменения` is set **after** `Записать()` (does not take effect).
+- [critical] **New methodology:** control of negative balances of your own document without a correct boundary
+  (own movements not accounted for) - see [Boundary and point in time](boundary-and-moment.md).
+- [important] **Both methodologies:** balance query/`Выполнить()` in a loop instead of one query over the list.

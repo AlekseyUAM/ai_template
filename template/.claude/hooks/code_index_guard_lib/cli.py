@@ -1,4 +1,4 @@
-"""CLI-контракт хука: чистые run/render и fail-safe main."""
+"""Hook CLI contract: pure run/render and fail-safe main."""
 import hashlib
 import json
 import sys
@@ -48,9 +48,9 @@ def run(payload, ctx, prefix=None):
     if tool == "Bash":
         d = bash.decide_bash(ti, cwd, ctx)
         if d is None:
-            # Команда без решения в Bash-грамматике: на Windows харнесс
-            # передаёт в Bash то, что на деле PowerShell — разбираем повторно
-            # как PowerShell, выкинув тела heredoc'ов (это ДАННЫЕ).
+            # Command without a decision in Bash grammar: on Windows the harness
+            # passes to Bash what actually is PowerShell - parse it again
+            # as PowerShell, dropping heredoc bodies (they are DATA).
             cmd = ti.get("command") or ""
             d = powershell.decide_powershell(
                 {"command": shell.strip_heredocs(cmd)}, cwd, ctx)
@@ -69,7 +69,7 @@ def render(decision):
 
 
 def _state_path() -> Path:
-    """Файл счётчиков отказов рядом с конфигом гарда (в каталоге хуков)."""
+    """Deny counter file next to the guard config (in the hooks directory)."""
     from .config import guard_config_path
     return guard_config_path().with_name(_STATE_NAME)
 
@@ -80,12 +80,12 @@ def _session_id(payload) -> str:
 
 
 def _call_key(payload) -> str:
-    """Ключ вызова: инструмент + хэш значимой части tool_input.
+    """Call key: tool + hash of the significant part of tool_input.
 
-    Для Read ключ — только `file_path` (повторные чтения разных диапазонов
-    одного файла считаются одним вызовом), для Grep/Glob — путь/образец,
-    для команд — сама команда. Так лимит отказов не обходится сменой
-    `offset`/`limit` или форматирования.
+    For Read the key is only `file_path` (repeated reads of different ranges
+    of one file count as one call), for Grep/Glob - path/pattern,
+    for commands - the command itself. So the deny limit cannot be bypassed by
+    changing `offset`/`limit` or formatting.
     """
     tool = str(payload.get("tool_name") or "")
     ti = payload.get("tool_input") or {}
@@ -106,7 +106,7 @@ def _call_key(payload) -> str:
 
 
 def _load_state(path: Path, session: str) -> dict:
-    """Состояние текущей сессии; при смене сессии счётчики сбрасываются."""
+    """Current session state; counters reset when the session changes."""
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
@@ -133,11 +133,11 @@ def _save_state(path: Path, state: dict) -> None:
 
 
 def _apply_deny_limit(payload, decision, max_denies):
-    """Разрешает нативный вызов после N отказов подряд — защита от зацикливания.
+    """Allows the native call after N consecutive denials - loop protection.
 
-    Локальная модель может упорно повторять Read/Grep по индексированному пути.
-    Счётчик живёт в файле рядом с конфигом и сбрасывается при смене session_id;
-    ошибки состояния не меняют решение (гард продолжает работать как раньше).
+    A local model may stubbornly repeat Read/Grep on an indexed path.
+    The counter lives in a file next to the config and resets when session_id changes;
+    state errors do not change the decision (the guard keeps working as before).
     """
     if decision is None or decision.allow or max_denies <= 0:
         return decision
@@ -154,10 +154,10 @@ def _apply_deny_limit(payload, decision, max_denies):
         if count > max_denies:
             return Decision(
                 True,
-                f"code-index-guard: для этого вызова уже было {max_denies} "
-                "отказов — разрешаю нативный инструмент, чтобы не зациклиться. "
-                "Дальше предпочитай code_index; alias репозитория — в тексте "
-                "предыдущих deny-сообщений.")
+                f"code-index-guard: this call already had {max_denies} "
+                "denials - allowing the native tool to avoid a loop. "
+                "Prefer code_index from now on; the repository alias is in the text "
+                "of the previous deny messages.")
         return decision
     except Exception:
         return decision
@@ -169,7 +169,7 @@ def main(argv=None):
         list_roots, prefix = parse_args(args)
         ctx = build_context()
         if list_roots:
-            return  # режим v1 не реализован: пустой stdout
+            return  # v1 mode is not implemented: empty stdout
         payload = json.load(sys.stdin)
         if not isinstance(payload, dict):
             return

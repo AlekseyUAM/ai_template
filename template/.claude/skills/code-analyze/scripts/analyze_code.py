@@ -1,4 +1,4 @@
-# analyze_code.py — прогон реестра правил по BSL-модулю (.bsl).
+# analyze_code.py - run the rule registry over a BSL module (.bsl).
 import argparse
 import os
 import sys

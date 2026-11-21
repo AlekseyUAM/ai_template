@@ -1,19 +1,19 @@
 #!/usr/bin/env python
-# cf-init v1.16 — Create empty 1C configuration scaffold (+write_xml_file/write_utf8_bom: общий эталон записи)
+# cf-init v1.16 - Create empty 1C configuration scaffold (+write_xml_file/write_utf8_bom: shared writing reference)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 """Generates minimal XML source files for a 1C configuration."""
 import sys, os, argparse, re, uuid
 
-# Регистронезависимый ввод: имена параметров и значения choices принимаются
-# в любом регистре (в argparse по умолчанию совпадение точное).
+# Case-insensitive input: parameter names and choices values are accepted
+# in any case (in argparse exact match is the default).
 def ci_parse_args(parser, argv=None):
-    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
+    """parse_args: parameter names and choices values are accepted in any case."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
         if tok.startswith('-') and tok.lower() in names:
             argv[i] = names[tok.lower()]
-    # choices — зеркало [ValidateSet]; канонизируем ДО разбора, иначе argparse отвергнет регистр
+    # choices - a mirror of [ValidateSet]; we canonicalize BEFORE parsing, otherwise argparse rejects the case
     choice_map = {}
     for a in parser._actions:
         if a.choices:
@@ -27,31 +27,31 @@ def ci_parse_args(parser, argv=None):
 
 
 def esc_xml_text(s):
-    # Эскейп ТЕКСТА элемента: только & < > — кавычку и апостроф платформа держит сырыми.
+    # Element TEXT escape: only & < > - the platform keeps quotes and apostrophes raw.
     return s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
 
 def new_uuid():
     return str(uuid.uuid4())
 
 def write_utf8_bom(path, content):
-    # newline='' — без трансляции: иначе текстовый режим Python дал бы CRLF на Windows
-    # и LF на macOS, то есть вывод навыка зависел бы от ОС.
+    # newline='' - no translation: otherwise Python text mode would produce CRLF on Windows
+    # and LF on macOS, that is, the skill output would depend on the OS.
     with open(path, 'w', encoding='utf-8-sig', newline='') as f:
         f.write(content)
 
 
 def write_xml_file(path, content):
-    """XML в каноне выгрузки Конфигуратора: CRLF в разделителях, без перевода в конце.
+    """XML in the Configurator export canon: CRLF in separators, no trailing newline translation.
 
-    Копия этой функции есть в каждом навыке-эмиттере (навыки автономны). Держать
-    копии одинаковыми — сознательно: разошедшиеся копии сводят на нет весь смысл.
+    A copy of this function exists in every emitter skill (skills are autonomous). Keeping
+    copies identical is deliberate: diverged copies negate the whole point.
     """
     text = content.replace('\r\n', '\n').replace('\n', '\r\n').rstrip('\r\n')
     write_utf8_bom(path, text)
 
 
 def format_rank(ver):
-    """"2.20" → 220, "2.9" → 209. Строковое сравнение неверно ("2.9" > "2.17")."""
+    """"2.20" -> 220, "2.9" -> 209. String comparison is wrong ("2.9" > "2.17")."""
     m = re.match(r'^(\d+)\.(\d+)$', ver or '')
     return int(m.group(1)) * 100 + int(m.group(2)) if m else 0
 
@@ -70,15 +70,15 @@ def main():
     parser.add_argument('-Version', dest='Version', default='')
     parser.add_argument('-Vendor', dest='Vendor', default='')
     parser.add_argument('-CompatibilityMode', dest='CompatibilityMode', default='Version8_3_24')
-    # Версия формата выгрузки (MDClasses) — её задаёт ПЛАТФОРМА, а не режим совместимости.
-    # Дефолт 2.17 — нижняя граница проверенного диапазона.
+    # Export format version (MDClasses) - it is set by the PLATFORM, not by the compatibility mode.
+    # Default 2.17 - the lower bound of the verified range.
     parser.add_argument('-FormatVersion', dest='FormatVersion', default='2.17')
     args = ci_parse_args(parser)
 
-    # Проверенный диапазон: 2.17 (8.3.24) … 2.21 (8.5). Полная лестница —
-    # docs/1c-configuration-spec.md, «Лестница версий». Версии ниже 2.17 (платформы 8.3.23 и
-    # старше) реальны, поэтому запретом их не закрываем: за пределами диапазона —
-    # ПРЕДУПРЕЖДЕНИЕ, скаффолд всё равно выпускается. Ошибка — только на нечисловое значение.
+    # Verified range: 2.17 (8.3.24) ... 2.21 (8.5). The full ladder is in
+    # docs/1c-configuration-spec.md, "Version ladder". Versions below 2.17 (platforms 8.3.23 and
+    # older) are real, so we do not block them: outside the range -
+    # a WARNING, the scaffold is still produced. An error only on a non-numeric value.
     format_rank_value = format_rank(args.FormatVersion)
     if format_rank_value == 0:
         print(f"Malformed -FormatVersion '{args.FormatVersion}' (expected N.N, e.g. 2.17)", file=sys.stderr)
@@ -88,25 +88,25 @@ def main():
               f"{FORMAT_VERIFIED_MIN}-{FORMAT_VERIFIED_MAX} — the scaffold is emitted as requested "
               f"but was not verified on that platform", file=sys.stderr)
 
-    # «Не использовать» в Конфигураторе хранится как версия ТЕКУЩЕЙ платформы, а не как DontUse:
-    # свежая база получает Version8_3_<своя>, и ни одна типовая в корпусе DontUse не содержит.
-    # Само значение легально — платформа принимает его без ошибок, — но не выживает: замерено на
-    # 8.3.25 и 8.3.27, выгрузка обоих возвращает Version8_3_8. Поэтому предупреждение, а не запрет.
-    # Сравнение регистронезависимо ЯВНО (в Python по умолчанию с учётом регистра),
-    # иначе ошибка проходила бы молча.
+    # "Do not use" in Configurator is stored as the version of the CURRENT platform, not as DontUse:
+    # a fresh base gets Version8_3_<its own>, and no typical configuration in the corpus contains DontUse.
+    # The value itself is legal - the platform accepts it without errors - but does not survive: measured on
+    # 8.3.25 and 8.3.27, export of both returns Version8_3_8. That is why a warning, not a ban.
+    # The comparison is case-insensitive EXPLICITLY (in Python the default is case-sensitive),
+    # otherwise the error would pass silently.
     if (args.CompatibilityMode or "").lower() == "dontuse":
         print("WARNING: CompatibilityMode 'DontUse' is not \"no restrictions\" — the platform stores it as Version8_3_8. For no compatibility restrictions use the target platform version (e.g. Version8_3_27 for 8.3.27).", file=sys.stderr)
 
-    # Режим совместимости не новее платформы, которая пишет эту версию формата. Такой конфигурации
-    # не выпускает ни одна платформа, а загрузка платформой старше режима МОЛЧА понижает его до своей
-    # версии (замерено: Version8_3_25 и Version8_3_27 на 8.3.24 → Version8_3_24). Лестница «платформа →
-    # формат» — копия docs/1c-configuration-spec.md §7.1, сверяет tests/skills/check-format-versions.mjs.
-    # Режим, которого нет в лестнице (8.3.28), не проверяется: замера нет.
+    # The compatibility mode is not newer than the platform that writes this format version. No platform
+    # produces such a configuration, and loading by a platform older than the mode SILENTLY lowers it to its own
+    # version (measured: Version8_3_25 and Version8_3_27 on 8.3.24 -> Version8_3_24). The "platform ->
+    # format" ladder is a copy of docs/1c-configuration-spec.md §7.1, checked by tests/skills/check-format-versions.mjs.
+    # A mode not in the ladder (8.3.28) is not checked: there is no measurement.
     platform_format_ladder = {
         "8.3.20": "2.13", "8.3.21": "2.14", "8.3.22": "2.15", "8.3.23": "2.16", "8.3.24": "2.17",
         "8.3.25": "2.18", "8.3.26": "2.19", "8.3.27": "2.20", "8.5.1": "2.21",
     }
-    # Регистронезависимо
+    # Case-insensitive
     m = re.match(r'^Version(\d+)_(\d+)_(\d+)$', args.CompatibilityMode or "", re.IGNORECASE)
     if m:
         compat_platform = f"{m.group(1)}.{m.group(2)}.{m.group(3)}"
@@ -141,9 +141,9 @@ def main():
     co = [new_uuid() for _ in range(7)]
 
     # --- Mobile functionalities ---
-    # Версия формата как число — по ней ниже включаются вставки 2.21.
+    # Format version as a number - insertions of 2.21 are enabled below based on it.
     is_221 = format_rank_value >= 221
-    # TextToSpeech приехал раньше остальных вставок 8.5 — своей ступенью, поэтому гейт отдельный.
+    # TextToSpeech arrived earlier than the other 8.5 insertions - as its own step, so the gate is separate.
     is_218 = format_rank_value >= 218
 
     mobile_funcs = [
@@ -162,11 +162,11 @@ def main():
         ("DocumentScanning","false"), ("SpeechToText","false"), ("Geofences","false"),
         ("IncomingShareRequests","false"), ("AllIncomingShareRequestsTypesProcessing","false"),
     ]
-    # TextToSpeech — возможность мобильного приложения, добавленная форматом 2.18 (8.3.25),
-    # последней в списке; в 2.21 список не менялся. Замерено выгрузками пустой ИБ шести платформ:
-    # 2.13/2.17 — 37 записей без неё, 2.18-2.21 — 38 с ней. Гейт обязателен и в обе стороны:
-    # на 2.17 тег ломает загрузку XDTO-ошибкой (проверено на 8.3.24), без тега на 2.18+ платформа
-    # подставит дефолт false и допишет его при выгрузке — то есть разойдётся роундтрип.
+    # TextToSpeech - a mobile application capability added by format 2.18 (8.3.25),
+    # the last in the list; in 2.21 the list did not change. Measured by exports of an empty IB from six platforms:
+    # 2.13/2.17 - 37 records without it, 2.18-2.21 - 38 with it. The gate is required in both directions:
+    # on 2.17 the tag breaks loading with an XDTO error (verified on 8.3.24), without the tag on 2.18+ the platform
+    # will substitute the default false and append it on export - that is, the round-trip will diverge.
     if is_218:
         mobile_funcs.append(("TextToSpeech", "false"))
 
@@ -179,8 +179,8 @@ def main():
     if synonym:
         synonym_xml = f"\r\n\t\t\t\t<v8:item>\r\n\t\t\t\t\t<v8:lang>ru</v8:lang>\r\n\t\t\t\t\t<v8:content>{esc_xml_text(synonym)}</v8:content>\r\n\t\t\t\t</v8:item>\r\n\t\t\t"
 
-    # Элемент целиком, а не значение внутри пары: при пустом значении Конфигуратор
-    # пишет <Vendor/>, а не <Vendor></Vendor>.
+    # The element as a whole, not the value inside the pair: with an empty value Configurator
+    # writes <Vendor/>, not <Vendor></Vendor>.
     vendor_el = f"<Vendor>{esc_xml_text(vendor)}</Vendor>" if vendor else "<Vendor/>"
     version_el = f"<Version>{esc_xml_text(version)}</Version>" if version else "<Version/>"
 
@@ -194,9 +194,9 @@ def main():
         "fb282519-d103-4dd3-bc12-cb271d631dfc",
     ]
 
-    # Свойства и пространство имён формата 2.21 (платформа 8.5). Значения и ПОЗИЦИИ сняты
-    # с выгрузки 8.5.1 (debug/fmt221/dump_v851): те же исходники, выгруженные с 8.3.27 и
-    # с 8.5.1, различаются ровно этим. Порядок важен — вставки идут на своё место.
+    # Properties and namespace of format 2.21 (platform 8.5). Values and POSITIONS are taken
+    # from the 8.5.1 export (debug/fmt221/dump_v851): the same sources exported from 8.3.27 and
+    # from 8.5.1 differ in exactly this. Order matters - insertions go to their place.
     pal_ns = ""
     f221_aux_forms = f221_window_variant = f221_open_variant = f221_captions = f221_migration = ""
     if is_221:

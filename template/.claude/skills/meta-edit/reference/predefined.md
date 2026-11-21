@@ -1,14 +1,14 @@
-# Предопределённые элементы
+# Predefined items
 
-Добавить предопределённые элементы (Catalog, ChartOfCharacteristicTypes). Существующие элементы и их
-идентификаторы сохраняются, новые получают свежий id.
+Add predefined items (Catalog, ChartOfCharacteristicTypes). Existing items and their
+identifiers are preserved, new ones get a fresh id.
 
-Inline — строка `(Код) Имя [Наименование]` (batch через `;;`; `[Наименование]` необязательно — иначе авто из имени):
+Inline - a string `(Код) Имя [Наименование]` (batch via `;;`; `[Наименование]` is optional - otherwise it is auto from the name):
 ```bash
 -Operation add-predefined -Value "(001) Основной ;; (002) Резервный [Резервный склад]"
 ```
 
-JSON — строки и/или объекты (для групп с вложенными):
+JSON - strings and/or objects (for groups with nested items):
 ```json
 { "add": { "predefined": [
   "(001) Основной",
@@ -16,5 +16,5 @@ JSON — строки и/или объекты (для групп с вложе�
 ] } }
 ```
 
-Ключи объекта: `name`, `code`, `description`, `isFolder`, `childItems` (дерево). Тип кода (строковый/числовой)
-берётся из объекта автоматически.
+Object keys: `name`, `code`, `description`, `isFolder`, `childItems` (tree). The code type (string/numeric)
+is taken from the object automatically.

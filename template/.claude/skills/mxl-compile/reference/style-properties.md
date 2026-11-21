@@ -1,81 +1,81 @@
-# Свойства стиля: полный перечень
+# Style properties: full list
 
-Читать, когда нужного свойства нет среди частых, описанных в SKILL.md: отступы, защита, узор, маска, формат редактирования, поведение при выводе.
+Read when the needed property is not among the common ones described in SKILL.md: indents, protection, pattern, mask, edit format, print behavior.
 
-Имя ключа совпадает с именем свойства в выгрузке — исключений нет.
+The key name matches the property name in the export - there are no exceptions.
 
-Тип значения:
+Value type:
 
-- **число** — целое;
-- **да/нет** — `true` / `false`;
-- **перечисление** — одно из указанных, регистр не важен;
-- **цвет** — `#RRGGBB`, `style:Имя`, `web:Имя`, `win:Имя`;
-- **линия** — `"Solid"` либо `{ style, width }`;
-- **текст** — строка (разворачивается на языки макета).
+- **number** - integer;
+- **yes/no** - `true` / `false`;
+- **enum** - one of the listed values, case-insensitive;
+- **color** - `#RRGGBB`, `style:Имя`, `web:Имя`, `win:Имя`;
+- **line** - `"Solid"` or `{ style, width }`;
+- **text** - a string (expanded into the template languages).
 
-## Текст и выравнивание
+## Text and alignment
 
-| Ключ | Тип | Значение |
+| Key | Type | Value |
 |------|-----|----------|
-| `font` | имя | Ссылка на имя из `fonts` |
-| `horizontalAlignment` | перечисление | `Left`, `Center`, `Right`, `Justify`, `Auto` |
-| `verticalAlignment` | перечисление | `Top`, `Center`, `Bottom` |
-| `textPlacement` | перечисление | `Wrap`, `Cut`, `Block`, `Auto` |
-| `textOrientation` | число | Поворот в десятых долях градуса: `900` = 90° |
-| `textColor` | цвет | Цвет текста |
-| `indent` | число | Отступ текста |
-| `autoIndent` | число | Автоматический отступ |
-| `format` | текст | Формат данных: `"ЧЦ=15; ЧДЦ=2"` |
-| `editFormat` | текст | Формат редактирования |
-| `mask` | текст | Маска ввода |
-| `markNegatives` | да/нет | Выделять отрицательные |
+| `font` | name | Reference to a name from `fonts` |
+| `horizontalAlignment` | enum | `Left`, `Center`, `Right`, `Justify`, `Auto` |
+| `verticalAlignment` | enum | `Top`, `Center`, `Bottom` |
+| `textPlacement` | enum | `Wrap`, `Cut`, `Block`, `Auto` |
+| `textOrientation` | number | Rotation in tenths of a degree: `900` = 90° |
+| `textColor` | color | Text color |
+| `indent` | number | Text indent |
+| `autoIndent` | number | Automatic indent |
+| `format` | text | Data format: `"ЧЦ=15; ЧДЦ=2"` |
+| `editFormat` | text | Edit format |
+| `mask` | text | Input mask |
+| `markNegatives` | yes/no | Highlight negatives |
 
-## Фон и рамка
+## Background and border
 
-| Ключ | Тип | Значение |
+| Key | Type | Value |
 |------|-----|----------|
-| `backColor` | цвет | Цвет фона |
-| `pattern` | перечисление | `WithoutPattern`, `Solid`, `Pattern1`…`Pattern17` (в Конфигураторе «Узор 1» … «Узор 17») |
-| `patternColor` | цвет | Цвет узора |
-| `border` | линия | Все четыре стороны |
-| `leftBorder`, `topBorder`, `rightBorder`, `bottomBorder` | линия | Отдельная сторона |
-| `borderColor` | цвет | Цвет рамки |
+| `backColor` | color | Background color |
+| `pattern` | enum | `WithoutPattern`, `Solid`, `Pattern1`…`Pattern17` (in Configurator "Pattern 1" ... "Pattern 17") |
+| `patternColor` | color | Pattern color |
+| `border` | line | All four sides |
+| `leftBorder`, `topBorder`, `rightBorder`, `bottomBorder` | line | Separate side |
+| `borderColor` | color | Border color |
 
-## Поведение
+## Behavior
 
-| Ключ | Тип | Значение |
+| Key | Type | Value |
 |------|-----|----------|
-| `hidden` | да/нет | Скрыть |
-| `protection` | да/нет | Защита от редактирования |
-| `print` | да/нет | Выводить на печать |
-| `hyperLink` | да/нет | Гиперссылка |
-| `detailsUse` | перечисление | Использование расшифровки: `Cell`, `Row`, `WithoutProcessing` |
-| `autoMarkIncomplete` | да/нет | Автоотметка незаполненного |
-| `bySelectedColumns` | да/нет | По выделенным колонкам |
-| `columnSizeChange` | перечисление | `Normal`, `QuickChange` |
-| `autoWidthCalculation` | да/нет | Автоматический расчёт ширины |
-| `widthWeightFactor` | число | Весовой коэффициент ширины |
+| `hidden` | yes/no | Hide |
+| `protection` | yes/no | Edit protection |
+| `print` | yes/no | Print |
+| `hyperLink` | yes/no | Hyperlink |
+| `detailsUse` | enum | Decryption use: `Cell`, `Row`, `WithoutProcessing` |
+| `autoMarkIncomplete` | yes/no | Auto-mark incomplete |
+| `bySelectedColumns` | yes/no | By selected columns |
+| `columnSizeChange` | enum | `Normal`, `QuickChange` |
+| `autoWidthCalculation` | yes/no | Automatic width calculation |
+| `widthWeightFactor` | number | Width weight factor |
 
-## Картинка в ячейке
+## Picture in a cell
 
-Ключи ниже задают картинку внутри ячейки; сама палитра картинок и рисунки поверх сетки —
-в `reference/drawings.md`.
+The keys below set the picture inside a cell; the picture palette itself and drawings on top of the grid are
+in `reference/drawings.md`.
 
-| Ключ | Тип | Значение |
+| Key | Type | Value |
 |------|-----|----------|
-| `picIndex` | число | Номер картинки |
-| `pictureSizeMode` | перечисление | `AutoSize`, `Proportionally`, `RealSize` |
-| `picHorizontalAlignment` | перечисление | `Auto`, `Center`, `Left`, `Right` |
-| `picVerticalAlignment` | перечисление | `Top`, `Center`, `Bottom` |
-| `textPosition` | перечисление | Положение текста относительно картинки: `Auto`, `Top`, `Right`, `Bottom` |
+| `picIndex` | number | Picture number |
+| `pictureSizeMode` | enum | `AutoSize`, `Proportionally`, `RealSize` |
+| `picHorizontalAlignment` | enum | `Auto`, `Center`, `Left`, `Right` |
+| `picVerticalAlignment` | enum | `Top`, `Center`, `Bottom` |
+| `textPosition` | enum | Text position relative to the picture: `Auto`, `Top`, `Right`, `Bottom` |
 
-## Чего в стиле нет
+## What a style does not have
 
-- `width` — свойство колонки, задаётся через `columnWidths`;
-- `height` — свойство строки, задаётся ключом `height` у строки;
-- `fillType` — выводится из того, каким ключом задано содержимое ячейки
+- `width` - a column property, set via `columnWidths`;
+- `height` - a row property, set with the `height` key on the row;
+- `fillType` - derived from which key sets the cell content
   (`text` / `param` / `template`);
-- `containsValue`, `valueType`, `controlType` — свойства конкретной ячейки, а не общего
-  оформления: задаются ключами ячейки `valueType` и `controlType`;
-- линия рисунка и её стороны — свойства рисунка: задаются его ключами `line` и `sides`
-  (`reference/drawings.md`); у ячейки такого свойства нет вовсе.
+- `containsValue`, `valueType`, `controlType` - properties of a specific cell, not of the shared
+  formatting: set with the cell keys `valueType` and `controlType`;
+- the drawing line and its sides - drawing properties: set with its `line` and `sides` keys
+  (`reference/drawings.md`); a cell has no such property at all.

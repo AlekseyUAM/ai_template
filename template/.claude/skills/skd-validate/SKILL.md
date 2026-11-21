@@ -1,6 +1,6 @@
 ---
 name: skd-validate
-description: Валидация схемы компоновки данных 1С (СКД). Используй после создания или модификации СКД для проверки корректности
+description: Validate a 1C data composition schema (DCS). Use after creating or modifying a DCS to check correctness
 argument-hint: <TemplatePath> [-Detailed] [-MaxErrors 20] [-ExpectedFields "Поле1,Поле2,..."]
 allowed-tools:
   - Bash
@@ -8,22 +8,22 @@ allowed-tools:
   - Glob
 ---
 
-# /skd-validate — валидация СКД (DataCompositionSchema)
+# /skd-validate - DCS (DataCompositionSchema) validation
 
-Проверяет структурную корректность Template.xml схемы компоновки данных. Выявляет ошибки формата, битые ссылки, дубликаты имён.
+Checks the structural correctness of a data composition schema Template.xml. Detects format errors, broken references, duplicate names.
 
 
-## Параметры
+## Parameters
 
-| Параметр     | Обяз. | Умолч. | Описание                                              |
+| Parameter    | Req.  | Default | Description                                           |
 |--------------|:-----:|---------|---------------------------------------------------------|
-| TemplatePath | да    | —       | Путь к Template.xml или каталогу макета                 |
-| Detailed     | нет   | —       | Подробный вывод (все проверки, включая успешные)         |
-| MaxErrors    | нет   | 20      | Остановиться после N ошибок                             |
-| OutFile      | нет   | —       | Записать результат в файл                               |
-| ExpectedFields | нет | —     | Колонки отчёта по ТЗ через запятую/точку с запятой — включает смысловую проверку выборки |
+| TemplatePath | yes   | -       | Path to Template.xml or the template directory          |
+| Detailed     | no    | -       | Detailed output (all checks, including successful ones)  |
+| MaxErrors    | no    | 20      | Stop after N errors                                     |
+| OutFile      | no    | -       | Write the result to a file                              |
+| ExpectedFields | no  | -       | Report columns per the specification, comma/semicolon separated - enables the semantic selection check |
 
-## Команда
+## Command
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/skd-validate.py" -TemplatePath "src/МойОтчёт/Templates/ОсновнаяСхема"
@@ -33,39 +33,39 @@ python "${CLAUDE_SKILL_DIR}/scripts/skd-validate.py" -TemplatePath "<Template.xm
   -ExpectedFields "Номенклатура,Количество,Себестоимость,Продажа,Прибыль"
 ```
 
-## Смысловые проверки
+## Semantic checks
 
-Структурная проверка (`XML`, ссылки, типы) не отвечает на вопрос «тот ли отчёт».
-Дополнительно валидатор проверяет:
+The structural check (`XML`, references, types) does not answer the question "is this the right report".
+Additionally the validator checks:
 
-- **`-ExpectedFields`** — выборка варианта должна ссылаться ровно на колонки ТЗ:
-  - пропущенная колонка — `[ERROR]`;
-  - лишняя колонка — `[ERROR]`;
-  - подмена колонки вычисляемым полем с другим именем и тем же заголовком
-    (например, `СебестоимостьУслуги` с заголовком «Себестоимость» вместо поля
-    `Себестоимость`) — `[ERROR]`;
-  - другое поле набора данных сверх ТЗ — `[WARN]`: служебное поле/соединение нужно
-    обосновать и не выводить в выборку.
-- **`GROUP BY` по виртуальной таблице** — если запрос читает
-  `РегистрНакопления.<Регистр>.Обороты/Остатки/ОстаткиИОбороты` и содержит
-  `СГРУППИРОВАТЬ ПО`, выдаётся `[WARN]`: ВТ уже агрегирует по измерениям, группировка
-  нужна только при соединении, размножающем строки.
-- **Коллизия заголовков** — выбранное вычисляемое поле с заголовком, совпадающим с
-  именем другого поля, помечается `[WARN]`: используй поле ТЗ, а не переименованное
-  вычисляемое.
+- **`-ExpectedFields`** - the variant selection must reference exactly the specification columns:
+  - a missing column - `[ERROR]`;
+  - an extra column - `[ERROR]`;
+  - substitution of a column by a calculated field with a different name and the same title
+    (for example, `СебестоимостьУслуги` with the title "Себестоимость" instead of the field
+    `Себестоимость`) - `[ERROR]`;
+  - another data set field beyond the specification - `[WARN]`: a service field/join must be
+    justified and not output in the selection.
+- **`GROUP BY` over a virtual table** - if the query reads
+  `РегистрНакопления.<Регистр>.Обороты/Остатки/ОстаткиИОбороты` and contains
+  `СГРУППИРОВАТЬ ПО`, a `[WARN]` is issued: the VT already aggregates by dimensions, grouping
+  is needed only for a join that multiplies rows.
+- **Title collision** - a selected calculated field with a title matching the
+  name of another field is marked `[WARN]`: use the specification field, not a renamed
+  calculated one.
 
-Результат `Validation OK` **без** `-ExpectedFields` означает «структура корректна», но
-не «состав отчёта соответствует ТЗ». Для отчётов всегда передавай `-ExpectedFields` и
-дополнительно сверяй `skd-info -Mode variant`.
+The result `Validation OK` **without** `-ExpectedFields` means "the structure is correct", but
+not "the report composition matches the specification". For reports always pass `-ExpectedFields` and
+additionally verify with `skd-info -Mode variant`.
 
-## Проверка по XSD
+## XSD check
 
-## Проверка по XSD
+## XSD check
 
-Порядок элементов, типы и значения дополнительно сверяются с XSD-схемами платформы, если они скачаны в проект. Иначе итоговая строка заканчивается на `XSD not checked: <причина>` — это не «проверено всё». Когда проверка нужна (например, платформа пишет «нарушен порядок следования»), скачай схемы версии формата выгрузки — атрибут `version` в `Configuration.xml` — через `/v8-xsd-fetch -Versions <версия>` и запусти снова. То же при `[WARN] XSD: no schemas for format <версия>`.
+The order of elements, types and values are additionally compared with the platform XSD schemas if they are downloaded into the project. Otherwise the final line ends with `XSD not checked: <причина>` - this is not "everything checked". When the check is needed (for example, the platform says "the order of occurrence is violated"), download the schemas of the export format version - the `version` attribute in `Configuration.xml` - via `/v8-xsd-fetch -Versions <версия>` and run again. The same for `[WARN] XSD: no schemas for format <версия>`.
 
-Нарушение: `XSD <версия>, line N: <родитель>/<элемент>: <что не так>`.
+Violation: `XSD <версия>, line N: <родитель>/<элемент>: <что не так>`.
 
-- `must come before <X>` — перенеси элемент непосредственно перед `<X>`, содержимое не меняй. `duplicate` — удали повтор. `not allowed in <P>` — элементу здесь не место. Иначе — текст о недопустимом значении.
-- `[WARN]` с `(no schemas for <версия>)` — сверено по схемам более новой версии: ориентир, не вердикт.
-- Если шаблон ты только что собрал или изменил `/skd-compile` или `/skd-edit`, нарушение — дефект навыка: сообщи о нём пользователю.
+- `must come before <X>` - move the element directly before `<X>`, do not change its content. `duplicate` - remove the duplicate. `not allowed in <P>` - the element does not belong here. Otherwise - text about an invalid value.
+- `[WARN]` with `(no schemas for <версия>)` - compared against schemas of a newer version: a guideline, not a verdict.
+- If you just built or changed the template with `/skd-compile` or `/skd-edit`, the violation is a skill defect: report it to the user.

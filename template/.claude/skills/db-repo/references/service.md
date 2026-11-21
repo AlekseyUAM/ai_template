@@ -1,31 +1,31 @@
-# Сервисные операции
+# Service operations
 
-## set-label — метка на версию
+## set-label - label a version
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/db-repo.py" -Command set-label -InfoBasePath "C:\Bases\MyDB" -Label "Релиз 1.2" -Version 120 -Comment "Передано в тест"
 ```
 
-Без `-Version` метка ставится на последнюю версию. Несуществующая версия — ошибка.
+Without `-Version` the label is put on the last version. A nonexistent version is an error.
 
-## optimize — оптимизация хранения
+## optimize - storage optimization
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/db-repo.py" -Command optimize -InfoBasePath "C:\Bases\MyDB"
 ```
 
-Оптимизирует хранение данных в хранилище. Операция долгая.
+Optimizes data storage in the repository. The operation is long.
 
-## clear-cache — очистка кеша
+## clear-cache - clear the cache
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/db-repo.py" -Command clear-cache -InfoBasePath "C:\Bases\MyDB" -CacheScope local
 ```
 
-| `-CacheScope` | Что чистит |
+| `-CacheScope` | What it clears |
 |---------------|------------|
-| `local` (по умолчанию) | Локальный кеш версий конфигурации |
-| `global` | Глобальный кеш версий |
-| `db` | Локальную базу данных хранилища |
+| `local` (default) | Local configuration version cache |
+| `global` | Global version cache |
+| `db` | Local repository database |
 
-Пригождается, когда хранилище ведёт себя странно после сбоя сети или отката версии.
+Useful when the repository behaves strangely after a network failure or a version rollback.

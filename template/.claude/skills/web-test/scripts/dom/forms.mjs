@@ -97,8 +97,8 @@ export function findClickTargetScript(formNum, text, { tableName, gridSelector }
       items.push(item);
     });
 
-    // Hyperlinks (staticTextHyper) — кроме заголовков сворачиваемых групп (#title_text),
-    // они обрабатываются ниже как kind:'formGroup' (клик = раскрыть/свернуть, не переход).
+    // Hyperlinks (staticTextHyper) - except headers of collapsible groups (#title_text),
+    // they are handled below as kind:'formGroup' (click = expand/collapse, not navigation).
     [...document.querySelectorAll('[id^="' + p + '"].staticTextHyper')].filter(el => el.offsetWidth > 0).forEach(el => {
       if (el.id.endsWith('#title_text')) return;
       const idName = el.id.replace(p, '');
@@ -106,20 +106,20 @@ export function findClickTargetScript(formNum, text, { tableName, gridSelector }
       items.push({ id: el.id, name: text, label: idName, kind: 'hyperlink' });
     });
 
-    // Сворачиваемые/всплывающие группы — заголовок как цель раскрытия/сворачивания.
-    // Идентификация: <base>#title_text и один из: гиперссылка (TitleHyperlink) ЛИБО кнопка-каретка
-    // <base>#titleBtn (Picture) ЛИБО панель <base>#panel_div (popup). Обычные группы пропускаем.
-    // Мишень клика: #titleBtn (вариант «картинка», компактный — бьём в центр) иначе текст
-    // заголовка через textClickPoint: контейнер растягивается по ширине содержимого группы,
-    // кликабелен только вложенный label (у popup клик по заголовку и открывает, и закрывает).
-    // Состояние — groupCollapsed, общая с getFormState().groups[].
+    // Collapsible/popup groups - the header is the expand/collapse target.
+    // Identification: <base>#title_text and one of: a hyperlink (TitleHyperlink) OR a caret button
+    // <base>#titleBtn (Picture) OR a panel <base>#panel_div (popup). Regular groups are skipped.
+    // Click target: #titleBtn (the "picture" variant, compact - we hit its center) otherwise the
+    // header text via textClickPoint: the container stretches to the width of the group content,
+    // only the nested label is clickable (for a popup, clicking the header both opens and closes).
+    // State - groupCollapsed, shared with getFormState().groups[].
     [...document.querySelectorAll('[id^="' + p + '"][id$="#title_text"]')]
       .filter(el => el.offsetWidth > 0 || el.offsetHeight > 0).forEach(el => {
       const base = el.id.slice(0, -('#title_text'.length));
       const btn = document.getElementById(base + '#titleBtn');
       const btnVisible = btn && (btn.offsetWidth > 0 || btn.offsetHeight > 0);
       const panelDiv = document.getElementById(base + '#panel_div');
-      if (!el.classList.contains('staticTextHyper') && !btnVisible && !panelDiv) return; // обычная группа
+      if (!el.classList.contains('staticTextHyper') && !btnVisible && !panelDiv) return; // regular group
       let pt;
       if (btnVisible) {
         const r = btn.getBoundingClientRect();
@@ -243,8 +243,8 @@ export function findClickTargetScript(formNum, text, { tableName, gridSelector }
     if (found) {
       const res = { id: found.id, kind: found.kind, name: found.name };
       if (found.disabled) res.disabled = true;
-      // label группы = её техническое имя: по нему обработчик клика сверяет состояние
-      // в groups[] после клика (name там техническое, а found.name — текст заголовка).
+      // group label = its technical name: the click handler compares state by it
+      // in groups[] after the click (name there is technical, while found.name is the header text).
       if (found.kind === 'formGroup') res.label = found.label;
       if (found.collapsed != null) res.collapsed = found.collapsed;
       if (found.x != null) { res.x = found.x; res.y = found.y; }
@@ -293,7 +293,7 @@ export function findClickTargetScript(formNum, text, { tableName, gridSelector }
     }
 
     // Form input fields — LAST resort: focus a field by name/label without changing its value.
-    // Only when no table scope is given ("если нет уточнения таблицы"): grid cells are handled elsewhere.
+    // Only when no table scope is given ("when no table is specified"): grid cells are handled elsewhere.
     // Reached only after every clickable target (button/link/tab/nav/grid row) failed to match,
     // so collisions between a field name and a real control are unlikely.
     const fields = [];

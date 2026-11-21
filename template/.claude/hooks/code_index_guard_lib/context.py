@@ -1,4 +1,4 @@
-"""Контекст одного запуска хука."""
+"""Context of a single hook run."""
 from dataclasses import dataclass
 
 from .config import GuardConfig

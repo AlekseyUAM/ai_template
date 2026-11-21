@@ -1,6 +1,6 @@
 ---
 name: form-info
-description: Анализ структуры управляемой формы 1С (Form.xml) — элементы, реквизиты, команды, события. Используй для понимания формы — при написании модуля формы, анализе обработчиков и элементов
+description: Analyze the structure of a 1C managed form (Form.xml) - elements, attributes, commands, events. Use to understand a form - when writing the form module, analyzing handlers and elements
 argument-hint: <FormPath>
 allowed-tools:
   - Bash
@@ -8,23 +8,23 @@ allowed-tools:
   - Glob
 ---
 
-# /form-info — Компактная сводка формы
+# /form-info - Compact form summary
 
-Читает Form.xml и выводит дерево элементов, реквизиты с типами, команды, события. Заменяет чтение тысяч строк XML.
+Reads Form.xml and outputs the element tree, attributes with types, commands, events. Replaces reading thousands of lines of XML.
 
-## Команда
+## Command
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/form-info.py" -FormPath "<путь к Form.xml>"
 ```
 
-## Параметры
+## Parameters
 
-| Параметр | Обязательный | Описание |
+| Parameter | Required | Description |
 |----------|:------------:|----------|
-| FormPath | да | Путь к файлу Form.xml |
-| Expand   | нет | Раскрыть свёрнутую секцию по имени или title, `*` — все |
-| Limit    | нет | Макс. строк (по умолчанию 150) |
-| Offset   | нет | Пропустить N строк (пагинация) |
+| FormPath | yes | Path to the Form.xml file |
+| Expand   | no | Expand a collapsed section by name or title, `*` - all |
+| Limit    | no | Max lines (default 150) |
+| Offset   | no | Skip N lines (pagination) |
 
-Вывод самодокументирован. `[Group:AH]`/`[Group:AV]` = AlwaysHorizontal/AlwaysVertical.
+The output is self-documenting. `[Group:AH]`/`[Group:AV]` = AlwaysHorizontal/AlwaysVertical.

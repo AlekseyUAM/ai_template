@@ -1,6 +1,6 @@
-# Форма отчёта
+# Report form
 
-Форма, подключённая к объекту-отчёту (`Report`). Кроме обычных свойств формы у неё есть несколько свойств в `properties`, связывающих форму с механизмом компоновки (СКД): куда выводится результат, где данные расшифровки, какого она типа. Все они задаются в блоке `properties` верхнего уровня.
+A form connected to a report object (`Report`). Besides regular form properties, it has several properties in `properties` that link the form to the composition mechanism (DCS): where the result is output, where the drill-down data is, what type it is. All of them are set in the top-level `properties` block.
 
 ```json
 "properties": {
@@ -10,53 +10,53 @@
 }
 ```
 
-Ни одно из этих свойств не обязательно — указывайте только те, что нужны конкретной форме.
+None of these properties is required - specify only those needed by a particular form.
 
-## Тип формы отчёта (`reportFormType`)
+## Report form type (`reportFormType`)
 
-Роль формы в составе отчёта:
+The form's role within the report:
 
-| Значение | Назначение |
+| Value | Purpose |
 |----------|-----------|
-| `Main` | Основная форма отчёта (результат + настройки) |
-| `Settings` | Форма настроек |
-| `Variant` | Форма варианта |
+| `Main` | Main report form (result + settings) |
+| `Settings` | Settings form |
+| `Variant` | Variant form |
 
 ```json
 "reportFormType": "Main"
 ```
 
-## Привязка к компоновке
+## Binding to composition
 
-| Ключ | Тип | Назначение |
+| Key | Type | Purpose |
 |------|-----|-----------|
-| `reportResult` | string | Имя реквизита-результата формы (табличный документ, куда выводится отчёт) |
-| `detailsData` | string | Имя реквизита данных расшифровки |
-| `variantAppearance` | string | Имя реквизита оформления варианта |
+| `reportResult` | string | Name of the form result attribute (the spreadsheet document where the report is output) |
+| `detailsData` | string | Name of the drill-down data attribute |
+| `variantAppearance` | string | Name of the variant appearance attribute |
 
-Значение каждого ключа — имя реквизита формы (а не путь к данным). Реквизит с таким именем должен присутствовать в `attributes` формы.
+The value of each key is a form attribute name (not a data path). An attribute with that name must be present in the form's `attributes`.
 
-## Группа пользовательских настроек (`customSettingsFolder`)
+## Custom settings folder (`customSettingsFolder`)
 
-Группа-элемент формы, в которую генерируются пользовательские настройки компоновщика. Задаётся **по имени** элемента-группы:
+A form group element into which the composer's custom settings are generated. Set **by the name** of the group element:
 
 ```json
 "customSettingsFolder": "ГруппаПользовательскихНастроек"
 ```
 
-## Прочие свойства компоновки
+## Other composition properties
 
-Редкие, задавайте только при явной необходимости:
+Rare, set only when explicitly needed:
 
-| Ключ | Значения | Назначение |
+| Key | Values | Purpose |
 |------|----------|-----------|
-| `autoShowState` | `Auto`, `DontShow`, `ShowOnComposition` | Автопоказ состояния формирования |
-| `reportResultViewMode` | `Auto` | Режим просмотра результата |
-| `viewModeApplicationOnSetReportResult` | `Auto` | Применение режима просмотра при установке результата |
+| `autoShowState` | `Auto`, `DontShow`, `ShowOnComposition` | Auto-show of the composition state |
+| `reportResultViewMode` | `Auto` | Result view mode |
+| `viewModeApplicationOnSetReportResult` | `Auto` | Application of the view mode when setting the result |
 
-## Реалистичный пример
+## Realistic example
 
-Основная форма отчёта со СКД: реквизит-результат, данные расшифровки и группа пользовательских настроек.
+The main report form with DCS: the result attribute, drill-down data and the custom settings group.
 
 ```json
 {

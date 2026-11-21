@@ -1,21 +1,21 @@
 ---
 name: form-patterns
-description: Справочник паттернов компоновки управляемых форм 1С. Используй как справочник при проектировании форм — архетипы, конвенции, продвинутые приёмы
+description: Reference of managed form layout patterns for 1C. Use as a reference when designing forms - archetypes, conventions, advanced techniques
 argument-hint: (no arguments)
 allowed-tools: []
 ---
 
-# /form-patterns — паттерны компоновки форм
+# /form-patterns - form layout patterns
 
-Справочник типовых паттернов дизайна управляемых форм 1С. Вызывай **перед** проектированием формы через `/form-compile`, когда требования пользователя не детализируют расположение элементов.
+A reference of typical design patterns for 1C managed forms. Call it **before** designing a form via `/form-compile`, when the user requirements do not detail the element layout.
 
-**Как использовать:** выбери подходящий архетип, применяй конвенции именования, при необходимости используй продвинутые паттерны.
+**How to use:** choose a suitable archetype, apply naming conventions, use advanced patterns when needed.
 
 ---
 
-## Архетипы форм
+## Form archetypes
 
-### Форма документа
+### Document form
 
 ```
 Шапка (horizontal, 2 колонки)
@@ -30,10 +30,10 @@ allowed-tools: []
 └─ КомментарийОтветственный (horizontal): Комментарий + Ответственный
 ```
 
-**События:** OnCreateAtServer, OnReadAtServer, OnOpen, BeforeWriteAtServer, AfterWriteAtServer, AfterWrite, NotificationProcessing
-**Свойства:** autoTitle=false
+**Events:** OnCreateAtServer, OnReadAtServer, OnOpen, BeforeWriteAtServer, AfterWriteAtServer, AfterWrite, NotificationProcessing
+**Properties:** autoTitle=false
 
-### Форма обработки (DataProcessor)
+### Data processor form (DataProcessor)
 
 ```
 Параметры (vertical)
@@ -46,10 +46,10 @@ allowed-tools: []
 └─ Закрыть (stdCommand: Close)
 ```
 
-**События:** OnCreateAtServer, OnOpen, NotificationProcessing
-**Свойства:** windowOpeningMode=LockOwnerWindow (если диалог), autoTitle=false
+**Events:** OnCreateAtServer, OnOpen, NotificationProcessing
+**Properties:** windowOpeningMode=LockOwnerWindow (if a dialog), autoTitle=false
 
-### Форма списка
+### List form
 
 ```
 Отборы (group: alwaysHorizontal)
@@ -58,20 +58,20 @@ allowed-tools: []
 ├─ Колонки: labelField (не input — данные только для чтения)
 ```
 
-**События:** OnCreateAtServer, OnOpen, NotificationProcessing, OnLoadDataFromSettingsAtServer
-**Свойства:** autoSaveDataInSettings=Use
-**Фильтры:** пара реквизитов на каждый — `Отбор[Поле]` (значение) + `Отбор[Поле]Использование` (boolean)
+**Events:** OnCreateAtServer, OnOpen, NotificationProcessing, OnLoadDataFromSettingsAtServer
+**Properties:** autoSaveDataInSettings=Use
+**Filters:** a pair of attributes for each - `Отбор[Поле]` (value) + `Отбор[Поле]Использование` (boolean)
 
-### Форма элемента справочника
+### Catalog item form
 
-**Простая:**
+**Simple:**
 ```
 ГруппаРеквизитов (horizontal)
 ├─ Наименование -> Объект.Description
 └─ Код -> Объект.Code (если нужен)
 ```
 
-**Сложная:**
+**Complex:**
 ```
 Главное (vertical)
 ├─ Наименование -> Объект.Description
@@ -81,9 +81,9 @@ allowed-tools: []
 └─ КонтактныеДанные / Дополнительно (vertical)
 ```
 
-**События:** OnCreateAtServer, OnReadAtServer, BeforeWriteAtServer, NotificationProcessing
+**Events:** OnCreateAtServer, OnReadAtServer, BeforeWriteAtServer, NotificationProcessing
 
-### Мастер (Wizard)
+### Wizard
 
 ```
 Страницы (pages, OnCurrentPageChange)
@@ -95,46 +95,46 @@ allowed-tools: []
 └─ Закрыть (stdCommand: Close)
 ```
 
-**Свойства:** windowOpeningMode=LockOwnerWindow
+**Properties:** windowOpeningMode=LockOwnerWindow
 
 ---
 
-## Конвенции именования
+## Naming conventions
 
-### Группы
+### Groups
 
-| Назначение | Имя | Тип |
+| Purpose | Name | Type |
 |-----------|-----|-----|
-| Шапка | `ГруппаШапка` | horizontal |
-| Левая колонка | `ГруппаШапкаЛевая` | vertical |
-| Правая колонка | `ГруппаШапкаПравая` | vertical |
-| Номер+Дата | `ГруппаНомерДата` | horizontal |
-| Подвал | `ГруппаПодвал` | vertical |
-| Итоги | `ГруппаИтоги` | horizontal |
-| Главная АКП формы | `ФормаКоманднаяПанель` | autoCmdBar |
-| Страницы | `ГруппаСтраницы` / `Страницы` | pages |
-| Предупреждение | `ГруппаПредупреждение` | horizontal, visible:false |
-| Доп. секция | `ГруппаДополнительно` / `ГруппаПрочее` | vertical, collapse |
+| Header | `ГруппаШапка` | horizontal |
+| Left column | `ГруппаШапкаЛевая` | vertical |
+| Right column | `ГруппаШапкаПравая` | vertical |
+| Number+Date | `ГруппаНомерДата` | horizontal |
+| Footer | `ГруппаПодвал` | vertical |
+| Totals | `ГруппаИтоги` | horizontal |
+| Main form command bar | `ФормаКоманднаяПанель` | autoCmdBar |
+| Pages | `ГруппаСтраницы` / `Страницы` | pages |
+| Warning | `ГруппаПредупреждение` | horizontal, visible:false |
+| Extra section | `ГруппаДополнительно` / `ГруппаПрочее` | vertical, collapse |
 
-### Элементы
+### Elements
 
-| Назначение | Имя |
+| Purpose | Name |
 |-----------|-----|
-| Поле в таблице | `[Таблица][Поле]` |
-| Итог | `Итоги[Поле]` |
-| Надпись-ссылка | `[Поле]Надпись` |
-| Фильтр | `Отбор[Поле]` |
-| Флажок фильтра | `Отбор[Поле]Использование` |
-| Кнопка команды | `[Команда]Кнопка` |
-| Баннер-картинка | `[Баннер]Картинка` |
-| Баннер-надпись | `[Баннер]Надпись` |
-| Подменю | `Подменю[Действие]` |
+| Field in a table | `[Таблица][Поле]` |
+| Total | `Итоги[Поле]` |
+| Link label | `[Поле]Надпись` |
+| Filter | `Отбор[Поле]` |
+| Filter checkbox | `Отбор[Поле]Использование` |
+| Command button | `[Команда]Кнопка` |
+| Banner picture | `[Баннер]Картинка` |
+| Banner label | `[Баннер]Надпись` |
+| Submenu | `Подменю[Действие]` |
 
-### Обработчики событий
+### Event handlers
 
-Имя = имя элемента + суффикс на русском:
+Name = element name + suffix in Russian:
 
-| Событие | Суффикс | Пример |
+| Event | Suffix | Example |
 |---------|---------|--------|
 | OnChange | ПриИзменении | `ОрганизацияПриИзменении` |
 | StartChoice | НачалоВыбора | `КонтрагентНачалоВыбора` |
@@ -142,37 +142,37 @@ allowed-tools: []
 | OnEditEnd | ПриОкончанииРедактирования | `ТоварыПриОкончанииРедактирования` |
 | OnStartEdit | ПриНачалеРедактирования | `ТоварыПриНачалеРедактирования` |
 
-Обработчики формы: `ПриСозданииНаСервере`, `ПриОткрытии`, `ПередЗакрытием`, `ОбработкаОповещения`.
+Form handlers: `ПриСозданииНаСервере`, `ПриОткрытии`, `ПередЗакрытием`, `ОбработкаОповещения`.
 
 ---
 
-## Принципы компоновки
+## Layout principles
 
-1. **Порядок чтения.** Сверху вниз, слева направо. Самое важное — вверху.
-2. **Двухколоночная шапка.** Основные реквизиты слева (контрагент, склад), организационные справа (организация, подразделение).
-3. **Кнопки действий — на главной АКП формы** (`autoCmdBar`), не в отдельной группе на форме. Главная кнопка — `defaultButton: true`. Закрыть — всегда последняя.
-4. **Таблицы — основная область.** Табличные части занимают большую часть формы, обычно на Pages.
-5. **Итоги рядом с таблицей.** В подвале, горизонтальная группа, все поля readOnly.
-6. **Фильтры — отдельная зона.** Над списком, alwaysHorizontal, пара «флажок + поле» на каждый фильтр.
-7. **Скрытые элементы для состояний.** Баннеры, предупреждения — `visible: false`, показываются программно.
-8. **Надписи-ссылки для диалогов.** `labelField` с `hyperlink: true` и событием Click.
+1. **Reading order.** Top to bottom, left to right. The most important things go on top.
+2. **Two-column header.** Main attributes on the left (counterparty, warehouse), organizational ones on the right (organization, department).
+3. **Action buttons go on the main form command bar** (`autoCmdBar`), not in a separate group on the form. The main button is `defaultButton: true`. Close is always last.
+4. **Tables are the main area.** Tabular sections take most of the form, usually on Pages.
+5. **Totals next to the table.** In the footer, a horizontal group, all fields readOnly.
+6. **Filters are a separate zone.** Above the list, alwaysHorizontal, a "checkbox + field" pair per filter.
+7. **Hidden elements for states.** Banners, warnings - `visible: false`, shown programmatically.
+8. **Link labels for dialogs.** `labelField` with `hyperlink: true` and the Click event.
 
 ---
 
-## Продвинутые паттерны (ERP)
+## Advanced patterns (ERP)
 
-### Сворачиваемые группы
+### Collapsible groups
 
-Для необязательных секций (подписи, дополнительно, прочее):
+For optional sections (signatures, additional, other):
 
 ```json
 { "group": "collapsible", "name": "ГруппаПодписи", "title": "Подписи",
   "collapsed": true, "children": [...] }
 ```
 
-### Баннер-предупреждение
+### Warning banner
 
-Группа «картинка + надпись», скрыта по умолчанию, показывается программно:
+A "picture + label" group, hidden by default, shown programmatically:
 
 ```json
 { "group": "horizontal", "name": "ГруппаПредупреждение", "showTitle": false,
@@ -182,9 +182,9 @@ allowed-tools: []
 ]}
 ```
 
-### Popup-меню в командной панели
+### Popup menu in the command bar
 
-Группировка связанных команд (печать, отправка) в одну кнопку с иконкой:
+Group related commands (print, send) into one button with an icon:
 
 ```json
 { "cmdBar": "КоманднаяПанель", "children": [
@@ -196,17 +196,17 @@ allowed-tools: []
 ]}
 ```
 
-### Форма без стандартной командной панели
+### Form without the standard command bar
 
-Для модальных диалогов и мастеров:
+For modal dialogs and wizards:
 
 ```json
 { "properties": { "commandBarLocation": "None", "windowOpeningMode": "LockWholeInterface" } }
 ```
 
-### Надпись-гиперссылка
+### Hyperlink label
 
-Вместо кнопки для открытия подформ (ЦеныИВалюта, УчётнаяПолитика):
+Instead of a button to open subforms (ЦеныИВалюта, УчётнаяПолитика):
 
 ```json
 { "labelField": "ЦеныИВалютаНадпись", "path": "ЦеныИВалюта", "hyperlink": true, "on": ["Click"] }
@@ -214,7 +214,7 @@ allowed-tools: []
 
 ---
 
-## Пример: форма обработки (полный DSL)
+## Example: data processor form (full DSL)
 
 ```json
 {

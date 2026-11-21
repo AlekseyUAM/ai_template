@@ -1,10 +1,10 @@
-# ExternalDataSource (внешний источник данных)
+# ExternalDataSource (External data source)
 
-Источник описывается **одним JSON целиком**: сам источник, его таблицы с полями и функции.
-Результат — `ExternalDataSources/<Имя>.xml` плюс по файлу на таблицу в `<Имя>/Tables/`.
+The source is described by **one whole JSON**: the source itself, its tables with fields, and functions.
+The result is `ExternalDataSources/<Имя>.xml` plus one file per table in `<Имя>/Tables/`.
 
-Строку соединения, пользователя, пароль и тип СУБД задавать не нужно: в конфигурации их нет,
-они настраиваются в режиме «Предприятие» и хранятся в базе.
+You do not need to set the connection string, user, password or DBMS type: they are not in the configuration,
+they are configured in "Enterprise" mode and stored in the database.
 
 ```json
 {
@@ -31,64 +31,64 @@
 }
 ```
 
-## Свойства источника
+## Source properties
 
-| Ключ | Умолчание | Значения |
+| Key | Default | Values |
 |------|-----------|----------|
 | `dataLockControlMode` | `Automatic` | `Automatic` / `Managed` / `AutomaticAndManaged` |
-| `tables` | `{}` | таблицы (см. ниже) |
-| `functions` | `{}` | функции (см. ниже) |
+| `tables` | `{}` | tables (see below) |
+| `functions` | `{}` | functions (see below) |
 
-При `AutomaticAndManaged` режим блокировок решает каждая таблица сама; при конкретном значении
-одноимённое свойство таблицы игнорируется платформой.
+With `AutomaticAndManaged` each table decides its lock mode itself; with a specific value the same-named
+table property is ignored by the platform.
 
-## Таблицы
+## Tables
 
-Ключ — имя таблицы в конфигурации. Значение — **массив полей** либо **объект** со свойствами
-и ключом `fields` (та же двойственность, что у `tabularSections` справочника).
+The key is the table name in the configuration. The value is a **field array** or an **object** with properties
+and a `fields` key (the same duality as for a catalog's `tabularSections`).
 
-| Ключ | Умолчание | Значения |
+| Key | Default | Values |
 |------|-----------|----------|
-| `nameInDataSource` | = имя таблицы | имя физической таблицы; для реляционной СУБД обычно `<база>.<схема>.<таблица>` |
-| `tableType` | `Table` | `Table` — таблица или представление; `Expression` — табличная функция |
-| `readOnly` | `false` | запрет записи; ставь `true` для представлений и таблиц вида `Expression` — писать в них нельзя |
-| `expressionInDataSource` | пусто | выражение для `Expression`, напр. `public.f_by_parent(&1)`; имя базы не указывается |
-| `tableDataType` | `NonobjectData` | `ObjectData` (запись определяется одним полем) / `NonobjectData` |
-| `keyFields` | `[]` | имена ключевых полей; без них таблица собирается, но недоступны форма записи и набор записей |
-| `presentationField` | пусто | имя поля представления (только `ObjectData`) |
-| `parentField` | пусто | имя поля родителя; его тип должен быть ссылкой на эту же таблицу |
-| `inputByString` | `[]` | имена полей ввода по строке; ключа нет → берётся `presentationField` |
-| `dataVersionField` | пусто | имя поля версии данных |
-| `dataLockFields` | `[]` | имена полей блокировки |
+| `nameInDataSource` | = table name | physical table name; for a relational DBMS usually `<база>.<схема>.<таблица>` |
+| `tableType` | `Table` | `Table` - a table or view; `Expression` - a table function |
+| `readOnly` | `false` | write prohibition; set `true` for views and `Expression` tables - they cannot be written to |
+| `expressionInDataSource` | empty | expression for `Expression`, e.g. `public.f_by_parent(&1)`; the database name is not specified |
+| `tableDataType` | `NonobjectData` | `ObjectData` (a record is identified by one field) / `NonobjectData` |
+| `keyFields` | `[]` | key field names; without them the table is assembled, but the record form and record set are unavailable |
+| `presentationField` | empty | presentation field name (only `ObjectData`) |
+| `parentField` | empty | parent field name; its type must be a reference to this same table |
+| `inputByString` | `[]` | input by string field names; if the key is absent -> `presentationField` is taken |
+| `dataVersionField` | empty | data version field name |
+| `dataLockFields` | `[]` | lock field names |
 | `transactionsIsolationLevel` | `Auto` | `Auto` / `ReadUncommitted` / `ReadCommitted` / `RepeatableRead` / `Serializable` |
 | `dataLockControlMode` | `Automatic` | `Automatic` / `Managed` / `AutomaticAndManaged` |
-| `basedOn` | `[]` | ввод на основании, ссылки вида `Catalog.Контрагенты` |
+| `basedOn` | `[]` | based on input, references like `Catalog.Контрагенты` |
 | `useStandardCommands` | `true` | bool |
 | `quickChoice` | `false` | bool |
 | `editType` | `InDialog` | `InDialog` / `InList` |
-| `fields` | `[]` | поля (см. ниже); синоним — `columns` |
+| `fields` | `[]` | fields (see below); synonym - `columns` |
 
-Ссылки на поля (`keyFields`, `presentationField`, `parentField`, `dataVersionField`,
-`inputByString`, `dataLockFields`) задаются **короткими именами полей** этой же таблицы.
+Field references (`keyFields`, `presentationField`, `parentField`, `dataVersionField`,
+`inputByString`, `dataLockFields`) are specified by **short field names** of the same table.
 
-Прочие свойства — представления (`objectPresentation`, `listPresentation`, …), формы по умолчанию
+Other properties - presentations (`objectPresentation`, `listPresentation`, …), default forms
 (`defaultObjectForm`, `defaultListForm`, …), `characteristics`, `explanation`,
-`includeHelpInContents` — как у справочника.
+`includeHelpInContents` - are as for a catalog.
 
-**Значение незаполненного родителя загрузкой XML не задаётся** — платформа сбрасывает его в пустое
-при любой загрузке, включая загрузку собственной выгрузки. Ставится только в Конфигураторе вручную.
+**The value of an empty parent is not set by XML load** - the platform resets it to empty
+on any load, including loading its own dump. It can only be set manually in the Configurator.
 
-## Поля
+## Fields
 
-Строковая и объектная форма — те же, что у реквизитов (см. `attributes.md`). Своих ключа три:
+The string and object forms are the same as for attributes (see `attributes.md`). It has three own keys:
 
-| Ключ | Умолчание | Значения |
+| Key | Default | Values |
 |------|-----------|----------|
-| `nameInDataSource` | = имя поля | имя колонки; в одинарных кавычках уходит в SQL как есть |
-| `readOnly` | `false` | поле не записывается (вычисляемые, автоинкрементные) |
-| `allowNull` | `false` | допускает `NULL` |
+| `nameInDataSource` | = field name | column name; in single quotes it goes to SQL as is |
+| `readOnly` | `false` | the field is not written (computed, auto-increment) |
+| `allowNull` | `false` | allows `NULL` |
 
-Флаги строковой формы: `readonly`, `nullable`.
+String form flags: `readonly`, `nullable`.
 
 ```json
 "fields": [
@@ -97,26 +97,26 @@
 ]
 ```
 
-Допустимые типы: `Number`, `String`, `Date`, `Boolean`, `UUID`, `BinaryData` и ссылка на таблицу
-внешнего источника — `ExternalDataSourceTableRef.<Источник>.<Таблица>`.
+Allowed types: `Number`, `String`, `Date`, `Boolean`, `UUID`, `BinaryData` and a reference to an external
+source table - `ExternalDataSourceTableRef.<Источник>.<Таблица>`.
 
-Двоичные данные: `BinaryData` — безлимит (так их пишет платформа при импорте из СУБД),
-`BinaryData(N)` — переменной длины, `BinaryData(N,fixed)` — фиксированной.
+Binary data: `BinaryData` - unlimited (this is how the platform writes them when importing from a DBMS),
+`BinaryData(N)` - variable length, `BinaryData(N,fixed)` - fixed.
 
-**Составной тип у поля недопустим** — платформа такую конфигурацию не загружает.
+**A composite type is not allowed for a field** - the platform does not load such a configuration.
 
-## Функции
+## Functions
 
-Ключ — имя функции. Значение — строка (интерпретируется как `expression`) либо объект.
+The key is the function name. The value is a string (interpreted as `expression`) or an object.
 
-| Ключ | Умолчание | Значения |
+| Key | Default | Values |
 |------|-----------|----------|
-| `expression` | — | выражение в источнике, обязательный |
-| `returns` | `String` | тип возвращаемого значения |
-| `returnValue` | `true` | `false` — процедура, тип не пишется |
+| `expression` | - | expression in the source, required |
+| `returns` | `String` | return value type |
+| `returnValue` | `true` | `false` - a procedure, the type is not written |
 
-Параметры описываются прямо в выражении как `&1`, `&2` — отдельного ключа для них нет.
-Необязательные — в фигурных скобках `f(&1{, &2})`, переменное число — `&n[]` (только последним).
+Parameters are described directly in the expression as `&1`, `&2` - there is no separate key for them.
+Optional ones - in curly braces `f(&1{, &2})`, variable number - `&n[]` (last only).
 
 ```json
 "functions": {
@@ -125,11 +125,11 @@
 }
 ```
 
-## Добавить в существующий источник
+## Add to an existing source
 
-`meta-compile` описывает источник **целиком**: повторный запуск заменяет его файл и выдаёт новый
-uuid, а таблицы, которых нет в описании, останутся на диске сиротами. Чтобы дописать таблицу или
-функцию в уже существующий источник, есть `meta-edit`:
+`meta-compile` describes the source **as a whole**: a repeated run replaces its file and issues a new
+uuid, and tables that are not in the description remain on disk as orphans. To add a table or
+function to an existing source, use `meta-edit`:
 
 ```json
 { "add": {
@@ -138,10 +138,10 @@ uuid, а таблицы, которых нет в описании, остану
 } }
 ```
 
-Удалить таблицу — `meta-remove ExternalDataSource.<Источник>.Table.<Таблица>`.
+To delete a table - `meta-remove ExternalDataSource.<Источник>.Table.<Таблица>`.
 
-## Не поддерживается
+## Not supported
 
-- **Кубы OLAP** (`Cube`, `DimensionTable`, `Dimension`, `Resource`).
-- **Формы и модули** таблиц — форму добавляет навык `form-add`, содержимое собирает `form-compile`.
-  Набор назначений зависит от `tableDataType`: `ObjectData` — Object/List/Choice, `NonobjectData` — Record/List/Choice.
+- **OLAP cubes** (`Cube`, `DimensionTable`, `Dimension`, `Resource`).
+- **Forms and modules** of tables - the form is added by the `form-add` skill, the content is assembled by `form-compile`.
+  The set of purposes depends on `tableDataType`: `ObjectData` - Object/List/Choice, `NonobjectData` - Record/List/Choice.

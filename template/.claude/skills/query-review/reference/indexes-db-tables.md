@@ -1,930 +1,916 @@
-# Индексы таблиц базы данных 1С (локальный справочник)
+# 1C database table indexes (local reference)
 
-Локальная копия справочника индексов, которые платформа 1С:Предприятие 8
-(версия формата 8.3.27) создаёт для таблиц базы данных автоматически при
-создании объектов конфигурации и при тех или иных их настройках. Используется
-навыком `query-review` при проверке «покрыто ли условие запроса подходящим
-индексом» — без доступа к внешним ресурсам.
+Local copy of the index reference that the 1C:Enterprise 8 platform
+(format version 8.3.27) creates for database tables automatically when
+configuration objects are created and under certain object settings. Used
+by the `query-review` skill when checking "is the query condition covered by a suitable
+index" - without access to external resources.
 
-Условные обозначения (как в разделе документации «Таблицы запросов»):
+Legend (as in the "Query tables" documentation section):
 
-- `Измерение1`, `Реквизит1` и т.п. — условные имена измерений/реквизитов.
-- `ОРНР` — общий реквизит-разделитель в режиме «независимо» (`ОРНР1`, `ОРНР2`…).
-- `ОРСР` — разделитель в режиме «независимо и совместно».
-- `ОРР` — разделитель, когда режим не важен.
-- `ОРРХ` — поле со значением хэш-функции набора значений разделителей.
-- `[...]` — необязательное индексное поле; `[... +...]` — набор однотипных полей.
+- `Измерение1`, `Реквизит1`, etc. - conventional names of dimensions/attributes.
+- `ОРНР` - common separator attribute in "independent" mode (`ОРНР1`, `ОРНР2`…).
+- `ОРСР` - separator in "independent and shared" mode.
+- `ОРР` - separator when the mode does not matter.
+- `ОРРХ` - field with the hash value of the separator value set.
+- `[...]` - optional index field; `[... +...]` - a set of same-type fields.
 
 ---
 
-Индексы таблиц базы данных
-В данном разделе приведен список индексов таблиц базы данных, которые создаются системой
-1С:Предприятие 8. Индексы таблиц создаются неявным образом при создании объектов
-конфигурации, а также при тех или иных настройках объектов конфигурации. Для тех случаев,
-когда создание индексов зависит от настроек объектов конфигурации приведены условия создания
-индексов.
-В приведенных ниже таблицах имена индексных полей приведены так, как они описаны в разделе
-документации "Таблицы запросов".
-Для измерений, реквизитов и т.д. применяются условные имена Измерение1, Реквизит1 и т.д.
-Для общих реквизитов, являющихся разделителями в режиме "независимо", будем использовать
-имена ОРНР (ОРНР1, ОРНР2, и т.д.).
-Для общих реквизитов, являющихся разделителями в режиме "независимо и совместно", будем
-использовать имена ОРСР.
-Если режим разделения не имеет значения, то для общих реквизитов, являющихся разделителями,
-будем использовать имена ОРР.
-Если в конфигурации определены разделители, то в индексы может входит поле, которое содержит
-значение хэш-функции набора значений разделителей. Такое поле будем обозначать именем ОРРХ.
-Те индексные поля, которые не являются обязательными приведены в квадратных скобках, а если в
-индексе присутствует набор однотипных полей, это описывается многоточием, например: Реквизит
-+ Измерение1 + [Измерение2 +...].
-Данным материалом следует руководствоваться при написании текстов запросов с целью
-оптимизации времени их исполнения.
+Database table indexes
+This section lists database table indexes that the 1C:Enterprise 8 system creates. Table indexes are created implicitly when configuration objects are created, as well as under certain configuration object settings. For cases where index creation depends on configuration object settings, the index creation conditions are given.
+In the tables below, index field names are given as described in the "Query tables" documentation section.
+For dimensions, attributes, etc., conventional names Измерение1, Реквизит1, etc. are used.
+For common attributes that are separators in "independent" mode, we use the names ОРНР (ОРНР1, ОРНР2, etc.).
+For common attributes that are separators in "independent and shared" mode, we use the names ОРСР.
+If the separation mode does not matter, then for common attributes that are separators we use the names ОРР.
+If separators are defined in the configuration, an index may include a field that contains the hash value of the separator value set. Such a field is denoted by the name ОРРХ.
+Index fields that are not mandatory are given in square brackets, and if the index contains a set of same-type fields, this is described by an ellipsis, e.g.: Реквизит + Измерение1 + [Измерение2 +...].
+This material should be used when writing query texts to optimize their execution time.
 
 
-## Справочник
+## Catalog (Справочник)
 
-Основные индексы
-Индекс
+Main indexes
+Index
 
-Условие
+Condition
 
 [ОРНР1 + ... +] Ссылка
-(Кластерный)
+(Clustered)
 
-Всегда.
-В индекс входят поля независимых разделителей, которые
-разделяют этот справочник.
+Always.
+The index includes fields of independent separators that
+separate this catalog.
 
 [ОРРХ | ОРНР1 +] Код + Ссылка
 
-Свойство "Длина кода" не равно 0.
-Если справочник разделяется одним независимым
-разделителем, тип которого не Строка, то индекс содержит
-поле этого разделителя.
-Если тип разделителя - Строка, или разделитель
-независимый и совместный, или разделителей больше
-одного, то индекс содержит поле значения хэш-функции
-значений разделителей.
-Это правило справедливо для всех индексов, в составе
-которых указано [ОРРХ | ОРНР1 +].
+Property "Длина кода" is not 0.
+If the catalog is separated by one independent
+separator whose type is not Строка, the index contains
+the field of that separator.
+If the separator type is Строка, or the separator
+is independent and shared, or there is more than one
+separator, the index contains the field of the hash value
+of separator values.
+This rule applies to all indexes that
+specify [ОРРХ | ОРНР1 +].
 
 [ОРРХ | ОРНР1 +] Наименование
 + Ссылка
 
-Свойство "Длина наименования" не равно 0.
+Property "Длина наименования" is not 0.
 
 [ОРРХ | ОРНР1 +] Реквизит +
 Ссылка
 
-Для реквизита "Реквизит" свойство "Индексировать"
-установлено в значение "Индексировать".
+For the attribute "Реквизит" the property "Индексировать"
+is set to "Индексировать".
 
-Для реквизита "Реквизит" свойство "Индексировать"
-установлено в значение "Индексировать с доп.
+For the attribute "Реквизит" the property "Индексировать"
+is set to "Индексировать с доп.
 [ОРРХ | ОРНР1 +] Реквизит + Код
-упорядочиванием" и при этом свойство "Длина кода" не
+упорядочиванием" and at the same time the property "Длина кода" is not
 + Ссылка
-равно 0, а свойство "Основное представление" равно "В виде
+0, and the property "Основное представление" is "В виде
 кода".
 
 [ОРРХ | ОРНР1 +] Реквизит +
 Наименование + Ссылка
 
-Для реквизита "Реквизит" свойство "Индексировать"
-установлено в значение "Индексировать с доп.
-упорядочиванием" и при этом свойство "Длина
-наименования" не равно 0, а свойство "основное
-представление" равно "В виде наименования".
+For the attribute "Реквизит" the property "Индексировать"
+is set to "Индексировать с доп.
+упорядочиванием" and at the same time the property "Длина
+наименования" is not 0, and the property "основное
+представление" is "В виде наименования".
 
 [ОРРХ | ОРНР1 +] Реквизит
 
-Справочник включен в критерий отбора через реквизит
+The catalog is included in the filter criterion via the attribute
 "Реквизит".
 
 [ОРРХ | ОРНР1 +] PredefinedID
 
-Индекс по идентификатору предопределенного объекта
-метаданных.
+Index by the ID of a predefined metadata
+object.
 
-Дополнительные индексы для подчиненного справочника (вне зависимости от
-иерархичности справочника)
-Индекс
+Additional indexes for a subordinate catalog (regardless of
+whether the catalog is hierarchical)
+Index
 
-Условие
+Condition
 
 [ОРРХ | ОРНР1 +] Владелец +
 Ссылка
 
-Свойство "Длина кода" равно 0.
+Property "Длина кода" is 0.
 
 [ОРРХ | ОРНР1 +] Владелец +
 Код + Ссылка
 
-Свойство "Длина кода" не равно 0.
+Property "Длина кода" is not 0.
 
 [ОРРХ | ОРНР1 +] Владелец +
 Наименование + Ссылка
 
-Свойство "Длина наименования" не равно 0.
+Property "Длина наименования" is not 0.
 
 [ОРРХ | ОРНР1 +] Владелец +
 Реквизит + Ссылка
 
-Для реквизита "Реквизит" свойство "Индексировать"
-установлено в значение "Индексировать".
+For the attribute "Реквизит" the property "Индексировать"
+is set to "Индексировать".
 
 [ОРРХ | ОРНР1 +] Владелец +
 Реквизит + Код + Ссылка
 
-Для реквизита "Реквизит" свойство "Индексировать"
-установлено в значение "Индексировать с доп.
-упорядочиванием" и при этом свойство "Длина кода" не
-равно 0, а свойство "Основное представление" равно "В виде
+For the attribute "Реквизит" the property "Индексировать"
+is set to "Индексировать с доп.
+упорядочиванием" and at the same time the property "Длина кода" is not
+0, and the property "Основное представление" is "В виде
 кода".
 
 [ОРРХ | ОРНР1 +] Владелец +
 Реквизит + Наименование +
 Ссылка
 
-Для реквизита "Реквизит" свойство "Индексировать"
-установлено в значение "Индексировать с доп.
-упорядочиванием" и при этом свойство "Длина
-наименования" не равно 0, а свойство "основное
-представление" равно "В виде наименования".
+For the attribute "Реквизит" the property "Индексировать"
+is set to "Индексировать с доп.
+упорядочиванием" and at the same time the property "Длина
+наименования" is not 0, and the property "основное
+представление" is "В виде наименования".
 
-Дополнительные индексы для иерархического неподчиненного справочника
-Если для справочника установлено свойство "Размещать группы сверху", то в индексах, наряду с
-полем Родитель, участвует поле ЭтоГруппа. Состав индексов соответствует приведенной ниже
-таблице.
-Индекс
+Additional indexes for a hierarchical non-subordinate catalog
+If the catalog has the property "Размещать группы сверху" set, the field ЭтоГруппа participates in the indexes along with
+the field Родитель. The index composition corresponds to the table below.
+Index
 
-Условие
+Condition
 
 [ОРРХ | ОРНР1 +] Родитель +
 ЭтоГруппа + Ссылка
 
-Свойство "Длина кода" равно 0 и свойство "Длина
-наименования" равно 0.
+Property "Длина кода" is 0 and the property "Длина
+наименования" is 0.
 
 [ОРРХ | ОРНР1 +] Родитель +
 ЭтоГруппа + Код + Ссылка
 
-Свойство "Длина кода" не равно 0.
+Property "Длина кода" is not 0.
 
 [ОРРХ | ОРНР1 +] Родитель +
 ЭтоГруппа + Наименование +
 Ссылка
 
-Свойство "Длина наименования" не равно 0.
+Property "Длина наименования" is not 0.
 
 [ОРРХ | ОРНР1 +] Родитель +
 ЭтоГруппа + Реквизит + Ссылка
 
-Для реквизита "Реквизит" свойство "Индексировать"
-установлено в значение "Индексировать".
+For the attribute "Реквизит" the property "Индексировать"
+is set to "Индексировать".
 
 [ОРРХ | ОРНР1 +] Родитель +
 ЭтоГруппа + Реквизит + Код +
 Ссылка
 
-Для реквизита "Реквизит" свойство "Индексировать"
-установлено в значение "Индексировать с доп.
-упорядочиванием" и при этом свойство "Длина кода" не
-равно 0, а свойство "Основное представление" равно "В виде
+For the attribute "Реквизит" the property "Индексировать"
+is set to "Индексировать с доп.
+упорядочиванием" and at the same time the property "Длина кода" is not
+0, and the property "Основное представление" is "В виде
 кода".
 
 [ОРРХ | ОРНР1 +] Родитель +
 ЭтоГруппа + Реквизит +
 Наименование + Ссылка
 
-Для реквизита "Реквизит" свойство "Индексировать"
-установлено в значение "Индексировать с доп.
-упорядочиванием" и при этом свойство "Длина
-наименования" не равно 0, а свойство "основное
-представление" равно "В виде наименования".
+For the attribute "Реквизит" the property "Индексировать"
+is set to "Индексировать с доп.
+упорядочиванием" and at the same time the property "Длина
+наименования" is not 0, and the property "основное
+представление" is "В виде наименования".
 
-Для справочников без размещения групп сверху состав индексов соответствует приведенной выше
-таблице, но в индексы при этом не включено поле ЭтоГруппа.
+For catalogs without groups on top, the index composition corresponds to the table above,
+but the field ЭтоГруппа is not included in the indexes.
 
-Дополнительные индексы для иерархического подчиненного справочника
-Если для справочника установлено свойство "Размещать группы сверху", то в индексах, наряду с
-полем Родитель, участвует поле ЭтоГруппа. Состав индексов соответствует приведенной ниже
-таблице.
-Индекс
+Additional indexes for a hierarchical subordinate catalog
+If the catalog has the property "Размещать группы сверху" set, the field ЭтоГруппа participates in the indexes along with
+the field Родитель. The index composition corresponds to the table below.
+Index
 
-Условие
+Condition
 
 [ОРРХ | ОРНР1 +] Владелец +
 Родитель + ЭтоГруппа + Ссылка
 
-Свойство "Длина кода" равно 0 и свойство "Длина
-наименования" равно 0.
+Property "Длина кода" is 0 and the property "Длина
+наименования" is 0.
 
 [ОРРХ | ОРНР1 +] Владелец +
 Родитель + ЭтоГруппа + Код +
 Ссылка
 
-Свойство "Длина кода" не равно 0.
+Property "Длина кода" is not 0.
 
 [ОРРХ | ОРНР1 +] Владелец +
 Родитель + ЭтоГруппа +
 Наименование + Ссылка
 
-Свойство "Длина наименования" не равно 0.
+Property "Длина наименования" is not 0.
 
 [ОРРХ | ОРНР1 +] Владелец +
 Родитель + ЭтоГруппа + Реквизит
 + Ссылка
 
-Для реквизита "Реквизит" свойство "Индексировать"
-установлено в значение "Индексировать".
+For the attribute "Реквизит" the property "Индексировать"
+is set to "Индексировать".
 
 [ОРРХ | ОРНР1 +] Владелец +
 Родитель + ЭтоГруппа + Реквизит
 + Код + Ссылка
 
-Для реквизита "Реквизит" свойство "Индексировать"
-установлено в значение "Индексировать с доп.
-упорядочиванием" и при этом свойство "Длина кода" не
-равно 0, а свойство "Основное представление" равно "В виде
+For the attribute "Реквизит" the property "Индексировать"
+is set to "Индексировать с доп.
+упорядочиванием" and at the same time the property "Длина кода" is not
+0, and the property "Основное представление" is "В виде
 кода".
 
 [ОРРХ | ОРНР1 +] Владелец +
 Родитель + ЭтоГруппа + Реквизит
 + Наименование + Ссылка
 
-Для реквизита "Реквизит" свойство "Индексировать"
-установлено в значение "Индексировать с доп.
-упорядочиванием" и при этом свойство "Длина
-наименования" не равно 0, а свойство "основное
-представление" равно "В виде наименования".
+For the attribute "Реквизит" the property "Индексировать"
+is set to "Индексировать с доп.
+упорядочиванием" and at the same time the property "Длина
+наименования" is not 0, and the property "основное
+представление" is "В виде наименования".
 
-Для справочников без размещения групп сверху состав индексов соответствует приведенной выше
-таблице, но в индексы при этом не включено поле ЭтоГруппа.
+For catalogs without groups on top, the index composition corresponds to the table above,
+but the field ЭтоГруппа is not included in the indexes.
 
-Таблица опций справочника
-Индекс
+Catalog options table
+Index
 
-Условие
+Condition
 
 [ОРРХ | ОРНР1 +] Идентификатор
-Всегда.
-(Кластерный)
+Always.
+(Clustered)
 
 
-## Документ
+## Document (Документ)
 
-Индекс
+Index
 
-Условие
+Condition
 
 [ОРНР1 + ... +] Ссылка
-(Кластерный)
+(Clustered)
 
-Всегда.
-В индекс входят поля независимых разделителей, которые
-разделяют этот документ.
+Always.
+The index includes fields of independent separators that
+separate this document.
 
 [ОРРХ | ОРНР1 +] Дата + Ссылка
 
-Всегда.
+Always.
 
 [ОРРХ | ОРНР1 +] Номер +
 Ссылка
 
-Свойство "Длина номера" не равно 0.
+Property "Длина номера" is not 0.
 
 [ОРРХ | ОРНР1 +] Реквизит +
 Ссылка
 
-Для реквизита "Реквизит" свойство "Индексировать"
-установлено в значение "Индексировать".
+For the attribute "Реквизит" the property "Индексировать"
+is set to "Индексировать".
 
 [ОРРХ | ОРНР1 +] Реквизит +
 Дата + Ссылка
 
-Для реквизита "Реквизит" свойство "Индексировать"
-установлено в значение "Индексировать с доп.
+For the attribute "Реквизит" the property "Индексировать"
+is set to "Индексировать с доп.
 упорядочиванием".
 
 [ОРРХ | ОРНР1 +] Реквизит
 
-Документ включен в критерий отбора через реквизит
+The document is included in the filter criterion via the attribute
 "Реквизит".
 
 [ОРРХ | ОРНР1 +]
 ПрефиксНомера + Номер + Ссылка
 
-Свойство "Длина номера" не равно 0.
+Property "Длина номера" is not 0.
 
-Журнал документов
-Индекс
+Document journal
+Index
 
-Условие
+Condition
 
 [ОРРХ | ОРНР1 +] Ссылка
-(Кластерный)
+(Clustered)
 
-Всегда.
+Always.
 
 [ОРРХ | ОРНР1 +] Дата + Ссылка
 
-Всегда.
+Always.
 
 [ОРРХ | ОРНР1 +] Графа +
 Ссылка
 
-Для графы журнала "Графа" свойство "Индексировать"
-установлено в значение "Индексировать".
+For the journal column "Графа" the property "Индексировать"
+is set to "Индексировать".
 
 [ОРРХ | ОРНР1 +] Графа + Дата
 + Ссылка
 
-Для графы журнала "Графа" свойство "Индексировать"
-установлено в значение "Индексировать с доп.
+For the journal column "Графа" the property "Индексировать"
+is set to "Индексировать с доп.
 упорядочиванием".
 
-План видов характеристик
-См. описание индексов справочника с той лишь поправкой, что длина кода и длина
-наименования плана видов характеристик не может быть равной нулю и, кроме того, план видов
-характеристик не может быть подчиненным.
+Chart of characteristic types
+See the description of catalog indexes, with the only correction that the code length and
+name length of a chart of characteristic types cannot be zero and, in addition, a chart of
+characteristic types cannot be subordinate.
 
-Таблица опций плана видов характеристик
-Индекс
+Chart of characteristic types options table
+Index
 
-Условие
+Condition
 
-Идентификатор Всегда.
+Идентификатор Always.
 
-План счетов
-Индекс
+Chart of accounts
+Index
 
-Условие
+Condition
 
 [ОРНР1 + ... +] Ссылка
-(Кластерный)
+(Clustered)
 
-Всегда.
-В индекс входят поля независимых разделителей, которые
-разделяют этот план счетов.
+Always.
+The index includes fields of independent separators that
+separate this chart of accounts.
 
 [ОРРХ | ОРНР1 +] Код + Ссылка
 
-Всегда.
+Always.
 
 [ОРРХ | ОРНР1 +] Родитель + Код
-Всегда.
+Always.
 + Ссылка
 [ОРРХ | ОРНР1 +] Наименование
 + Ссылка
 
-Всегда.
+Always.
 
 [ОРРХ | ОРНР1 +] Родитель +
 Наименование + Ссылка
 
-Всегда.
+Always.
 
 [ОРРХ | ОРНР1 +] Порядок +
 Ссылка
 
-Свойство "Длина порядка" не равно 0.
+Property "Длина порядка" is not 0.
 
 [ОРРХ | ОРНР1 +] Родитель +
 Порядок + Ссылка
 
-Свойство "Длина порядка" не равно 0.
+Property "Длина порядка" is not 0.
 
 [ОРРХ | ОРНР1 +] Реквизит +
 Ссылка
 
-Для реквизита "Реквизит" свойство "Индексировать"
-установлено в значение "Индексировать".
+For the attribute "Реквизит" the property "Индексировать"
+is set to "Индексировать".
 
 [ОРРХ | ОРНР1 +] Родитель +
 Реквизит + Ссылка
 
-Для реквизита "Реквизит" свойство "Индексировать"
-установлено в значение "Индексировать".
+For the attribute "Реквизит" the property "Индексировать"
+is set to "Индексировать".
 
 [ОРРХ | ОРНР1 +] Реквизит +
 Порядок + Ссылка
 
-Для реквизита "Реквизит" свойство "Индексировать"
-установлено в значение "Индексировать с доп.
-упорядочиванием" и при этом свойство "Длина порядка" не
-равно 0.
+For the attribute "Реквизит" the property "Индексировать"
+is set to "Индексировать с доп.
+упорядочиванием" and at the same time the property "Длина порядка" is not
+0.
 
 [ОРРХ | ОРНР1 +] Родитель +
 Реквизит + Порядок + Ссылка
 
-Для реквизита "Реквизит" свойство "Индексировать"
-установлено в значение "Индексировать с доп.
-упорядочиванием" и при этом свойство "Длина порядка" не
-равно 0.
+For the attribute "Реквизит" the property "Индексировать"
+is set to "Индексировать с доп.
+упорядочиванием" and at the same time the property "Длина порядка" is not
+0.
 
-Для реквизита "Реквизит" свойство "Индексировать"
-установлено в значение "Индексировать с доп.
+For the attribute "Реквизит" the property "Индексировать"
+is set to "Индексировать с доп.
 [ОРРХ | ОРНР1 +] Реквизит + Код
-упорядочиванием" и при этом свойство "Длина порядка"
+упорядочиванием" and at the same time the property "Длина порядка"
 + Ссылка
-равно 0, а свойство "Основное представление" - "В виде
+is 0, and the property "Основное представление" - "В виде
 кода".
 
 [ОРРХ | ОРНР1 +] Родитель +
 Реквизит + Код + Ссылка
 
-Для реквизита "Реквизит" свойство "Индексировать"
-установлено в значение "Индексировать с доп.
-упорядочиванием" и при этом свойство "Длина порядка"
-равно 0, а свойство "Основное представление" - "В виде
+For the attribute "Реквизит" the property "Индексировать"
+is set to "Индексировать с доп.
+упорядочиванием" and at the same time the property "Длина порядка"
+is 0, and the property "Основное представление" - "В виде
 кода".
 
 [ОРРХ | ОРНР1 +] Реквизит +
 Наименование + Ссылка
 
-Для реквизита "Реквизит" свойство "Индексировать"
-установлено в значение "Индексировать с доп.
-упорядочиванием" и при этом свойство "Длина порядка"
-равно 0, а свойство "Основное представление" - "В виде
+For the attribute "Реквизит" the property "Индексировать"
+is set to "Индексировать с доп.
+упорядочиванием" and at the same time the property "Длина порядка"
+is 0, and the property "Основное представление" - "В виде
 наименования".
 
 [ОРРХ | ОРНР1 +] Родитель +
 Реквизит + Наименование +
 Ссылка
 
-Для реквизита "Реквизит" свойство "Индексировать"
-установлено в значение "Индексировать с доп.
-упорядочиванием" и при этом свойство "Длина порядка"
-равно 0, а свойство "Основное представление" - "В виде
+For the attribute "Реквизит" the property "Индексировать"
+is set to "Индексировать с доп.
+упорядочиванием" and at the same time the property "Длина порядка"
+is 0, and the property "Основное представление" - "В виде
 наименования".
 
 [ОРРХ | ОРНР1 +] Реквизит
 
-План счетов включен в критерий отбора через реквизит
+The chart of accounts is included in the filter criterion via the attribute
 "Реквизит".
 
 [ОРРХ | ОРНР1 +] PredefinedID
 
-Индекс по идентификатору предопределенного объекта
-метаданных.
+Index by the ID of a predefined metadata
+object.
 
-Таблица опций плана счетов
+Chart of accounts options table
 
-Индекс
+Index
 
-Условие
+Condition
 
-Идентификатор Всегда.
+Идентификатор Always.
 
-План видов расчета
-См. описание основных индексов справочника.
+Chart of calculation types
+See the description of catalog main indexes.
 
-Таблица опций плана видов расчета
-Индекс
+Chart of calculation types options table
+Index
 
-Условие
+Condition
 
-Идентификатор Всегда.
+Идентификатор Always.
 
-План обмена
-См. описание основных индексов справочника с той лишь поправкой, что длина кода и длина
-наименования плана обмена не может быть равной нулю.
+Exchange plan
+See the description of catalog main indexes, with the only correction that the code length and
+name length of an exchange plan cannot be zero.
 
-Табличная часть
-Индекс
+Tabular section
+Index
 
-Условие
+Condition
 
 [ОРНР1 + ... +] Ссылка + Ключ
-(Кластерный)
+(Clustered)
 
-Всегда.
-В индекс входят поля независимых разделителей,
-разделяющих объект, которому принадлежит табличная
-часть.
+Always.
+The index includes fields of independent separators
+that separate the object to which the tabular section
+belongs.
 
 [ОРРХ | ОРНР1 +] Реквизит +
 Ссылка
 
-Объект конфигурации включен в критерий отбора через
-реквизит "Реквизит" табличной части или для реквизита
-табличной части установлено свойство "Индексировать".
+The configuration object is included in the filter criterion via the
+tabular section attribute "Реквизит", or the tabular section attribute
+has the property "Индексировать" set.
 
 [ОРРХ | ОРНР1 +] PredefinedID
 
-Индекс по идентификатору предопределенного объекта
-метаданных.
+Index by the ID of a predefined metadata
+object.
 
-Для всех таблиц, которые предоставляют доступ к табличным частям объектов.
+For all tables that provide access to object tabular sections.
 
-Регистр сведений
-Непериодический регистр сведений
-Индекс
+Information register
+Non-periodic information register
+Index
 
-Условие и описание
+Condition and description
 
 [ОРРХ | ОРНР1 +] Измерение1 +
-[Измерение2 +...] (Кластерный)
+[Измерение2 +...] (Clustered)
 
-Есть хоть одно измерение регистра.
-Индекс, включающий все измерения в том порядке, в
-котором они заданы при конфигурировании.
-Индекс кластерный, если регистр независимый.
+The register has at least one dimension.
+An index including all dimensions in the order
+in which they are defined at configuration time.
+The index is clustered if the register is independent.
 
 [ОРРХ | ОРНР1 +] ИзмерениеN +
 Измерение1 + [Измерение2 +...]
 
-Измерению "ИзмерениеN" задано свойство "Индексировать"
-или свойство "Ведущее" и при этом это не первое и не
-единственное измерение.
-Индекс, включающий все измерения. Первое поле ИзмерениеN, затем все остальные измерения в том порядке,
-в котором они заданы при конфигурировании.
+The dimension "ИзмерениеN" has the property "Индексировать" set
+or the property "Ведущее", and it is not the first and not the
+only dimension.
+An index including all dimensions. The first field is ИзмерениеN, then all other dimensions in the order
+in which they are defined at configuration time.
 
 [ОРРХ | ОРНР1 +] Реквизит +
 Измерение1 + [Измерение2 +...]
 
-Реквизиту "Реквизит" задано свойство "Индексировать".
-Индекс в котором первое поле - Реквизит, затем все
-измерения в том порядке, в котором они заданы при
-конфигурировании.
+The attribute "Реквизит" has the property "Индексировать" set.
+An index in which the first field is Реквизит, then all
+dimensions in the order in which they are defined at
+configuration time.
 
 [ОРРХ | ОРНР1 +] Ресурс +
 Измерение1 + [Измерение2 +...]
 
-Ресурсу "Ресурс" задано свойство "Индексировать".
-Индекс в котором первое поле - Ресурс, затем все измерения
-в том порядке, в котором они заданы при конфигурировании.
+The resource "Ресурс" has the property "Индексировать" set.
+An index in which the first field is Ресурс, then all dimensions
+in the order in which they are defined at configuration time.
 
-Периодический регистр сведений
-Индекс
+Periodic information register
+Index
 
-Условие и описание
+Condition and description
 
 [ОРРХ | ОРНР1 +] Период +
 [Измерение1 + ...]
 
-Всегда.
+Always.
 
 [ОРРХ | ОРНР1 +] Измерение1 +
 [Измерение2 +...] + Период
-(Кластерный)
+(Clustered)
 
-Есть хоть одно измерение регистра.
-Индекс, включающий все измерения в том порядке, в
-котором они заданы при конфигурировании и поле Период.
+The register has at least one dimension.
+An index including all dimensions in the order
+in which they are defined at configuration time, and the field Период.
 
 [ОРРХ | ОРНР1 +] ИзмерениеN +
 Период + Измерение1 +
 [Измерение2 +...]
 
-Измерению "ИзмерениеN" задано свойство "Индексировать"
-или свойство "Ведущее" и при этом это не единственное
-измерение.
-Индекс, включающий поле Период и все измерения. Первое
-поле - ИзмерениеN, затем поле Период, затем все остальные
-измерения в том порядке, в котором они заданы при
-конфигурировании.
+The dimension "ИзмерениеN" has the property "Индексировать" set
+or the property "Ведущее", and it is not the only
+dimension.
+An index including the field Период and all dimensions. The first
+field is ИзмерениеN, then the field Период, then all other
+dimensions in the order in which they are defined at
+configuration time.
 
 [ОРРХ | ОРНР1 +] Реквизит +
 Период + [Измерение1 + ...]
 
-Реквизиту "Реквизит" задано свойство "Индексировать".
-Индекс в котором первое поле - Реквизит, затем поле
-Период, затем все измерения в том порядке, в котором они
-заданы при конфигурировании.
+The attribute "Реквизит" has the property "Индексировать" set.
+An index in which the first field is Реквизит, then the field
+Период, then all dimensions in the order in which they are
+defined at configuration time.
 
 [ОРРХ | ОРНР1 +] Ресурс +
 Период + [Измерение1 + ...]
 
-Ресурсу "Ресурс" задано свойство "Индексировать".
-Индекс в котором первое поле - Ресурс, затем поле Период,
-затем все измерения в том порядке, в котором они заданы
-при конфигурировании.
+The resource "Ресурс" has the property "Индексировать" set.
+An index in which the first field is Ресурс, then the field Период,
+then all dimensions in the order in which they are defined
+at configuration time.
 
-Дополнительный индекс для регистра сведений, подчиненного регистратору
-Индекс
+Additional index for an information register subordinate to a registrar
+Index
 [ОРНР1 + ... +] Регистратор +
-НомерСтроки (Кластерный)
+НомерСтроки (Clustered)
 
-Условие и описание
-Всегда.
-В индекс входят поля независимых разделителей, которые
-разделяют этот регистр.
-Индекс кластерный, если регистр непериодический.
+Condition and description
+Always.
+The index includes fields of independent separators that
+separate this register.
+The index is clustered if the register is non-periodic.
 
-Регистр сведений с периодичностью "По позиции регистратора"
-Индекс
+Information register with periodicity "By registrar position"
+Index
 
-Условие и описание
+Condition and description
 
 [ОРРХ | ОРНР1 +] Период +
 Регистратор + НомерСтроки
 
-Всегда.
+Always.
 
 [ОРНР1 + ... +] Регистратор +
 НомерСтроки
 
-Всегда.
-В индекс входят поля независимых разделителей, которые
-разделяют этот регистр.
+Always.
+The index includes fields of independent separators that
+separate this register.
 
 [ОРРХ | ОРНР1 +] Измерение1 +
 [Измерение2 + ...] + Период +
 Регистратор + НомерСтроки
-(Кластерный)
+(Clustered)
 
-Есть хоть одно измерение регистра.
-Индекс, включающий все измерения в том порядке, в
-котором они заданы при конфигурировании, поле Период и
-поле Регистратор.
+The register has at least one dimension.
+An index including all dimensions in the order in which
+they are defined at configuration time, the field Период and
+the field Регистратор.
 
 [ОРРХ | ОРНР1 +] Измерение +
 Период + Регистратор +
 НомерСтроки
 
-Измерению "Измерение" задано свойство "Индексировать".
+The dimension "Измерение" has the property "Индексировать" set.
 
 [ОРРХ | ОРНР1 +] Реквизит +
 Период + Регистратор +
 НомерСтроки
 
-Реквизиту "Реквизит" задано свойство "Индексировать".
+The attribute "Реквизит" has the property "Индексировать" set.
 
 [ОРРХ | ОРНР1 +] Ресурс +
 Период + Регистратор +
 НомерСтроки
 
-Ресурсу "Ресурс" задано свойство "Индексировать".
+The resource "Ресурс" has the property "Индексировать" set.
 
 ИтогиСрезПервых
-Индекс
+Index
 
-Условие и описание
+Condition and description
 
 [ОРРХ | ОРНР1 +] Измерение1 +
 [Измерение2 + ...] + Период
-(Кластерный)
+(Clustered)
 
-Есть хоть одно измерение регистра.
-Индекс, включающий все измерения в том порядке, в
-котором они заданы при конфигурировании.
+The register has at least one dimension.
+An index including all dimensions in the order
+in which they are defined at configuration time.
 
 [ОРРХ | ОРНР1 +] Реквизит +
 [Измерение1 + ...]
 
-Реквизиту "Реквизит" задано свойство "Индексировать".
+The attribute "Реквизит" has the property "Индексировать" set.
 
 [ОРРХ | ОРНР1 +] Ресурс +
 [Измерение1 + ...]
 
-Ресурсу "Ресурс" задано свойство "Индексировать".
+The resource "Ресурс" has the property "Индексировать" set.
 
 [ОРРХ | ОРНР1 +] ИзмерениеN +
 Измерение1 + [Измерение2 +...]
 
-Измерению "ИзмерениеN" задано свойство "Индексировать"
-или свойство "Ведущее" и при этом это не единственное
-измерение.
-Индекс, включающий все измерения. Первое поле ИзмерениеN, затем все остальные измерения в том порядке,
-в котором они заданы при конфигурировании.
+The dimension "ИзмерениеN" has the property "Индексировать" set
+or the property "Ведущее", and it is not the only
+dimension.
+An index including all dimensions. The first field is ИзмерениеN, then all other dimensions in the order
+in which they are defined at configuration time.
 
 ИтогиСрезПоследних
-Индекс
+Index
 
-Условие и описание
+Condition and description
 
 [ОРРХ | ОРНР1 +] Измерение1 +
 [Измерение2 + ...] + Период
-(Кластерный)
+(Clustered)
 
-Есть хоть одно измерение регистра.
-Индекс, включающий все измерения в том порядке, в
-котором они заданы при конфигурировании
+The register has at least one dimension.
+An index including all dimensions in the order
+in which they are defined at configuration time
 
 [ОРРХ | ОРНР1 +] Реквизит +
 [Измерение1 + ...]
 
-Реквизиту "Реквизит" задано свойство "Индексировать"
+The attribute "Реквизит" has the property "Индексировать" set
 
 [ОРРХ | ОРНР1 +] Ресурс +
 [Измерение1 + ...]
 
-Ресурсу "Ресурс" задано свойство "Индексировать"
+The resource "Ресурс" has the property "Индексировать" set
 
 [ОРРХ | ОРНР1 +] ИзмерениеN +
 Измерение1 + [Измерение2 +...]
 
-Измерению "ИзмерениеN" задано свойство "Индексировать"
-или свойство "Ведущее" и при этом это не единственное
-измерение.
-Индекс, включающий все измерения. Первое поле ИзмерениеN, затем все остальные измерения в том порядке,
-в котором они заданы при конфигурировании.
+The dimension "ИзмерениеN" has the property "Индексировать" set
+or the property "Ведущее", and it is not the only
+dimension.
+An index including all dimensions. The first field is ИзмерениеN, then all other dimensions in the order
+in which they are defined at configuration time.
 
-Регистр накопления
-Основная таблица регистра
+Accumulation register
+Main register table
 
-Индекс
+Index
 
-Условие
+Condition
 
 [ОРРХ | ОРНР1 +] Период +
 Регистратор + НомерСтроки
-(Кластерный)
+(Clustered)
 
-Всегда.
+Always.
 
 [ОРНР1 + ... +] Регистратор +
 НомерСтроки
 
-Всегда.
-В индекс входят поля независимых разделителей, которые
-разделяют этот регистр.
+Always.
+The index includes fields of independent separators that
+separate this register.
 
 [ОРРХ | ОРНР1 +] Измерение +
 Период + Регистратор +
 НомерСтроки
 
-Измерению "Измерение" задано свойство "Индексировать".
+The dimension "Измерение" has the property "Индексировать" set.
 
 [ОРРХ | ОРНР1 +] Реквизит +
 Период + Регистратор +
 НомерСтроки
 
-Реквизиту "Реквизит" задано свойство "Индексировать".
+The attribute "Реквизит" has the property "Индексировать" set.
 
-Таблица остатков
-Индекс
+Balances table
+Index
 
-Условие
+Condition
 
 [ОРРХ | ОРНР1 +] Период +
 Измерение1 + ... + ИзмерениеN +
 [DimHash] + [Splitter]
-(Кластерный)
+(Clustered)
 
-Для регистров вида "Остатки".
+For registers of kind "Остатки".
 
 [ОРРХ | ОРНР1 +] Период +
 Измерение
 
-Измерению "Измерение" задано свойство
-"Индексировать"(начиная со второго измерения).
+The dimension "Измерение" has the property
+"Индексировать" set (starting from the second dimension).
 
-Таблица оборотов
-Индекс
+Turnovers table
+Index
 
-Условие
+Condition
 
 [ОРРХ | ОРНР1 +] Период +
 Измерение1 + ... + ИзмерениеN +
 [DimHash] + [Splitter]
-(Кластерный)
+(Clustered)
 
-Для регистров вида "Обороты".
+For registers of kind "Обороты".
 
 [ОРРХ | ОРНР1 +] Измерение +
 Период
 
-Измерению "Измерение" задано свойство "Индексировать".
-(начиная со второго измерения).
+The dimension "Измерение" has the property "Индексировать" set.
+(starting from the second dimension).
 
 Период + DimHash
 
-Для регистров, где количество измерений не позволяет
-организовать уникальный индекс по измерениям
+For registers where the number of dimensions does not allow
+organizing a unique index over dimensions
 
-Таблица опций регистра накопления
-Индекс
+Accumulation register options table
+Index
 
-Условие
-
-[ОРРХ | ОРНР1 +] Идентификатор
-Всегда.
-(Кластерный)
-
-Агрегаты регистра накопления
-Таблица агрегатов
-Индекс
-[ОРРХ | ОРНР1 +] Период +
-Измерение1 + ... + ИзмерениеN
-(Кластерный)
-
-Условие
-Всегда.
-
-Таблица статистики регистра накопления
-Индекс
-
-Условие
+Condition
 
 [ОРРХ | ОРНР1 +] Идентификатор
-Всегда.
-+ Период + Splitter (Кластерный)
-Карта используемых измерений
+Always.
+(Clustered)
 
-Всегда
+Accumulation register aggregates
+Aggregates table
+Index
+[ОРРХ | ОРНР1 +] Период +
+Измерение1 + ... + ИзмерениеN
+(Clustered)
 
-Таблица опций сети агрегатов
-Индекс
+Condition
+Always.
 
-Условие
+Accumulation register statistics table
+Index
+
+Condition
 
 [ОРРХ | ОРНР1 +] Идентификатор
-Всегда.
-(Кластерный)
+Always.
++ Период + Splitter (Clustered)
+Map of used dimensions
 
-Таблица буфера новых оборотов регистра накопления
-Индекс
+Always
+
+Aggregate network options table
+Index
+
+Condition
+
+[ОРРХ | ОРНР1 +] Идентификатор
+Always.
+(Clustered)
+
+Buffer table of new accumulation register turnovers
+Index
 [ОРРХ | ОРНР1 +] Период +
 Измерение1 + ... + ИзмерениеN
-(Кластерный)
+(Clustered)
 
-Условие
-Всегда.
+Condition
+Always.
 
-Таблица новых оборотов регистра накопления
-Индекс
+New turnovers table of the accumulation register
+Index
 [ОРРХ | ОРНР1 +] Период +
 Измерение1 + ... + ИзмерениеN
-(Кластерный) + Splitter
+(Clustered) + Splitter
 
-Условие
-Всегда.
+Condition
+Always.
 
-Таблица кодов измерений регистра накопления
-Индекс
+Dimension codes table of the accumulation register
+Index
 [ОРРХ | ОРНР1 +] Период + UUID
 измерения 1 + ... + UUID
-измеренияN (Кластерный)
+измеренияN (Clustered)
 
-Условие
-Всегда.
+Condition
+Always.
 
-Таблица сети агрегатов
-Индекс
+Aggregate network table
+Index
 
-Условие
+Condition
 
 [ОРРХ | ОРНР1 +] Идентификатор
 + UUID измерения 1 + ... + UUID
-Всегда.
-измеренияN (Кластерный)
+Always.
+измеренияN (Clustered)
 
-Регистр бухгалтерии
-Основная таблица регистра без корреспонденции
-Индекс
+Accounting register
+Main register table without correspondence
+Index
 [ОРРХ | ОРНР1 +] Период +
 Регистратор + НомерСтроки
-(Кластерный)
+(Clustered)
 
-Условие и описание
-Всегда.
+Condition and description
+Always.
 
 [ОРНР1 + ... +] Регистратор +
 НомерСтроки
 
-Всегда.
-В индекс входят поля независимых разделителей, которые
-разделяют этот регистр.
+Always.
+The index includes fields of independent separators that
+separate this register.
 
 [ОРРХ | ОРНР1 +] Счет + Период
 + Регистратор
 
-Регистру назначен план счетов.
+A chart of accounts is assigned to the register.
 
 [ОРРХ | ОРНР1 +] Измерение +
 Период + Регистратор +
 НомерСтроки
 
-Измерению "Измерение" задано свойство "Индексировать".
+The dimension "Измерение" has the property "Индексировать" set.
 
 [ОРРХ | ОРНР1 +] Реквизит +
 Период + Регистратор +
 НомерСтроки
 
-Реквизиту "Реквизит" задано свойство "Индексировать".
+The attribute "Реквизит" has the property "Индексировать" set.
 
-Основная таблица регистра с корреспонденцией
-От вышеприведенного состава индексов отличается лишь тем, что вместо индекса по счету
-создаются два индекса по счету дебета и счету кредита.
-Индекс
+Main register table with correspondence
+It differs from the index composition above only in that instead of the account index
+two indexes are created: by debit account and by credit account.
+Index
 
-Условие
+Condition
 
 [ОРРХ | ОРНР1 +] СчетДт +
 Период + Регистратор
 
-Регистру назначен план счетов.
+A chart of accounts is assigned to the register.
 
 [ОРРХ | ОРНР1 +] СчетКт +
 Период + Регистратор
 
-Регистру назначен план счетов.
+A chart of accounts is assigned to the register.
 
-Таблица итогов по счету
-Индекс
+Account totals table
+Index
 [ОРРХ | ОРНР1 +] Период
 [+ Счет]
 + ИзмерениеБезПризнакаУчета1 +
@@ -935,18 +921,17 @@
 [+ ХэшИзмерений]
 [+ РазделительИтогов]
 
-Условие
-Поле "Счет" добавляется в случае, если регистру определен
-план счетов.
+Condition
+The field "Счет" is added if a chart of accounts is defined
+for the register.
 
-Поле "ХэшИзмерений" добавляется, количество других полей
-больше 15.
-Поле "РазделительИтогов" добавляется, если включено
-разделение итогов.
+The field "ХэшИзмерений" is added when the number of other fields
+is greater than 15.
+The field "РазделительИтогов" is added if totals splitting is enabled.
 
-Таблица итогов между счетами
-Только для регистров, поддерживающих корреспонденцию
-Индекс
+Inter-account totals table
+Only for registers supporting correspondence
+Index
 [ОРРХ | ОРНР1 +]
 ИзмерениеДт1 + ИзмерениеКт1 +
 ...
@@ -954,753 +939,738 @@
 [+ ХэшИзмерений]
 [+ РазделительИтогов]
 
-Условие
-Для не балансовых измерений.
-Для балансовых измерений.
-Поле "ХэшИзмерений" добавляется, количество других полей
-больше 15.
-Поле "РазделительИтогов" добавляется, если включено
-разделение итогов.
+Condition
+For non-balance dimensions.
+For balance dimensions.
+The field "ХэшИзмерений" is added when the number of other fields
+is greater than 15.
+The field "РазделительИтогов" is added if totals splitting is enabled.
 
-Таблица со значениями субконто
+Table with subconto values
 
-Индекс
+Index
 
-Условие
+Condition
 
 [ОРРХ | ОРНР1 +] Регистратор +
 НомерСтроки + Корреспонденция
 
-Всегда.
+Always.
 
 [ОРРХ | ОРНР1 +] Период +
 Регистратор + НомерСтроки +
 ВидСубконто + Корреспонденция
-(Кластерный)
+(Clustered)
 
-Всегда.
+Always.
 
 [ОРРХ | ОРНР1 +] ВидСубконто +
 Значение
 
-Всегда.
+Always.
 
-Таблица опций регистра бухгалтерии
-Индекс
+Accounting register options table
+Index
 
-Условие
+Condition
 
 [ОРРХ | ОРНР1 +] Идентификатор
-Всегда.
-(Кластерный)
+Always.
+(Clustered)
 
-Регистр расчета
-Основная таблица регистра расчета
-Индекс
+Calculation register
+Main calculation register table
+Index
 
-Условие и описание
+Condition and description
 
 [ОРРХ | ОРНР1 +]
 ПериодРегистрации + Регистратор
 + НомерСтроки
 
-Всегда.
+Always.
 
 [ОРНР1 + ... +] Регистратор +
 НомерСтроки
 
-Всегда.
-В индекс входят поля независимых разделителей, которые
-разделяют этот регистр.
+Always.
+The index includes fields of independent separators that
+separate this register.
 
 [ОРРХ | ОРНР1 +]
 ПериодРегистрации +
 [БазовоеИзмерение1 +...]
 
-Всегда.
-Индекс по полю ПериодРегистрации и всем базовым
-измерениям, т.е. по тем измерениям, у которых установлено
-свойство "Базовое". Базовые измерения следуют в том
-порядке, в котором они заданы при конфигурировании.
+Always.
+Index by the field ПериодРегистрации and all base
+dimensions, i.e. dimensions with the property "Базовое" set.
+Base dimensions follow in the order
+in which they are defined at configuration time.
 
 [ОРРХ | ОРНР1 +]
 [БазовоеИзмерение1 +...] +
 ПериодРегистрации
 
-Есть хоть одно базовое измерение.
-Индекс по всем базовым измерениям, т.е. по тем измерениям,
-у которых установлено свойство "Базовое" и полю
+There is at least one base dimension.
+Index by all base dimensions, i.e. dimensions with the property
+"Базовое" set, and the field
 ПериодРегистрации.
 
 [ОРРХ | ОРНР1 +]
 ПериодДействия +
 [БазовоеИзмерение1 +...]
 
-Установлено свойство регистра расчета "ПериодДействия".
-Индекс по полю ПериодДействия и всем базовым
-измерениям, т.е. по тем измерениям, у которых установлено
-свойство "Базовое". Базовые измерения следуют в том
-порядке, в котором они заданы при конфигурировании.
+The calculation register property "ПериодДействия" is set.
+Index by the field ПериодДействия and all base
+dimensions, i.e. dimensions with the property "Базовое" set.
+Base dimensions follow in the order
+in which they are defined at configuration time.
 
 [ОРРХ | ОРНР1 +]
 [БазовоеИзмерение1 +...] +
 ПериодДействия
 
-Установлено свойство регистра расчета "ПериодДействия" и
-есть хоть одно базовое измерение.
-Индекс по всем базовым измерениям, т.е. по тем измерениям,
-у которых установлено свойство "Базовое" и полю
+The calculation register property "ПериодДействия" is set and
+there is at least one base dimension.
+Index by all base dimensions, i.e. dimensions with the property
+"Базовое" set, and the field
 ПериодРегистрации.
 
 [ОРРХ | ОРНР1 +] Измерение +
 ПериодРегистрации + Регистратор
 + НомерСтроки
 
-Измерению "Измерение" задано свойство "Индексировать".
+The dimension "Измерение" has the property "Индексировать" set.
 
 [ОРРХ | ОРНР1 +] Реквизит +
 ПериодРегистрации + Регистратор
 + НомерСтроки
 
-Реквизиту "Реквизит" задано свойство "Индексировать".
+The attribute "Реквизит" has the property "Индексировать" set.
 
-Таблица перерасчета
-Индекс
+Recalculation table
+Index
 [ОРРХ | ОРНР1 +]
 Регистратор +
 ВидРасчета +
 [Измерение1 + ...]
 
-Условие и описание
-Всегда.
-Индекс по полю Регистратор, полю ВидРасчета и всем полям измерений
-перерасчета в той последовательности, в которой они
-сконфигурированы.
+Condition and description
+Always.
+Index by the field Регистратор, the field ВидРасчета and all recalculation
+dimension fields in the sequence in which they are
+configured.
 
-Tаблица фактических периодов действия
-Индекс
+Table of actual action periods
+Index
 [ОРРХ | ОРНР1 +]
 Регистратор +
 НомерСтроки
 
-Условие и описание
-Всегда.
-В индекс входят поля независимых разделителей, которые разделяют
-этот регистр.
+Condition and description
+Always.
+The index includes fields of independent separators that separate
+this register.
 
-Таблица опций регистра расчета
-Индекс
+Calculation register options table
+Index
 
-Условие
+Condition
 
 [ОРРХ | ОРНР1 +] Идентификатор
-Всегда.
-(Кластерный)
+Always.
+(Clustered)
 
-Последовательности
-Основная таблица последовательности
-Индекс
+Sequences
+Main sequence table
+Index
 
-Условие и описание
+Condition and description
 
 [ОРРХ | ОРНР1 +]
 Регистратор
 
-Всегда.
+Always.
 
 [ОРРХ | ОРНР1 +]
 [Измерение1 + ...] +
 Период + Регистратор
 
-Всегда.
-Индекс по всем полям измерений, полю Период и полю Регистратор.
-Поля измерений следуют в том порядке, в котором они заданы при
-конфигурировании.
+Always.
+Index by all dimension fields, the field Период and the field Регистратор.
+Dimension fields follow in the order in which they are defined at
+configuration time.
 
-Таблица границ последовательности
-Индекс
+Sequence boundary table
+Index
 [ОРРХ | ОРНР1 +] [Измерение1 +
 ...] + Период + Регистратор
 
-Условие и описание
-Всегда.
-Индекс по всем полям измерений, полю Период и полю
-Регистратор. Поля измерений следуют в том порядке, в
-котором они заданы при конфигурировании.
+Condition and description
+Always.
+Index by all dimension fields, the field Период and the field
+Регистратор. Dimension fields follow in the order in
+which they are defined at configuration time.
 
-Перечисления
+Enums
 
-Индекс
+Index
 
-Условие и описание
+Condition and description
 
 [ОРРХ | ОРНР1 +] Порядок +
 Ссылка
 
-Всегда.
-Поле порядок таблиц перечислений соответствует порядку в
-котором значения перечисления расположены в дереве
-конфигурации.
+Always.
+The order field of enum tables corresponds to the order in
+which enum values are located in the configuration
+tree.
 
 [ОРНР1 + ... +] Ссылка
-(Кластерный)
+(Clustered)
 
-Всегда.
-В индекс входят поля независимых разделителей, которые
-разделяют этот регистр.
+Always.
+The index includes fields of independent separators that
+separate this register.
 
-Бизнес-процессы
-Основная таблица бизнес-процесса
-Индекс
+Business processes
+Main business process table
+Index
 
-Условие
+Condition
 
 [ОРНР1 + ... +] Ссылка
-(Кластерный)
+(Clustered)
 
-Всегда.
-В индекс входят поля независимых разделителей, которые
-разделяют этот регистр.
+Always.
+The index includes fields of independent separators that
+separate this register.
 
 [ОРРХ | ОРНР1 +] Дата + Ссылка
 
-Всегда.
+Always.
 
 [ОРРХ | ОРНР1 +] Номер +
 Ссылка
 
-Свойство "Длина номера" не равно 0.
+Property "Длина номера" is not 0.
 
 [ОРРХ | ОРНР1 +] Завершен +
 Дата + Ссылка
 
-Всегда
+Always
 
 [ОРРХ | ОРНР1 +] Стартован +
 Дата + Ссылка
 
-Всегда
+Always
 
 [ОРРХ | ОРНР1 +] ВедущаяЗадача
-Всегда
+Always
 + Ссылка
 [ОРРХ | ОРНР1 +] Реквизит +
 Ссылка
 
-Для реквизита "Реквизит" свойство "Индексировать"
-установлено в значение "Индексировать".
+For the attribute "Реквизит" the property "Индексировать"
+is set to "Индексировать".
 
 [ОРРХ | ОРНР1 +] Реквизит +
 Дата + Ссылка
 
-Для реквизита "Реквизит" свойство "Индексировать"
-установлено в значение "Индексировать с доп.
+For the attribute "Реквизит" the property "Индексировать"
+is set to "Индексировать с доп.
 упорядочиванием".
 
 [ОРРХ | ОРНР1 +] Реквизит
 
-Бизнес-процесс включен в критерий отбора через реквизит
+The business process is included in the filter criterion via the attribute
 "Реквизит".
 
-Таблица точек маршрута бизнес-процесса
-Индекс
+Table of business process route points
+Index
 
-Условие и описание
+Condition and description
 
 [ОРНР1 + ... +] Ссылка
-(Кластерный)
+(Clustered)
 
-Всегда.
-В индекс входят поля независимых разделителей, которые разделяют
-этот регистр.
+Always.
+The index includes fields of independent separators that separate
+this register.
 
 [ОРРХ | ОРНР1 +]
 Порядок + Ссылка
 
-Всегда.
-Поле порядок таблиц точек соответствует порядку в котором точки
-маршрута были введены в графическую схему бизнес-процесса.
+Always.
+The order field of point tables corresponds to the order in which route
+points were entered into the business process flowchart.
 
-Задачи
-Индекс
+Tasks
+Index
 [ОРНР1 + ... +] Ссылка
-(Кластерный)
+(Clustered)
 
-Условие
-Всегда.
-В индекс входят поля независимых разделителей, которые
-разделяют этот регистр.
+Condition
+Always.
+The index includes fields of independent separators that
+separate this register.
 
 [ОРРХ | ОРНР1 +] Дата + Ссылка
 
-Всегда.
+Always.
 
 [ОРРХ | ОРНР1 +] Номер +
 Ссылка
 
-Свойство "Длина номера" не равно 0.
+Property "Длина номера" is not 0.
 
 [ОРРХ | ОРНР1 +] Наименование
 + Ссылка
 
-Всегда
+Always
 
 [ОРРХ | ОРНР1 +] Выполнена +
 Наименование + Ссылка
 
-Всегда
+Always
 
 [ОРРХ | ОРНР1 +] Выполнена +
 Дата + Ссылка
 
-Всегда
+Always
 
 [ОРРХ | ОРНР1 +] БизнесПроцесс
 + ТочкаМаршрута + Ссылка
 
-Всегда
+Always
 
 [ОРРХ | ОРНР1 +] Выполнена +
-БизнесПроцесс + ТочкаМаршрута + Всегда
+БизнесПроцесс + ТочкаМаршрута + Always
 Ссылка
 [ОРРХ | ОРНР1 +] БизнесПроцесс
 + Дата + Ссылка
 
-Всегда
+Always
 
 [ОРРХ | ОРНР1 +] Реквизит +
 Ссылка
 
-Для реквизита "Реквизит" свойство "Индексировать"
-установлено в значение "Индексировать".
+For the attribute "Реквизит" the property "Индексировать"
+is set to "Индексировать".
 
 [ОРРХ | ОРНР1 +] Реквизит +
 Дата + Ссылка
 
-Для реквизита "Реквизит" свойство "Индексировать"
-установлено в значение "Индексировать с доп.
+For the attribute "Реквизит" the property "Индексировать"
+is set to "Индексировать с доп.
 упорядочиванием".
 
 [ОРРХ | ОРНР1 +] Реквизит
 
-Задача включена в критерий отбора через реквизит
+The task is included in the filter criterion via the attribute
 "Реквизит".
 
-Сервисы интеграции
-Таблица настроек сервиса интеграции
-Индекс
-[ОРРХ | ОРНР1 +] (Кластерный)
+Integration services
+Integration service settings table
+Index
+[ОРРХ | ОРНР1 +] (Clustered)
 
-Условие
-Всегда.
-В индекс входят поля независимых разделителей, которые
-разделяют этот план счетов.
+Condition
+Always.
+The index includes fields of independent separators that
+separate this chart of accounts.
 
-Таблица очереди отправки канала сервиса интеграции
-Индекс
+Integration service channel send queue table
+Index
 
-Условие
+Condition
 
-Всегда.
+Always.
 [ОРРХ | ОРНР1 +] Идентификатор
-В индекс входят поля независимых разделителей, которые
-сообщения (Кластерный)
-разделяют этот сервис интеграции.
+The index includes fields of independent separators that
+сообщения (Clustered)
+separate this integration service.
 Позиция сообщения
 
-Всегда.
+Always.
 
-Таблица очереди получения канала сервиса интеграции
-Индекс
+Integration service channel receive queue table
+Index
 
-Условие
+Condition
 
-Всегда.
+Always.
 [ОРРХ | ОРНР1 +] Идентификатор
-В индекс входят поля независимых разделителей, которые
-сообщения (Кластерный)
-разделяют этот сервис интеграции.
+The index includes fields of independent separators that
+сообщения (Clustered)
+separate this integration service.
 Позиция сообщения
 
-Всегда.
+Always.
 
-Таблицы регистрации изменений
-Таблицы регистрации изменений для различных объектов метаданных отличаются только составом
-и типами полей ключа данных - набора полей, однозначно определяющих данные. Для объектных
-типов данных (Справочник, Документ, ПланСчетов и др.) - это "Ссылка"; для регистров,
-подчиненных регистратору (РегистрНакопления, РегистрБухгалтерии, РегистрСведений,
-подчиненный регистратору и др.) - "Регистратор"; для регистров сведений, неподчиненных
-регистратору - поля, соответствующие изменениям, входящим в основной отбор регистра; для
-констант - идентификатор объекта метаданных Константы.
-Индекс
+Change registration tables
+Change registration tables for different metadata objects differ only in the composition
+and types of data key fields - a set of fields that uniquely identify data. For object
+data types (Справочник, Документ, ПланСчетов, etc.) it is "Ссылка"; for registers
+subordinate to a registrar (РегистрНакопления, РегистрБухгалтерии, РегистрСведений
+subordinate to a registrar, etc.) - "Регистратор"; for information registers not subordinate
+to a registrar - the fields corresponding to changes included in the main register filter; for
+constants - the ID of the metadata object Константы.
+Index
 [ОРРХ | ОРНР1 +] Узел + Номер
 сообщения + Ключ данных
 
-Условие и описание
-Всегда.
+Condition and description
+Always.
 
 [ОРРХ | ОРНР1 +] Ключ данных +
-Всегда.
+Always.
 Узел + Номер сообщения
 
-Таблица списка пользователей
-Индекс
+User list table
+Index
 
-Условие и описание
+Condition and description
 
-Уникальный идентификатор
-пользователя (Кластерный)
+Unique user ID
+(Clustered)
 
-Всегда.
+Always.
 
-Идентификатор набора ролей
+Role set ID
 
-Всегда.
+Always.
 
-Имя пользователя ОС
+OS user name
 
-Всегда.
+Always.
 
-[ОРРХ +] Имя пользователя ОС
+[ОРРХ +] OS user name
 
-В конфигурации определен хотя бы один разделитель.
+At least one separator is defined in the configuration.
 
-Имя пользователя
+User name
 
-Всегда.
+Always.
 
-[ОРРХ +] Имя пользователя
+[ОРРХ +] User name
 
-В конфигурации определен хотя бы один разделитель.
+At least one separator is defined in the configuration.
 
-[ОРРХ +] Полное имя пользователя
+[ОРРХ +] Full user name
 
-Всегда.
-В индекс входит значение хэш-функции набора значений
-разделителей, если в конфигурации определен хотя бы один
-разделитель.
+Always.
+The index includes the hash value of the separator value set
+if at least one separator is defined in the configuration.
 
-Показывать пользователя в списке
-для диалога аутентификации
+Show user in the list
+for the authentication dialog
 
-Всегда.
+Always.
 
-Разрешена аутентификация
-средствами 1С:Предприятия
+Authentication by 1C:Enterprise means
+is allowed
 
-Всегда.
+Always.
 
-Таблица истории работы пользователей
-Индекс
+User activity history table
+Index
 
-Условие и описание
+Condition and description
 
-[ОРРХ +] Уникальный
-идентификатор записи
+[ОРРХ +] Unique
+record ID
 
-Всегда.
-В индекс входит значение хэш-функции набора значений
-разделителей, если в конфигурации определен хотя бы один
-разделитель.
+Always.
+The index includes the hash value of the separator value set
+if at least one separator is defined in the configuration.
 
-[ОРРХ +] Уникальный
-идентификатор пользователя +
-Дата время
+[ОРРХ +] Unique
+user ID +
+Date time
 
-Всегда.
-В индекс входит значение хэш-функции набора значений
-разделителей, если в конфигурации определен хотя бы один
-разделитель.
+Always.
+The index includes the hash value of the separator value set
+if at least one separator is defined in the configuration.
 
-[ОРРХ +] Уникальный
-идентификатор пользователя +
-Хеш по URL
+[ОРРХ +] Unique
+user ID +
+Hash by URL
 
-Всегда.
-В индекс входит значение хэш-функции набора значений
-разделителей, если в конфигурации определен хотя бы один
-разделитель.
+Always.
+The index includes the hash value of the separator value set
+if at least one separator is defined in the configuration.
 
 ОРРХ +
 ИспользованиеРазделителя1 + ...
 
-В конфигурации определен хотя бы один разделитель.
+At least one separator is defined in the configuration.
 
-Таблица хранилища системных настроек
-Таблица хранилища настроек отчетов
-Таблица хранилища настроек вариантов отчетов
-Таблица хранилища общих настроек
-Таблица хранилища настроек данных форм
-Таблица хранилища настроек динамических списков
-Таблица хранилища настроек обработки ошибок
-Таблица хранилища внешних данных навигационных ссылок
-Таблица хранилища внутренних настроек
-Таблица хранилища настроек стандартного интерфейса OData
-Индекс
+System settings storage table
+Report settings storage table
+Report variant settings storage table
+Common settings storage table
+Form data settings storage table
+Dynamic list settings storage table
+Error handling settings storage table
+Navigation link external data storage table
+Internal settings storage table
+OData standard interface settings storage table
+Index
 
-Условие и описание
+Condition and description
 
-[ОРРХ +] Хеш от уникального
-идентификатора пользователя +
-Имя предмета настройки + Хеш от
-имени множественной
-(именованной) настройки + Версия
-настройки
+[ОРРХ +] Hash of unique
+user ID +
+Setting subject name + Hash of
+multiple (named) setting name + Setting
+version
 
-Всегда.
-В индекс входит значение хэш-функции набора значений
-разделителей, если в конфигурации определен хотя бы один
-разделитель.
+Always.
+The index includes the hash value of the separator value
+set if at least one separator is defined in the configuration.
 
 ОРРХ +
 ИспользованиеРазделителя1 + ...
 
-В конфигурации определен хотя бы один разделитель.
+At least one separator is defined in the configuration.
 
-Таблица очереди истории данных
-Индекс
-Идентификатор объекта
-метаданных + Идентификатор
-данных + Позиция сообщения в
-очереди (Кластерный)
+Data history queue table
+Index
+Metadata object ID
++ Data ID + Message position in
+queue (Clustered)
 
-Условие и описание
+Condition and description
 
-Всегда.
+Always.
 
-Таблица версий данных истории данных
-Индекс
-Идентификатор данных + Номер
-версии данных (Кластерный)
+Data history data versions table
+Index
+Data ID + Data
+version number (Clustered)
 
-Условие и описание
-Всегда.
+Condition and description
+Always.
 
-Таблицы последних версий истории данных
+Data history latest versions tables
 
-Индекс
+Index
 
-Условие и описание
+Condition and description
 
-[ОРР1 + … + ] + Идентификатор
-объекта метаданных +
-Идентификатор данных
-(Кластерный)
+[ОРР1 + … + ] + Metadata
+object ID +
+Data ID
+(Clustered)
 
-Всегда.
-В индекс входят поля разделителей
+Always.
+The index includes separator fields
 
-Таблица версий метаданных истории данных
-Индекс
+Data history metadata versions table
+Index
 
-Условие и описание
+Condition and description
 
-[ОРНР1 + … + ] + Идентификатор
-объекта метаданных + Флаг версия
-метаданных сформирована при
-изменении настроек + Флаг версия
-метаданных является актуальной +
-Номер актуальной версии
-метаданных (Кластерный)
+[ОРНР1 + … + ] + Metadata
+object ID + Metadata version
+formed flag on settings change + Metadata version
+is current flag +
+Current metadata version
+number (Clustered)
 
-Всегда.
-В индекс входят поля независимых разделителей
+Always.
+The index includes fields of independent separators
 
-Идентификатор объекта
-метаданных + Номер актуальной
-версии метаданных
+Metadata object ID
++ Current metadata
+version number
 
-Всегда.
+Always.
 
-Таблица настроек истории данных
-Индекс
+Data history settings table
+Index
 
-Условие и описание
+Condition and description
 
-[ОРНР1 + … + ] + Идентификатор
-объекта метаданных (Кластерный)
+[ОРНР1 + … + ] + Metadata
+object ID (Clustered)
 
-Всегда.
-В индекс входят поля независимых разделителей
+Always.
+The index includes fields of independent separators
 
-Таблица очереди обработки после записи версии истории данных
-Индекс
+Post-write processing queue table of a data history version
+Index
 
-Условие и описание
+Condition and description
 
-[ОРР1 + … + ] + Идентификатор
-объекта метаданных +
-Идентификатор данных + Номер
-версии (Кластерный)
+[ОРР1 + … + ] + Metadata
+object ID +
+Data ID + Version
+number (Clustered)
 
-Всегда.
-В индекс входят поля разделителей
+Always.
+The index includes separator fields
 
-Копии базы данных
-Таблица копий
-Индекс
+Database copies
+Copies table
+Index
 
-Условие
+Condition
 
-Идентификатор копии + Имя копии
-(Кластерный)
+Copy ID + Copy name
+(Clustered)
 
-Всегда.
+Always.
 
-Таблица настроек копий
-Индекс
-Идентификатор копии
-(Кластерный)
+Copy settings table
+Index
+Copy ID
+(Clustered)
 
-Условие и описание
-Всегда.
+Condition and description
+Always.
 
-Таблица состояний таблиц копий
+Copy table states table
 
-Индекс
+Index
 
-Условие и описание
+Condition and description
 
-Идентификатор копии +
-Имя таблицы
-(Кластерный)
+Copy ID +
+Table name
+(Clustered)
 
-Всегда.
+Always.
 
-Таблица изменений в процессе первоначального копирования
-Индекс
-Идентификатор копии +
-Имя таблицы
-(Кластерный)
+Changes during initial copy table
+Index
+Copy ID +
+Table name
+(Clustered)
 
-Условие и описание
-Всегда.
+Condition and description
+Always.
 
-Таблица объектов изменений
-Индекс
-Идентификатор объекта
-(Кластерный)
+Change objects table
+Index
+Object ID
+(Clustered)
 
-Условие и описание
-Всегда.
+Condition and description
+Always.
 
-Таблица с информацией по блокам первоначального копирования
-Индекс
-Идентификатор копии +
-Имя таблицы + Номер
-блока (Кластерный)
+Table with information on initial copy blocks
+Index
+Copy ID +
+Table name + Block
+number (Clustered)
 
-Условие и описание
-Всегда.
+Condition and description
+Always.
 
-Таблица журналов транзакций
-Индекс
+Transaction journals table
+Index
 
-Условие и описание
+Condition and description
 
-Номер транзакции
-(Кластерный)
+Transaction number
+(Clustered)
 
-Всегда.
+Always.
 
-Идентификатор
-транзакции
+Transaction ID
 
-Всегда.
+Always.
 
-Таблица с измененными в транзакциях таблицах
-Индекс
+Table of tables changed in transactions
+Index
 
-Условие и описание
+Condition and description
 
-Номер транзакции +
-Имя таблицы
-(Кластерный)
+Transaction number +
+Table name
+(Clustered)
 
-Всегда.
+Always.
 
-Имя таблицы
+Table name
 
-Всегда.
+Always.
 
-Таблица перенесенных транзакций
-Индекс
-Идентификатор копии +
-Номер транзакции
-(Кластерный)
+Transferred transactions table
+Index
+Copy ID +
+Transaction number
+(Clustered)
 
-Условие и описание
-Всегда.
+Condition and description
+Always.
 
-Таблица временных файлов для обмена с мобильным клиентом с автономным
-режимом
+Temp files table for exchange with the offline mobile client
 
-Индекс
-Идентификатор
-записи
+Index
+Record ID
 
-Условие и описание
-Всегда.
+Condition and description
+Always.
 
-Таблица табличных пространств базы данных
-Индекс
+Database tablespaces table
+Index
 
-Условие и описание
+Condition and description
 
-Имя табличного
-пространства
-(Кластерный)
+Tablespace
+name
+(Clustered)
 
-Всегда.
+Always.
 
-Идентификатор
-табличного пространства
+Tablespace ID
 
-Всегда.
+Always.
 
-Таблица элементов состава табличных пространств базы данных
-Индекс
-Идентификатор объекта
-метаданных + Признак
-назначения элемента +
-Признак размещения
-данных (Кластерный)
+Database tablespace composition elements table
+Index
+Metadata object ID + Element
+purpose flag +
+Data placement
+flag (Clustered)
 
-Условие и описание
+Condition and description
 
-Всегда.
+Always.
 
-Идентификатор табличного
-пространства + Признак
-Всегда.
-назначения элемента
+Tablespace ID + Element
+purpose flag
+Always.
 
-Дополнительные индексы
-Для всех объектов дерева метаданных объектного типа, журналов документов и регистров доступна
-функциональность дополнительных индексов (при условии наличия КОРП лицензии).
-В качестве источника полей дополнительного индекса может выступать либо объект метаданных,
-либо табличная часть объекта метаданных, либо виртуальная таблица объекта метаданных.
-Смешение полей из разных источников в одном индексе не допускается, однако существует
-возможность добавления нескольких индексов с использованием полей из разных источников.
-Например, нельзя создать индекс, включающий поля объекта метаданных и поля табличной части
-этого объекта одновременно, но можно добавить два (или более) разных индексов, один из которых
-будет включать поля объекта, а другой – поля табличной части объекта.
-Добавление в дополнительный индекс полей объекта метаданных приводит к созданию индекса на
-основной таблице объекта метаданных.
-Добавление в дополнительный индекс полей табличной части объекта метаданных приводит к
-созданию индекса на таблице, хранящей данные табличной части.
-Добавление в дополнительный индекс полей виртуальной таблицы объекта метаданных в общем
-случае приводит к созданию нескольких индексов, охватывающих те таблицы, которые участвуют в
-формировании виртуальной таблицы. Например, создание дополнительного индекса с
-использованием полей виртуальной таблицы "Остатки" регистра накопления приводит к созданию
-двух индексов – индекса на основной таблице регистра накопления и индекса на таблице итогов
-регистра накопления.
-Поля объекта метаданных, включенные в состав дополнительных индексов, могут быть
-"Индексируемыми" – такие поля входят в состав ключевых колонок индекса, либо
-"Дополнительными" – такие поля добавляются в индекс в качестве включенных колонок, а если
-СУБД не поддерживает включенные колонки, то такие поля игнорируются.
-Для индексирования доступны все поля выбранного источника, за исключением полей с типом
-"Двоичные данные" и с типом "Строка" неограниченной длины.
-Платформа "1С:Предприятие 8" не накладывает ограничений на количество дополнительных
+Additional indexes
+For all objects of the metadata tree of the object type, document journals and registers, the
+additional indexes functionality is available (provided a CORP license is present).
+The source of additional index fields can be either a metadata object,
+or a tabular section of a metadata object, or a virtual table of a metadata object.
+Mixing fields from different sources in one index is not allowed, however there is
+the possibility of adding several indexes using fields from different sources.
+For example, you cannot create an index including fields of a metadata object and fields of a tabular section
+of this object at the same time, but you can add two (or more) different indexes, one of which
+will include object fields and the other - tabular section fields of the object.
+Adding metadata object fields to an additional index creates an index on
+the main table of the metadata object.
+Adding tabular section fields of a metadata object to an additional index creates
+an index on the table storing the tabular section data.
+Adding virtual table fields of a metadata object to an additional index generally
+creates several indexes covering the tables that participate in
+forming the virtual table. For example, creating an additional index with
+the use of fields of the "Остатки" virtual table of an accumulation register creates
+two indexes - an index on the main table of the accumulation register and an index on the totals table
+of the accumulation register.
+Metadata object fields included in additional indexes can be
+"Indexable" - such fields are included in the key columns of the index, or
+"Additional" - such fields are added to the index as included columns, and if
+the DBMS does not support included columns, such fields are ignored.
+All fields of the selected source are available for indexing, except fields with the type
+"Двоичные данные" and with the type "Строка" of unlimited length.
+The 1C:Enterprise 8 platform does not impose restrictions on the number of additional
 
-индексов, при этом каждый индекс может содержать не более 16 физических колонок.
+indexes, while each index can contain no more than 16 physical columns.

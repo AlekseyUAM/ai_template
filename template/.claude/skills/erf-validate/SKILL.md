@@ -1,6 +1,6 @@
 ---
 name: erf-validate
-description: Валидация внешнего отчёта 1С (ERF). Используй после создания или модификации отчёта для проверки корректности
+description: Validation of a 1C external report (ERF). Use after creating or modifying a report to check correctness
 argument-hint: <ObjectPath> [-Detailed] [-MaxErrors 30]
 allowed-tools:
   - Bash
@@ -8,27 +8,26 @@ allowed-tools:
   - Glob
 ---
 
-# /erf-validate — валидация внешнего отчёта (ERF)
+# /erf-validate - external report (ERF) validation
 
-Проверяет структурную корректность XML-исходников внешнего отчёта: корневую структуру, InternalInfo, свойства (включая MainDataCompositionSchema), ChildObjects, реквизиты, табличные части, уникальность имён, наличие файлов форм и макетов.
+Checks the structural correctness of the external report XML sources: root structure, InternalInfo, properties (including MainDataCompositionSchema), ChildObjects, attributes, tabular sections, name uniqueness, presence of form and template files.
 
-Использует тот же скрипт, что и `/epf-validate` — автоопределение по типу элемента (ExternalReport).
+Uses the same script as `/epf-validate` - auto-detection by element type (ExternalReport).
 
-Проверяется XML. Синтаксис модулей проверяет сборка: навык `1c-batch` (команда `build-epf`).
+XML is checked. Module syntax is checked by the build: skill `1c-batch` (command `build-epf`).
 
-## Параметры
+## Parameters
 
-| Параметр   | Обяз. | Умолч. | Описание                                      |
+| Parameter   | Req. | Default | Description                                      |
 |------------|:-----:|---------|-------------------------------------------------|
-| ObjectPath | да    | —       | Путь к корневому XML или каталогу отчёта        |
-| Detailed   | нет   | —       | Подробный вывод (все проверки, включая успешные) |
-| MaxErrors  | нет   | 30      | Остановиться после N ошибок                     |
-| OutFile    | нет   | —       | Записать результат в файл (UTF-8 BOM)           |
+| ObjectPath | yes   | -       | Path to the root XML or the report directory        |
+| Detailed   | no    | -       | Detailed output (all checks, including successful ones) |
+| MaxErrors  | no    | 30      | Stop after N errors                     |
+| OutFile    | no    | -       | Write the result to a file (UTF-8 BOM)           |
 
-## Команда
+## Command
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/../epf-validate/scripts/epf-validate.py" -ObjectPath "src/МойОтчёт"
 python "${CLAUDE_SKILL_DIR}/../epf-validate/scripts/epf-validate.py" -ObjectPath "src/МойОтчёт/МойОтчёт.xml"
 ```
-

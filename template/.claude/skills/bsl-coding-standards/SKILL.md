@@ -1,515 +1,514 @@
 ---
 name: bsl-coding-standards
-description: Чеклист ручного код-ревью BSL-кода 1С — требования стандартов, которые нельзя проверить автоматически (нужны семантика задачи, анализ потока данных, знание метаданных/состава конфигурации, запросы, ИТОГИ, СКД и регистры). Используй при ревью модуля после автоматических проверок.
+description: Manual code review checklist for 1C BSL code - standards requirements that cannot be checked automatically (task semantics, data flow analysis, knowledge of metadata/configuration composition, queries, TOTALS (ИТОГИ), DCS and registers are required). Use when reviewing a module after automatic checks.
 allowed-tools:
   - Read
 ---
 
-# bsl-coding-standards — чеклист ручного ревью BSL-кода 1С
+# bsl-coding-standards - manual review checklist for 1C BSL code
 
-Здесь только требования стандартов, которые **нельзя заскриптовать** и проверяются
-вручную. Проверяй каждый пункт глазами. Пункты сгруппированы по темам; чеклист
-пополняется по мере разбора документов стандартов.
+This file contains only standards requirements that **cannot be scripted** and are checked
+manually. Check every item by eye. Items are grouped by topic; the checklist grows as
+standards documents are analyzed.
 
-Severity каждого пункта проставлена по единой шкале `критичная`/`важная`/`минорная` (как в статанализе bsl_ls / LSP); правило вынесения итогового вердикта по находкам — в чеклисте reviewer.
+The severity of each item follows the single scale `критичная`/`важная`/`минорная` (as in
+bsl_ls / LSP static analysis); the rule for the final verdict on findings is in the reviewer checklist.
 
-## Неявные запросы в цикле
+## Implicit queries in a loop
 
-Явные запросы в цикле (`Запрос.Выполнить()`, `Новый Запрос`) и запрос в вызванном из
-цикла локальном методе модуля (глубина 1) автоматически ловит `code-analyze`
+Explicit queries in a loop (`Запрос.Выполнить()`, `Новый Запрос`) and a query inside a local
+module method called from the loop (depth 1) are caught automatically by `code-analyze`
 
-- [важная] **Стандартные функции БСП в цикле** — вызов в цикле
-  `ОбщегоНазначения.ЗначениеРеквизитаОбъекта` / `ЗначенияРеквизитовОбъекта` (и аналогов
-  `КонтактнаяИнформацияОбъекта` и т.п.) — это **запрос к БД на каждой итерации**: внутри эти
-  функции выполняют запрос по одному объекту. `code-analyze` их не ловит (это вызовы в общий
-  модуль — межмодульно). Заменить на «списочный» вариант, вызываемый один раз по всему списку
-  ссылок: `ЗначенияРеквизитовОбъектов(МассивСсылок, …)`, `КонтактнаяИнформацияОбъектов(…)` —
-  один запрос вместо N.
-- [важная] **Разыменование ссылки через точку в теле цикла** — найти в теле каждого цикла
-  идентификаторы с 1+ точкой (`Ссылка.Реквизит`, `Ссылка.Реквизит.Реквизит`). Если база
-  цепочки — ссылка/объект (а не Структура, ТаблицаЗначений, набор записей и т.п.), то
-  **каждое** обращение через точку — неявный запрос к БД за реквизитом/представлением на
-  каждой итерации. Автоматически ссылку от структуры/коллекции не отличить (нужны типы) —
-  поэтому проверяется глазами. Выносить получение реквизитов в один запрос по списку или
+- [important] **BSP standard functions in a loop** - calling in a loop
+  `ОбщегоНазначения.ЗначениеРеквизитаОбъекта` / `ЗначенияРеквизитовОбъекта` (and analogues
+  `КонтактнаяИнформацияОбъекта` etc.) is a **DB query on every iteration**: internally these
+  functions run a query per object. `code-analyze` does not catch them (these are calls into a common
+  module - cross-module). Replace with the "list" variant called once over the whole list of
+  refs: `ЗначенияРеквизитовОбъектов(МассивСсылок, …)`, `КонтактнаяИнформацияОбъектов(…)` -
+  one query instead of N.
+- [important] **Dereferencing a ref via dot in the loop body** - find in the body of each loop
+  identifiers with 1+ dot (`Ссылка.Реквизит`, `Ссылка.Реквизит.Реквизит`). If the base of the
+  chain is a ref/object (and not a Structure, ValueTable, record set etc.), then
+  **every** dot access is an implicit DB query for an attribute/presentation on
+  each iteration. A ref cannot be automatically distinguished from a structure/collection (types are needed) -
+  so this is checked by eye. Move attribute retrieval into one query over the list or
   `ОбщегоНазначения.ЗначенияРеквизитовОбъектов`.
-- [важная] **Получение представления ссылки в цикле** — `Строка(Ссылка)`, `Представление(...)`,
-  неявное приведение ссылки к строке в цикле тоже бьёт в БД за представлением; получать
-  представления заранее одним запросом.
-- [важная] **Большая глубина вызовов** — `code-analyze` раскрывает только глубину 1 и только в
-  рамках одного модуля. При подозрении, что запрос спрятан глубже (цепочка вызовов, вызов
-  в общий модуль), используй `code_index` для анализа **графа вызовов**: пройди по
-  вызываемым из цикла методам (в т.ч. межмодульно) и проверь, нет ли в них обращения к БД.
+- [important] **Getting a ref presentation in a loop** - `Строка(Ссылка)`, `Представление(...)`,
+  implicit conversion of a ref to a string in a loop also hits the DB for the presentation; get
+  presentations in advance with one query.
+- [important] **Large call depth** - `code-analyze` expands only depth 1 and only within
+  one module. If you suspect a query is hidden deeper (call chain, call
+  into a common module), use `code_index` to analyze the **call graph**: walk the
+  methods called from the loop (including cross-module) and check whether they access the DB.
 
-## Поиск в коллекциях значений
+## Search in value collections
 
-- [важная] **Индексирование колонок при многократном поиске** — если по `ТаблицаЗначений`
-  с большим числом строк (ориентир — 1000+, либо меньше при частом поиске)
-  выполняется два и более поиска, убедиться, что колонки поиска
-  проиндексированы (`ТЗ.Индексы.Добавить(...)`); индексировать только
-  селективные колонки (мало строк на значение), иначе эффекта не будет.
-- [важная] **Соответствие индекса структуре `НайтиСтроки`** — при поиске по нескольким
-  колонкам методом `НайтиСтроки` проверить, что существует индекс, список полей
-  которого ТОЧНО совпадает со структурой поиска (порядок полей не важен). Иначе
-  индекс не задействуется и поиск идёт перебором. То же ограничение — у метода
-  `Скопировать` с параметром `ПараметрыОтбора`.
-- [важная] **Сортировка `ТаблицаЗначений` по ссылочным колонкам** — при `Сортировать` по
-  колонке со ссылочными значениями система обращается к ИБ за представлением для
-  каждой строки. Проверить: если нужна сортировка по наименованию — добавлять
-  колонку с представлением на этапе заполнения и сортировать по ней; иначе —
-  сортировать «по ссылке» через объект `СравнениеЗначений`.
-- [важная] **Поиск в большом `Массив`** — при поиске в массиве с большим числом элементов
-  (1000+ либо меньше при поиске в цикле) заменить массив на `Соответствие` (если
-  порядок не важен) или индексированную `ТаблицаЗначений` (если порядок значим):
-  в массиве поиск идёт перебором.
-- [важная] **Уникальность большого массива** — для обеспечения уникальности элементов
-  большого массива использовать однократный вызов `ОбщегоНазначения.СвернутьМассив`
-  или `ДополнитьМассив(..., ТолькоУникальныеЗначения = Истина)` в конце
-  алгоритма, а не поэлементную проверку в цикле.
-- [важная] **`ДеревоЗначений` и поиск** — в `ДеревоЗначений` нет индексов (поиск
-  перебором); если требуется частый поиск по большому объёму — заменить на
-  индексированную `ТаблицаЗначений`.
+- [important] **Column indexing on repeated searches** - if a `ТаблицаЗначений`
+  with many rows (guideline - 1000+, or fewer with frequent search)
+  is searched two or more times, make sure the search columns
+  are indexed (`ТЗ.Индексы.Добавить(...)`); index only
+  selective columns (few rows per value), otherwise there will be no effect.
+- [important] **Index must match the `НайтиСтроки` structure** - when searching by several
+  columns with `НайтиСтроки`, check that an index exists whose field list
+  EXACTLY matches the search structure (field order does not matter). Otherwise
+  the index is not used and the search is a scan. The same limitation applies to the
+  `Скопировать` method with the `ПараметрыОтбора` parameter.
+- [important] **Sorting `ТаблицаЗначений` by reference columns** - when sorting with `Сортировать` by
+  a column with reference values, the system queries the IB for the presentation of
+  each row. Check: if sorting by name is needed, add a column with the presentation
+  when filling and sort by it; otherwise sort "by ref" via the `СравнениеЗначений` object.
+- [important] **Search in a large `Массив`** - when searching an array with many elements
+  (1000+, or fewer when searching in a loop), replace the array with `Соответствие` (if
+  order does not matter) or an indexed `ТаблицаЗначений` (if order matters):
+  array search is a scan.
+- [important] **Uniqueness of a large array** - to ensure uniqueness of elements
+  of a large array, use a single call to `ОбщегоНазначения.СвернутьМассив`
+  or `ДополнитьМассив(..., ТолькоУникальныеЗначения = Истина)` at the end of the
+  algorithm, not an element-by-element check in a loop.
+- [important] **`ДеревоЗначений` and search** - `ДеревоЗначений` has no indexes (search
+  is a scan); if frequent search over a large volume is required, replace it with an
+  indexed `ТаблицаЗначений`.
 
-## Предварительная инициализация локальных переменных
+## Pre-initialization of local variables
 
-- [критичная] **Инициализация до ветвления** — если значение локальной переменной
-  вычисляется в больших блоках `Если…ИначеЕсли…Иначе`, проверить, что переменная
-  предварительно инициализирована значением по умолчанию ДО блока. Иначе при
-  непокрытой ветке переменная окажется `Неопределено`, а последующий код,
-  рассчитывающий на конкретный тип, даст ошибку времени выполнения.
+- [critical] **Initialize before branching** - if the value of a local variable
+  is computed in large `Если…ИначеЕсли…Иначе` blocks, check that the variable
+  is pre-initialized with a default value BEFORE the block. Otherwise, on an
+  uncovered branch the variable ends up `Неопределено`, and subsequent code that
+  expects a concrete type fails at runtime.
 
-## Имена переменных
+## Variable names
 
-- [минорная] **Осмысленность имени** — имя переменной образовано от терминов предметной
-  области и отражает назначение (`ДиалогРаботыСКаталогом`, а не `масРеквизитов`,
+- [minor] **Meaningful name** - the variable name is derived from domain
+  terms and reflects its purpose (`ДиалогРаботыСКаталогом`, not `масРеквизитов`,
   `соотвВидИмя`, `новСтр`).
-- [минорная] **CamelCase без сокращений** — каждое слово в имени с прописной буквы, пробелы
-  удалены; предлоги и местоимения из одной буквы — тоже прописными. Префиксные
-  сокращения типа `мас…`, `соотв…`, `нов…` недопустимы.
-- [минорная] **Имена переменных-флагов** — переменную, отражающую состояние флага, называть
-  так, как читается её истинное значение (`ЕстьОшибки`, `ЭтоТоварТара`).
+- [minor] **CamelCase without abbreviations** - every word in the name starts with a capital letter, spaces
+  removed; one-letter prepositions and pronouns are capitalized too. Prefix
+  abbreviations like `мас…`, `соотв…`, `нов…` are not allowed.
+- [minor] **Flag variable names** - name a variable that reflects flag state
+  so that its true value reads naturally (`ЕстьОшибки`, `ЭтоТоварТара`).
 
-## Массовая конкатенация строк
+## Mass string concatenation
 
-- [минорная] **Оценка «массовости»** — оценить, действительно ли объём конкатенации массовый (ориентир — 1000+ операций, тем меньше,
-  чем длиннее строки). Для заведомо малых объёмов вне универсальных механизмов
-  замена на `СтрСоединить` не обязательна — не ухудшай читаемость ради
-  микрооптимизации.
+- [minor] **Assess "massiveness"** - assess whether the concatenation volume is really massive (guideline - 1000+ operations, fewer
+  for longer strings). For known-small volumes outside universal mechanisms,
+  replacement with `СтрСоединить` is not mandatory - do not hurt readability for a
+  micro-optimization.
 
-## Кодировка и символы BSL
+## Encoding and BSL symbols
 
-- [важная] **Только ASCII-дефис `-`** — в BSL-коде и комментариях `—` (U+2014) и `–`
-  (U+2013) дают `InvalidCharacterInFile` в `bsl_ls` и ломают сборку. Перед сдачей
-  ищи их в изменённых модулях (`grep -nE '–|—'`; без `-P` — работает и в GNU, и в BSD/macOS grep).
+- [important] **ASCII hyphen `-` only** - in BSL code and comments, `—` (U+2014) and `–`
+  (U+2013) cause `InvalidCharacterInFile` in `bsl_ls` and break the build. Before delivery,
+  search for them in changed modules (`grep -nE '–|—'`; without `-P` - works in both GNU and BSD/macOS grep).
 
-## Вызов исключений в коде
+## Raising exceptions in code
 
-- [минорная] **Нужно ли вообще исключение** — в общем случае вызывать исключение не требуется:
-  при ошибках платформа сама выводит сообщение, пишет стек в журнал регистрации и
-  отправляет в сервис регистрации ошибок. Проверить, что `ВызватьИсключение`
-  появляется обоснованно.
-- [минорная] **Категория ошибки** — для исключений бизнес-логики, выводимых пользователю,
-  категорию не указывать (по умолчанию `ИсключениеВызванноеИзВстроенногоЯзыка`).
-  Для прочих — указать подходящую (`ОшибкаСети`, `НарушениеПравДоступа` и т.п.),
-  чтобы пользователь получил типовые рекомендации. Для диагностики программных
-  ошибок (некорректный параметр, неверно встроенная подсистема) — категория
+- [minor] **Is an exception needed at all** - in the general case, raising an exception is not required:
+  on errors the platform itself outputs a message, writes the stack to the event log and
+  sends it to the error reporting service. Check that `ВызватьИсключение`
+  appears for a justified reason.
+- [minor] **Error category** - for business-logic exceptions shown to the user,
+  do not specify a category (the default is `ИсключениеВызванноеИзВстроенногоЯзыка`).
+  For others, specify a suitable one (`ОшибкаСети`, `НарушениеПравДоступа` etc.)
+  so that the user gets standard recommendations. For diagnosing program
+  errors (invalid parameter, wrongly integrated subsystem) use the category
   `ОшибкаКонфигурации`.
-- [критичная] **Проверка прав** — в большинстве случаев использовать
-  `ВыполнитьПроверкуПравДоступа`; программный вызов исключения с категорией
-  `НарушениеПравДоступа` — только для проверки наличия конкретной роли.
-- [минорная] **Коды ошибок строкой, не числом** — если бизнес-логике важен анализ типа
-  ошибки, использовать строковые коды (3-й параметр `ВызватьИсключение` или код
-  возврата) с префиксом подсистемы; числовые коды недопустимы (нечитаемы).
+- [critical] **Rights check** - in most cases use
+  `ВыполнитьПроверкуПравДоступа`; a programmatic exception with the category
+  `НарушениеПравДоступа` - only to check for a specific role.
+- [minor] **Error codes as strings, not numbers** - if business logic needs to analyze the error
+  type, use string codes (3rd parameter of `ВызватьИсключение` or the return
+  code) with a subsystem prefix; numeric codes are not allowed (unreadable).
 
-## Перехват исключений в коде
+## Catching exceptions in code
 
-- [минорная] **Перехватывать только по необходимости** — не оборачивать код в
-  `Попытка…Исключение` без причины: необработанное исключение штатно выводится,
-  логируется и отправляется в сервис регистрации ошибок. Перехват оправдан лишь
-  когда нужно уточнить техтекст прикладной информацией или выполнить собственную
-  диагностику (например, в обработчиках обновления ИБ).
-- [важная] **Локальность блока `Попытка`** — не открывать большие блоки `Попытка…Исключение`;
-  ставить их точечно вокруг конкретного потенциально проблемного вызова, чтобы не
-  перехватить несвязанные ошибки соседнего кода.
-- [критичная] **Не интерпретировать текст исключения** — не анализировать текст ошибки для
-  определения причины (текст зависит от локализации/версии); использовать
-  категории ошибок (`ИнформацияОбОшибке.ЯвляетсяОшибкойКатегории`) или коды ошибок.
-- [важная] **Правильные функции представления ошибки** — для журнала регистрации применять
-  `ОбработкаОшибок.ПодробноеПредставлениеОшибки` (возвращает стек), для сообщения
-  пользователю — `ОбработкаОшибок.СообщениеОбОшибкеДляПользователя` (сохраняет
-  уточнения при пробросе).
+- [minor] **Catch only when necessary** - do not wrap code in
+  `Попытка…Исключение` without a reason: an unhandled exception is output, logged and
+  sent to the error reporting service as designed. Catching is justified only
+  when you need to refine the technical text with application information or run your own
+  diagnostics (e.g., in IB update handlers).
+- [important] **Locality of the `Попытка` block** - do not open large `Попытка…Исключение` blocks;
+  place them precisely around a specific potentially problematic call so as not to
+  catch unrelated errors of neighboring code.
+- [critical] **Do not interpret the exception text** - do not analyze the error text to
+  determine the cause (the text depends on localization/version); use error
+  categories (`ИнформацияОбОшибке.ЯвляетсяОшибкойКатегории`) or error codes.
+- [important] **Correct error representation functions** - for the event log use
+  `ОбработкаОшибок.ПодробноеПредставлениеОшибки` (returns the stack), for the message
+  to the user - `ОбработкаОшибок.СообщениеОбОшибкеДляПользователя` (preserves
+  refinements when rethrown).
 
-## Объекты типа Структура
+## Structure-type objects
 
-- [минорная] **Структура со значениями по умолчанию сразу** — не добавлять свойства в структуру
-  в разных частях кода с последующей проверкой `Свойство("…")`; создавать структуру
-  с полным набором свойств по умолчанию в одном месте (обычно функцией-конструктором).
-  Исключение — структуры с нефиксированным форматом (данные из внешних источников,
-  системные параметры формы).
+- [minor] **Structure with default values at once** - do not add properties to a structure
+  in different parts of the code with a later `Свойство("…")` check; create the structure
+  with a full set of default properties in one place (usually a constructor function).
+  Exception - structures with an unfixed format (data from external sources,
+  system form parameters).
 
-## Структуры и таблицы значений как параметры процедур и функций
+## Structures and value tables as procedure and function parameters
 
-- [минорная] **Функция-конструктор параметров** — для функции с параметром типа `Структура`/
-  `ТаблицаЗначений`/`ДеревоЗначений` определить рядом функцию-конструктор, которая
-  возвращает структуру-заготовку со свойствами (или пустую типизированную ТЗ);
-  вызывающий код заполняет её и передаёт в вызываемую функцию. Параметры со
-  значениями по умолчанию должны быть явно проинициализированы в конструкторе.
-  Исключение для ТЗ — когда таблица является результатом расчётов (конструктор не
-  обязателен).
-- [минорная] **Не менять состав структуры-параметра в вызывающем коде** — не инициализировать
-  структуру параметров вручную, не добавлять свойства, не менять состав/типы колонок
-  ТЗ; все допустимые параметры определяются только в функции-конструкторе.
-- [минорная] **Описание свойств структур и колонок ТЗ** — в программном интерфейсе библиотек
-  все функции, возвращающие структуры/ТЗ (включая конструкторы), должны иметь
-  описание типа возвращаемого значения с перечислением свойств/колонок, начиная с
-  новой строки с префиксом `*` (вложенность — больше звёздочек).
+- [minor] **Parameter constructor function** - for a function with a `Структура`/
+  `ТаблицаЗначений`/`ДеревоЗначений` parameter, define a constructor function nearby that
+  returns a blank structure with properties (or an empty typed VT);
+  the calling code fills it and passes it to the called function. Parameters with
+  default values must be explicitly initialized in the constructor.
+  Exception for VT - when the table is the result of calculations (the constructor is
+  optional).
+- [minor] **Do not change the parameter structure composition in calling code** - do not initialize
+  the parameter structure manually, do not add properties, do not change the composition/types of VT columns;
+  all allowed parameters are defined only in the constructor function.
+- [minor] **Describe structure properties and VT columns** - in the program interface of libraries,
+  all functions returning structures/VTs (including constructors) must have
+  a description of the return type listing properties/columns, starting on
+  a new line with the `*` prefix (nesting - more asterisks).
 
-## Имена процедур и функций
+## Procedure and function names
 
-- [минорная] **«Говорящие» имена** — имя метода образовано от терминов предметной области и
-  понятно без описания (не `ВыполнитьПроверку(Параметр1, Рекв, ТЗ)`).
-- [минорная] **Без типов в имени** — не описывать в имени типы параметров/возвращаемого
-  значения (`ИменаРолейСПравомДобавления`, а не `ПолучитьМассивРолей…`).
-- [минорная] **Процедуры — от глагола** — имя процедуры от неопределённой формы глагола по
-  сути действия (`ЗагрузитьКонтрагента`, а не `ЗагрузкаКонтрагента`).
-- [минорная] **Функции — от результата** — имя функции от описания возвращаемого значения
-  (`ПолноеИмяПользователя`); для создающих объект — со слова «Новый»
-  (`НовоеПолеФормы`); для проверки условия — со слова «Это» или причастием
+- [minor] **"Speaking" names** - the method name is derived from domain terms and
+  is clear without a description (not `ВыполнитьПроверку(Параметр1, Рекв, ТЗ)`).
+- [minor] **No types in the name** - do not describe parameter/return
+  types in the name (`ИменаРолейСПравомДобавления`, not `ПолучитьМассивРолей…`).
+- [minor] **Procedures - from a verb** - the procedure name is an infinitive verb describing
+  the action (`ЗагрузитьКонтрагента`, not `ЗагрузкаКонтрагента`).
+- [minor] **Functions - from the result** - the function name describes the return value
+  (`ПолноеИмяПользователя`); for object-creating ones - from the word "New"
+  (`НовоеПолеФормы`); for condition checks - from the word "Is" or a participle
   (`ДокументПроведён`).
-- [минорная] **CamelCase** — как для имён переменных.
+- [minor] **CamelCase** - as for variable names.
 
-## Описание процедур и функций
+## Description of procedures and functions
 
-- [минорная] **Формат секций** — комментарий перед объявлением: «Описание» (начинается с
-  глагола, не с «Процедура…»/имени метода и не повторяет имя), «Параметры:»
-  (каждый: имя — тип — текст; тип обязателен и только существующий в платформе),
-  «Возвращаемое значение:», «Пример:».
-- [минорная] **Ссылки и коллекции в описании** — для параметров-Структур/ТЗ указывать ссылку
-  `см. Модуль.ФункцияКонструктор`; для Массивов — `Массив из <тип>`.
-- [важная] **Только в заголовках** — комментарии в BSL допустимы только в заголовке
-  модуля и в описании метода перед объявлением. В теле `Процедура`/`Функция`,
-  между операторами и внутри текста запроса комментарии не пишем. Существующие
-  комментарии не удаляем.
-- [минорная] **Без бесполезных комментариев** — не пересказывать код и не писать
-  описания, не добавляющие информации (например «Процедура-обработчик события …»
-  к очевидному обработчику).
+- [minor] **Section format** - the comment before the declaration: "Description" (starts with
+  a verb, not with "Procedure…"/the method name and does not repeat the name), "Parameters:"
+  (each: name - type - text; the type is mandatory and only one that exists in the platform),
+  "Return value:", "Example:".
+- [minor] **References and collections in the description** - for Structure/VT parameters specify the reference
+  `см. Модуль.ФункцияКонструктор`; for Arrays - `Массив из <тип>`.
+- [important] **Only in headers** - BSL comments are allowed only in the module header
+  and in the method description before the declaration. In the body of `Процедура`/`Функция`,
+  between statements and inside query text we do not write comments. Do not delete existing
+  comments.
+- [minor] **No useless comments** - do not retell the code and do not write
+  descriptions that add no information (e.g., "Event handler procedure …"
+  for an obvious handler).
 
-## Параметры процедур и функций
+## Procedure and function parameters
 
-- [минорная] **Осмысленные имена параметров** — от терминов предметной области.
-- [минорная] **Не подменять параметры** — не использовать вместо параметров переменные модуля,
-  реквизиты формы и т.п.
-- [минорная] **Логический порядок** — параметры по принципу «от общего к частному» (основной
-  объект первым).
-- [минорная] **Группировка при множестве параметров** — при большом числе параметров
-  группировать однотипные в параметр типа `Структура` или дробить функцию на
-  несколько простых.
-- [минорная] **Без пробелов в вызовах** — не ставить пробелы перед `(`, после `(`, перед `)`
-  и перед запятыми (когда параметры в одной строке и не опущены).
+- [minor] **Meaningful parameter names** - from domain terms.
+- [minor] **Do not substitute parameters** - do not use module variables,
+  form attributes etc. instead of parameters.
+- [minor] **Logical order** - parameters follow "general to specific" (the main
+  object first).
+- [minor] **Grouping with many parameters** - with many parameters
+  group same-type ones into a `Структура` parameter or split the function into
+  several simple ones.
+- [minor] **No spaces in calls** - do not put spaces before `(`, after `(`, before `)`
+  and before commas (when parameters are on one line and not omitted).
 
-## Дублирование кода
+## Code duplication
 
-- [минорная] **Избегать дублирования** — не копировать фрагменты/процедуры с одинаковой по
-  логике функциональностью; выносить переиспользуемые алгоритмы из модулей
-  объектов и форм в общие модули. Дублирование оправдано только если ветки кода в
-  будущем значительно разойдутся.
+- [minor] **Avoid duplication** - do not copy fragments/procedures with logically identical
+  functionality; move reusable algorithms from object and form modules
+  into common modules. Duplication is justified only if the code branches will diverge
+  significantly in the future.
 
-## Получение метаданных объектов
+## Getting object metadata
 
-- [важная] **Метаданные через объект, а не глобально** — при известном типе получать
-  метаданные через `Объект.Метаданные()` / `Ссылка.Метаданные()`, а не через
-  `Метаданные.Справочники[Имя]` или `Метаданные.НайтиПоПолномуИмени(...)` (второй
-  способ существенно медленнее). Когда тип заранее неизвестен — `Метаданные.НайтиПоТипу(ТипЗнч(Ссылка))`.
-  (Контекстно: `НайтиПоПолномуИмени`/`НайтиПоТипу` уместны при неизвестном типе —
-  поэтому проверяется глазами.)
+- [important] **Metadata via the object, not globally** - when the type is known, get
+  metadata via `Объект.Метаданные()` / `Ссылка.Метаданные()`, and not via
+  `Метаданные.Справочники[Имя]` or `Метаданные.НайтиПоПолномуИмени(...)` (the second
+  way is significantly slower). When the type is unknown in advance - `Метаданные.НайтиПоТипу(ТипЗнч(Ссылка))`.
+  (Contextually: `НайтиПоПолномуИмени`/`НайтиПоТипу` are appropriate when the type is unknown -
+  that is why this is checked by eye.)
 
-## Переменные в программных модулях
+## Variables in program modules
 
-- [минорная] **Предпочитать штатные средства** — вместо переменных модуля использовать более
-  подходящие средства платформы (область видимости переменных модуля трудно
-  контролировать).
-- [минорная] **Передача между обработчиками** — для передачи параметров в обработчики
-  событий объекта из внешнего кода использовать `ДополнительныеСвойства`, а не
-  экспортные переменные модуля; для внутренней передачи между обработчиками —
-  неэкспортные переменные модуля объекта.
-- [минорная] **Коды возврата строками** — для кодов ошибок/возврата использовать строковые
-  константы, а не числовые переменные модуля.
-- [важная] **Кеширование — через ПовторноеИспользование** — долго вычисляемые часто
-  используемые значения кешировать модулями с повторным использованием, а не
-  переменными модуля; не кешировать статику (предопределённые значения —
+- [minor] **Prefer built-in facilities** - instead of module variables use more
+  suitable platform facilities (the scope of module variables is hard to
+  control).
+- [minor] **Passing between handlers** - to pass parameters to object event handlers
+  from external code use `ДополнительныеСвойства`, not export module variables; for internal
+  passing between handlers - non-export module variables of the object.
+- [minor] **Return codes as strings** - for error/return codes use string
+  constants, not numeric module variables.
+- [important] **Caching - via repeated use** - cache long-computed frequently
+  used values with reusable modules, not with module
+  variables; do not cache static data (predefined values -
   `ПредопределённоеЗначение`).
 
-## Директивы компиляции и инструкции препроцессора
+## Compilation directives and preprocessor instructions
 
-- [критичная] **Директивы `#Если Сервер/Клиент` в клиент-серверных общих модулях** — не
-  использовать инструкции препроцессора для проверки клиентского/серверного
-  контекста в общих модулях с постфиксом `КлиентСервер` (контекст надёжно не
-  определяется); методы с разным поведением разносить в модули `Клиент` и
-  `Сервер`. (Ветвление по режиму клиента — `#Если ВебКлиент` — допустимо.)
-- [минорная] **Не разрывать конструкции** — инструкции препроцессора/областями не разрывать
-  отдельные выражения, грамматические конструкции, объявления и вызовы методов.
+- [critical] **`#Если Сервер/Клиент` directives in client-server common modules** - do not
+  use preprocessor instructions to check client/server
+  context in common modules with the `КлиентСервер` postfix (the context is not reliably
+  determined); move methods with different behavior into `Клиент` and
+  `Сервер` modules. (Branching by client mode - `#Если ВебКлиент` - is allowed.)
+- [minor] **Do not break constructs** - do not split
+  individual expressions, grammatical constructs, declarations and method calls with preprocessor instructions/regions.
 
-## Активность движений
+## Movement activity
 
-- [критичная] **Учёт активности в запросах** — если в конфигурации используется переключение
-  активности движений регистра (ручная корректировка), во всех запросах/отчётах к
-  РЕАЛЬНЫМ таблицам такого регистра должно быть условие `ГДЕ Активность = ИСТИНА`
-  (виртуальные таблицы учитывают активность автоматически). Особое внимание —
-  универсальные отчёты и бизнес-логика, работающие с произвольными регистрами.
-- [критичная] **Отмена проведения — отключать активность, а не удалять** — для документов с
-  ручной корректировкой движений при отмене проведения отключать активность
-  движений, а не удалять записи.
+- [critical] **Account for activity in queries** - if the configuration uses switching of
+  register movement activity (manual adjustment), all queries/reports against
+  REAL tables of such a register must have the condition `ГДЕ Активность = ИСТИНА`
+  (virtual tables account for activity automatically). Pay special attention to
+  universal reports and business logic working with arbitrary registers.
+- [critical] **Unposting - disable activity, do not delete** - for documents with
+  manual movement adjustment, when unposting disable the activity of
+  movements instead of deleting records.
 
-## Использование журнала регистрации
+## Using the event log
 
-- [минорная] **Тип события «Группа.Событие»** — строковый идентификатор типа события
-  группировать по функциональному признаку («Проведение документов.Не удалось
-  отменить проведение»); не включать в тип конкретные данные ИБ/внешних систем
-  (их — в параметры `Метаданные` и `Данные` метода `ЗаписьЖурналаРегистрации`).
-- [минорная] **Уровень важности** — критичные ошибки → «Ошибка», потенциальные проблемы →
-  «Предупреждение», успешное завершение → «Информация».
-- [минорная] **Комментарий — одно событие на запись** — не помещать в один комментарий
-  информацию о нескольких событиях; не писать данные неизвестного/большого размера
-  (ориентир — до 10 Кб). Для исключений — `ОбработкаОшибок.ПодробноеПредставлениеОшибки(ИнформацияОбОшибке())`.
-- [важная] **Не выбирать из журнала в скоростных задачах** — при больших объёмах выборка из
-  ЖР медленная; для протоколирования заводить отдельный регистр или использовать
-  специализированные объекты платформы.
+- [minor] **Event type "Group.Event"** - group the string event type identifier
+  by functional attribute ("Document posting. Failed to cancel posting");
+  do not include specific IB/external system data in the type
+  (put them in the `Метаданные` and `Данные` parameters of the `ЗаписьЖурналаРегистрации` method).
+- [minor] **Importance level** - critical errors → "Error", potential problems →
+  "Warning", successful completion → "Information".
+- [minor] **Comment - one event per record** - do not put information about several events into one
+  comment; do not write data of unknown/large size
+  (guideline - up to 10 KB). For exceptions - `ОбработкаОшибок.ПодробноеПредставлениеОшибки(ИнформацияОбОшибке())`.
+- [important] **Do not read from the log in high-speed tasks** - with large volumes, reading from
+  the event log is slow; for logging, create a separate register or use
+  specialized platform objects.
 
-## Табличный документ — представления ссылочных значений
+## Spreadsheet document - reference value presentations
 
-- [важная] **Не ссылки в параметрах ячеек** — при формировании табличного документа в
-  параметрах ячеек (тип заполнения «Параметр») не указывать ссылочные значения —
-  это вызывает многократные обращения к БД за представлениями; передавать сами
-  представления. Исключение — когда получение представлений заранее само требует
-  аналогичных многократных обращений (в т.ч. из-за неявных соединений при
-  `Представление()` в запросе и ограничения MS SQL на 256 таблиц).
-- [важная] **Представления ссылок — в запросе отчёта** — при выводе ссылочных полей в
-  отчёт получать поле-представление (и нужные реквизиты) прямо в запросе, а не
-  разыменовывать ссылку «через точку» в момент вывода (замедляет вывод); саму
-  ссылку класть в расшифровку ячейки.
+- [important] **No refs in cell parameters** - when building a spreadsheet document,
+  do not specify reference values in cell parameters (fill type "Parameter") -
+  this causes repeated DB calls for presentations; pass the
+  presentations themselves. Exception - when getting presentations in advance itself requires
+  similar repeated calls (including because of implicit joins with
+  `Представление()` in a query and the MS SQL limit of 256 tables).
+- [important] **Reference presentations - in the report query** - when outputting reference fields to
+  a report, get the presentation field (and the needed attributes) right in the query, and do not
+  dereference the ref "via dot" at output time (slows output); put the
+  ref itself into the cell decryption.
 
-## Общие требования к построению конструкций встроенного языка
+## General requirements for building built-in language constructs
 
-- [минорная] **Промежуточные переменные для сравнения** — не встраивать вызов-выражение
-  прямо в условие сравнения (`Если Вопрос(...) = КодВозвратаДиалога.Да Тогда`);
-  присвоить результат промежуточной переменной и сравнивать её.
+- [minor] **Intermediate variables for comparison** - do not embed a call expression
+  directly into a comparison condition (`Если Вопрос(...) = КодВозвратаДиалога.Да Тогда`);
+  assign the result to an intermediate variable and compare it.
 
-## Работа с параметром «Отказ» в обработчиках событий
+## Working with the "Cancel" parameter in event handlers
 
-- [важная] **Не сообщать об отказе молча** — в событиях `ПриЗаписи`, `ПередЗаписью`,
-  `ПередУдалением`, `ОбработкаПроведения`, `ОбработкаПроверкиЗаполнения` не
-  устанавливать `Отказ = Истина` без информирования пользователя о причине
-  (сообщением `ОбщегоНазначения.СообщитьПользователю(..., Отказ)` или исключением) —
-  иначе «Не удалось записать…» скрывает истинную причину.
+- [important] **Do not report cancellation silently** - in the `ПриЗаписи`, `ПередЗаписью`,
+  `ПередУдалением`, `ОбработкаПроведения`, `ОбработкаПроверкиЗаполнения` events do not
+  set `Отказ = Истина` without informing the user of the reason
+  (with a message `ОбщегоНазначения.СообщитьПользователю(..., Отказ)` or an exception) -
+  otherwise "Failed to write…" hides the true cause.
 
-## Структура модуля
+## Module structure
 
-- [минорная] **Содержание заголовка модуля** — в начале модуля комментарий с кратким
-  описанием назначения и условий применения (для модулей форм — описание
-  параметров формы).
-- [минорная] **Разбиение разделов на подразделы** — объёмные разделы разбивать на области по
-  функциональному признаку; имена областей — по правилам имён переменных.
-- [минорная] **Правильное размещение методов** — в «Программный интерфейс» помещать только
-  методы, вызываемые извне объекта; методы, вызываемые лишь из самого объекта и
-  его форм, — в «Служебные процедуры и функции».
+- [minor] **Module header content** - at the start of the module, a comment with a brief
+  description of purpose and application conditions (for form modules - a description
+  of form parameters).
+- [minor] **Splitting sections into subsections** - split large sections into regions by
+  functional attribute; region names follow variable naming rules.
+- [minor] **Correct method placement** - put only methods called from outside the object
+  into "Program interface"; methods called only from the object itself and
+  its forms - into "Service procedures and functions".
 
-## Тексты модулей
+## Module texts
 
-- [минорная] **Русский язык, табуляция** — тексты модулей на русском (исключения — веб-сервисы
-  и идентификаторы внешних систем); синтаксический отступ — табуляцией (4), не
-  пробелами.
+- [minor] **Russian language, tabs** - module texts in Russian (exceptions - web services
+  and external system identifiers); syntax indent - with tabs (4), not
+  spaces.
 
-## Размещение функциональности по модулям
+## Placing functionality across modules
 
-- [минорная] **Модуль объекта / менеджера / общий** — в модуле объекта размещать логику
-  экземпляра (работа с `ЭтотОбъект`, обработчики событий, заполнение); в модуле
-  менеджера — «статическую» логику, не зависящую от экземпляра (работа по ссылке,
-  печать списка, обновление ИБ); общую для нескольких объектов логику — в общих
-  модулях. Избегать `ПолучитьОбъект` только ради вызова метода модуля объекта
-  (загружает объект целиком).
+- [minor] **Object / manager / common module** - put instance logic into the object module
+  (work with `ЭтотОбъект`, event handlers, filling); "static" logic independent of the
+  instance into the manager module (work by ref,
+  printing a list, IB update); logic common to several objects - into common
+  modules. Avoid `ПолучитьОбъект` just to call an object module method
+  (loads the whole object).
 
-## Программное создание прикладных объектов
+## Programmatic creation of application objects
 
-- [критичная] **Вызывать Заполнить при создании** — при программном создании объекта
-  (`СоздатьЭлемент`/`СоздатьДокумент`…) явно вызывать `Заполнить(Неопределено)`
-  (если данных нет — передать `Неопределено`): корректно отработают «Значение
-  заполнения», обработчик `ОбработкаЗаполнения` и подписки. Исключение — полная
-  загрузка из обмена/XML.
+- [critical] **Call Fill on creation** - when creating an object programmatically
+  (`СоздатьЭлемент`/`СоздатьДокумент`…) explicitly call `Заполнить(Неопределено)`
+  (if there is no data - pass `Неопределено`): "Fill value", the
+  `ОбработкаЗаполнения` handler and subscriptions will work correctly. Exception - full
+  load from exchange/XML.
 
-## Проведение документов и движения
+## Document posting and movements
 
-- [важная] **Запись движений — неявно системой** — в `ОбработкаПроведения` не записывать
-  наборы записей явно (`.Записать()`), кроме случая, когда записанные данные нужны
-  последующим шагам проведения; иначе риск взаимных блокировок.
-- [важная] **Проведение — основной способ отражения в учёте** — большинство документов
-  должны проводиться (`Проведение = Разрешить`); не подменять проведение
-  отключением проведения. Даже документ без движений должен проводиться (отличие
-  от «черновика»).
-- [критичная] **Непроведённые/помеченные на удаление — без активных движений.**
-- [критичная] **Неизменность результата проведения** — повторное проведение без изменения
-  влияющих на движения данных не должно менять движения; формирование движений не
-  должно зависеть от состояния учётных регистров (остатков), кроме обоснованных
-  случаев (партионный учёт). Внешние данные, влияющие на движения, сохранять в
-  документе или защищать от изменения (Запрет редактирования реквизитов).
-- [важная] **Служебные данные проведения — через `ДополнительныеСвойства`** — значения,
-  вычисленные в `ПередЗаписью` и нужные только в `ОбработкаПроведения`/`ПриЗаписи`
-  в рамках записи (признак сдвига даты, необходимость очистки движений и т.п.),
-  передавать структурой `ДокументОбъект.ДополнительныеСвойства` (`Вставить` в
-  `ПередЗаписью`, `Получить`/`Свойство` в `ОбработкаПроведения`). Не заводить под
-  такие флаги реквизиты документа (лишняя сущность в метаданных/форме/отчётах) и
-  переменные модуля (конфликтуют с реквизитами и переживают запись). Проверяется глазами.
+- [important] **Movement writing - implicitly by the system** - in `ОбработкаПроведения` do not write
+  record sets explicitly (`.Записать()`), except when the written data is needed by
+  subsequent posting steps; otherwise there is a risk of mutual locks.
+- [important] **Posting - the main way to reflect in accounting** - most documents
+  must be posted (`Проведение = Разрешить`); do not replace posting
+  with disabled posting. Even a document without movements must be posted (difference
+  from a "draft").
+- [critical] **Unposted/marked for deletion - no active movements.**
+- [critical] **Posting result immutability** - re-posting without changes to data
+  affecting movements must not change movements; movement formation must
+  not depend on the state of accounting registers (balances), except justified
+  cases (batch accounting). External data affecting movements must be stored in the
+  document or protected from change (attribute edit prohibition).
+- [important] **Posting service data - via `ДополнительныеСвойства`** - values
+  computed in `ПередЗаписью` and needed only in `ОбработкаПроведения`/`ПриЗаписи`
+  within the write (date shift flag, need to clear movements etc.)
+  pass via the `ДокументОбъект.ДополнительныеСвойства` structure (`Вставить` in
+  `ПередЗаписью`, `Получить`/`Свойство` in `ОбработкаПроведения`). Do not create document
+  attributes for such flags (extra entity in metadata/form/reports) or
+  module variables (conflict with attributes and survive the write). Checked by eye.
 
-## Граница и момент времени
+## Boundary and point in time
 
-> Предметное правило (зачем нужны, применение в документах и отчётах, типичные ошибки):
-> [Граница и момент времени](reference/boundary-and-moment.md). Ниже — ручная проверка.
+> Domain rule (why they are needed, use in documents and reports, typical errors):
+> [Boundary and point in time](reference/boundary-and-moment.md). Below - manual check.
 
-- [важная] **Корректность границы при контроле своих движений** — при контроле остатков своего
-  документа после записи движений убедиться, что остатки читаются на
-  `Новый Граница(МоментВремени(), ВидГраницы.Включая)` (учтены собственные движения); при чтении
-  до своих движений — `Исключая`/`МоментВремени()`. Выбор границы определяется семантикой и
-  не скриптуется.
-- [критичная] **Момент вместо даты в виртуальных таблицах** — убедиться, что в параметры ВТ передаётся
-  `МоментВремени`/`Граница`, а не `Дата` (где важно упорядочивание внутри секунды).
-- [критичная] **Зеркальность границ периода** — для отчётов проверить корректность включающей/исключающей
-  границы на начало и конец периода (граничный документ не задвоился и не потерялся).
+- [important] **Boundary correctness when controlling own movements** - when controlling balances of your
+  document after writing movements, make sure balances are read at
+  `Новый Граница(МоментВремени(), ВидГраницы.Включая)` (own movements included); when reading
+  before own movements - `Исключая`/`МоментВремени()`. The choice of boundary is determined by semantics and
+  is not scripted.
+- [critical] **Moment instead of date in virtual tables** - make sure `МоментВремени`/`Граница` is passed
+  in the VT parameters, not `Дата` (where ordering within a second matters).
+- [critical] **Period boundary mirroring** - for reports check the correctness of the inclusive/exclusive
+  boundary at the start and end of the period (the boundary document is neither doubled nor lost).
 
-## Удаление движений
+## Movement deletion
 
-> Предметное правило (3 режима, отличия по реализации и блокировкам, флаг «Записывать»):
-> [Удаление движений](reference/movements-deletion.md). Ниже — ручная проверка.
+> Domain rule (3 modes, differences in implementation and locks, the "Write" flag):
+> [Movement deletion](reference/movements-deletion.md). Below - manual check.
 
-- [критичная] **Соответствие режима сценарию** — убедиться, что режим удаления движений документа
-  (свойство «Удаление движений», метаданные в `code_index`) соответствует сценарию: для
-  обычного проведения предпочтителен «Удалять автоматически при отмене проведения»;
-  «Не удалять автоматически» — только когда движения формируются не только проведением.
-  Выбор режима — семантика задачи, не скриптуется.
-- [критичная] **Затирание старых движений при перепроведении** — при режимах «при отмене проведения»/
-  «не удалять» проверить, что задан `Движения.<Регистр>.Записывать = Истина` и выполняется
-  запись набора, иначе старые движения останутся.
+- [critical] **Mode matches the scenario** - make sure the document movement deletion mode
+  (property "Movement deletion", metadata in `code_index`) matches the scenario: for
+  normal posting "Delete automatically on unpost" is preferred;
+  "Do not delete automatically" - only when movements are formed not only by posting.
+  The mode choice is task semantics, not scripted.
+- [critical] **Overwriting old movements on re-posting** - with "on unpost"/
+  "do not delete" modes, check that `Движения.<Регистр>.Записывать = Истина` is set and the
+  set is written, otherwise old movements remain.
 
-## Самодостаточность регистров
+## Register self-sufficiency
 
-- [критичная] **Регистр независим от регистратора** — логика и отчёты по регистру не должны
-  обращаться к полям регистратора «через точку» (неявное соединение; в РИБ
-  регистратора может не быть). Регистру должно хватать собственных данных —
-  выносить нужные реквизиты в измерения/ресурсы/реквизиты регистра.
+- [critical] **Register independent of the recorder** - register logic and reports must not
+  access recorder fields "via dot" (implicit join; in a distributed infobase
+  the recorder may be absent). The register must have enough own data -
+  move the needed attributes into dimensions/resources/register attributes.
 
-## Планы обмена с отборами
+## Exchange plans with filters
 
-- [критичная] **Логика регистрации в `ПередЗаписью`/`ПередУдалением`** — определять
-  узлы-получатели в этих событиях; данные, участвующие в обмене, должны быть
-  самодостаточны (содержать всё необходимое для логики регистрации, не
-  обращаться к полям связанных таблиц «через точку»).
-- [критичная] **Устойчивость логики регистрации** — учитывать, что данные загружаются в
-  произвольном порядке (нужные данные могут быть ещё не загружены), признак
-  `ОбменДанными.Загрузка` при регистрации игнорируется, а ошибки регистрации
-  прерывают загрузку сообщения обмена.
+- [critical] **Registration logic in `ПередЗаписью`/`ПередУдалением`** - determine
+  recipient nodes in these events; data involved in exchange must be
+  self-sufficient (contain everything needed for the registration logic, not
+  access related table fields "via dot").
+- [critical] **Registration logic robustness** - take into account that data is loaded in
+  arbitrary order (the needed data may not be loaded yet), the
+  `ОбменДанными.Загрузка` flag is ignored during registration, and registration errors
+  interrupt the exchange message load.
 
-## Отчёты на СКД
+## DCS reports
 
-> Полный чеклист (состав полей, имена, форма отчёта, `GROUP BY` по ВТ, проверки) —
-> [Особенности СКД](reference/skd-specifics.md). Прочитай справку целиком перед
-> проектированием, разработкой и ревью отчёта.
+> Full checklist (field composition, names, report form, `GROUP BY` over VT, checks) -
+> [DCS specifics](reference/skd-specifics.md). Read the reference in full before
+> designing, developing and reviewing a report.
 
-## Параметры отчёта в СКД
+## Report parameters in DCS
 
-- [минорная] **Избегать лишних параметров** — не использовать параметры запроса СКД там, где
-  достаточно обычного управления элементами отбора (`ГДЕ Организация =
-  &Организация` → дать пользователю отбор «Организация»).
-- [важная] **Необязательные условия через `{ГДЕ ...}`** — вместо обязательных параметров
-  использовать расширение языка запросов СКД `{ГДЕ ...}`, чтобы при отключении
-  параметра пользователем отключался и фрагмент условия (без ошибки «Не задан
-  параметр отчёта»).
+- [minor] **Avoid extra parameters** - do not use DCS query parameters where
+  ordinary filter item management is enough (`ГДЕ Организация =
+  &Организация` → give the user the "Organization" filter).
+- [important] **Optional conditions via `{ГДЕ ...}`** - instead of mandatory parameters
+  use the DCS query language extension `{ГДЕ ...}` so that when the user disables
+  the parameter the condition fragment is disabled too (without the "Report parameter not set"
+  error).
 
-## Транзакции
+## Transactions
 
-- [важная] **Минимум действий и длительности** — в транзакции выполнять только неделимые по
-  бизнес-логике действия; тяжёлые расчёты, проверку заполнения, не требующие
-  блокировки запросы выносить за транзакцию; длинные массовые операции бить на
-  порции (ориентир — запись порции ≤ 20 сек). Не объединять в одну транзакцию
-  логически независимые действия.
-- [важная] **Не вызывать внешние ресурсы в транзакции** — сетевые папки, HTTP/FTP/веб-,
-  почтовые сервисы и т.п. (долго, может быть недоступно, тайм-ауты).
-- [минорная] **Не открывать транзакцию ради одной записи** — не вызывать `НачатьТранзакцию`
-  явно, когда кроме записи объекта/набора других действий с БД нет (платформа сама
-  откроет транзакцию) и ответственное чтение не требуется.
-- [критичная] **Вложенные транзакции** — при использовании вложенной транзакции в конце блока
-  `Исключение` добавлять `ВызватьИсключение` (иначе внешняя транзакция не будет
-  отменена — «В данной транзакции происходила ошибка»). Внутри активной транзакции
-  после ошибки не обращаться к БД (в т.ч. неявно — за представлением ссылки).
-- [критичная] **Отключение итогов — в транзакции** — `УстановитьИспользованиеИтогов(Ложь)` с
-  записью и обратным включением выполнять в транзакции (иначе в других сеансах
-  ошибка при получении среза последних).
+- [important] **Minimum actions and duration** - perform in a transaction only actions indivisible by
+  business logic; move heavy calculations, fill checks, queries that do not require
+  locks outside the transaction; split long mass operations into
+  portions (guideline - portion write ≤ 20 sec). Do not combine logically independent actions
+  into one transaction.
+- [important] **Do not call external resources in a transaction** - network folders, HTTP/FTP/web,
+  mail services etc. (slow, may be unavailable, timeouts).
+- [minor] **Do not open a transaction for a single write** - do not call `НачатьТранзакцию`
+  explicitly when there are no other DB actions besides writing an object/set (the platform will open
+  the transaction itself) and responsible reading is not required.
+- [critical] **Nested transactions** - when using a nested transaction, add `ВызватьИсключение` at the end of the
+  `Исключение` block (otherwise the outer transaction will not be
+  rolled back - "An error occurred in this transaction"). Inside an active transaction,
+  after an error do not access the DB (including implicitly - for a ref presentation).
+- [critical] **Disabling totals - in a transaction** - perform `УстановитьИспользованиеИтогов(Ложь)` with
+  writing and re-enabling in a transaction (otherwise other sessions get an
+  error when getting the latest slice).
 
-## Блокировки и ответственное чтение данных
+## Locks and responsible data reading
 
-> Предметное правило (виды блокировок, управляемые/автоматические,
-> исключительные/разделяемые, `ИсточникДанных`/`ИспользоватьИзИсточникаДанных`, объект
-> `Диапазон`, примеры): [Блокировки](reference/locks.md). Методика контроля остатков и
-> порядок блокировок: [Методика контроля остатков](reference/balance-control-methodology.md).
-> Ниже — пункты ручной проверки, которые нельзя заскриптовать.
+> Domain rule (lock types, managed/automatic,
+> exclusive/shared, `ИсточникДанных`/`ИспользоватьИзИсточникаДанных`, the
+> `Диапазон` object, examples): [Locks](reference/locks.md). Balance control methodology and
+> lock order: [Balance control methodology](reference/balance-control-methodology.md).
+> Below - manual check items that cannot be scripted.
 
-- [важная] **Объектная блокировка перед изменением** — перед изменением существующего
-  объекта из кода вызывать `Заблокировать()` / `ЗаблокироватьДанныеДляРедактирования`
-  (пессимистическая блокировка для конкурентной работы). Не проверять блокировку
-  при загрузке в обмене и в гарантированно монопольных операциях (обновление ИБ).
-- [важная] **Ответственное чтение — в транзакции с управляемой блокировкой** — чтение, по
-  результатам которого изменяются данные или принимаются решения (чтение при
-  проведении для движений, целостная передача в другую систему, групповая
-  обработка/обновление ИБ), выполнять в транзакции, предварительно установив
-  управляемую блокировку (`БлокировкаДанных`). Ответственное чтение не требуется
-  для динамических списков, поиска, большинства отчётов, условно-постоянных данных
-  и монопольных операций.
-- [критичная] **Исключительная/разделяемая блокировка** — при чтении с последующим изменением
-  ставить исключительную блокировку до чтения (иначе взаимоблокировка); при чтении
-  без изменения (например, для формирования движений) — разделяемую на читаемые
-  данные, исключительную на изменяемые.
-- [важная] **Управляемый режим блокировки** — использовать режим управления блокировкой
-  «Управляемый»; блокировать только реально обрабатываемые записи; не применять в
-  запросах конструкцию `ДЛЯ ИЗМЕНЕНИЯ` (бессмысленна в управляемом режиме).
-- [важная] **Избыточные блокировки — проектирование** — минимизировать избыточные блокировки
-  на этапе проектирования структуры метаданных; особое внимание —
-  последовательности, регистры бухгалтерии и накопления.
+- [important] **Object lock before modification** - before modifying an existing
+  object from code call `Заблокировать()` / `ЗаблокироватьДанныеДляРедактирования`
+  (pessimistic lock for concurrent work). Do not check the lock
+  during exchange load and in guaranteed exclusive operations (IB update).
+- [important] **Responsible reading - in a transaction with a managed lock** - reading whose
+  results are used to modify data or make decisions (reading during
+  posting for movements, consistent transfer to another system, group
+  processing/IB update) must be performed in a transaction, after setting a
+  managed lock (`БлокировкаДанных`). Responsible reading is not required
+  for dynamic lists, search, most reports, conditionally constant data
+  and exclusive operations.
+- [critical] **Exclusive/shared lock** - when reading followed by modification,
+  set an exclusive lock before reading (otherwise deadlock); when reading
+  without modification (e.g., to form movements) - shared on the read
+  data, exclusive on the modified data.
+- [important] **Managed lock mode** - use the lock control mode
+  "Managed"; lock only records actually processed; do not use the
+  `ДЛЯ ИЗМЕНЕНИЯ` construct in queries (meaningless in managed mode).
+- [important] **Redundant locks - design** - minimize redundant locks
+  at the metadata structure design stage; pay special attention to
+  sequences, accounting and accumulation registers.
 
-## Запись регистров и чтение реквизитов
+## Writing registers and reading attributes
 
-- [важная] **Запись регистра одним набором** — не перезаписывать большой набор, в котором
-  меняется ≤30% записей (писать только изменения); использовать режимы замещения
-  (Слияние/Удаление/Обновление) и вычисление изменений запросом.
-- [важная] **Чтение отдельных реквизитов — запросом или БСП** — для чтения отдельных
-  реквизитов не использовать `Ссылка.ПолучитьОбъект()` и разыменование
-  `Ссылка.Реквизит` через точку (загружают объект целиком с табличными частями);
-  использовать запрос или `ОбщегоНазначения.ЗначениеРеквизитаОбъекта` /
+- [important] **Write a register with one set** - do not rewrite a large set in which
+  ≤30% of records change (write only the changes); use substitution modes
+  (Merge/Delete/Update) and change computation by query.
+- [important] **Reading individual attributes - by query or BSP** - to read individual
+  attributes do not use `Ссылка.ПолучитьОбъект()` and dot dereferencing
+  `Ссылка.Реквизит` (they load the whole object with tabular sections);
+  use a query or `ОбщегоНазначения.ЗначениеРеквизитаОбъекта` /
   `ЗначенияРеквизитовОбъекта`.
-- [важная] **Блокирующее чтение остатков — ближе к концу транзакции** — контроль остатков
-  (чтение итогов) выполнять как можно ближе к концу транзакции: сначала записать
-  движения регистров, не требующих контроля (в стабильном порядке, с
-  `БлокироватьДляИзменения = Ложь`), в конце — регистры, требующие контроля
-  (`БлокироватьДляИзменения = Истина`) и запрос контроля отрицательных остатков.
-  Не контролировать остатки там, где это не нужно (приходный документ,
-  перепроведение без увеличения списания).
+- [important] **Blocking balance reading - closer to the transaction end** - perform balance control
+  (totals reading) as close to the transaction end as possible: first write
+  movements of registers that do not require control (in a stable order, with
+  `БлокироватьДляИзменения = Ложь`), at the end - registers requiring control
+  (`БлокироватьДляИзменения = Истина`) and the negative balance control query.
+  Do not control balances where it is not needed (receipt document,
+  re-posting without increasing write-off).
 
-## Регистры накопления и виртуальные таблицы
+## Accumulation registers and virtual tables
 
-> Полный чеклист (хранение, «Обороты»/«Остатки»/«Остатки и обороты», агрегаты, типовые
-> ошибки запросов) — [Регистры накопления](reference/accumulation-registers.md).
-> Прочитай справку целиком перед написанием запроса/отчёта по регистру накопления.
+> Full checklist (storage, "Turnovers"/"Balances"/"Balances and turnovers", aggregates, typical
+> query errors) - [Accumulation registers](reference/accumulation-registers.md).
+> Read the reference in full before writing a query/report for an accumulation register.
 
-## Итоги в запросах (ИТОГИ)
+## Totals in queries (ИТОГИ)
 
-- [критичная] **Неагрегированные поля в ИТОГИ** — поле, не входящее в группировку
-  `ИТОГИ` и не обёрнутое в агрегат, на строках итогов равно `NULL`. Это ловит
-  `query-analyze` (`totals-field-not-aggregated`, error), но проверяй и глазами:
-  каждое «голое» поле списка выбора должно быть либо в `ПО`, либо в агрегате.
+- [critical] **Non-aggregated fields in TOTALS** - a field that is not included in the
+  `ИТОГИ` grouping and not wrapped in an aggregate equals `NULL` on total rows. This is caught by
+  `query-analyze` (`totals-field-not-aggregated`, error), but also check by eye:
+  every "bare" field of the select list must be either in `ПО` or in an aggregate.
 
-## Регистры сведений
+## Information registers
 
-> Полный чеклист (архитектура, «СрезПоследних»/«СрезПервых», режимы записи) —
-> [Регистры сведений](reference/information-registers.md). Прочитай справку целиком
-> перед запросом или записью регистра сведений.
+> Full checklist (architecture, "SliceLast"/"SliceFirst", write modes) -
+> [Information registers](reference/information-registers.md). Read the reference in full
+> before querying or writing an information register.
 
-## Режим разделения итогов регистров
+## Register totals split mode
 
-- [важная] **Разделение итогов не помогает при контроле остатков** — если ведётся контроль
-  остатков, эффекта от разделения итогов не будет; контроль остатков переносить
-  как можно ближе к концу транзакции.
+- [important] **Totals split does not help with balance control** - if balance
+  control is used, splitting totals has no effect; move balance control
+  as close to the transaction end as possible.

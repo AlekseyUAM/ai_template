@@ -1,4 +1,4 @@
-# analyze_query.py — прогон реестра правил по тексту запроса.
+# analyze_query.py - run the rule registry against query text.
 import argparse
 import sys
 
@@ -7,17 +7,17 @@ sys.stderr.reconfigure(encoding="utf-8")
 
 import rules
 
-# Коды правил, работающих только по тексту (без AST-модели); все остальные требуют модель.
+# Rule codes that work on text only (no AST model); all others require the model.
 _TEXT_ONLY_CODES = frozenset({"keyword-lowercase", "query-one-line", "order-after-totals"})
 _SEPARATOR = "--- 8< ---"
 
 
 def split_extracted(text: str) -> list[tuple[str | None, str]]:
-    """Разбить вывод extract_queries.py на блоки (заголовок, текст запроса).
+    """Split extract_queries.py output into blocks (header, query text).
 
-    extract_queries.py печатает `# <путь>:<строка>` перед текстом запроса и
-    разделяет запросы строкой `--- 8< ---`. Обычный текст запроса без заголовков
-    возвращается одним блоком с header=None.
+    extract_queries.py prints `# <path>:<line>` before the query text and
+    separates queries with the `--- 8< ---` line. Plain query text without headers
+    is returned as a single block with header=None.
     """
     text = text.replace("\r\n", "\n")
     if not text.strip():
@@ -42,12 +42,12 @@ def split_extracted(text: str) -> list[tuple[str | None, str]]:
 
 
 def analyze_text(text: str):
-    """Разобрать один текст запроса; вернуть (ctx, findings)."""
+    """Analyze one query text; return (ctx, findings)."""
     ctx = rules.QueryContext(text)
     findings = rules.run_all(ctx)
-    # Принудительно обращаемся к модели, чтобы зафиксировать model_error
-    # (run_all мог пропустить все AST-правила без обращения к ctx.model,
-    # если модель ещё не была запрошена).
+    # Force access to the model to capture model_error
+    # (run_all could skip all AST rules without touching ctx.model
+    # if the model has not been requested yet).
     _ = ctx.model
     findings.sort(key=lambda f: (f.line, f.code))
     return ctx, findings
@@ -93,9 +93,9 @@ def main(argv=None):
         ctx, findings = analyze_text(query)
         analyzed.append((header, ctx, findings))
 
-    # Инфраструктурный пропуск слоя (нет node/бандла, сбой запуска) — предупреждаем.
-    # Синтаксическая ошибка разбора (ctx.parse_error) не пропуск, а находка
-    # query-not-parseable — её не дублируем предупреждением.
+    # Infrastructure layer skip (no node/bundle, launch failure) - warn.
+    # A syntax parse error (ctx.parse_error) is not a skip but the
+    # query-not-parseable finding - do not duplicate it with a warning.
     seen_errors = []
     for _header, ctx, _findings in analyzed:
         if ctx.model_error and not ctx.parse_error and ctx.model_error not in seen_errors:

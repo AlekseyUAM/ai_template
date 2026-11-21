@@ -1,31 +1,31 @@
-# Планы: ChartOfCharacteristicTypes, ChartOfAccounts, ChartOfCalculationTypes
+# Charts: ChartOfCharacteristicTypes, ChartOfAccounts, ChartOfCalculationTypes
 
-Все три — ссылочные типы (наследуют слой Catalog: коды, `standardAttributes`, `characteristics`, `inputByString`,
-формы, представления — см. `catalog.md` / `attributes.md` / `blocks.md`) с предопределёнными элементами и своими
-специальными свойствами.
+All three are reference types (they inherit the Catalog layer: codes, `standardAttributes`, `characteristics`, `inputByString`,
+forms, presentations - see `catalog.md` / `attributes.md` / `blocks.md`) with predefined items and their own
+special properties.
 
 ## ChartOfCharacteristicTypes (План видов характеристик)
 
-Хранит определения характеристик (видов). Иерархический (папки+элементы).
+Stores characteristic (kind) definitions. Hierarchical (folders + items).
 
-| Ключ | Умолчание | Значения |
+| Key | Default | Values |
 |------|-----------|----------|
-| `valueType` | любой примитив | тип значения характеристики (составной — строка `"A + B"` или массив `valueTypes`) |
-| `characteristicExtValues` | пусто | ссылка на справочник доп. значений |
+| `valueType` | any primitive | characteristic value type (composite - string `"A + B"` or `valueTypes` array) |
+| `characteristicExtValues` | empty | reference to the additional values catalog |
 | `hierarchical` | `false` | bool |
 | `foldersOnTop` | `true` | bool |
-| `codeLength` | `9` | длина кода |
-| `descriptionLength` | `100` | длина наименования |
+| `codeLength` | `9` | code length |
+| `descriptionLength` | `100` | description length |
 | `checkUnique` | `true` | bool |
 | `autonumbering` | `true` | bool |
-| `codeSeries` | `WholeCharacteristicKind` | серия кодов |
+| `codeSeries` | `WholeCharacteristicKind` | code series |
 | `createOnInput` | `DontUse` | `Auto` / `Use` / `DontUse` |
 | `dataLockControlMode` | `Managed` | `Automatic` / `Managed` |
-| `predefined` | `[]` | предопределённые виды (несут тип значения — см. ниже) |
-| `attributes` / `tabularSections` | `[]` / `{}` | реквизиты / табличные части |
+| `predefined` | `[]` | predefined kinds (carry the value type - see below) |
+| `attributes` / `tabularSections` | `[]` / `{}` | attributes / tabular sections |
 
-**Предопределённые виды** несут **тип значения на элемент** — короткой строкой после `:`
-(`"(Код) Имя [Наименование]: Тип"`, составной через `+`) или объектной формой с ключом `type`:
+**Predefined kinds** carry a **value type per item** - as a short string after `:`
+(`"(Код) Имя [Наименование]: Тип"`, composite via `+`) or as an object form with the `type` key:
 
 ```json
 "predefined": [
@@ -37,40 +37,41 @@
 
 ## ChartOfAccounts (План счетов)
 
-| Ключ | Умолчание | Значения |
+| Key | Default | Values |
 |------|-----------|----------|
-| `extDimensionTypes` | пусто | ссылка на ПВХ видов субконто `ChartOfCharacteristicTypes.X` |
-| `maxExtDimensionCount` | `0` (без ПВХ) / `3` (с ПВХ) | макс. число субконто |
-| `codeMask` | пусто | маска кода счёта (напр. `"@@@.@@"`) |
-| `codeLength` | `9` | длина кода |
-| `descriptionLength` | `25` | длина наименования |
+| `extDimensionTypes` | empty | reference to the chart of characteristic types of subconto kinds `ChartOfCharacteristicTypes.X` |
+| `maxExtDimensionCount` | `0` (no chart of characteristic types) / `3` (with it) | max number of subconto |
+| `codeMask` | empty | account code mask (e.g. `"@@@.@@"`) |
+| `codeLength` | `9` | code length |
+| `descriptionLength` | `25` | description length |
 | `checkUnique` | `true` | bool |
-| `codeSeries` | `WholeChartOfAccounts` | серия кодов |
+| `codeSeries` | `WholeChartOfAccounts` | code series |
 | `defaultPresentation` | `AsCode` | `AsCode` / `AsDescription` |
 | `autoOrderByCode` | `true` | bool |
-| `orderLength` | `9` | длина строки упорядочивания |
+| `orderLength` | `9` | ordering string length |
 | `createOnInput` | `DontUse` | `Auto` / `Use` / `DontUse` |
 | `dataLockControlMode` | `Managed` | `Automatic` / `Managed` |
-| `accountingFlags` | `[]` | признаки учёта (как реквизиты, тип по умолчанию Boolean; массив имён/реквизитов) |
-| `extDimensionAccountingFlags` | `[]` | признаки учёта субконто (как реквизиты) |
-| `predefined` | `[]` | предопределённые счета (см. ниже) |
+| `accountingFlags` | `[]` | accounting flags (as attributes, default type Boolean; array of names/attributes) |
+| `extDimensionAccountingFlags` | `[]` | subconto accounting flags (as attributes) |
+| `predefined` | `[]` | predefined accounts (see below) |
 
-**Предопределённый счёт** (объектная форма):
+**Predefined account** (object form):
 
-| Поле | Умолчание | Значения |
+| Field | Default | Values |
 |------|-----------|----------|
-| `name` | — | имя (обязательно) |
-| `code` | пусто | код счёта |
-| `description` | из имени | наименование |
+| `name` | - | name (required) |
+| `code` | empty | account code |
+| `description` | from name | name |
 | `accountType` | `ActivePassive` | `Active` / `Passive` / `ActivePassive` |
-| `offBalance` | `false` | bool (забалансовый) |
-| `order` | — | строка сортировки |
-| `flags` | `[]` | включённые признаки учёта (только TRUE) |
-| `subconto` | `[]` | виды субконто (см. ниже) |
-| `childItems` | `[]` | подчинённые счета |
+| `offBalance` | `false` | bool (off-balance) |
+| `order` | - | sort string |
+| `flags` | `[]` | enabled accounting flags (TRUE only) |
+| `subconto` | `[]` | subconto kinds (see below) |
+| `childItems` | `[]` | subordinate accounts |
 
-`subconto` — строка `"Вид | Признак1, Признак2"` (после `|` — включённые признаки учёта субконто; токен `Turnover` —
-«только обороты») или объект `{ type, turnover, flags }`. `Вид` — имя предопределённого вида из ПВХ `extDimensionTypes`.
+`subconto` - a string `"Вид | Признак1, Признак2"` (after `|` - enabled subconto accounting flags; the `Turnover` token means
+"turnovers only") or an object `{ type, turnover, flags }`. `Вид` - the name of a predefined kind from the chart of
+characteristic types `extDimensionTypes`.
 
 ```json
 "predefined": [
@@ -82,24 +83,24 @@
 
 ## ChartOfCalculationTypes (План видов расчёта)
 
-| Ключ | Умолчание | Значения |
+| Key | Default | Values |
 |------|-----------|----------|
-| `codeLength` | `5` | длина кода |
-| `descriptionLength` | `100` | длина наименования |
+| `codeLength` | `5` | code length |
+| `descriptionLength` | `100` | description length |
 | `codeAllowedLength` | `Variable` | `Variable` / `Fixed` |
 | `dependenceOnCalculationTypes` | `DontUse` | `DontUse` / `OnActionPeriod` / `OnRegistrationPeriod` |
-| `baseCalculationTypes` | `[]` | базовые виды расчёта (список ссылок `ChartOfCalculationTypes.X`) |
-| `actionPeriodUse` | `false` | bool (использовать период действия) |
+| `baseCalculationTypes` | `[]` | base calculation types (list of references `ChartOfCalculationTypes.X`) |
+| `actionPeriodUse` | `false` | bool (use action period) |
 | `createOnInput` | `DontUse` | `Auto` / `Use` / `DontUse` |
 | `dataLockControlMode` | `Managed` | `Automatic` / `Managed` |
-| `predefined` | `[]` | предопределённые виды расчёта (см. ниже) |
+| `predefined` | `[]` | predefined calculation types (see below) |
 
-**Предопределённый вид расчёта** — плоский: строка `"(Код) Имя [Наименование]"` или объект
-`{ name, code, description, actionPeriodIsBase }` (`actionPeriodIsBase` — bool, по умолчанию `false`).
+**Predefined calculation type** - flat: a string `"(Код) Имя [Наименование]"` or an object
+`{ name, code, description, actionPeriodIsBase }` (`actionPeriodIsBase` - bool, `false` by default).
 
 ```json
 "predefined": [ "(00001) Оклад [Оклад по дням]", { "name": "Премия", "code": "00002", "actionPeriodIsBase": true } ]
 ```
 
-> **ChartOfAccounts** ссылается на ПВХ через `extDimensionTypes`. Регистр бухгалтерии/расчёта требует
-> соответствующий план (см. `registers.md`).
+> **ChartOfAccounts** references a chart of characteristic types via `extDimensionTypes`. An accounting/calculation
+> register requires the corresponding chart (see `registers.md`).

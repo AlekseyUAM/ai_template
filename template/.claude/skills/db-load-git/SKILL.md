@@ -1,6 +1,6 @@
 ---
 name: db-load-git
-description: Загрузка изменений из Git в базу 1С. Используй когда нужно загрузить изменения из гита, обновить базу из репозитория, partial load из коммита
+description: Loading changes from Git into a 1C database. Use when you need to load changes from git, update the database from the repository, do a partial load from a commit
 argument-hint: "[database] [source]"
 allowed-tools:
   - Bash
@@ -9,13 +9,13 @@ allowed-tools:
   - AskUserQuestion
 ---
 
-# /db-load-git — Загрузка изменений из Git
+# /db-load-git - Loading changes from Git
 
-Определяет изменённые файлы конфигурации по данным Git и выполняет частичную загрузку в информационную базу.
+Determines changed configuration files from Git data and performs a partial load into the infobase.
 
-> Если в изменениях есть `Configuration.xml`, платформа выполнит **полную загрузку конфигурации**, а не только изменённых объектов.
+> If the changes include `Configuration.xml`, the platform performs a **full configuration load**, not just the changed objects.
 
-> Удалённый объект уйдёт из базы, только если удалён и из состава владельца (`ChildObjects` объекта или `Configuration.xml`). Удалённый файл-часть объекта (модуль, файлы `Ext/`) загрузкой частями не удаляется: скрипт перечислит такие удаления в `[ВНИМАНИЕ]`, а если кроме них загружать нечего, завершится ошибкой. Применить их можно только полной загрузкой (`/db-load-xml -Mode Full`); чтобы убрать код модуля, достаточно оставить файл пустым.
+> A deleted object leaves the database only if it is also deleted from the owner's composition (`ChildObjects` of the object or `Configuration.xml`). A deleted file that is part of an object (a module, files under `Ext/`) is not deleted by partial loading: the script lists such deletions under `[ВНИМАНИЕ]`, and if there is nothing else to load, it fails with an error. They can only be applied by a full load (`/db-load-xml -Mode Full`); to remove module code, it is enough to leave the file empty.
 
 ## Usage
 
@@ -27,52 +27,52 @@ allowed-tools:
 /db-load-git dev -DryRun                      — только показать что будет загружено
 ```
 
-## Параметры подключения
+## Connection parameters
 
-Прочитай `.v8-project.json` из корня проекта и разреши базу:
-1. Если пользователь указал параметры подключения (путь, сервер) — используй напрямую
-2. Если указал базу по имени — ищи по id / alias / name в `.v8-project.json`
-3. Если не указал — сопоставь текущую ветку Git с `databases[].branches`
-4. Если ветка не совпала — используй `default`
-Платформа — `v8path` найденной записи базы, иначе корневой `v8path`. Не задан ни там, ни там — `-V8Path` не передавай.
-Если файла нет — предложи `/db-list add`.
-Если использованная база не зарегистрирована — после выполнения предложи добавить через `/db-list add`.
-Если в записи базы указан `configSrc` — используй как каталог конфигурации.
+Read `.v8-project.json` from the project root and resolve the database:
+1. If the user specified connection parameters (path, server) - use them directly
+2. If the user specified a database by name - search by id / alias / name in `.v8-project.json`
+3. If not specified - match the current Git branch against `databases[].branches`
+4. If the branch did not match - use `default`
+Platform - `v8path` of the found database record, otherwise the root `v8path`. If neither is set - do not pass `-V8Path`.
+If the file does not exist - offer `/db-list add`.
+If the database used is not registered - after execution offer to add it via `/db-list add`.
+If the database record has `configSrc` - use it as the configuration directory.
 
-## Команда
+## Command
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/db-load-git.py" <параметры>
 ```
 
-### Параметры скрипта
+### Script parameters
 
-| Параметр | Обязательный | Описание |
+| Parameter | Required | Description |
 |----------|:------------:|----------|
-| `-V8Path <путь>` | нет | Каталог bin платформы, или полный путь к `1cv8.exe` / `ibcmd.exe` |
-| `-InfoBasePath <путь>` | * | Файловая база |
-| `-InfoBaseServer <сервер>` | * | Сервер 1С (для серверной базы) |
-| `-InfoBaseRef <имя>` | * | Имя базы на сервере |
-| `-UserName <имя>` | нет | Имя пользователя |
-| `-Password <пароль>` | нет | Пароль |
-| `-ConfigDir <путь>` | да | Каталог XML-выгрузки (git-репозиторий) |
-| `-Source <источник>` | нет | `All` (по умолч.) / `Staged` / `Unstaged` / `Commit` |
-| `-CommitRange <range>` | для Commit | Диапазон коммитов (напр. `HEAD~3..HEAD`) |
-| `-Extension <имя>` | нет | Загрузить в расширение |
-| `-NoApplyCheck` | нет | Не проверять применимость расширения после загрузки |
-| `-Format <формат>` | нет | `Hierarchical` (по умолч.) / `Plain` |
-| `-DryRun` | нет | Только показать что будет загружено (без загрузки) |
-| `-UpdateDB` | нет | После загрузки сразу обновить конфигурацию БД (`/UpdateDBCfg`) |
-| `-AdditionalV8Arguments <список>` | нет | Доп. аргументы запуска `1cv8.exe` через запятую, напр. `/UseHwLicenses+` |
-| `-AdditionalIbcmdArguments <список>` | нет | Доп. аргументы `ibcmd` через запятую, в форме `--ключ=значение` |
+| `-V8Path <путь>` | no | Platform bin directory, or full path to `1cv8.exe` / `ibcmd.exe` |
+| `-InfoBasePath <путь>` | * | File infobase |
+| `-InfoBaseServer <сервер>` | * | 1C server (for a server infobase) |
+| `-InfoBaseRef <имя>` | * | Database name on the server |
+| `-UserName <имя>` | no | User name |
+| `-Password <пароль>` | no | Password |
+| `-ConfigDir <путь>` | yes | XML dump directory (git repository) |
+| `-Source <источник>` | no | `All` (default) / `Staged` / `Unstaged` / `Commit` |
+| `-CommitRange <range>` | for Commit | Commit range (e.g. `HEAD~3..HEAD`) |
+| `-Extension <имя>` | no | Load into an extension |
+| `-NoApplyCheck` | no | Do not check extension applicability after loading |
+| `-Format <формат>` | no | `Hierarchical` (default) / `Plain` |
+| `-DryRun` | no | Only show what will be loaded (without loading) |
+| `-UpdateDB` | no | After loading, immediately update the DB configuration (`/UpdateDBCfg`) |
+| `-AdditionalV8Arguments <список>` | no | Additional `1cv8.exe` launch arguments, comma-separated, e.g. `/UseHwLicenses+` |
+| `-AdditionalIbcmdArguments <список>` | no | Additional `ibcmd` arguments, comma-separated, in the form `--ключ=значение` |
 
-> `*` — нужен либо `-InfoBasePath`, либо пара `-InfoBaseServer` + `-InfoBaseRef`
+> `*` - either `-InfoBasePath` is needed, or the pair `-InfoBaseServer` + `-InfoBaseRef`
 
-## После выполнения
+## After execution
 
-Если `-UpdateDB` не был указан — **предложить `/db-update`** для применения изменений к БД
+If `-UpdateDB` was not specified - **offer `/db-update`** to apply the changes to the DB
 
-## Примеры
+## Examples
 
 ```bash
 # Все незафиксированные изменения

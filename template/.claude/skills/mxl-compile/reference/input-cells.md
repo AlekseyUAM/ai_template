@@ -1,7 +1,7 @@
-# Ячейки-поля ввода
+# Input field cells
 
-Ячейка может не показывать текст, а принимать значение от пользователя — так делают макеты для
-ввода данных. Достаточно задать тип значения:
+A cell can show no text and instead accept a value from the user - this is how templates for
+data entry are made. It is enough to set the value type:
 
 ```json
 { "col": 1, "valueType": "Number(15,3,nonneg)" }
@@ -12,30 +12,30 @@
 { "col": 6, "valueType": "AnyRef" }
 ```
 
-Грамматика типа:
+Type grammar:
 
-| Запись | Значение |
+| Entry | Meaning |
 |---|---|
-| `Boolean` | булево |
-| `String`, `String(10)`, `String(10,fixed)` | строка; без длины — неограниченная, `fixed` — фиксированной длины |
-| `Number`, `Number(15,3)`, `Number(15,3,nonneg)` | число; без параметров — без ограничения разрядности, `nonneg` — неотрицательное |
-| `Date`, `DateTime`, `Time` | дата, дата со временем, время |
-| `CatalogRef.Валюты`, `DocumentRef.Реализация`, `EnumRef.Статусы`, `DefinedType.Сумма` | ссылочный тип |
-| `CatalogRef`, `DocumentRef`, `AnyRef` | категория целиком: любая ссылка этого вида |
-| `A + B` | составной тип; повтор одного примитива недопустим |
+| `Boolean` | boolean |
+| `String`, `String(10)`, `String(10,fixed)` | string; without length - unlimited, `fixed` - fixed length |
+| `Number`, `Number(15,3)`, `Number(15,3,nonneg)` | number; without parameters - no digit limit, `nonneg` - non-negative |
+| `Date`, `DateTime`, `Time` | date, date with time, time |
+| `CatalogRef.Валюты`, `DocumentRef.Реализация`, `EnumRef.Статусы`, `DefinedType.Сумма` | reference type |
+| `CatalogRef`, `DocumentRef`, `AnyRef` | the category as a whole: any reference of this kind |
+| `A + B` | composite type; repeating the same primitive is not allowed |
 
-Русские имена принимаются наравне с английскими: `Число(15,3)`, `Строка(10)`,
+Russian names are accepted on a par with English ones: `Число(15,3)`, `Строка(10)`,
 `СправочникСсылка.Валюты`.
 
-`text` и `template` в такой ячейке недопустимы — платформа не показывает текст там, где вводится
-значение. `param` и `detail` допустимы: они описывают заполнение и расшифровку, а не содержимое.
+`text` and `template` are not allowed in such a cell - the platform does not show text where a
+value is entered. `param` and `detail` are allowed: they describe filling and decryption, not content.
 
-Пустой тип `"valueType": ""` — «ячейка содержит значение», но тип не ограничен.
+Empty type `"valueType": ""` - "the cell contains a value", but the type is not restricted.
 
-Значение поля ввода задаётся ключом `value`. Его тип — тип литерала JSON: строка, число,
-`true`/`false`; к объявленному типу ячейки значение не приводится. Пустая строка означает
-пустое значение объявленного типа. Дата пишется строкой `ГГГГ-ММ-ДДTчч:мм:сс` и читается
-как дата у ячейки, объявленной датой; у ссылочного и составного типа значение — строка.
+The input field value is set with the `value` key. Its type is the JSON literal type: string, number,
+`true`/`false`; the value is not cast to the cell's declared type. An empty string means
+an empty value of the declared type. A date is written as the string `ГГГГ-ММ-ДДTчч:мм:сс` and is read
+as a date for a cell declared as a date; for a reference and composite type the value is a string.
 
 ```json
 { "col": 1, "valueType": "Number(15,3)", "value": 12.5 }
@@ -44,5 +44,5 @@
 { "col": 4, "valueType": "DateTime", "value": "" }
 ```
 
-`controlType` нужен редко: умолчание платформы — поле ввода, и оно подходит всем типам, включая
-`Boolean`. Флажок задаётся явно.
+`controlType` is rarely needed: the platform default is an input field, and it suits all types, including
+`Boolean`. A checkbox is set explicitly.

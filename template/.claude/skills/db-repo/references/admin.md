@@ -1,45 +1,45 @@
-# Администрирование хранилища
+# Repository administration
 
-## create — создать хранилище
+## create - create a repository
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/db-repo.py" -Command create -InfoBasePath "C:\Bases\MyDB" -RepositoryPath "C:\Repo\MyApp" -RepositoryUser "Admin" -RepositoryPassword "…"
 ```
 
-| Параметр | Описание |
+| Parameter | Description |
 |----------|----------|
-| `-NoBind` | Не подключать базу к созданному хранилищу |
-| `-AllowConfigurationChanges` | Включить возможность изменения, если конфигурация на поддержке без неё |
-| `-ChangesAllowedRule <правило>` | Правило для объектов, изменения которых разрешены поставщиком |
-| `-ChangesNotRecommendedRule <правило>` | То же для «изменения не рекомендуются» |
+| `-NoBind` | Do not connect the database to the created repository |
+| `-AllowConfigurationChanges` | Enable configuration changes if the configuration is on vendor support without this ability |
+| `-ChangesAllowedRule <правило>` | Rule for objects whose changes are allowed by the vendor |
+| `-ChangesNotRecommendedRule <правило>` | Same for "changes not recommended" |
 
-Правила: `ObjectNotEditable`, `ObjectIsEditableSupportEnabled`, `ObjectNotSupported`.
+Rules: `ObjectNotEditable`, `ObjectIsEditableSupportEnabled`, `ObjectNotSupported`.
 
-Без `-NoBind` база сразу подключается к созданному хранилищу. Создание — это версия 1.
+Without `-NoBind` the database is immediately connected to the created repository. Creation is version 1.
 
-Для расширения: `-Extension "<Имя>"` и отдельный путь — у расширения своё хранилище.
+For an extension: `-Extension "<Имя>"` and a separate path - an extension has its own repository.
 
-## add-user — создать пользователя
+## add-user - create a user
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/db-repo.py" -Command add-user -InfoBasePath "C:\Bases\MyDB" -NewUser "Ivanov" -NewUserPassword "…" -Rights LockObjects
 ```
 
-| Право | Что даёт |
+| Right | What it grants |
 |-------|----------|
-| `ReadOnly` | Просмотр |
-| `LockObjects` | Захват объектов |
-| `ManageConfigurationVersions` | Изменение состава версий |
-| `Administration` | Административные функции |
+| `ReadOnly` | View |
+| `LockObjects` | Locking objects |
+| `ManageConfigurationVersions` | Changing the set of versions |
+| `Administration` | Administrative functions |
 
-`-RestoreDeletedUser` — восстановить одноимённого удалённого. Если пользователь с таким именем
-существует, он **не** будет добавлен. Выполняющий должен иметь административные права.
+`-RestoreDeletedUser` - restore a deleted user with the same name. If a user with that name
+exists, it will **not** be added. The executing user must have administrative rights.
 
-## copy-users — скопировать пользователей из другого хранилища
+## copy-users - copy users from another repository
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/db-repo.py" -Command copy-users -InfoBasePath "C:\Bases\MyDB" -SourcePath "\\srv01\repo\Other" -SourceUser "Admin" -SourcePassword "…"
 ```
 
-`-SourcePath`, `-SourceUser`, `-SourcePassword` описывают хранилище-**источник**. Удалённые пользователи
-не копируются; существующие не перезаписываются.
+`-SourcePath`, `-SourceUser`, `-SourcePassword` describe the **source** repository. Deleted users
+are not copied; existing ones are not overwritten.

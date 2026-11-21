@@ -7,18 +7,18 @@ import re
 import sys
 import xml.etree.ElementTree as ET
 
-# Регистронезависимый ввод: имена параметров и значения choices принимаются
-# в любом регистре (в argparse по умолчанию совпадение точное).
+# Case-insensitive input: parameter names and choices values are accepted
+# in any case (argparse matches exactly by default).
 
 def parse_json_input(text, source, expected=None, inline=False):
-    """Разбор пользовательского JSON: одна строка в stderr вместо traceback (issue #80).
+    """Parse user JSON: one line on stderr instead of a traceback (issue #80).
 
-    expected заполняем только для полиморфного входа: у файла подсказка
-    была бы наполнителем — имя файла и текст парсера самодостаточны. inline печатает ещё и то,
-    что доехало: у файла такого вопроса нет, он лежит на диске и его видно целиком.
+    expected is filled only for polymorphic input: for a file the hint would be
+    filler - the file name and the parser text are self-sufficient. inline also prints what
+    arrived: a file has no such question, it lies on disk and is visible in full.
 
-    Импорты внутри тела: копия функции живёт в навыках с разными именами модулей
-    (skd-decompile импортирует json локально как _json), а тело обязано быть одинаковым.
+    Imports inside the body: a copy of the function lives in skills with different module names
+    (skd-decompile imports json locally as _json), and the body must be identical.
     """
     import json as _pj
     import sys as _psys
@@ -42,10 +42,10 @@ def parse_json_input(text, source, expected=None, inline=False):
 
 
 def read_json_file(path):
-    """Чтение входного JSON-файла с кодировкой из BOM (issue #80).
+    """Read the input JSON file with the encoding from the BOM (issue #80).
 
-    BOM — объявление самого файла, поэтому ему верим; без BOM ждём строгий UTF-8. Кодовую
-    страницу не подбираем: угаданное имя уехало бы в метаданные молча.
+    The BOM is the file's own declaration, so we trust it; without a BOM we expect strict UTF-8.
+    We do not guess a code page: a guessed name would go into the metadata silently.
     """
     import os as _pos
     import sys as _psys
@@ -72,13 +72,13 @@ def read_json_file(path):
 
 
 def ci_parse_args(parser, argv=None):
-    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
+    """parse_args: parameter names and choices values are accepted in any case."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
         if tok.startswith('-') and tok.lower() in names:
             argv[i] = names[tok.lower()]
-    # choices — зеркало [ValidateSet]; канонизируем ДО разбора, иначе argparse отвергнет регистр
+    # choices mirrors [ValidateSet]; canonicalize BEFORE parsing, otherwise argparse rejects the case
     choice_map = {}
     for a in parser._actions:
         if a.choices:
@@ -417,11 +417,11 @@ def new_sentinel(kind, loc, detail):
 
 # --- 3. Helpers ---
 
-# Custom JSON serializer — компактный, 2-пробельный indent, массивы примитивов inline.
-# В отличие от ConvertTo-Json (PS5.1):
-#   - не выравнивает ключи объекта по самому длинному
-#   - не разворачивает массивы примитивов на отдельные строки
-#   - кириллица в UTF-8 (без \uXXXX-escapes)
+# Custom JSON serializer - compact, 2-space indent, arrays of primitives inline.
+# Unlike ConvertTo-Json (PS5.1):
+#   - does not align object keys to the longest one
+#   - does not expand arrays of primitives onto separate lines
+#   - Cyrillic in UTF-8 (no \uXXXX escapes)
 def convert_string_to_json_literal(s):
     if s is None:
         return 'null'
@@ -459,7 +459,7 @@ def _fmt_number(v):
         # Invariant culture: '.' decimal sep
         if v == int(v):
             # Preserve float-ness: 5.0 → "5"
-            # Строковое представление по инвариантной культуре: 5.0 → "5"
+            # String representation in invariant culture: 5.0 -> "5"
             return str(int(v))
         return repr(v)
     return str(v)
@@ -510,7 +510,7 @@ def convert_to_compact_json(obj, depth=0, indent_unit='  ', line_limit=400):
     if isinstance(obj, (int, float)):
         return _fmt_number(obj)
 
-    # Try inline для объектов и массивов с объектами — если помещается в lineLimit с учётом текущего indent.
+    # Try inline for objects and arrays with objects - if it fits in lineLimit including the current indent.
     is_container = isinstance(obj, (dict, list, tuple))
     if is_container:
         inline_attempt = try_inline_json(obj)
@@ -760,7 +760,7 @@ def get_appearance_dict(app_node):
     return d
 
 
-# Read <r:inputParameters> → JSON array. Returns None если отсутствует или пустой.
+# Read <r:inputParameters> -> JSON array. Returns None if absent or empty.
 def read_input_parameters(parent_node):
     ip = parent_node.select_single_node("r:inputParameters")
     if not ip:
@@ -1217,7 +1217,7 @@ def render_parameter(p):
     return obj
 
 
-# --- 3b. Built-in style presets (preset-shape: 11 полей) ---
+# --- 3b. Built-in style presets (preset shape: 11 fields) ---
 
 builtin_preset_names = ['none', 'data', 'header', 'subheader', 'total']
 
@@ -2409,8 +2409,8 @@ def build_table_axis_block(node, loc, include_name=False):
         for fc in f_node.select_nodes("dcsset:item"):
             fa.append(build_filter_item(fc, "%s/filter" % loc))
         entry['filter'] = fa
-    # order/selection — всегда явные ([Auto] как есть, отсутствие/пустоту как []): иначе compile
-    # впаяет дефолтный Auto → round-trip рвётся на осях без выбора (напр. ветки use=false).
+    # order/selection - always explicit ([Auto] as is, absence/empty as []): otherwise compile
+    # solders in the default Auto -> round-trip breaks on axes without selection (e.g. use=false branches).
     ord_node = node.select_single_node("dcsset:order")
     ord_items = build_order(ord_node, "%s/order" % loc) if ord_node else []
     entry['order'] = ord_items if len(ord_items) > 0 else []
@@ -2565,7 +2565,7 @@ def build_structure(node, loc):
                     s_arr.append(build_table_axis_block(s, "%s/%d/series[%d]" % (loc, idx, si)))
                     si += 1
                 entry['series'] = s_arr
-            # chart-level selection — всегда явно ([] при отсутствии/пустоте, иначе compile впаяет Auto)
+            # chart-level selection - always explicit ([] when absent/empty, otherwise compile solders in Auto)
             sel_n = it.select_single_node("dcsset:selection")
             sel_i = build_selection(sel_n, "%s/%d/selection" % (loc, idx)) if sel_n else []
             entry['selection'] = sel_i if len(sel_i) > 0 else []
@@ -2611,9 +2611,9 @@ def build_structure(node, loc):
         if len(g_fields) > 0:
             entry['groupFields'] = g_fields
 
-        # Local selection/order — всегда явные ([Auto] как есть, отсутствие/пустоту как []): иначе
-        # compile впаяет дефолтный Auto → round-trip рвётся на группах без выбора (напр. use=false).
-        # [] не Auto-only → try_structure_shorthand не свернёт такую группу в shorthand (без Auto).
+        # Local selection/order - always explicit ([Auto] as is, absence/empty as []): otherwise
+        # compile solders in the default Auto -> round-trip breaks on groups without selection (e.g. use=false).
+        # [] is not Auto-only -> try_structure_shorthand will not fold such a group into shorthand (without Auto).
         sel_node = it.select_single_node("dcsset:selection")
         sel_items = build_selection(sel_node, "%s/selection" % loc) if sel_node else []
         entry['selection'] = sel_items if len(sel_items) > 0 else []

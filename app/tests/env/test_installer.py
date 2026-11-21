@@ -1,7 +1,16 @@
+import pytest
+
 from agentmon.backends import RunResult
 from agentmon.backends.local import LocalProvisioner
 from agentmon.env.config_schema import EnvConfig, McpSelection, AgentModel, SCHEMA_VERSION
 from agentmon.env import installer
+from agentmon.env.content import provision_venv as real_provision_venv
+
+
+@pytest.fixture(autouse=True)
+def _fast_venv(monkeypatch):
+    """Installer tests must not create a real venv or run pip (network)."""
+    monkeypatch.setattr(installer, "provision_venv", lambda *a, **k: None)
 
 
 def cfg(tmp_path):
@@ -62,20 +71,36 @@ def test_install_writes_config_and_registers(tmp_path):
     assert any(e.step == "prepare-src" and e.status == "ok" for e in events)
 
 
-def test_venv_step_warns_on_pip_failure(tmp_path):
+class FakeVenvProv(LocalProvisioner):
+    """LocalProvisioner without real venv/pip subprocesses."""
+
+    def __init__(self, pip_rc=0):
+        self.pip_rc = pip_rc
+        self._venv = False
+
+    def exists(self, path):
+        if path.replace("\\", "/").endswith("/.venv"):
+            return self._venv
+        return super().exists(path)
+
+    def write_text(self, path, content):
+        pass
+
+    def run(self, cmd, cwd=None, timeout=None):
+        if "-m" in cmd and "venv" in cmd:
+            self._venv = True
+            return RunResult(0)
+        if "pip" in cmd:
+            return RunResult(self.pip_rc, stderr="pip error")
+        return super().run(cmd, cwd=cwd, timeout=timeout)
+
+
+def test_venv_step_warns_on_pip_failure(tmp_path, monkeypatch):
     """Сбой pip при подъёме .venv даёт статус "warn", но не валит установку."""
-    from agentmon.backends import RunResult
-    from agentmon.backends.local import LocalProvisioner
-
-    class PipFailProv(LocalProvisioner):
-        def run(self, cmd, cwd=None):
-            if "pip" in cmd:
-                return RunResult(returncode=1, stderr="pip error")
-            return super().run(cmd, cwd=cwd)
-
+    monkeypatch.setattr(installer, "provision_venv", real_provision_venv)
     events = list(installer.install_environment(
         cfg(tmp_path), update=False, register=lambda c: None,
-        dump_cf=False, dump_cfe=False, prov=PipFailProv()))
+        dump_cf=False, dump_cfe=False, prov=FakeVenvProv(pip_rc=1)))
     venv = [e for e in events if e.step == "venv"]
     assert any(e.status == "warn" and "setup-venv.py" in e.detail for e in venv)
     # предупреждение не прерывает установку — register всё равно ok
@@ -83,11 +108,12 @@ def test_venv_step_warns_on_pip_failure(tmp_path):
     assert any(e.step == "register" and e.status == "ok" for e in events)
 
 
-def test_venv_step_ok_on_success(tmp_path):
+def test_venv_step_ok_on_success(tmp_path, monkeypatch):
     """Успешный подъём .venv → шаг venv со статусом "ok"."""
+    monkeypatch.setattr(installer, "provision_venv", real_provision_venv)
     events = list(installer.install_environment(
         cfg(tmp_path), update=False, register=lambda c: None,
-        dump_cf=False, dump_cfe=False))
+        dump_cf=False, dump_cfe=False, prov=FakeVenvProv()))
     assert any(e.step == "venv" and e.status == "ok" for e in events)
 
 
@@ -100,16 +126,22 @@ def test_install_runs_dumps_when_requested(tmp_path):
     assert len(dump_calls) == 2       # cf и cfe
 
 
-def test_install_tools_step_optional(tmp_path):
+def test_install_tools_step_optional(tmp_path, monkeypatch):
+    calls: list[str] = []
+    monkeypatch.setattr(
+        installer, "install_tools_fn",
+        lambda config, *, prov=None: calls.append(config.project_dir))
     events = list(installer.install_environment(
         cfg(tmp_path), update=False, register=lambda c: None,
         dump_cf=False, dump_cfe=False, install_tools=True))
     assert any(e.step == "tools-install" and e.status == "ok" for e in events)
+    assert calls == [str(tmp_path)]
 
     events2 = list(installer.install_environment(
         cfg(tmp_path), update=False, register=lambda c: None,
         dump_cf=False, dump_cfe=False))
     assert not any(e.step == "tools-install" for e in events2)
+    assert calls == [str(tmp_path)]
 
 
 def test_git_commit_step_on_create(tmp_path):

@@ -1,4 +1,4 @@
-"""Имена инструментов code-index так, как их видит модель."""
+"""code-index tool names as the model sees them."""
 DEFAULT_PREFIX = "mcp__code_index__"
 _prefix = DEFAULT_PREFIX
 

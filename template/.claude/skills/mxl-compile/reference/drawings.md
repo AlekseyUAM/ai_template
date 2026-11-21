@@ -1,7 +1,7 @@
-# Рисунки и картинки
+# Drawings and pictures
 
-Рисунок — объект поверх сетки ячеек: картинка, фигура или надпись. Его положение задают два
-якоря: ячейка плюс смещение в точках от её левого верхнего угла.
+A drawing is an object on top of the cell grid: a picture, a shape or a text label. Its position is set by two
+anchors: a cell plus an offset in points from its top-left corner.
 
 ```json
 "pictures": {
@@ -22,36 +22,36 @@
 ]
 ```
 
-| Поле | Обяз. | По умолч. | Описание |
+| Field | Required | Default | Description |
 |------|:-----:|-----------|----------|
-| `type` | нет | `Picture` | `Picture`, `Rectangle`, `Ellipse`, `Line`, `Text`, `Chart`, `GanttChart` |
-| `begin` / `end` | да | — | Якоря: `row`, `col` (1-based) и смещения `dy`, `dx` в точках |
-| `picture` | нет | — | Имя записи из `pictures` |
-| `pictureSize` | нет | `Stretch` | Как картинка заполняет прямоугольник: `Stretch`, `AutoSize`, `Proportionally`, `RealSize` |
-| `text` | нет | — | Надпись: строка или объект «язык → текст» |
-| `name` | нет | — | Имя рисунка, по которому к нему обращаются из кода |
-| `detail` | нет | — | Параметр расшифровки |
-| `style` | нет | — | Именованный стиль: заливка, шрифт, выравнивание надписи |
-| `line` | нет | — | Линия рисунка (она же его рамка) — как `border` у ячейки |
-| `sides` | нет | — | Какие стороны рамки видны: `left`, `top`, `right`, `bottom` |
-| `id` | нет | номер по порядку | Идентификатор рисунка |
-| `zOrder` | нет | номер по порядку | Порядок перекрытия: чем больше, тем выше |
+| `type` | no | `Picture` | `Picture`, `Rectangle`, `Ellipse`, `Line`, `Text`, `Chart`, `GanttChart` |
+| `begin` / `end` | yes | - | Anchors: `row`, `col` (1-based) and offsets `dy`, `dx` in points |
+| `picture` | no | - | Name of an entry from `pictures` |
+| `pictureSize` | no | `Stretch` | How the picture fills the rectangle: `Stretch`, `AutoSize`, `Proportionally`, `RealSize` |
+| `text` | no | - | Label: a string or a "language -> text" object |
+| `name` | no | - | Drawing name used to refer to it from code |
+| `detail` | no | - | Decryption parameter |
+| `style` | no | - | Named style: fill, font, label alignment |
+| `line` | no | - | Drawing line (also its border) - like `border` on a cell |
+| `sides` | no | - | Which border sides are visible: `left`, `top`, `right`, `bottom` |
+| `id` | no | sequential number | Drawing identifier |
+| `zOrder` | no | sequential number | Overlap order: the bigger, the higher |
 
-Порядок в списке `drawings` — порядок в документе; кто кого перекрывает, задаёт `zOrder`.
+The order in the `drawings` list is the document order; `zOrder` sets who overlaps whom.
 
-Запись в `pictures` — либо ссылка (`ref`), либо сами данные в base64 (`data`). Ссылкой
-задаются и предопределённая картинка платформы, и общая картинка конфигурации — пишутся они
-одинаково, префиксом `v8ui:`. Пустая запись `{}` — картинка не задана, такое в макетах встречается.
-Прозрачность задаётся ключом `transparent` в одной из двух форм: `false` — прозрачного фона
-нет; `{ "x": …, "y": … }` — прозрачным считается цвет пикселя с этими координатами внутри
-картинки (по флажку «прозрачный фон» Конфигуратор берёт её правый нижний пиксель).
+An entry in `pictures` is either a reference (`ref`) or the data itself in base64 (`data`). A reference
+sets both a predefined platform picture and a common configuration picture - they are written
+the same way, with the `v8ui:` prefix. An empty entry `{}` means the picture is not set; this occurs in templates.
+Transparency is set with the `transparent` key in one of two forms: `false` - no transparent
+background; `{ "x": …, "y": … }` - the color of the pixel at these coordinates inside
+the picture is considered transparent (with the "transparent background" checkbox Configurator takes its bottom-right pixel).
 
-Одну запись `pictures` могут использовать несколько рисунков — данные в макете не дублируются.
+Several drawings can use one `pictures` entry - the data is not duplicated in the template.
 
-## Картинка в ячейке
+## Picture in a cell
 
-Картинка бывает не только поверх сетки, но и внутри ячейки — тогда её задаёт стиль, а сама
-картинка берётся из той же палитры `pictures`:
+A picture can be not only on top of the grid but also inside a cell - then it is set by the style, and the
+picture itself is taken from the same `pictures` palette:
 
 ```json
 {
@@ -65,8 +65,8 @@
 }
 ```
 
-- `picIndex` — номер записи в `pictures`, считая с единицы в порядке объявления;
-- `picHorizontalAlignment`, `picVerticalAlignment`, `pictureSizeMode`, `textPosition` — как
-  картинка стоит в ячейке и где относительно неё текст (значения — в `style-properties.md`);
-- `pictureParameter` — ключ самой ЯЧЕЙКИ, а не стиля: имя параметра, которым картинку
-  подставляют из кода, как `param` подставляет текст. С текстом ячейки уживается.
+- `picIndex` - entry number in `pictures`, 1-based in declaration order;
+- `picHorizontalAlignment`, `picVerticalAlignment`, `pictureSizeMode`, `textPosition` - how
+  the picture is placed in the cell and where the text is relative to it (values are in `style-properties.md`);
+- `pictureParameter` - a key of the CELL itself, not of the style: the parameter name used to insert the picture
+  from code, just as `param` inserts text. It coexists with cell text.

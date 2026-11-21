@@ -5,16 +5,16 @@
 import sys, os, argparse, re
 from lxml import etree
 
-# Регистронезависимый ввод: имена параметров и значения choices принимаются
-# в любом регистре (в argparse по умолчанию совпадение точное).
+# Case-insensitive input: parameter names and choices values are accepted
+# in any case (in argparse exact match is the default).
 def ci_parse_args(parser, argv=None):
-    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
+    """parse_args: parameter names and choices values are accepted in any case."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
         if tok.startswith('-') and tok.lower() in names:
             argv[i] = names[tok.lower()]
-    # choices — зеркало [ValidateSet]; канонизируем ДО разбора, иначе argparse отвергнет регистр
+    # choices - a mirror of [ValidateSet]; we canonicalize BEFORE parsing, otherwise argparse rejects the case
     choice_map = {}
     for a in parser._actions:
         if a.choices:
@@ -119,7 +119,7 @@ VALID_ENUM_VALUES = {
         'TaxiEnableVersion8_5', 'Version8_5EnableTaxi', 'Version8_5',
     ],
     'DatabaseTablespacesUseMode': ['DontUse', 'Use'],
-    # Проверено платформой 8.3.24 и 8.5.1: Fullscreen нет (ошибка XDTO), есть …Workplace и Kiosk
+    # Verified with platform 8.3.24 and 8.5.1: no Fullscreen (XDTO error), …Workplace and Kiosk exist
     'MainClientApplicationWindowMode': ['Normal', 'Workplace', 'FullscreenWorkplace', 'Kiosk', 'EmbeddedWorkplace'],
     'CompatibilityMode': [
         'DontUse', 'Version8_1', 'Version8_2_13', 'Version8_2_16',
@@ -135,22 +135,22 @@ VALID_ENUM_VALUES = {
 EXPECTED_NS = 'http://v8.1c.ru/8.3/MDClasses'
 
 # ── Format version ───────────────────────────────────────────
-# Проверенный диапазон версий формата выгрузки: 2.17 (8.3.24) … 2.21 (8.5). Полная лестница —
-# docs/1c-configuration-spec.md, «Лестница версий». Версию задаёт платформа ВЫГРУЗКИ, а не режим
-# совместимости конфигурации. Версии ниже 2.17 (платформы 8.3.23 и старше) существуют, но навыки
-# на них не проверялись — это предупреждение о непокрытии, а не о некорректности файла.
+# Verified range of export format versions: 2.17 (8.3.24) ... 2.21 (8.5). The full ladder is in
+# docs/1c-configuration-spec.md, "Version ladder". The version is set by the EXPORT platform, not by the configuration
+# compatibility mode. Versions below 2.17 (platforms 8.3.23 and older) exist, but the skills
+# have not been verified on them - this is a warning about non-coverage, not about file incorrectness.
 FORMAT_VERIFIED_MIN = "2.17"
 FORMAT_VERIFIED_MAX = "2.21"
 
 
 def format_rank(ver):
-    """"2.20" → 220, "2.9" → 209. Строковое сравнение неверно ("2.9" > "2.17")."""
+    """"2.20" -> 220, "2.9" -> 209. String comparison is wrong ("2.9" > "2.17")."""
     m = re.match(r'^(\d+)\.(\d+)$', ver or '')
     return int(m.group(1)) * 100 + int(m.group(2)) if m else 0
 
 
-# Штамп версии формата — атрибут version КОРНЕВОГО элемента файла. Копия общего эталона (семья
-# root_version, авторитет — meta-validate).
+# The format version stamp - the version attribute of the file ROOT element. A copy of the common reference (family
+# root_version, authority - meta-validate).
 def root_version(xml_path):
     if not os.path.isfile(xml_path):
         return None
@@ -653,9 +653,9 @@ def main():
         for err in form_ref_errors:
             r.error(f'9. {err}')
 
-    # --- Check 10: тела конфигурации Ext/*.xml в версии Configuration.xml ---
-    # Конфигурация для платформы — такой же объект, как остальные: Configuration.xml и штампованные тела
-    # Ext/*.xml (CommandInterface, HomePageWorkArea, Splash, …) загружаются только в одной версии формата
+    # --- Check 10: configuration body files Ext/*.xml at the Configuration.xml version ---
+    # A configuration is an object like any other for the platform: Configuration.xml and stamped bodies
+    # Ext/*.xml (CommandInterface, HomePageWorkArea, Splash, ...) load only in one format version
     # («Версия формата загружаемого файла … отличается от версии формата ранее загруженных файлов»).
     cfg_ext_dir = os.path.join(config_dir, 'Ext')
     cfg_bodies_ok = 0

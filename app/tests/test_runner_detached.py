@@ -77,10 +77,16 @@ def test_terminate_kills_process_group(tmp_path):
              f"time.sleep(30)")
     pid = rd.launch([sys.executable, "-c", inner], cwd=str(tmp_path),
                     log_file=str(tmp_path / "l"), exit_file=str(tmp_path / "e"))
-    # wait for the inner process to write its pid
-    end = time.time() + 5
-    while time.time() < end and not child_pidfile.exists():
+    # wait for the inner process to write its pid (generous under CI load)
+    end = time.time() + 20
+    while time.time() < end:
+        try:
+            if child_pidfile.read_text().strip():
+                break
+        except FileNotFoundError:
+            pass
         time.sleep(0.05)
+    assert child_pidfile.exists(), "inner process did not write its pid file"
     child_pid = int(child_pidfile.read_text())
     assert rd.is_running(child_pid)
     rd.terminate(pid)

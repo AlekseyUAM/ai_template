@@ -1,4 +1,4 @@
-# rules.py — реестр автоматических проверок запросов 1С.
+# rules.py - registry of automatic 1C query checks.
 import json
 import os
 import re
@@ -6,8 +6,8 @@ import shutil
 import subprocess
 from dataclasses import dataclass
 
-# Автономный бандл SDBL-парсера (см. vendor/README.md). Module-level — чтобы тесты
-# могли подменять путь через monkeypatch.
+# Standalone SDBL parser bundle (see vendor/README.md). Module-level so tests
+# can substitute the path via monkeypatch.
 _PARSER_BUNDLE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "vendor", "sdbl_parse.js")
 
 
@@ -38,10 +38,10 @@ def rule(code, severity, title):
 
 
 def _sanitize(text):
-    """Содержимое строковых литералов "..." и строчных комментариев //… заменяется
-    пробелами той же длины (переводы строк сохранены). Правила, работающие по коду
-    запроса, не должны срабатывать на слова внутри строк и комментариев. Длина и
-    номера строк сохраняются — позиции совпадают с исходным текстом."""
+    """The content of "..." string literals and //... line comments is replaced
+    with spaces of the same length (line breaks preserved). Rules that work on query
+    code must not trigger on words inside strings and comments. The length and
+    line numbers are preserved - positions match the source text."""
     out = []
     i, n = 0, len(text)
     while i < n:
@@ -74,8 +74,8 @@ def _sanitize(text):
 
 class QueryContext:
     def __init__(self, text):
-        # Файлы 1С-выгрузки часто начинаются с BOM (U+FEFF): лексер парсера его не
-        # понимает → ложный query-not-parseable. Снимаем; номера строк не меняются.
+        # 1C export files often start with a BOM (U+FEFF): the parser lexer does not
+        # understand it -> false query-not-parseable. Strip it; line numbers stay.
         if text.startswith("\ufeff"):
             text = text[1:]
         self.text = text
@@ -87,8 +87,8 @@ class QueryContext:
         self._model = None
         self._model_parsed = False
         self.model_error = None
-        # Заполняется только когда парсер отработал и вернул синтаксическую ошибку
-        # ({"error": …}) — в отличие от инфраструктурного пропуска (нет node/бандла).
+        # Set only when the parser ran and returned a syntax error
+        # ({"error": ...}) - unlike an infrastructure skip (no node/bundle).
         self.parse_error = None
         self.parse_line = None
 
@@ -101,12 +101,12 @@ class QueryContext:
     @property
     def upper(self):
         if self._upper is None:
-            self._upper = self.text.upper()  # для кириллицы длина сохраняется
+            self._upper = self.text.upper()  # for Cyrillic the length is preserved
         return self._upper
 
     @property
     def code(self):
-        """Текст запроса без содержимого строк и комментариев (см. _sanitize)."""
+        """Query text without the content of strings and comments (see _sanitize)."""
         if self._code is None:
             self._code = _sanitize(self.text)
         return self._code
@@ -135,10 +135,10 @@ class QueryContext:
 
     @property
     def model(self):
-        """Структурная модель запроса (BatchDocument) от вендоренного SDBL-парсера,
-        или None, если разбор недоступен. Запускает `node vendor/sdbl_parse.js`,
-        кеширует результат. Никогда не бросает — при любой проблеме возвращает None
-        и пишет причину в self.model_error (правила по модели тогда пропускаются)."""
+        """Structural query model (BatchDocument) from the vendored SDBL parser,
+        or None if parsing is unavailable. Runs `node vendor/sdbl_parse.js`,
+        caches the result. Never throws - on any problem returns None
+        and writes the reason to self.model_error (model rules are then skipped)."""
         if self._model_parsed:
             return self._model
         self._model_parsed = True
@@ -178,12 +178,12 @@ class QueryContext:
 
 
 def iter_query_models(ctx):
-    """Пробегает запросы-участники распарсенной модели.
-    yield (line, distinct, model_dict): line — стартовая строка оператора пакета
-    (из ctx.statements, best-effort; 1 если не сопоставилось), distinct — флаг
-    участника объединения (False = добавлен через ОБЪЕДИНИТЬ ВСЕ), model_dict —
-    QueryModel. Если модель недоступна (node/бандла нет или ошибка разбора) —
-    не yield-ит ничего (правило по модели корректно пропускается)."""
+    """Walks the member queries of the parsed model.
+    yield (line, distinct, model_dict): line - start line of the package statement
+    (from ctx.statements, best-effort; 1 if not matched), distinct - flag of a
+    union member (False = added via ОБЪЕДИНИТЬ ВСЕ), model_dict -
+    QueryModel. If the model is unavailable (no node/bundle or parse error) -
+    yields nothing (the model rule is correctly skipped)."""
     batch = ctx.model
     if not isinstance(batch, dict):
         return
@@ -201,21 +201,21 @@ def run_all(ctx):
     return findings
 
 
-# ── Разбираемость текста запроса ─────────────────────
+# ── Query text parseability ─────────────────────
 
 @rule(code="query-not-parseable", severity="warning",
       title="Текст запроса не разбирается парсером — не откроется конструктором")
 def check_query_not_parseable(ctx):
-    """Если SDBL-парсер вернул синтаксическую ошибку — текст запроса не откроется
-    конструктором запросов (и, как правило, некорректен).
+    """If the SDBL parser returned a syntax error, the query text will not open in
+    the query designer (and is usually incorrect).
 
-    Это ОТДЕЛЬНАЯ ситуация от инфраструктурного пропуска слоя (нет node/бандла):
-    там модель недоступна по внешней причине, здесь же парсер отработал и сообщил,
-    что текст синтаксически неверен. Поэтому фиксируется как находка, а не как
-    «проверки пропущены». ctx.parse_error заполняется только при ответе парсера
-    вида `{"error": …}`.
+    This is a SEPARATE situation from an infrastructure layer skip (no node/bundle):
+    there the model is unavailable for an external reason, while here the parser ran
+    and reported that the text is syntactically invalid. So it is recorded as a
+    finding, not as "checks skipped". ctx.parse_error is set only when the parser
+    responds with `{"error": ...}`.
     """
-    _ = ctx.model  # гарантируем, что парсер отработал и parse_error зафиксирован
+    _ = ctx.model  # make sure the parser ran and parse_error is recorded
     if not ctx.parse_error:
         return []
     return [Finding(
@@ -229,18 +229,18 @@ def check_query_not_parseable(ctx):
     )]
 
 
-# ── Вспомогательные константы ────────────────────────────────
+# ── Helper constants ────────────────────────────────
 
-# Ключевые слова языка запросов 1С — пишутся заглавными.
-# Список охватывает наиболее частотные слова; намеренно НЕ включаем:
-# — «И», «В», «ПО» — слишком коротки, высокая вероятность совпадения с
-#   идентификаторами и именами полей; дают неприемлемый уровень ложных срабатываний;
-# — «ССЫЛКА», «ЗНАЧЕНИЕ», «ТИРЕ» — используются и как имена полей/реквизитов,
-#   что делает их слишком шумными для эвристического поиска без парсера;
-# — «ВЫБОР», «КОГДА», «ТОГДА», «ИНАЧЕ», «КОНЕЦ» — часто встречаются как имена
-#   полей или псевдонимов (например «КАК Конец», «КАК Начало»); без AST-парсера
-#   невозможно отличить ключевое слово ВЫБОР…КОНЕЦ от имени поля/псевдонима —
-#   слишком высокая вероятность ложных срабатываний на идентификаторы.
+# Keywords of the 1C query language - written in uppercase.
+# The list covers the most frequent words; we intentionally do NOT include:
+# - «И», «В», «ПО» - too short, high chance of matching
+#   identifiers and field names; they give an unacceptable false-positive rate;
+# - «ССЫЛКА», «ЗНАЧЕНИЕ», «ТИРЕ» - also used as field/attribute names,
+#   which makes them too noisy for heuristic search without a parser;
+# - «ВЫБОР», «КОГДА», «ТОГДА», «ИНАЧЕ», «КОНЕЦ» - often occur as names
+#   of fields or aliases (e.g. «КАК Конец», «КАК Начало»); without an AST parser
+#   it is impossible to distinguish the ВЫБОР…КОНЕЦ keyword from a field/alias name -
+#   too high a chance of false positives on identifiers.
 _QUERY_KEYWORDS = [
     "ВЫБРАТЬ", "РАЗЛИЧНЫЕ", "РАЗРЕШЕННЫЕ", "ПЕРВЫЕ",
     "ИЗ", "ГДЕ", "СГРУППИРОВАТЬ", "УПОРЯДОЧИТЬ",
@@ -250,19 +250,19 @@ _QUERY_KEYWORDS = [
     "ПОДОБНО", "МЕЖДУ", "ЕСТЬNULL", "КАК",
 ]
 
-# ── Проверки ────────────────────────────────────────────────
+# ── Checks ────────────────────────────────────────────────
 
-_MANY_TABLES_THRESHOLD = 7  # при ≥7 таблицах в одном запросе — info
+_MANY_TABLES_THRESHOLD = 7  # with >=7 tables in one query - info
 
 
 @rule(code="select-star", severity="warning",
       title="ВЫБРАТЬ * — выбирать только нужные поля")
 def check_select_star(ctx):
-    """Проверяет наличие ВЫБРАТЬ * по AST-модели.
+    """Checks for ВЫБРАТЬ * using the AST model.
 
-    Итерирует iter_query_models(ctx); если хотя бы одно поле запроса
-    имеет expression == "*" — это ВЫБРАТЬ *. Одно срабатывание на запрос.
-    Если модель недоступна (node/бандл отсутствуют) — правило пропускается.
+    Iterates iter_query_models(ctx); if at least one query field
+    has expression == "*", this is ВЫБРАТЬ *. One hit per query.
+    If the model is unavailable (no node/bundle), the rule is skipped.
     """
     out = []
     for line, distinct, model_dict in iter_query_models(ctx):
@@ -280,12 +280,12 @@ def check_select_star(ctx):
 @rule(code="many-joins", severity="info",
       title="Слишком много соединений в одном запросе")
 def check_many_joins(ctx):
-    """Считает таблицы в каждом запросе по AST-модели.
+    """Counts tables in each query using the AST model.
 
-    Стандарт указывает: «много может быть уже и 5–7 таблиц в
-    одном запросе». Порог 7 таблиц — верхняя граница этого диапазона;
-    осознанно консервативная эвристика уровня info.
-    Если модель недоступна (node/бандл отсутствуют) — правило пропускается.
+    The standard says: "5-7 tables in one query may already
+    be a lot". The threshold of 7 tables is the upper bound of this range;
+    a deliberately conservative info-level heuristic.
+    If the model is unavailable (no node/bundle), the rule is skipped.
     """
     out = []
     for line, distinct, model_dict in iter_query_models(ctx):
@@ -304,30 +304,30 @@ def check_many_joins(ctx):
     return out
 
 
-# ── Оформление текстов запросов ─────────────────────
+# ── Query text formatting ─────────────────────
 
-# Регулярное выражение для обнаружения ключевого слова в НЕ-верхнем регистре.
-# Стратегия: для каждого ключевого слова ищем его с флагом IGNORECASE.
-# Если найденный фрагмент отличается от эталонного (верхний регистр),
-# значит слово написано неправильно.
+# Regular expression to detect a keyword in non-uppercase form.
+# Strategy: for each keyword, search for it with the IGNORECASE flag.
+# If the found fragment differs from the reference (uppercase),
+# the word is written incorrectly.
 _KW_PATTERNS = [
     re.compile(r"\b" + re.escape(kw) + r"\b", re.IGNORECASE | re.UNICODE)
     for kw in _QUERY_KEYWORDS
 ]
-# Сопоставление паттерна с эталонным словом
+# Mapping of pattern to the reference word
 _KW_PATTERN_MAP = list(zip(_KW_PATTERNS, _QUERY_KEYWORDS))
 
 
 @rule(code="keyword-lowercase", severity="warning",
       title="Ключевые слова запроса должны быть заглавными")
 def check_keyword_lowercase(ctx):
-    """Проверяет, что ключевые слова языка запросов написаны в верхнем регистре.
+    """Checks that query language keywords are written in uppercase.
 
-    «Все ключевые слова языка запросов пишутся заглавными буквами».
-    Сканирует ctx.code (без строк и комментариев), чтобы не срабатывать на
-    слова внутри строковых литералов и комментариев.
-    Пропускает совпадения, непосредственно предшествующие «.» — это разыменование
-    поля (например Т.Конец), а не ключевое слово.
+    "All query language keywords are written in capital letters".
+    Scans ctx.code (without strings and comments) to avoid triggering on
+    words inside string literals and comments.
+    Skips matches immediately preceded by «.» - that is a field
+    dereference (e.g. Т.Конец), not a keyword.
     """
     out = []
     seen_positions = set()
@@ -336,7 +336,7 @@ def check_keyword_lowercase(ctx):
         for m in pattern.finditer(code):
             if m.start() in seen_positions:
                 continue
-            # Пропускаем «Таблица.конец» и подобные разыменования полей
+            # Skip «Таблица.конец» and similar field dereferences
             if m.start() > 0 and code[m.start() - 1] == '.':
                 continue
             found = m.group()
@@ -354,17 +354,17 @@ def check_keyword_lowercase(ctx):
     return out
 
 
-# ── Псевдонимы источников данных ────────────────────
+# ── Data source aliases ────────────────────
 
 @rule(code="alias-starts-with-underscore", severity="warning",
       title="Псевдоним источника данных не должен начинаться с подчёркивания")
 def check_alias_starts_with_underscore(ctx):
-    """Проверяет псевдонимы ИСТОЧНИКОВ ДАННЫХ по AST-модели.
+    """Checks DATA SOURCE aliases using the AST model.
 
-    Итерирует iter_query_models(ctx); для каждого источника из model_dict["tables"]
-    проверяет поле alias. Псевдонимы полей (model_dict["fields"][].alias) не
-    затрагиваются. Если модель недоступна (node/бандл отсутствуют) — правило
-    пропускается.
+    Iterates iter_query_models(ctx); for each source from model_dict["tables"]
+    checks the alias field. Field aliases (model_dict["fields"][].alias) are not
+    touched. If the model is unavailable (no node/bundle), the rule
+    is skipped.
     """
     out = []
     for line, distinct, model_dict in iter_query_models(ctx):
@@ -384,12 +384,12 @@ def check_alias_starts_with_underscore(ctx):
 @rule(code="alias-single-char", severity="warning",
       title="Псевдоним источника данных не должен состоять из одного символа")
 def check_alias_single_char(ctx):
-    """Проверяет псевдонимы ИСТОЧНИКОВ ДАННЫХ по AST-модели.
+    """Checks DATA SOURCE aliases using the AST model.
 
-    Итерирует iter_query_models(ctx); для каждого источника из model_dict["tables"]
-    проверяет поле alias. Псевдонимы полей (model_dict["fields"][].alias) не
-    затрагиваются. Если модель недоступна (node/бандл отсутствуют) — правило
-    пропускается.
+    Iterates iter_query_models(ctx); for each source from model_dict["tables"]
+    checks the alias field. Field aliases (model_dict["fields"][].alias) are not
+    touched. If the model is unavailable (no node/bundle), the rule
+    is skipped.
     """
     out = []
     for line, distinct, model_dict in iter_query_models(ctx):
@@ -409,25 +409,25 @@ def check_alias_single_char(ctx):
 @rule(code="alias-collides-with-field", severity="warning",
       title="Псевдоним источника совпадает с именем поля — платформа не разрешит «Псевдоним.Реквизит» (неоднозначное поле)")
 def check_alias_collides_with_field(ctx):
-    """Флагует источник, чей псевдоним совпадает с именем поля ДРУГОЙ таблицы.
+    """Flags a source whose alias matches a field name of ANOTHER table.
 
-    Это самый частый класс ошибок агентов (ошибки 1 и 3 в errors.md): таблице
-    дают псевдоним, совпадающий с именем измерения/реквизита/поля ТЧ
-    (`Номенклатура`, `Партия`, `Организация`…). Платформа тогда не может
-    разрешить обращение `Псевдоним.Реквизит` и выдаёт:
+    This is the most common class of agent errors (errors 1 and 3 in errors.md): a table
+    is given an alias matching the name of a dimension/attribute/tabular section field
+    (`Номенклатура`, `Партия`, `Организация`...). The platform then cannot
+    resolve the reference `Псевдоним.Реквизит` and reports:
         «Неоднозначное поле "Номенклатура.Ссылка"».
 
-    Работает по AST-модели: собирает псевдонимы источников (table.alias) и имена
-    полей (path) из списка выбора, условий ГДЕ и ключей соединений вместе с их
-    таблицей-владельцем (tableId). Если псевдоним источника T совпадает с именем
-    поля, принадлежащего ДРУГОЙ таблице (tableId != id таблицы T) — обращение
-    `T.…` неоднозначно → находка. Совпадение с полем самой таблицы T
-    (нормальная ситуация) не флагуется.
+    Works on the AST model: collects source aliases (table.alias) and field
+    names (path) from the select list, WHERE conditions and join keys together with their
+    owning table (tableId). If the alias of source T matches the name
+    of a field belonging to ANOTHER table (tableId != id of table T), the reference
+    `T.…` is ambiguous -> finding. A match with a field of table T itself
+    (normal situation) is not flagged.
 
-    Severity=warning: при реальном обращении `Псевдоним.Реквизит` это жёсткая
-    ошибка платформы (запрос не компилируется); эвристика высокой достоверности,
-    но формально обращение могло и не встретиться.
-    Если модель недоступна — правило пропускается.
+    Severity=warning: with an actual reference `Псевдоним.Реквизит` this is a hard
+    platform error (the query does not compile); a high-confidence heuristic,
+    but formally the reference might not occur.
+    If the model is unavailable, the rule is skipped.
     """
     out = []
     for line, distinct, model_dict in iter_query_models(ctx):
@@ -441,7 +441,7 @@ def check_alias_collides_with_field(ctx):
                 alias_disp.setdefault(a.upper(), a)
         if not alias_to_id:
             continue
-        # (имя_поля_upper, id_таблицы-владельца) из полей, условий и соединений
+        # (field_name_upper, owner_table_id) from fields, conditions and joins
         refs = []
         for f in model_dict.get("fields") or []:
             p = f.get("path")
@@ -479,14 +479,14 @@ def check_alias_collides_with_field(ctx):
 @rule(code="query-one-line", severity="info",
       title="Запрос написан в одну строку — следует структурировать")
 def check_query_one_line(ctx):
-    """Обнаруживает операторы ВЫБРАТЬ, записанные целиком в одну строку.
+    """Detects ВЫБРАТЬ statements written entirely on one line.
 
-    «Текст запроса должен быть структурирован, не следует писать
-    запрос в одну строку, даже короткий».
-    Проверяет каждый оператор пакета: если весь оператор не содержит \\n,
-    начинается с ВЫБРАТЬ и содержит слово ИЗ — значит запрос в одну строку.
-    Это исключает ложные срабатывания на встроенные подзапросы внутри
-    многострочного внешнего запроса.
+    "The query text must be structured, one should not write
+    a query on one line, even a short one".
+    Checks each package statement: if the whole statement contains no \\n,
+    starts with ВЫБРАТЬ and contains the word ИЗ, the query is on one line.
+    This excludes false positives on nested subqueries inside
+    a multi-line outer query.
     """
     out = []
     for start_line, stmt in ctx.statements:
@@ -508,19 +508,19 @@ def check_query_one_line(ctx):
     return out
 
 
-# ── Упорядочивание результатов запроса ───────────────
+# ── Ordering of query results ───────────────
 
 @rule(code="autoorder-with-first", severity="error",
       title="АВТОУПОРЯДОЧИВАНИЕ с ПЕРВЫЕ запрещено")
 def check_autoorder_with_first(ctx):
-    """Обнаруживает совместное использование ПЕРВЫЕ и АВТОУПОРЯДОЧИВАНИЕ по AST-модели.
+    """Detects combined use of ПЕРВЫЕ and АВТОУПОРЯДОЧИВАНИЕ using the AST model.
 
-    «Использование конструкции ПЕРВЫЕ совместно с конструкцией
-    АВТОУПОРЯДОЧИВАНИЕ запрещено».
-    Итерирует iter_query_models(ctx); для каждого запроса проверяет наличие
-    order.auto == True и selection.top. Если модель недоступна — пропускается.
-    Правило взаимоисключающе с autoorder-not-recommended: при auto+has_first
-    выдаётся только error, при auto без has_first — только warning.
+    "Using the ПЕРВЫЕ construct together with the
+    АВТОУПОРЯДОЧИВАНИЕ construct is prohibited".
+    Iterates iter_query_models(ctx); for each query checks for
+    order.auto == True and selection.top. If the model is unavailable, it is skipped.
+    This rule is mutually exclusive with autoorder-not-recommended: with auto+has_first
+    only error is emitted, with auto without has_first - only warning.
     """
     out = []
     for line, distinct, model in iter_query_models(ctx):
@@ -544,17 +544,17 @@ def check_autoorder_with_first(ctx):
 @rule(code="union-without-all", severity="info",
       title="ОБЪЕДИНИТЬ без ВСЕ выполняет дорогостоящее удаление дублей")
 def check_union_without_all(ctx):
-    """Флагует членов объединения, добавленных через ОБЪЕДИНИТЬ (с дедупликацией).
+    """Flags union members added via ОБЪЕДИНИТЬ (with deduplication).
 
-    в общем случае следует использовать ОБЪЕДИНИТЬ ВСЕ, так как
-    ОБЪЕДИНИТЬ (без ВСЕ) выполняет удаление полностью одинаковых строк, что
-    затратно по времени даже если одинаковых строк заведомо быть не может.
-    Исключение: когда удаление дублей является необходимым условием корректности.
-    Severity=info, т.к. это рекомендация.
+    in general one should use ОБЪЕДИНИТЬ ВСЕ, since
+    ОБЪЕДИНИТЬ (without ВСЕ) removes fully identical rows, which
+    is time-consuming even if identical rows provably cannot occur.
+    Exception: when removing duplicates is a necessary condition of correctness.
+    Severity=info, since this is a recommendation.
 
-    Работает по AST-модели: iter_query_models возвращает distinct=True для
-    членов, добавленных через ОБЪЕДИНИТЬ (без ВСЕ). Если модель недоступна —
-    правило пропускается.
+    Works on the AST model: iter_query_models returns distinct=True for
+    members added via ОБЪЕДИНИТЬ (without ВСЕ). If the model is unavailable,
+    the rule is skipped.
     """
     out = []
     for line, distinct, model in iter_query_models(ctx):
@@ -571,14 +571,14 @@ def check_union_without_all(ctx):
     return out
 
 
-# ── Оператор ПОДОБНО ─────────────────────────────────
+# ── ПОДОБНО operator ─────────────────────────────────
 
 def _iter_like_params(ctx):
-    """Генератор: для каждого условия ПОДОБНО по AST-модели yield (line, param).
+    """Generator: yields (line, param) for each ПОДОБНО condition from the AST model.
 
-    Итерирует iter_query_models(ctx); для каждого запроса проходит по
-    conditions[]. Если cond["operator"] == "ПОДОБНО" и param — непустая строка,
-    возвращает (line, param). Если модель недоступна — не возвращает ничего.
+    Iterates iter_query_models(ctx); for each query walks
+    conditions[]. If cond["operator"] == "ПОДОБНО" and param is a non-empty string,
+    returns (line, param). If the model is unavailable, returns nothing.
     """
     for line, distinct, model in iter_query_models(ctx):
         for cond in model.get("conditions") or []:
@@ -589,11 +589,11 @@ def _iter_like_params(ctx):
 
 
 def _like_literal_content(param):
-    """Извлекает содержимое первого строкового литерала из param.
+    """Extracts the content of the first string literal from param.
 
-    Если param.lstrip() начинается с '"', сканирует до закрывающей '"' (двойной
-    '""' = экранированная кавычка) и возвращает внутреннее содержимое.
-    Иначе возвращает None.
+    If param.lstrip() starts with '"', scans up to the closing '"' (a doubled
+    '""' = escaped quote) and returns the inner content.
+    Otherwise returns None.
     """
     s = param.lstrip()
     if not s or s[0] != '"':
@@ -608,7 +608,7 @@ def _like_literal_content(param):
                 parts.append('"')
                 i += 2
                 continue
-            break  # конец литерала
+            break  # end of literal
         parts.append(c)
         i += 1
     return ''.join(parts)
@@ -617,12 +617,12 @@ def _like_literal_content(param):
 @rule(code="like-leading-wildcard", severity="warning",
       title="ПОДОБНО с ведущим спецсимволом — индекс не используется")
 def check_like_leading_wildcard(ctx):
-    """Флагует ПОДОБНО, где шаблон начинается с % или _ (ведущий wildcard).
+    """Flags ПОДОБНО where the pattern starts with % or _ (leading wildcard).
 
-    Читает операнд из AST-модели conditions[].param — только операнд ПОДОБНО,
-    без засорения арифметикой из других условий WHERE.
-    Severity=warning: прямое влияние на производительность.
-    Параметры (&Шаблон) и поля пропускаются — значение неизвестно.
+    Reads the operand from the AST model conditions[].param - only the ПОДОБНО operand,
+    without noise from arithmetic in other WHERE conditions.
+    Severity=warning: direct performance impact.
+    Parameters (&Шаблон) and fields are skipped - the value is unknown.
     """
     out = []
     for line, param in _iter_like_params(ctx):
@@ -640,24 +640,24 @@ def check_like_leading_wildcard(ctx):
 @rule(code="like-square-brackets", severity="error",
       title="ПОДОБНО с [...] или [^...] — не работает на IBM DB2")
 def check_like_square_brackets(ctx):
-    """Флагует ПОДОБНО, где шаблон содержит незаэкранированные '['.
+    """Flags ПОДОБНО where the pattern contains unescaped '['.
 
-    Читает операнд из AST-модели conditions[].param.
-    Определяет символ-экранировщик: ищет СПЕЦСИМВОЛ "..." в param (case-insensitive).
-    Флагует, если в literal_content есть '[', не предшествуемый символом экранировщика.
-    Severity=error: гарантированный сбой на IBM DB2.
+    Reads the operand from the AST model conditions[].param.
+    Determines the escape character: looks for СПЕЦСИМВОЛ "..." in param (case-insensitive).
+    Flags if literal_content contains '[' not preceded by the escape character.
+    Severity=error: guaranteed failure on IBM DB2.
     """
     out = []
     for line, param in _iter_like_params(ctx):
         content = _like_literal_content(param)
         if content is None:
             continue
-        # Определить символ экранировщика: СПЕЦСИМВОЛ "X" в param
+        # Determine the escape character: СПЕЦСИМВОЛ "X" in param
         escape_char = None
         m = re.search(r'(?i)СПЕЦСИМВОЛ\s+"(.)', param)
         if m:
             escape_char = m.group(1)
-        # Проверить наличие незаэкранированного '['
+        # Check for an unescaped '['
         flagged = False
         for idx, ch in enumerate(content):
             if ch == '[':
@@ -680,12 +680,12 @@ def check_like_square_brackets(ctx):
 @rule(code="like-concatenation", severity="warning",
       title="ПОДОБНО: шаблон формируется полем/конкатенацией")
 def check_like_concatenation(ctx):
-    """Флагует ПОДОБНО, где шаблон собирается конкатенацией или является полем.
+    """Flags ПОДОБНО where the pattern is built by concatenation or is a field.
 
-    Читает операнд из AST-модели conditions[].param.
-    Флагует, если param содержит '+' (конкатенация) ИЛИ операнд не начинается
-    с '"' (строковый литерал) и не начинается с '&' (параметр).
-    Severity=warning: нарушение п.1 стандарта.
+    Reads the operand from the AST model conditions[].param.
+    Flags if param contains '+' (concatenation) OR the operand does not start
+    with '"' (string literal) and does not start with '&' (parameter).
+    Severity=warning: violation of the standard's item 1.
     """
     out = []
     for line, param in _iter_like_params(ctx):
@@ -700,21 +700,21 @@ def check_like_concatenation(ctx):
     return out
 
 
-# ── Округление результатов арифметических операций ──────
+# ── Rounding of arithmetic operation results ──────
 
 @rule(code="division-without-cast", severity="warning",
       title="Деление без ВЫРАЗИТЬ(... КАК Число(m,n)) — точность может различаться на разных СУБД")
 def check_division_without_cast(ctx):
-    """Флагует деление (/), не обёрнутое в ВЫРАЗИТЬ(... КАК Число(m,n)).
+    """Flags division (/) not wrapped in ВЫРАЗИТЬ(... КАК Число(m,n)).
 
-    при арифметических операциях деления точность результата
-    может различаться на разных СУБД. Рекомендуется явно указывать разрядность
-    через ВЫРАЗИТЬ(... КАК Число(m,n)).
+    in arithmetic division operations the result precision
+    may differ across DBMSs. It is recommended to specify the precision explicitly
+    via ВЫРАЗИТЬ(... КАК Число(m,n)).
 
-    Работает по AST-модели: для каждого поля проверяет fields[].expression.
-    Флагует, если expression содержит '/' И expression (в верхнем регистре)
-    не начинается с 'ВЫРАЗИТЬ(' (то есть результат деления не обёрнут).
-    Если модель недоступна — правило пропускается.
+    Works on the AST model: for each field checks fields[].expression.
+    Flags if expression contains '/' AND expression (in uppercase)
+    does not start with 'ВЫРАЗИТЬ(' (i.e. the division result is not wrapped).
+    If the model is unavailable, the rule is skipped.
     """
     out = []
     for line, distinct, model_dict in iter_query_models(ctx):
@@ -742,16 +742,16 @@ def check_division_without_cast(ctx):
 @rule(code="avg-without-cast", severity="warning",
       title="СРЕДНЕЕ без ВЫРАЗИТЬ(... КАК Число(m,n)) — точность может различаться на разных СУБД")
 def check_avg_without_cast(ctx):
-    """Флагует агрегатную функцию СРЕДНЕЕ, не обёрнутую в ВЫРАЗИТЬ(... КАК Число(m,n)).
+    """Flags the СРЕДНЕЕ aggregate function not wrapped in ВЫРАЗИТЬ(... КАК Число(m,n)).
 
-    агрегатная функция СРЕДНЕЕ может давать результат разной точности
-    на разных СУБД. Рекомендуется ВЫРАЗИТЬ(СРЕДНЕЕ(...) КАК Число(m,n)).
+    the СРЕДНЕЕ aggregate function may produce results of different precision
+    on different DBMSs. ВЫРАЗИТЬ(СРЕДНЕЕ(...) КАК Число(m,n)) is recommended.
 
-    Работает по AST-модели: если поле имеет func == "Среднее" (т.е. СРЕДНЕЕ не
-    обёрнуто ни в какое выражение — в частности, не в ВЫРАЗИТЬ), то выдаётся
-    предупреждение. Когда СРЕДНЕЕ обёрнуто в ВЫРАЗИТЬ, парсер представляет всё
-    поле как expression (не func), поэтому двойных срабатываний не бывает.
-    Если модель недоступна — правило пропускается.
+    Works on the AST model: if a field has func == "Среднее" (i.e. СРЕДНЕЕ is not
+    wrapped in any expression - in particular, not in ВЫРАЗИТЬ), a
+    warning is emitted. When СРЕДНЕЕ is wrapped in ВЫРАЗИТЬ, the parser represents the whole
+    field as expression (not func), so no double hits occur.
+    If the model is unavailable, the rule is skipped.
     """
     out = []
     for line, distinct, model_dict in iter_query_models(ctx):
@@ -776,17 +776,17 @@ def check_avg_without_cast(ctx):
 @rule(code="full-join", severity="warning",
       title="ПОЛНОЕ ВНЕШНЕЕ СОЕДИНЕНИЕ не рекомендуется — снижает производительность на PostgreSQL")
 def check_full_join(ctx):
-    """Флагует использование ПОЛНОГО ВНЕШНЕГО СОЕДИНЕНИЯ по AST-модели.
+    """Flags use of FULL OUTER JOIN using the AST model.
 
-    «в общем случае не рекомендуется использовать конструкцию
-    ПОЛНОЕ ВНЕШНЕЕ СОЕДИНЕНИЕ в запросах» — в особенности при наличии двух и более
-    таких конструкций, когда производительность на PostgreSQL значительно снижается.
-    Severity=warning: стандарт является методической рекомендацией («не рекомендуется»),
-    а не запретом.
+    "in general it is not recommended to use the
+    ПОЛНОЕ ВНЕШНЕЕ СОЕДИНЕНИЕ construct in queries" - especially with two or more
+    such constructs, when performance on PostgreSQL drops significantly.
+    Severity=warning: the standard is a methodological recommendation ("not recommended"),
+    not a prohibition.
 
-    Работает по AST-модели: joins[].leftAll == True И joins[].rightAll == True —
-    признак ПОЛНОГО ВНЕШНЕГО СОЕДИНЕНИЯ. Одно срабатывание на запрос, если в нём
-    присутствует хотя бы одно ПОЛНОЕ СОЕДИНЕНИЕ. Если модель недоступна — пропускается.
+    Works on the AST model: joins[].leftAll == True AND joins[].rightAll == True is
+    the sign of ПОЛНОЕ ВНЕШНЕЕ СОЕДИНЕНИЕ. One hit per query if it
+    contains at least one full join. If the model is unavailable, it is skipped.
     """
     out = []
     for line, distinct, model_dict in iter_query_models(ctx):
@@ -802,30 +802,30 @@ def check_full_join(ctx):
                         "По возможности перепишите запрос через ОБЪЕДИНИТЬ ВСЕ."
                     ),
                 ))
-                break  # одно срабатывание на запрос
+                break  # one hit per query
     return out
 
 
-# ── Вложенные запросы в условии соединения ───────────
+# ── Nested queries in a join condition ───────────
 
 @rule(code="subquery-in-join-condition", severity="warning",
       title="Вложенный запрос в условии соединения (ПО) — не следует")
 def check_subquery_in_join_condition(ctx):
-    """Флагует вложенные ВЫБРАТЬ в условии соединения (ПО).
+    """Flags nested ВЫБРАТЬ in a join condition (ПО).
 
-    «Не следует использовать вложенные запросы в условии соединения.
-    Это может привести к значительному замедлению запроса и (в отдельных
-    случаях) к его полной неработоспособности на некоторых СУБД».
-    Severity=warning: стандарт формулирует рекомендацию («не следует»), а не
-    категорический запрет — хотя последствия на отдельных СУБД серьёзны.
+    "One should not use nested queries in a join condition.
+    This can significantly slow down the query and (in some
+    cases) make it completely unusable on some DBMSs".
+    Severity=warning: the standard formulates a recommendation ("should not"), not
+    a categorical prohibition - although the consequences on some DBMSs are serious.
 
-    Работает по AST-модели: итерирует joins[].conditions[] каждого запроса;
-    если условие имеет custom=True и его expression (в верхнем регистре)
-    содержит слово «ВЫБРАТЬ» — это вложенный подзапрос в условии соединения.
-    Вложенные запросы в ИЗ (table.subquery) и в полях ВЫБРАТЬ
-    не попадают в joins.conditions и не флагуются.
-    Одно срабатывание на каждый запрос, содержащий хотя бы одно такое условие.
-    Если модель недоступна — правило пропускается.
+    Works on the AST model: iterates joins[].conditions[] of each query;
+    if a condition has custom=True and its expression (in uppercase)
+    contains the word «ВЫБРАТЬ», it is a nested subquery in a join condition.
+    Nested queries in ИЗ (table.subquery) and in ВЫБРАТЬ fields
+    do not get into joins.conditions and are not flagged.
+    One hit per query containing at least one such condition.
+    If the model is unavailable, the rule is skipped.
     """
     out = []
     for line, distinct, model_dict in iter_query_models(ctx):
@@ -852,26 +852,26 @@ def check_subquery_in_join_condition(ctx):
     return out
 
 
-# ── Соединения с вложенными запросами и виртуальными таблицами ──
+# ── Joins with nested queries and virtual tables ──
 
 @rule(code="join-to-subquery", severity="warning",
       title="Соединение с вложенным запросом (ИЗ) — не следует, используйте временную таблицу")
 def check_join_to_subquery(ctx):
-    """Флагует соединение, в котором один из источников данных является вложенным запросом.
+    """Flags a join where one of the data sources is a nested query.
 
-    «При написании запросов не следует использовать соединения
-    с вложенными запросами. Следует соединять друг с другом только объекты
-    метаданных или временные таблицы».
-    Severity=warning: стандарт формулирует рекомендацию («не следует»), а не
-    категорический запрет; исключение допускается, когда подзапрос сканирует
-    мало записей.
+    "When writing queries, one should not use joins
+    with nested queries. Only metadata objects or temporary
+    tables should be joined to each other".
+    Severity=warning: the standard formulates a recommendation ("should not"), not
+    a categorical prohibition; an exception is allowed when the subquery scans
+    few records.
 
-    Работает по AST-модели: строит map {id → table} для каждого запроса;
-    для каждого join проверяет, есть ли у joined-таблицы ключ «subquery».
-    Виртуальные таблицы (table.virtual) НЕ флагуются этим правилом — для них
-    отдельное ручное требование в чеклисте.
-    Одно срабатывание на запрос, даже если подзапросов несколько.
-    Если модель недоступна — правило пропускается.
+    Works on the AST model: builds a map {id -> table} for each query;
+    for each join checks whether the joined table has the «subquery» key.
+    Virtual tables (table.virtual) are NOT flagged by this rule - they have
+    a separate manual requirement in the checklist.
+    One hit per query, even if there are several subqueries.
+    If the model is unavailable, the rule is skipped.
     """
     out = []
     for line, distinct, model_dict in iter_query_models(ctx):
@@ -906,11 +906,11 @@ def check_join_to_subquery(ctx):
     return out
 
 
-# ── Эффективные условия запросов ─────────────────────
+# ── Efficient query conditions ─────────────────────
 
-# Функции, применяемые к полям в условиях ГДЕ/ПО — блокируют использование индекса.
-# Стандарт строковые функции → заменять на ПОДОБНО.
-# Стандарт функции дат → заменять на МЕЖДУ.
+# Functions applied to fields in ГДЕ/ПО conditions - they block index use.
+# Standard: string functions -> replace with ПОДОБНО.
+# Standard: date functions -> replace with МЕЖДУ.
 _CONDITION_FUNCTIONS = re.compile(
     r"^(?:"
     r"ПОДСТРОКА|СТРОКА|СТРДЛИНА|СТРНАЙТИ|ВРЕГ|НРЕГ|СОКРЛ|СОКРП|СОКРЛП|СИМВОЛ|"
@@ -925,29 +925,29 @@ _CONDITION_FUNCTIONS = re.compile(
 @rule(code="function-in-condition", severity="warning",
       title="Функция применяется к полю в условии ГДЕ — индекс не используется")
 def check_function_in_condition(ctx):
-    """Флагует условие WHERE, где строковая или датовая функция применяется к полю.
+    """Flags a WHERE condition where a string or date function is applied to a field.
 
-    «НЕПРАВИЛЬНО: ПОДСТРОКА(Таблица.Поле, 1, 6) = "строка"» — блокирует индекс;
-    стандарт предписывает заменять на ПОДОБНО или вычисляемое поле.
-    «НЕПРАВИЛЬНО: МЕСЯЦ(Таблица.Поле) = 1» — блокирует индекс;
-    стандарт предписывает заменять на МЕЖДУ &НачалоПериода И &КонецПериода.
+    "WRONG: ПОДСТРОКА(Таблица.Поле, 1, 6) = "строка"" - blocks the index;
+    the standard prescribes replacing it with ПОДОБНО or a calculated field.
+    "WRONG: МЕСЯЦ(Таблица.Поле) = 1" - blocks the index;
+    the standard prescribes replacing it with МЕЖДУ &НачалоПериода И &КонецПериода.
 
-    Severity=warning: стандарт показывает пример «НЕПРАВИЛЬНО», неявно запрещая
-    паттерн («нельзя использовать … функции» в основном условии).
+    Severity=warning: the standard shows a "WRONG" example, implicitly prohibiting
+    the pattern ("one must not use ... functions" in the main condition).
 
-    Работает по AST-модели: срабатывает, только если в запросе НЕТ ни одного
-    структурного условия (custom=False) — т.е. функция применена в основном
-    условии. При наличии структурного (потенциально индексного) условия функция
-    считается дополнительной — стандарт это допускает, и правило не срабатывает
-    (без метаданных основное/дополнительное точно не различить, поэтому берём
-    консервативный критерий, исключающий ложные срабатывания). Если модель
-    недоступна — пропускается.
+    Works on the AST model: triggers only if the query has NO
+    structured condition (custom=False) - i.e. the function is applied in the main
+    condition. If a structured (potentially indexable) condition is present, the function
+    is considered additional - the standard allows this, and the rule does not trigger
+    (without metadata the main/additional distinction cannot be made exactly, so we take
+    a conservative criterion that excludes false positives). If the model
+    is unavailable, it is skipped.
     """
     out = []
     for line, distinct, model_dict in iter_query_models(ctx):
         conds = model_dict.get("conditions") or []
         if any(not c.get("custom", True) for c in conds):
-            continue  # есть структурное (индексное) условие → функция в дополнительном → OK
+            continue  # there is a structured (index) condition -> function is additional -> OK
         for cond in conds:
             if not cond.get("custom"):
                 continue
@@ -964,33 +964,33 @@ def check_function_in_condition(ctx):
                         "для функций дат — МЕЖДУ."
                     ),
                 ))
-                break  # одно срабатывание на запрос
+                break  # one hit per query
     return out
 
 
 @rule(code="case-as-sole-condition", severity="warning",
       title="ВЫБОР как единственное условие ГДЕ — индекс не используется")
 def check_case_as_sole_condition(ctx):
-    """Флагует ВЫБОР (CASE WHEN) в роли единственного условия ГДЕ.
+    """Flags ВЫБОР (CASE WHEN) acting as the sole WHERE condition.
 
-    «Выражение ВЫБОР можно использовать только в дополнительных условиях».
-    «НЕПРАВИЛЬНО: ГДЕ ВЫБОР КОГДА … ТОГДА … ИНАЧЕ … КОНЕЦ» — поиск по индексу
-    не применяется. «ПРАВИЛЬНО»: ВЫБОР после основного условия, объединённого по И.
+    "The ВЫБОР expression may only be used in additional conditions".
+    "WRONG: ГДЕ ВЫБОР КОГДА … ТОГДА … ИНАЧЕ … КОНЕЦ" - index search
+    is not applied. "RIGHT": ВЫБОР after the main condition, combined with И.
 
-    Severity=warning: стандарт формулирует ограничение («можно только в доп. условиях»),
-    а абсолютный запрет — лишь при отсутствии индексного основного условия.
+    Severity=warning: the standard formulates a restriction ("only in additional conditions"),
+    and an absolute prohibition only when there is no indexable main condition.
 
-    Работает по AST-модели: если conditions[] содержит хотя бы одно custom-условие
-    с expression, начинающимся с «ВЫБОР», И при этом нет ни одного структурного
-    условия (custom=False), то ВЫБОР является единственным/основным условием.
-    Если модель недоступна — пропускается.
+    Works on the AST model: if conditions[] contains at least one custom condition
+    with expression starting with «ВЫБОР», AND there is no structured
+    condition (custom=False), then ВЫБОР is the sole/main condition.
+    If the model is unavailable, it is skipped.
     """
     out = []
     for line, distinct, model_dict in iter_query_models(ctx):
         conds = model_dict.get("conditions") or []
         has_structured = any(not c.get("custom", True) for c in conds)
         if has_structured:
-            continue  # есть структурное (индексное) условие → ВЫБОР в дополнительном месте → OK
+            continue  # there is a structured (index) condition -> ВЫБОР is additional -> OK
         for cond in conds:
             if not cond.get("custom"):
                 continue
@@ -1007,29 +1007,29 @@ def check_case_as_sole_condition(ctx):
                         "(после основного индексного через И)."
                     ),
                 ))
-                break  # одно срабатывание на запрос
+                break  # one hit per query
     return out
 
 
-# ── Обращения к виртуальным таблицам ────────────────
+# ── Access to virtual tables ────────────────
 
 @rule(code="vt-filter-in-where", severity="warning",
       title="Условие на виртуальную таблицу в ГДЕ — следует передать в параметры виртуальной таблицы")
 def check_vt_filter_in_where(ctx):
-    """Флагует условия ГДЕ, которые фильтруют поле виртуальной таблицы напрямую.
+    """Flags WHERE conditions that filter a virtual table field directly.
 
-    «Не рекомендуется обращаться к виртуальным таблицам при помощи
-    условий в секции ГДЕ». При таком запросе СУБД сначала извлечёт все записи
-    виртуальной таблицы, а затем отфильтрует их — оптимизатор не может выбрать
-    эффективный план. Фильтры следует передавать в параметры виртуальной таблицы.
-    Severity=warning: стандарт формулирует «Не рекомендуется» (п.1).
+    "It is not recommended to access virtual tables using
+    conditions in the ГДЕ section". With such a query the DBMS first extracts all records
+    of the virtual table and then filters them - the optimizer cannot choose
+    an efficient plan. Filters should be passed to the virtual table parameters.
+    Severity=warning: the standard formulates "Not recommended" (item 1).
 
-    Работает по AST-модели: строит map {id → table} для каждого запроса;
-    если у таблицы есть ключ "virtual", таблица — виртуальная.
-    Затем проходит по conditions[]: если tableId совпадает с id виртуальной
-    таблицы — условие фильтрует ВТ через ГДЕ → флаг.
-    Условия на НЕ-виртуальные таблицы игнорируются.
-    Если модель недоступна — правило пропускается.
+    Works on the AST model: builds a map {id -> table} for each query;
+    if a table has the "virtual" key, the table is virtual.
+    Then walks conditions[]: if tableId matches the id of a virtual
+    table, the condition filters a VT via ГДЕ -> flag.
+    Conditions on non-virtual tables are ignored.
+    If the model is unavailable, the rule is skipped.
     """
     out = []
     for line, distinct, model_dict in iter_query_models(ctx):
@@ -1057,34 +1057,34 @@ def check_vt_filter_in_where(ctx):
     return out
 
 
-# ── Эффективное обращение к ВТ Остатки ───────────────
+# ── Efficient access to the Остатки VT ───────────────
 
-# Суффикс «.Остатки» в fullName — признак ВТ Остатки накопления или бухгалтерии.
-# ОстаткиИОбороты имеет суффикс «.ОстаткиИОбороты» и не попадает под это правило.
+# The «.Остатки» suffix in fullName is a sign of the balances VT of an accumulation or accounting register.
+# ОстаткиИОбороты has the «.ОстаткиИОбороты» suffix and does not fall under this rule.
 _OSTATOK_SUFFIX = re.compile(r"\.Остатки$", re.UNICODE | re.IGNORECASE)
 
 
 @rule(code="ostatok-with-period", severity="info",
       title="ВТ Остатки: указана дата — СУБД также читает таблицу движений")
 def check_ostatok_with_period(ctx):
-    """Флагует обращение к ВТ «Остатки», у которой заполнен параметр даты.
+    """Flags access to the «Остатки» VT with a filled date parameter.
 
-    если при обращении к виртуальной таблице «Остатки» в первый параметр
-    передаётся дата, платформа 1С генерирует запрос, который читает не только
-    хранимую таблицу остатков, но и таблицу движений (более медленный вложенный
-    запрос с группировкой). Для получения ТЕКУЩИХ остатков дату указывать не нужно —
-    следует оставить первый параметр пустым.
+    if a date is passed as the first parameter when accessing the «Остатки»
+    virtual table, the 1C platform generates a query that reads not only
+    the stored balances table but also the movements table (a slower nested
+    query with grouping). To get CURRENT balances no date is needed -
+    the first parameter should be left empty.
 
-    Сигнал: у виртуальной таблицы с суффиксом «.Остатки» в fullName заполнено
-    поле virtual.period (парсер помещает туда первый параметр в скобках, если он
-    непустой). Пустой первый параметр (…, Условие = …) или отсутствие скобок
-    означает «текущие остатки» — правило не срабатывает.
+    Signal: for a virtual table with the «.Остатки» suffix in fullName, the
+    virtual.period field is filled (the parser puts the first parameter in parentheses there if it
+    is non-empty). An empty first parameter (…, Условие = …) or no parentheses
+    means "current balances" - the rule does not trigger.
 
-    Правило НЕ дублирует vt-filter-in-where (тот флагует условия ГДЕ на
-    любые виртуальные таблицы). Данное правило флагует параметр периода,
-    специфичный именно для ВТ Остатки.
+    The rule does NOT duplicate vt-filter-in-where (that one flags ГДЕ conditions on
+    any virtual tables). This rule flags the period parameter
+    specific to the Остатки VT.
 
-    Если модель недоступна (node/бандл отсутствуют) — правило пропускается.
+    If the model is unavailable (no node/bundle), the rule is skipped.
     """
     out = []
     for line, distinct, model_dict in iter_query_models(ctx):
@@ -1110,14 +1110,14 @@ def check_ostatok_with_period(ctx):
     return out
 
 
-# ── Число параметров виртуальных таблиц ─────────────────
+# ── Number of virtual table parameters ─────────────────
 
-# Сигнатуры ВТ фиксированы. Меньшее число параметров допустимо (опущенные получают
-# значения по умолчанию), БОЛЬШЕЕ — синтаксическая ошибка платформы: запрос не
-# компилируется. Парсер сохраняет лишние аргументы в virtual.extraArgs.
-# Для регистра бухгалтерии точное число зависит от субконто плана счетов и
-# корреспонденции регистра — берём максимум (с субконто и корреспонденцией),
-# поэтому ловим только гарантированно лишние параметры (fail-open по метаданным).
+# VT signatures are fixed. Fewer parameters are allowed (omitted ones get
+# default values), MORE is a platform syntax error: the query does not
+# compile. The parser stores extra arguments in virtual.extraArgs.
+# For an accounting register the exact number depends on the chart of accounts subconto and
+# the register correspondence - we take the maximum (with subconto and correspondence),
+# so we catch only guaranteed extra parameters (fail-open by metadata).
 _VT_SIGNATURES = {
     ("РЕГИСТРНАКОПЛЕНИЯ", "ОСТАТКИ"): ("Период", "Условие"),
     ("РЕГИСТРНАКОПЛЕНИЯ", "ОБОРОТЫ"):
@@ -1145,23 +1145,23 @@ _VT_MAX_ARGS = {
 @rule(code="vt-too-many-params", severity="error",
       title="У виртуальной таблицы передано больше параметров, чем допускает сигнатура")
 def check_vt_too_many_params(ctx):
-    """Флагует вызовы ВТ с аргументами сверх сигнатуры.
+    """Flags VT calls with arguments beyond the signature.
 
-    Типовая ошибка кодогенерации: фильтр по измерению передают ОТДЕЛЬНЫМ
-    аргументом после пустого «Условия»:
+    A typical code generation error: a dimension filter is passed as a SEPARATE
+    argument after an empty «Условие»:
         РегистрНакопления.Товары.Остатки(<Период>, , Организация = &Организация)
-    У ВТ «Остатки» сигнатура (Период, Условие) — третьего параметра нет; платформа
-    выдаёт ошибку компиляции. Правильно:
+    The «Остатки» VT has the signature (Период, Условие) - there is no third parameter; the platform
+    reports a compilation error. Correct:
         РегистрНакопления.Товары.Остатки(<Период>, Организация = &Организация)
 
-    Работает по AST-модели: парсер складывает аргументы сверх сигнатуры в
-    virtual.extraArgs (см. sdblParser.ts). Меньшее число параметров не флагуется —
-    опущенные параметры получают значения по умолчанию. Для регистра бухгалтерии
-    число параметров зависит от субконто/корреспонденции (метаданных нет),
-    поэтому проверяется только гарантированный максимум.
+    Works on the AST model: the parser puts arguments beyond the signature into
+    virtual.extraArgs (see sdblParser.ts). Fewer parameters are not flagged -
+    omitted parameters get default values. For an accounting register
+    the number of parameters depends on subconto/correspondence (no metadata),
+    so only the guaranteed maximum is checked.
 
-    Severity=error: платформа откажется компилировать запрос.
-    Если модель недоступна — правило пропускается.
+    Severity=error: the platform will refuse to compile the query.
+    If the model is unavailable, the rule is skipped.
     """
     out = []
     for line, distinct, model_dict in iter_query_models(ctx):
@@ -1179,7 +1179,7 @@ def check_vt_too_many_params(ctx):
             key = (parts[0].upper(), parts[2].upper())
             max_args = _VT_MAX_ARGS.get(key)
             if max_args is None:
-                continue  # неизвестная ВТ — не флагуем (fail-open)
+                continue  # unknown VT - do not flag (fail-open)
             sig = _VT_SIGNATURES.get(key)
             sig_text = (
                 f" ({', '.join(sig)})" if sig
@@ -1199,10 +1199,10 @@ def check_vt_too_many_params(ctx):
     return out
 
 
-# ── Использование временных таблиц ──────────────────────
+# ── Use of temporary tables ──────────────────────
 
 def _temp_table_used_in_join(member_model, temp_name_upper):
-    """True, если temporaryTableName (верхний регистр) участвует в JOIN данного запроса."""
+    """True if temporaryTableName (uppercase) participates in a JOIN of this query."""
     tables_by_id = {t["id"]: t for t in (member_model.get("tables") or [])}
     temp_ids = {
         tid for tid, t in tables_by_id.items()
@@ -1219,7 +1219,7 @@ def _temp_table_used_in_join(member_model, temp_name_upper):
 
 
 def _temp_table_used_in_in_subquery(member_model, temp_name_upper):
-    """True, если temp table встречается в подзапросе В (...) в данном запросе."""
+    """True if the temp table occurs in a В (...) subquery in this query."""
     for cond in member_model.get("conditions") or []:
         if cond.get("operator") != "В":
             continue
@@ -1236,30 +1236,30 @@ def _temp_table_used_in_in_subquery(member_model, temp_name_upper):
 @rule(code="temp-table-join-no-index", severity="warning",
       title="Временная таблица участвует в соединении, но создана без ИНДЕКСИРОВАТЬ ПО")
 def check_temp_table_join_no_index(ctx):
-    """Флагует ПОМЕСТИТЬ-оператор, если ВТ используется в JOIN, но не имеет ИНДЕКСИРОВАТЬ ПО.
+    """Flags a ПОМЕСТИТЬ statement if the VT is used in a JOIN but has no ИНДЕКСИРОВАТЬ ПО.
 
-    «Большая временная таблица участвует в соединении (не важно,
-    с какой стороны). В индекс следует добавлять поля, участвующие в условии ПО».
-    Автоматически слово «большая» проверить нельзя (неизвестен объём данных),
-    поэтому правило срабатывает при отсутствии ИНДЕКСИРОВАТЬ ПО независимо от объёма —
-    это консервативная эвристика уровня warning.
+    "A large temporary table participates in a join (no matter
+    on which side). The index should include the fields involved in the ПО condition".
+    The word "large" cannot be checked automatically (the data volume is unknown),
+    so the rule triggers when ИНДЕКСИРОВАТЬ ПО is absent regardless of volume -
+    a conservative warning-level heuristic.
 
-    Алгоритм:
-    1. Собрать имена всех ВТ, созданных без ИНДЕКСИРОВАТЬ ПО в пакете.
-    2. Пройти по следующим операторам пакета; если ВТ участвует в joins[] —
-       сообщить об отсутствии индекса на операторе ПОМЕСТИТЬ.
+    Algorithm:
+    1. Collect the names of all VTs created without ИНДЕКСИРОВАТЬ ПО in the package.
+    2. Walk the following package statements; if a VT participates in joins[] -
+       report the missing index on the ПОМЕСТИТЬ statement.
 
-    Работает только по AST-модели. Если модель недоступна — пропускается.
+    Works only on the AST model. If the model is unavailable, it is skipped.
     """
     batch = ctx.model
     if not isinstance(batch, dict):
         return []
     stmts_batch = batch.get("members", []) or []
-    stmts_src = ctx.statements  # (line, text) для каждого оператора
+    stmts_src = ctx.statements  # (line, text) for each statement
 
-    # Шаг 1: для каждого оператора пакета собрать map createTemp-ВТ → (line, has_idx)
-    # Индекс оператора в пакете совпадает с индексом в ctx.statements.
-    temp_table_info = {}  # name_upper → (line, has_idx)
+    # Step 1: for each package statement build a map createTemp VT -> (line, has_idx)
+    # The statement index in the package matches the index in ctx.statements.
+    temp_table_info = {}  # name_upper -> (line, has_idx)
     for si, stmt in enumerate(stmts_batch):
         line = stmts_src[si][0] if si < len(stmts_src) else 1
         for member in stmt.get("members", []) or []:
@@ -1268,22 +1268,22 @@ def check_temp_table_join_no_index(ctx):
                 name = (model.get("tempTableName") or "").upper()
                 if name:
                     has_idx = bool(model.get("indexing"))
-                    # Сохраняем первое вхождение (самое ранее) с флагом индекса.
+                    # Keep the first occurrence (earliest) with the index flag.
                     if name not in temp_table_info:
                         temp_table_info[name] = (line, has_idx)
                     elif has_idx:
-                        # appendTemp с индексом — обновляем флаг.
+                        # appendTemp with an index - update the flag.
                         temp_table_info[name] = (temp_table_info[name][0], True)
 
     out = []
     flagged = set()
-    # Шаг 2: смотрим все операторы на предмет использования ВТ в JOIN.
+    # Step 2: check all statements for VT use in JOIN.
     for si, stmt in enumerate(stmts_batch):
         for member in stmt.get("members", []) or []:
             model = member.get("model") or {}
             for name_upper, (create_line, has_idx) in temp_table_info.items():
                 if has_idx:
-                    continue  # индекс есть — всё нормально
+                    continue  # index present - fine
                 if name_upper in flagged:
                     continue
                 if _temp_table_used_in_join(model, name_upper):
@@ -1304,17 +1304,17 @@ def check_temp_table_join_no_index(ctx):
 @rule(code="temp-table-in-no-index", severity="warning",
       title="Временная таблица используется в подзапросе В (...), но создана без ИНДЕКСИРОВАТЬ ПО")
 def check_temp_table_in_no_index(ctx):
-    """Флагует ПОМЕСТИТЬ-оператор, если ВТ используется в условии В (...), но нет ИНДЕКСИРОВАТЬ ПО.
+    """Flags a ПОМЕСТИТЬ statement if the VT is used in a В (...) condition but has no ИНДЕКСИРОВАТЬ ПО.
 
-    «Обращение к временной таблице выполняется в подзапросе
-    конструкции логического оператора В (...). В индекс следует добавлять поля
-    временной таблицы из списка выбора, соответствующие перечисленным с левой
-    стороны логического оператора В (...)».
+    "Access to the temporary table is performed in a subquery
+    of the logical operator В (...) construct. The index should include the
+    temporary table fields from the select list that correspond to the ones listed on the left
+    side of the logical operator В (...)".
 
-    Алгоритм аналогичен check_temp_table_join_no_index, но проверяет подзапросы
-    в conditions[].subquery (operator == "В") следующих операторов пакета.
+    The algorithm is similar to check_temp_table_join_no_index, but checks subqueries
+    in conditions[].subquery (operator == "В") of the following package statements.
 
-    Работает только по AST-модели. Если модель недоступна — пропускается.
+    Works only on the AST model. If the model is unavailable, it is skipped.
     """
     batch = ctx.model
     if not isinstance(batch, dict):
@@ -1361,23 +1361,23 @@ def check_temp_table_in_no_index(ctx):
     return out
 
 
-# ── Вычисление количества записей в запросах ─────────
+# ── Counting records in queries ─────────
 
-# Регулярное выражение: expression == "СУММА(1)" или "ЕСТЬNULL(СУММА(1), 0)"
-# (с учётом возможных пробелов вокруг 1 и запятой).
+# Regular expression: expression == "СУММА(1)" or "ЕСТЬNULL(СУММА(1), 0)"
+# (allowing possible spaces around 1 and the comma).
 _SUM_ONE_RE = re.compile(
     r"^(?:ЕСТЬNULL\s*\(\s*)?СУММА\s*\(\s*1\s*\)(?:\s*,\s*0\s*\))?$",
     re.IGNORECASE | re.UNICODE,
 )
 
-# Регулярное выражение: expression == "СУММА(ВЫБОР ... КОНЕЦ)"
-# где выражение содержит «ТОГДА 1» или «ИНАЧЕ 1» (счётчик в единицах),
-# но НЕ содержит «ВЫРАЗИТЬ» (не обёрнуто с расширенной разрядностью).
+# Regular expression: expression == "СУММА(ВЫБОР ... КОНЕЦ)"
+# where the expression contains «ТОГДА 1» or «ИНАЧЕ 1» (counter in units),
+# but does NOT contain «ВЫРАЗИТЬ» (not wrapped with extended precision).
 _SUM_CASE_ONE_RE = re.compile(
     r"^СУММА\s*\(ВЫБОР\s+",
     re.IGNORECASE | re.UNICODE,
 )
-# Проверяем «ТОГДА 1» или «ИНАЧЕ 1» (без ВЫРАЗИТЬ) в теле СУММА(ВЫБОР...).
+# Check for «ТОГДА 1» or «ИНАЧЕ 1» (without ВЫРАЗИТЬ) in the body of СУММА(ВЫБОР...).
 _CASE_HAS_LITERAL_1 = re.compile(
     r"(?:ТОГДА|ИНАЧЕ)\s+1(?:\s|$|\))",
     re.IGNORECASE | re.UNICODE,
@@ -1387,17 +1387,17 @@ _CASE_HAS_LITERAL_1 = re.compile(
 @rule(code="sum-one-for-count", severity="warning",
       title="СУММА(1) вместо КОЛИЧЕСТВО(*) — переполнение при ≥10 млн записей")
 def check_sum_one_for_count(ctx):
-    """Флагует СУММА(1) и ЕСТЬNULL(СУММА(1), 0) как замену КОЛИЧЕСТВО(*).
+    """Flags СУММА(1) and ЕСТЬNULL(СУММА(1), 0) as a replacement for КОЛИЧЕСТВО(*).
 
-    «при вычислении количества записей следует всегда использовать
-    функцию КОЛИЧЕСТВО, а не СУММА». При количестве записей 10 млн. и более
-    СУММА(1) переполняется из-за разрядности числа по умолчанию (7 знаков),
-    которую использует 1С:Предприятие в СУБД. Severity=warning: стандарт
-    формулирует рекомендацию («следует использовать КОЛИЧЕСТВО, а не СУММА»);
-    последствие (переполнение) наступает лишь при больших объёмах.
+    "when calculating the number of records one should always use
+    the КОЛИЧЕСТВО function, not СУММА". With 10 million records or more
+    СУММА(1) overflows due to the default number precision (7 digits)
+    that 1C:Enterprise uses in the DBMS. Severity=warning: the standard
+    formulates a recommendation ("one should use КОЛИЧЕСТВО, not СУММА");
+    the consequence (overflow) occurs only with large volumes.
 
-    Работает по AST-модели: проверяет fields[].expression на совпадение с
-    СУММА(1) или ЕСТЬNULL(СУММА(1), 0). Если модель недоступна — пропускается.
+    Works on the AST model: checks fields[].expression for a match with
+    СУММА(1) or ЕСТЬNULL(СУММА(1), 0). If the model is unavailable, it is skipped.
     """
     out = []
     for line, distinct, model_dict in iter_query_models(ctx):
@@ -1422,17 +1422,17 @@ def check_sum_one_for_count(ctx):
 @rule(code="sum-case-without-cast", severity="warning",
       title="СУММА(ВЫБОР...ТОГДА 1...) без ВЫРАЗИТЬ — переполнение при ≥10 млн записей")
 def check_sum_case_without_cast(ctx):
-    """Флагует СУММА(ВЫБОР...ТОГДА 1...) без ВЫРАЗИТЬ(1 КАК ЧИСЛО(17,0)).
+    """Flags СУММА(ВЫБОР...ТОГДА 1...) without ВЫРАЗИТЬ(1 КАК ЧИСЛО(17,0)).
 
-    когда условный подсчёт нельзя выразить через КОЛИЧЕСТВО,
-    «следует расширить разрядность числа с помощью ВЫРАЗИТЬ(1 КАК ЧИСЛО(17, 0))».
-    Без ВЫРАЗИТЬ разрядность числа по умолчанию (7 знаков) не даёт посчитать
-    более 10 млн. условных записей. Severity=warning: «следует» (рекомендация).
+    when a conditional count cannot be expressed via КОЛИЧЕСТВО,
+    "one should extend the number precision using ВЫРАЗИТЬ(1 КАК ЧИСЛО(17, 0))".
+    Without ВЫРАЗИТЬ the default number precision (7 digits) cannot count
+    more than 10 million conditional records. Severity=warning: "should" (recommendation).
 
-    Работает по AST-модели: если expression начинается с СУММА(ВЫБОР и содержит
-    «ТОГДА 1» или «ИНАЧЕ 1» (счётчик — литеральная единица), но не содержит
-    «ВЫРАЗИТЬ» — флагуется.
-    Если модель недоступна — правило пропускается.
+    Works on the AST model: if expression starts with СУММА(ВЫБОР and contains
+    «ТОГДА 1» or «ИНАЧЕ 1» (counter - a literal one), but does not contain
+    «ВЫРАЗИТЬ», it is flagged.
+    If the model is unavailable, the rule is skipped.
     """
     out = []
     for line, distinct, model_dict in iter_query_models(ctx):
@@ -1443,10 +1443,10 @@ def check_sum_case_without_cast(ctx):
             expr_upper = expr.upper()
             if not _SUM_CASE_ONE_RE.match(expr_upper):
                 continue
-            # Есть ВЫРАЗИТЬ — уже обёрнуто корректно
+            # ВЫРАЗИТЬ present - already wrapped correctly
             if "ВЫРАЗИТЬ" in expr_upper:
                 continue
-            # Убеждаемся, что это счётчик (ТОГДА 1 или ИНАЧЕ 1)
+            # Make sure this is a counter (ТОГДА 1 or ИНАЧЕ 1)
             if _CASE_HAS_LITERAL_1.search(expr_upper):
                 out.append(Finding(
                     code="sum-case-without-cast",
@@ -1461,24 +1461,24 @@ def check_sum_case_without_cast(ctx):
     return out
 
 
-# ── Запросы в динамических списках ───────────────────
+# ── Queries in dynamic lists ───────────────────
 
 def _all_sources_are_temp(member_model, known_temp_names_upper):
-    """True, если ВСЕ источники данных запроса — временные таблицы (нет точки в fullName
-    и fullName совпадает с именем ранее созданной ВТ — или вообще нет точки, если
-    имена ВТ неизвестны). Пустой список источников → False (нет смысла флаговать).
+    """True if ALL data sources of the query are temporary tables (no dot in fullName
+    and fullName matches the name of a previously created VT - or no dot at all if
+    VT names are unknown). Empty source list -> False (no point in flagging).
     """
     tables = member_model.get("tables") or []
     if not tables:
         return False
     for tbl in tables:
         full_name = tbl.get("fullName") or ""
-        # Реальные таблицы метаданных всегда содержат точку (Справочник.Товары).
-        # Временные таблицы — нет.
+        # Real metadata tables always contain a dot (Справочник.Товары).
+        # Temporary tables do not.
         if "." in full_name:
             return False
         if known_temp_names_upper and full_name.upper() not in known_temp_names_upper:
-            # Имя не найдено среди известных ВТ — скорее всего это не ВТ, пропуск.
+            # Name not found among known VTs - most likely not a VT, skip.
             return False
     return True
 
@@ -1486,22 +1486,22 @@ def _all_sources_are_temp(member_model, known_temp_names_upper):
 @rule(code="last-query-from-temp-only", severity="warning",
       title="Последний запрос пакета выбирает только из временной таблицы — это уже не динамический список")
 def check_last_query_from_temp_only(ctx):
-    """Флагует пакет, в котором последний оператор SELECT выбирает данные ТОЛЬКО
-    из временных таблиц (нет ни одной реальной таблицы метаданных).
+    """Flags a package whose last SELECT statement selects data ONLY
+    from temporary tables (no real metadata table).
 
-    «Если последний запрос динамического списка выбирает данные
-    только из ранее созданной временной таблицы, то это уже не динамический список
-    и следует перепроектировать его запрос и, скорее всего, метаданные,
-    используемые запросом».
+    "If the last query of a dynamic list selects data
+    only from a previously created temporary table, it is no longer a dynamic list,
+    and its query, and most likely the metadata used by the query,
+    should be redesigned".
 
-    Алгоритм:
-    1. Собрать имена всех ВТ, созданных через ПОМЕСТИТЬ в пакете.
-    2. Найти последний оператор с queryType == "select" (или без queryType).
-    3. Если все его источники данных — временные таблицы из шага 1 — флаговать.
+    Algorithm:
+    1. Collect the names of all VTs created via ПОМЕСТИТЬ in the package.
+    2. Find the last statement with queryType == "select" (or without queryType).
+    3. If all its data sources are temporary tables from step 1, flag it.
 
-    Severity=warning: формулировка «следует перепроектировать» (рекомендация).
-    Одно срабатывание на весь пакет.
-    Если модель недоступна — правило пропускается.
+    Severity=warning: the wording "should be redesigned" (a recommendation).
+    One hit per whole package.
+    If the model is unavailable, the rule is skipped.
     """
     batch = ctx.model
     if not isinstance(batch, dict):
@@ -1511,7 +1511,7 @@ def check_last_query_from_temp_only(ctx):
         return []
     stmts_src = ctx.statements
 
-    # Шаг 1: собрать имена ВТ из createTemp-операторов.
+    # Step 1: collect VT names from createTemp statements.
     known_temp = set()
     for stmt in stmts_batch:
         for member in stmt.get("members", []) or []:
@@ -1522,9 +1522,9 @@ def check_last_query_from_temp_only(ctx):
                     known_temp.add(name)
 
     if not known_temp:
-        return []  # нет временных таблиц — правило неприменимо
+        return []  # no temporary tables - rule is not applicable
 
-    # Шаг 2: найти последний SELECT-оператор (не createTemp, не dropTemp).
+    # Step 2: find the last SELECT statement (not createTemp, not dropTemp).
     last_select_si = None
     for si, stmt in enumerate(stmts_batch):
         for member in stmt.get("members", []) or []:
@@ -1537,7 +1537,7 @@ def check_last_query_from_temp_only(ctx):
     if last_select_si is None:
         return []
 
-    # Шаг 3: проверить, что все источники последнего SELECT — из ВТ.
+    # Step 3: check that all sources of the last SELECT are from VTs.
     last_stmt = stmts_batch[last_select_si]
     for member in last_stmt.get("members", []) or []:
         model = member.get("model") or {}
@@ -1545,7 +1545,7 @@ def check_last_query_from_temp_only(ctx):
         if qt != "select":
             continue
         if not _all_sources_are_temp(model, known_temp):
-            return []  # хотя бы один участник объединения читает реальную таблицу
+            return []  # at least one union member reads a real table
 
     line = stmts_src[last_select_si][0] if last_select_si < len(stmts_src) else 1
     return [Finding(
@@ -1561,7 +1561,7 @@ def check_last_query_from_temp_only(ctx):
     )]
 
 
-# ── Порядок секций: УПОРЯДОЧИТЬ ПО должно идти перед ИТОГИ ──
+# ── Section order: УПОРЯДОЧИТЬ ПО must come before ИТОГИ ──
 
 _KW_ITOGI = re.compile(r"\bИТОГИ\b", re.UNICODE)
 _KW_ORDER = re.compile(r"\bУПОРЯДОЧИТЬ\b", re.UNICODE)
@@ -1570,22 +1570,22 @@ _KW_ORDER = re.compile(r"\bУПОРЯДОЧИТЬ\b", re.UNICODE)
 @rule(code="order-after-totals", severity="error",
       title="УПОРЯДОЧИТЬ ПО после ИТОГИ — нарушен порядок секций (синтаксическая ошибка платформы)")
 def check_order_after_totals(ctx):
-    """Флагует УПОРЯДОЧИТЬ ПО, расположенное ПОСЛЕ секции ИТОГИ.
+    """Flags УПОРЯДОЧИТЬ ПО located AFTER the ИТОГИ section.
 
-    Ошибка 2 в errors.md: платформа требует строгий порядок секций
-    (…УПОРЯДОЧИТЬ ПО → АВТОУПОРЯДОЧИВАНИЕ → ИТОГИ) и выдаёт синтаксическую ошибку
-    «Синтаксическая ошибка "УПОРЯДОЧИТЬ"». ВАЖНО: вендоренный SDBL-парсер к такому
-    порядку ЛОЯЛЕН — он разбирает запрос без ошибки (молча теряя УПОРЯДОЧИТЬ),
-    поэтому query-not-parseable эту ошибку НЕ ловит. Нужна отдельная текстовая
-    проверка.
+    Error 2 in errors.md: the platform requires a strict section order
+    (…УПОРЯДОЧИТЬ ПО -> АВТОУПОРЯДОЧИВАНИЕ -> ИТОГИ) and reports the syntax error
+    «Синтаксическая ошибка "УПОРЯДОЧИТЬ"». IMPORTANT: the vendored SDBL parser is
+    LENIENT about this order - it parses the query without error (silently dropping УПОРЯДОЧИТЬ),
+    so query-not-parseable does NOT catch this error. A separate text
+    check is needed.
 
-    Работает по тексту (без AST): в каждом операторе пакета (ctx.statements) по
-    санированному тексту (без строк/комментариев) ищет ключевые слова ИТОГИ и
-    УПОРЯДОЧИТЬ; если УПОРЯДОЧИТЬ стоит после ИТОГИ — находка. Подзапросы с
-    собственным УПОРЯДОЧИТЬ (ПЕРВЫЕ … УПОРЯДОЧИТЬ) стоят в тексте раньше ИТОГИ
-    верхнего уровня, поэтому не дают ложного срабатывания.
+    Works on text (no AST): in each package statement (ctx.statements), over the
+    sanitized text (without strings/comments), searches for the keywords ИТОГИ and
+    УПОРЯДОЧИТЬ; if УПОРЯДОЧИТЬ comes after ИТОГИ, it is a finding. Subqueries with
+    their own УПОРЯДОЧИТЬ (ПЕРВЫЕ … УПОРЯДОЧИТЬ) appear in the text before the top-level
+    ИТОГИ, so they do not cause a false hit.
 
-    Severity=error: гарантированный отказ компиляции запроса на платформе.
+    Severity=error: guaranteed compilation failure of the query on the platform.
     """
     out = []
     for line, stmt in ctx.statements:
@@ -1603,29 +1603,29 @@ def check_order_after_totals(ctx):
     return out
 
 
-# ── ИТОГИ: неагрегированные негруппировочные поля ────
+# ── ИТОГИ: non-aggregated non-grouping fields ────
 
 @rule(code="totals-field-not-aggregated", severity="error",
       title="Поле выводится при ИТОГИ, но не агрегировано и не входит в группировку — на строках-итогах NULL")
 def check_totals_field_not_aggregated(ctx):
-    """Флагует «голое» поле в запросе с ИТОГИ, которое не входит ни в группировку
-    ИТОГИ, ни в агрегат.
+    """Flags a "bare" field in a query with ИТОГИ that is included neither in the
+    ИТОГИ grouping nor in an aggregate.
 
-    Ошибка 4 в errors.md: `ИТОГИ ПО Номенклатура` без агрегатов для полей
-    `Услуга`, `Потребность`. При обходе `ОбходРезультатаЗапроса.ПоГруппировкам`
-    (и на строках ОБЩИЕ) негруппировочные неагрегированные поля возвращаются как
-    NULL. Побочно это даёт runtime-ошибку вида «Преобразование значения к типу
-    Булево не может быть выполнено», когда такое NULL-поле используется в условии.
+    Error 4 in errors.md: `ИТОГИ ПО Номенклатура` without aggregates for the fields
+    `Услуга`, `Потребность`. When traversing `ОбходРезультатаЗапроса.ПоГруппировкам`
+    (and on ОБЩИЕ rows) non-grouping non-aggregated fields are returned as
+    NULL. As a side effect this causes a runtime error like «Преобразование значения к типу
+    Булево не может быть выполнено» when such a NULL field is used in a condition.
 
-    Работает по AST-модели: если у запроса есть секция totals, то для каждого
-    «голого» поля списка выбора (есть path, нет func, нет expression) проверяется,
-    входит ли оно в totals.groupFields (по selectAlias или path) либо в
-    totals.totalFields (по operandAlias). Если нет — поле станет NULL на
-    строках-итогах → находка. Вычисляемые поля (expression) и агрегаты (func) не
-    флагуются. Если модель недоступна — правило пропускается.
+    Works on the AST model: if the query has a totals section, then for each
+    "bare" field of the select list (has path, no func, no expression) it checks
+    whether it is in totals.groupFields (by selectAlias or path) or in
+    totals.totalFields (by operandAlias). If not, the field becomes NULL on
+    totals rows -> finding. Calculated fields (expression) and aggregates (func) are not
+    flagged. If the model is unavailable, the rule is skipped.
 
-    Severity=error: приводит к NULL в данных и, как правило, к runtime-ошибке
-    при обходе результата. Находка блокирует приёмку.
+    Severity=error: leads to NULL in the data and usually to a runtime error
+    when traversing the result. The finding blocks acceptance.
     """
     out = []
     for line, distinct, model_dict in iter_query_models(ctx):
@@ -1648,7 +1648,7 @@ def check_totals_field_not_aggregated(ctx):
                 total_aliases.add(oa.upper())
         for f in model_dict.get("fields") or []:
             if f.get("func") or f.get("expression"):
-                continue  # агрегат или вычисляемое поле — не «голое»
+                continue  # aggregate or calculated field - not "bare"
             path = f.get("path")
             if not path:
                 continue
@@ -1670,15 +1670,15 @@ def check_totals_field_not_aggregated(ctx):
 @rule(code="autoorder-not-recommended", severity="warning",
       title="АВТОУПОРЯДОЧИВАНИЕ не рекомендуется — разработчик не контролирует поля сортировки")
 def check_autoorder_not_recommended(ctx):
-    """Предупреждает о любом использовании АВТОУПОРЯДОЧИВАНИЕ без ПЕРВЫЕ по AST-модели.
+    """Warns about any use of АВТОУПОРЯДОЧИВАНИЕ without ПЕРВЫЕ using the AST model.
 
-    «В остальных случаях конструкцию АВТОУПОРЯДОЧИВАНИЕ также не
-    рекомендуется использовать, так как разработчик не контролирует, какие именно
-    поля будут использованы для упорядочивания».
-    Итерирует iter_query_models(ctx); для каждого запроса проверяет order.auto == True.
-    Если тот же запрос имеет selection.top — он покрывается error-правилом
-    autoorder-with-first, поэтому warning здесь не выдаётся (нет двойных срабатываний).
-    Если модель недоступна — правило пропускается.
+    "In other cases the АВТОУПОРЯДОЧИВАНИЕ construct is also not
+    recommended, since the developer does not control which
+    fields will be used for ordering".
+    Iterates iter_query_models(ctx); for each query checks order.auto == True.
+    If the same query has selection.top, it is covered by the error rule
+    autoorder-with-first, so no warning is emitted here (no double hits).
+    If the model is unavailable, the rule is skipped.
     """
     out = []
     for line, distinct, model in iter_query_models(ctx):

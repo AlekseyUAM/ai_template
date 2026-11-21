@@ -1,6 +1,6 @@
-# Companion-панели и расширенная подсказка элемента
+# Companion panels and extended element tooltip
 
-Любой элемент формы может нести свой собственный контент в трёх companion-свойствах: расширенную подсказку (`extendedTooltip`), командную панель (`commandBar`) и контекстное меню (`contextMenu`). Все три задаются ключами прямо на объекте элемента.
+Any form element can carry its own content in three companion properties: the extended tooltip (`extendedTooltip`), the command bar (`commandBar`) and the context menu (`contextMenu`). All three are set by keys directly on the element object.
 
 ```jsonc
 { "table": "Список", "path": "Список",
@@ -9,11 +9,11 @@
   "extendedTooltip": "Двойной клик открывает карточку" }
 ```
 
-## Расширенная подсказка (`extendedTooltip`)
+## Extended tooltip (`extendedTooltip`)
 
-Подсказка-надпись рядом с элементом. Две формы записи.
+A tooltip label next to the element. Two notation forms.
 
-**Текст-форма** — просто текст подсказки:
+**Text form** - just the tooltip text:
 
 ```jsonc
 "extendedTooltip": "Укажите ИНН контрагента"
@@ -21,11 +21,11 @@
 "extendedTooltip": { "text": "Всего <b>с НДС</b>", "formatted": true }
 ```
 
-- строка — ru-текст;
-- `{ "ru": …, "en": … }` — многоязычный (как `title`);
-- `{ "text": …, "formatted": true }` — форматированный текст (inline-разметка 1С: `<b>…</>`, `<i>`, `<u>`, `<color web:Red>…</>`, `<bgColor …>`, `<font …>`, `<fontSize …>`, `<link URL>…</>`, `<img …>`; закрывающий тег — `</>`). `formatted` нужен только когда текст содержит такую разметку.
+- a string - Russian text;
+- `{ "ru": …, "en": … }` - multilingual (like `title`);
+- `{ "text": …, "formatted": true }` - formatted text (1C inline markup: `<b>…</>`, `<i>`, `<u>`, `<color web:Red>…</>`, `<bgColor …>`, `<font …>`, `<fontSize …>`, `<link URL>…</>`, `<img …>`; the closing tag is `</>`). `formatted` is needed only when the text contains such markup.
 
-**Own-content форма** — объект с раскладкой/оформлением/флагами, когда подсказке нужны размеры, цвет, гиперссылка и т.п.:
+**Own-content form** - an object with layout/appearance/flags, when the tooltip needs sizes, color, a hyperlink, etc.:
 
 ```jsonc
 "extendedTooltip": {
@@ -36,28 +36,28 @@
 }
 ```
 
-Ключи own-content объекта (все необязательны):
+Own-content object keys (all optional):
 
-| Ключ | Тип | Назначение |
+| Key | Type | Purpose |
 |------|-----|-----------|
-| `text` | string/ML | Текст подсказки (с `formatted` — форматированный) |
-| `formatted` | bool | Интерпретировать inline-разметку в `text` |
-| `tooltip` | string/ML | Всплывающая подсказка самой расширенной подсказки (редко; ≠ обычному `tooltip` элемента) |
-| `hyperlink` | bool | Сделать подсказку гиперссылкой |
-| `visible` / `enabled` | bool | Видимость / доступность подсказки |
-| `width` / `height` | number | Размеры |
-| `maxWidth` / `autoMaxWidth` | number / bool | Максимальная ширина / авто-максимум |
-| `titleHeight` | number | Высота заголовка |
-| `horizontalStretch` | bool | Горизонтальное растяжение |
-| `verticalAlign` | string | Вертикальное выравнивание |
-| `textColor` / `font` | string/object | Цвет текста / шрифт (см. `references/appearance.md`) |
-| `events` | object | Обработчики событий подсказки, напр. `{ "URLProcessing": "Имя" }` у гиперссылочной подсказки |
+| `text` | string/ML | Tooltip text (with `formatted` - formatted) |
+| `formatted` | bool | Interpret inline markup in `text` |
+| `tooltip` | string/ML | Tooltip of the extended tooltip itself (rare; != the element's regular `tooltip`) |
+| `hyperlink` | bool | Make the tooltip a hyperlink |
+| `visible` / `enabled` | bool | Visibility / availability of the tooltip |
+| `width` / `height` | number | Sizes |
+| `maxWidth` / `autoMaxWidth` | number / bool | Maximum width / auto maximum |
+| `titleHeight` | number | Title height |
+| `horizontalStretch` | bool | Horizontal stretch |
+| `verticalAlign` | string | Vertical alignment |
+| `textColor` / `font` | string/object | Text color / font (see `references/appearance.md`) |
+| `events` | object | Tooltip event handlers, e.g. `{ "URLProcessing": "Имя" }` for a hyperlink tooltip |
 
-## Командная панель (`commandBar`)
+## Command bar (`commandBar`)
 
-Собственная командная панель элемента (обычно таблицы или группы).
+The element's own command bar (usually of a table or group).
 
-**Значение** — массив или объект:
+**The value** is an array or an object:
 
 ```jsonc
 "commandBar": [ { "button": "Создать", "command": "СоздатьЭлемент" } ]
@@ -72,22 +72,22 @@
 }
 ```
 
-- массив `[ … ]` — краткая запись для `{ "children": [ … ] }`;
-- объект — `children` плюс необязательные `autofill` и `horizontalAlign`.
+- the array `[ … ]` - a short notation for `{ "children": [ … ] }`;
+- an object - `children` plus optional `autofill` and `horizontalAlign`.
 
-| Ключ | Тип | Назначение |
+| Key | Type | Purpose |
 |------|-----|-----------|
-| `children` | array | Содержимое панели — обычная грамматика кнопок (см. основную инструкцию) |
-| `autofill` | bool | `false` — подавить автозаполнение панели стандартными командами. Необязательно (по умолчанию панель автозаполняется) |
-| `horizontalAlign` | string | Горизонтальное выравнивание содержимого: `Left` / `Center` / `Right`. Необязательно |
+| `children` | array | Panel content - the regular button grammar (see the main instruction) |
+| `autofill` | bool | `false` - suppress panel autofill with standard commands. Optional (by default the panel is autofilled) |
+| `horizontalAlign` | string | Horizontal alignment of the content: `Left` / `Center` / `Right`. Optional |
 
-`children` — кнопки: `button` (с `command` / `commandName` / `stdCommand`), `buttonGroup`, `popup` — как в основной инструкции по кнопкам.
+`children` - buttons: `button` (with `command` / `commandName` / `stdCommand`), `buttonGroup`, `popup` - as in the main button instruction.
 
-> Для таблицы динамического списка панель по умолчанию подавлена (чтобы не дублировать командную панель формы). Чтобы оставить автозаполняемую панель у самой таблицы — задайте `commandBar: { "autofill": true }`.
+> For a dynamic list table the panel is suppressed by default (to avoid duplicating the form command bar). To keep an autofilled panel on the table itself, set `commandBar: { "autofill": true }`.
 
-## Контекстное меню (`contextMenu`)
+## Context menu (`contextMenu`)
 
-Собственное контекстное меню элемента. Грамматика та же, что у `commandBar`, но без `horizontalAlign`.
+The element's own context menu. The grammar is the same as for `commandBar`, but without `horizontalAlign`.
 
 ```jsonc
 "contextMenu": [ { "button": "Карта маршрута", "commandName": "CommonCommand.КартаМаршрута" } ]
@@ -100,12 +100,12 @@
 }
 ```
 
-| Ключ | Тип | Назначение |
+| Key | Type | Purpose |
 |------|-----|-----------|
-| `children` | array | Пункты меню — обычная грамматика кнопок |
-| `autofill` | bool | `false` — подавить автозаполнение меню. Необязательно |
+| `children` | array | Menu items - the regular button grammar |
+| `autofill` | bool | `false` - suppress menu autofill. Optional |
 
-## Пример: таблица со своим меню и инфо-баннером
+## Example: a table with its own menu and info banner
 
 ```jsonc
 { "table": "Заказы", "path": "Объект.Заказы",

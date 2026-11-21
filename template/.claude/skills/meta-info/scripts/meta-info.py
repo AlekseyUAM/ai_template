@@ -10,16 +10,16 @@ from lxml import etree
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
-# Регистронезависимый ввод: имена параметров и значения choices принимаются
-# в любом регистре (в argparse по умолчанию совпадение точное).
+# Case-insensitive input: parameter names and choices values are accepted
+# in any case (argparse matches exactly by default).
 def ci_parse_args(parser, argv=None):
-    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
+    """parse_args: parameter names and choices values are accepted in any case."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
         if tok.startswith('-') and tok.lower() in names:
             argv[i] = names[tok.lower()]
-    # choices — зеркало [ValidateSet]; канонизируем ДО разбора, иначе argparse отвергнет регистр
+    # choices mirrors [ValidateSet]; canonicalize BEFORE parsing, otherwise argparse rejects the case
     choice_map = {}
     for a in parser._actions:
         if a.choices:
@@ -180,9 +180,9 @@ type_name_map = {
     "ExternalDataSource": "Внешний источник данных", "Table": "Таблица внешнего источника",
 }
 
-# Долгие виды сокращаем (ПВХ, РС/РН/РБ/РР): в списке на сорок реквизитов повторяющийся префикс
-# съедает колонку и прячет отличающуюся часть — имя объекта. Аббревиатуры приняты как ВВОД в
-# meta-compile/meta-edit (словарь typeSynonyms), поэтому строку из вывода можно подать обратно.
+# Long type names are shortened (ПВХ, РС/РН/РБ/РР): in a list of forty attributes the repeated prefix
+# eats the column and hides the differing part - the object name. The abbreviations are accepted as INPUT in
+# meta-compile/meta-edit (typeSynonyms dictionary), so a line from the output can be fed back.
 ref_type_map = {
     "CatalogRef": "СправочникСсылка", "DocumentRef": "ДокументСсылка",
     "EnumRef": "ПеречислениеСсылка", "ChartOfAccountsRef": "ПланСчетовСсылка",
@@ -231,8 +231,8 @@ object_type_map = {
     "CalculationRegisterRecordSet": "НаборЗаписейРР",
     "SequenceRecordSet": "НаборЗаписейПоследовательности",
     "RecalculationRecordSet": "НаборЗаписейПерерасчета",
-    # Менеджеры встречаются в источниках подписок. Сиблинга-аббревиатуры у них нет
-    # (единственный ориентир — КонстантаМенеджерЗначения), поэтому имена полные.
+    # Managers occur in event subscription sources. They have no sibling abbreviation
+    # (the only reference point is КонстантаМенеджерЗначения), so the names are full.
     "CatalogManager": "СправочникМенеджер", "DocumentManager": "ДокументМенеджер",
     "DocumentJournalManager": "ЖурналДокументовМенеджер",
     "EnumManager": "ПеречислениеМенеджер",
@@ -275,9 +275,9 @@ def get_ml_text(node):
     return ""
 
 
-# Корень конфигурации — ближайший каталог выше объекта, где лежит Configuration.xml (или
-# Ext/ParentConfigurations.bin у выгрузки на поддержке). Фиксированное «на два уровня выше» тут
-# неверно: объект бывает подан из другого места дерева, а у внешней обработки корня нет вовсе.
+# Configuration root - the nearest directory above the object that contains Configuration.xml (or
+# Ext/ParentConfigurations.bin for a supported-configuration dump). A fixed "two levels up" is wrong
+# here: the object may be passed from another place in the tree, and an external data processor has no root at all.
 def find_config_root_dir():
     d = os.path.dirname(object_path)
     for _ in range(8):
@@ -293,17 +293,17 @@ def find_config_root_dir():
     return None
 
 
-# Множество типов (v8:TypeSet) — индирекция: в строке типа стоит имя, а состав лежит в другом
-# файле (определяемый тип) или определяется данными (характеристика ПВХ). Раскрывать состав в
-# строке типа нельзя дважды: один псевдоним встречается в объекте десятками раз (в АвансовомОтчете
-# `ДенежнаяСумма*` — 12 раз), а в корпусе есть определяемые типы на 596 типов — вывод упёрся бы в
-# постраничник и съел хвост объекта. Поэтому имя стоит встроенно, а раскрытие идёт ровно одной
-# записью на уникальное множество, глоссарием в конце вывода.
+# Type set (v8:TypeSet) is an indirection: the type string holds a name, while the composition lives in another
+# file (defined type) or is determined by data (chart of characteristic types). The composition must not be
+# expanded in the type string repeatedly: one alias occurs dozens of times in an object (in АвансовыйОтчет
+# `ДенежнаяСумма*` 12 times), and the corpus has defined types with 596 types - the output would hit the
+# pager and eat the tail of the object. Therefore the name is inline, and the expansion goes as exactly one
+# entry per unique set, as a glossary at the end of the output.
 type_set_glossary = {}
 defined_type_cache = {}
 _config_root_state = {"probed": False, "dir": None}
-# Состав определяемого типа сам может содержать множество. Внутрь раскрытия не углубляемся: там
-# имя уже достаточно, а рекурсия по самоссылочному типу не завершилась бы.
+# The composition of a defined type may itself contain a set. We do not go deeper into the expansion: there
+# the name is already enough, and recursion over a self-referential type would not terminate.
 _in_type_set_expansion = {"on": False}
 
 
@@ -317,8 +317,8 @@ def get_config_root_dir():
 def resolve_defined_type(dt_name):
     if dt_name in defined_type_cache:
         return defined_type_cache[dt_name]
-    # broken отличаем от found: файл на месте, но не разобрался — сказать «файла нет» было бы
-    # враньём, а молчать — тем же тихим отказом, от которого лечим.
+    # broken is distinguished from found: the file is there but failed to parse - saying "no file" would be
+    # a lie, and staying silent would be the same quiet failure we are curing.
     res = {"found": False, "broken": False, "members": []}
     root = get_config_root_dir()
     if root:
@@ -339,8 +339,8 @@ def resolve_defined_type(dt_name):
                     finally:
                         _in_type_set_expansion["on"] = False
                     res["members"] = members
-                    # found только после успешного разбора: иначе упавшее раскрытие
-                    # печаталось бы как «состав пуст» — ложь вместо «не разобран».
+                    # found only after a successful parse: otherwise a failed expansion
+                    # would print as "composition empty" - a lie instead of "not parsed".
                     res["found"] = True
             except Exception:
                 res["broken"] = True
@@ -358,10 +358,10 @@ def register_type_set(label, kind, name):
     type_set_glossary[label] = {"kind": kind, "name": name}
 
 
-# Тип-множество: голое имя метатипа без `.Имя` означает ВСЕ объекты этого класса
-# (см. docs/meta-dsl-spec.md §«Тип-множество»). Конкретный тип всегда пишется с точкой, но
-# отличать «все» от «один» по наличию точки посреди длинного имени — сигнал низкой различимости,
-# поэтому обобщённый метатип получает суффикс «(все)»: разница становится словом, а не пунктуацией.
+# Type set: a bare metatype name without `.Имя` means ALL objects of that class
+# (see docs/meta-dsl-spec.md §"Тип-множество"). A concrete type is always written with a dot, but
+# telling "all" from "one" by the presence of a dot in a long name is a low-discriminability signal,
+# so a generalized metatype gets the "(все)" suffix: the difference becomes a word, not punctuation.
 def format_single_type_set(raw):
     raw = re.sub(r'^d\d+p\d+:', 'cfg:', raw)
     m = re.match(r'^cfg:DefinedType\.(.+)$', raw)
@@ -390,7 +390,7 @@ def format_single_type_set(raw):
     return raw
 
 
-# Глоссарий множеств: одна запись на уникальное множество, в порядке первого упоминания.
+# Set glossary: one entry per unique set, in order of first mention.
 def get_type_set_glossary_lines():
     lines = []
     for label, e in type_set_glossary.items():
@@ -459,9 +459,9 @@ def format_single_type(raw, parent_node):
     if raw == "v8:UUID":
         return "УникальныйИдентификатор"
     if raw == "xs:base64Binary":
-        # xs:base64Binary — всегда ДвоичныеДанные, и без квалификаторов тоже: замерено
-        # на 8.3.24.1691 — такой узел платформа загружает и выгружает обратно как безлимитные
-        # двоичные данные (Length 0, AllowedLength Variable), а не как ХранилищеЗначения.
+        # xs:base64Binary is always ДвоичныеДанные, even without qualifiers: measured
+        # on 8.3.24.1691 - the platform loads and dumps such a node back as unlimited
+        # binary data (Length 0, AllowedLength Variable), not as ХранилищеЗначения.
         return "ДвоичныеДанные"
     if raw == "v8:Null":
         return "Null"
@@ -486,9 +486,9 @@ def format_single_type(raw, parent_node):
     m = re.match(r'^cfg:DefinedType\.(.+)$', raw)
     if m:
         return f"ОпределяемыйТип.{m.group(1)}"
-    # cfg:DocumentObject.Xxx / cfg:InformationRegisterRecordSet.Xxx — объектные типы.
-    # Без карты они уходили в ветку «снять cfg:» и печатались по-английски, хотя в
-    # источниках подписки те же типы печатались по-русски: одно понятие двумя видами.
+    # cfg:DocumentObject.Xxx / cfg:InformationRegisterRecordSet.Xxx - object types.
+    # Without the map they fell into the "strip cfg:" branch and printed in English, although in
+    # event subscription sources the same types printed in Russian: one concept in two forms.
     m = re.match(r'^cfg:(\w+)\.(.+)$', raw)
     if m and m.group(1) in object_type_map:
         return f"{object_type_map[m.group(1)]}.{m.group(2)}"
@@ -530,8 +530,8 @@ def format_flags(a_props, is_dimension=False):
     return f"  [{', '.join(flags)}]"
 
 
-# Ссылка на объект метаданных (`Catalog.Валюты` в Owners и подобных) — не тип значения,
-# но в выводе показываем именно тип, который присваивается: СправочникСсылка.Валюты.
+# Reference to a metadata object (`Catalog.Валюты` in Owners and similar) is not a value type,
+# but the output shows the type that is assigned: СправочникСсылка.Валюты.
 def format_md_object_ref(raw):
     m = re.match(r'^(\w+)\.(.+)$', raw)
     if m:
@@ -541,20 +541,20 @@ def format_md_object_ref(raw):
     return raw
 
 
-# ── Стандартные реквизиты ────────────────────────────────────
+# ── Standard attributes ──────────────────────────────────────
 
-# Сколько типов состава печатать списком, прежде чем свернуть в счётчик. По корпусу
-# acc/erp/ut/unf состав ПВХ доходит до 151 типа, при этом 20 из 42 ПВХ укладываются в 5.
+# How many composition types to print as a list before collapsing into a counter. In the corpus
+# acc/erp/ut/unf the ПВХ composition reaches 151 types, while 20 of 42 ПВХ fit within 5.
 COMPOSED_TYPE_THRESHOLD = 5
 
-# Имена полей, состав которых свернули в счётчик, — по ним в конце вывода печатается
-# единственная подсказка, чем состав развернуть.
+# Names of fields whose composition was collapsed into a counter - for them a single
+# hint on how to expand the composition is printed at the end of the output.
 collapsed_names = []
 
-# Блок StandardAttributes в XML опционален: платформа материализует его только когда хотя бы
-# один стандартный реквизит кастомизирован (docs/meta-dsl-spec.md §7.1.1). Когда блока нет,
-# действуют платформенные дефолты — профиль ниже совпадает с $stdAttrProfile в meta-compile
-# (выведен из корпуса acc+erp). Правки держать синхронными, иначе навыки разъедутся молча.
+# The StandardAttributes block in XML is optional: the platform materializes it only when at least
+# one standard attribute is customized (docs/meta-dsl-spec.md §7.1.1). When the block is absent,
+# platform defaults apply - the profile below matches $stdAttrProfile in meta-compile
+# (derived from the acc+erp corpus). Keep the changes in sync, otherwise the skills silently diverge.
 std_attr_required_default = {
     "Catalog": {"Owner": True, "Description": True},
     "Document": {"Date": True},
@@ -578,14 +578,14 @@ def new_std_attr(name, type_str, flags):
     return {"Name": name, "Type": type_str, "Flags": flag_str}
 
 
-# Стандартные реквизиты, наличие и характеристики которых задаются настройками объекта, —
-# их нельзя вывести из остального вывода, поэтому они попадают и в overview. Ссылка,
-# ПометкаУдаления, Родитель и прочее следуют из типа объекта и строки «Иерархический» —
-# они только в full (см. get_standard_attributes_full).
+# Standard attributes whose presence and characteristics are set by object properties -
+# they cannot be derived from the rest of the output, so they also appear in overview. Ссылка,
+# ПометкаУдаления, Родитель and the rest follow from the object type and the "Иерархический" line -
+# they are only in full (see get_standard_attributes_full).
 def get_standard_attributes(props_node, obj_type, mode_name):
     result = []
 
-    # Владелец — только у подчинённого справочника; состав типов ниоткуда не выводится
+    # Владелец only for a subordinate catalog; the type composition is not derived from anywhere
     if obj_type == "Catalog":
         owners_node = find(props_node, "md:Owners")
         owner_types = []
@@ -596,8 +596,8 @@ def get_standard_attributes(props_node, obj_type, mode_name):
             req = "обязательный" if test_std_attr_required(props_node, "Owner", obj_type) else None
             result.append(new_std_attr("Владелец", ", ".join(owner_types), [req]))
 
-    # ТипЗначения ПВХ — до полутора сотен типов, полный список раздул бы сводку в обоих
-    # режимах, поэтому сворачиваем в счётчик. Состав смотреть через -Name ТипЗначения.
+    # ТипЗначения of a ПВХ - up to one and a half hundred types; the full list would bloat the summary in both
+    # modes, so we collapse it into a counter. View the composition via -Name ТипЗначения.
     if obj_type == "ChartOfCharacteristicTypes":
         vt = find(props_node, "md:Type")
         if vt is not None:
@@ -610,12 +610,12 @@ def get_standard_attributes(props_node, obj_type, mode_name):
             if type_str:
                 result.append(new_std_attr("ТипЗначения", type_str, []))
 
-    # Дата — есть всегда, ценна флагом обязательности
+    # Дата is always present, valuable for its required flag
     if obj_type in ("Document", "BusinessProcess", "Task"):
         req = "обязательный" if test_std_attr_required(props_node, "Date", obj_type) else None
         result.append(new_std_attr("Дата", "Дата", [req]))
 
-    # Номер — тип и длина задаются объектом, при NumberLength=0 номера нет
+    # Номер - type and length are set by the object; with NumberLength=0 there is no number
     if obj_type in ("Document", "BusinessProcess", "Task"):
         num_len = find(props_node, "md:NumberLength")
         if num_len is not None and inner_text(num_len).isdigit() and int(inner_text(num_len)) > 0:
@@ -635,7 +635,7 @@ def get_standard_attributes(props_node, obj_type, mode_name):
                 flags.append("авто")
             result.append(new_std_attr("Номер", f"{nt_ru}({inner_text(num_len)})", flags))
 
-    # Код — при CodeLength=0 кода у объекта нет вовсе, строку не печатаем
+    # Код - with CodeLength=0 the object has no code at all, do not print the line
     code_len = find(props_node, "md:CodeLength")
     if code_len is not None and inner_text(code_len).isdigit() and int(inner_text(code_len)) > 0:
         code_type = find(props_node, "md:CodeType")
@@ -648,7 +648,7 @@ def get_standard_attributes(props_node, obj_type, mode_name):
             flags.append("фикс. длина")
         result.append(new_std_attr("Код", f"{ct_ru}({inner_text(code_len)})", flags))
 
-    # Наименование — при DescriptionLength=0 наименования нет
+    # Наименование - with DescriptionLength=0 there is no name
     desc_len = find(props_node, "md:DescriptionLength")
     if desc_len is not None and inner_text(desc_len).isdigit() and int(inner_text(desc_len)) > 0:
         req = "обязательный" if test_std_attr_required(props_node, "Description", obj_type) else None
@@ -657,8 +657,8 @@ def get_standard_attributes(props_node, obj_type, mode_name):
     return result
 
 
-# Остальные стандартные реквизиты — предсказуемы по типу объекта, но в full полезны
-# как перечень доступных полей для запроса.
+# The remaining standard attributes are predictable from the object type, but in full they are useful
+# as a list of available fields for a query.
 def get_standard_attributes_full(props_node, obj_type, obj_name):
     self_ref_map = {
         "Catalog": "СправочникСсылка",
@@ -677,7 +677,7 @@ def get_standard_attributes_full(props_node, obj_type, obj_name):
         result.append(new_std_attr("Ссылка", self_ref, []))
     result.append(new_std_attr("ПометкаУдаления", "Булево", []))
 
-    # Родитель и ЭтоГруппа существуют только у иерархических объектов
+    # Родитель and ЭтоГруппа exist only on hierarchical objects
     hier = find(props_node, "md:Hierarchical")
     is_hier = (hier is not None and inner_text(hier) == "true") or obj_type == "ChartOfAccounts"
     if is_hier and self_ref:
@@ -707,7 +707,7 @@ def get_standard_attributes_full(props_node, obj_type, obj_name):
     elif obj_type == "ChartOfCalculationTypes":
         result.append(new_std_attr("ПериодДействияБазовый", "Булево", []))
 
-    # Предопределённые данные есть у всех перечисленных типов, кроме документов и задач
+    # Predefined data exists on all the listed types except documents and tasks
     if obj_type in ("Catalog", "ChartOfCharacteristicTypes", "ChartOfAccounts", "ChartOfCalculationTypes"):
         result.append(new_std_attr("Предопределенный", "Булево", []))
         result.append(new_std_attr("ИмяПредопределенныхДанных", "Строка", []))
@@ -754,8 +754,8 @@ def get_max_name_len(attrs):
 def get_simple_children(parent_node, tag):
     result = []
     for child in find_all(parent_node, f"md:{tag}"):
-        # Form/Template в ChildObjects — простые узлы с именем в тексте, а Command — узел
-        # с вложенным Properties: у него inner_text склеил бы всё содержимое в одну строку.
+        # Form/Template in ChildObjects are simple nodes with the name in text, while Command is a node
+        # with nested Properties: inner_text would glue all content into one line for it.
         name_node = find(child, "md:Properties/md:Name")
         result.append(inner_text(name_node) if name_node is not None else inner_text(child))
     return result
@@ -795,9 +795,9 @@ def format_source_type(raw):
         name = m.group(2)
         if prefix in object_type_map:
             return f"{object_type_map[prefix]}.{name}"
-    # Голый вид без точки тоже бывает источником: meta-compile пишет менеджера (ДокументМенеджер)
-    # обычным v8:Type. Суффикса «(все)» тут НЕ ставим — это сам тип менеджера, а не класс объектов;
-    # множеством голый вид приходит через v8:TypeSet, и его форматирует format_single_type_set.
+    # A bare type without a dot can also be a source: meta-compile writes the manager (ДокументМенеджер)
+    # as a regular v8:Type. We do NOT put the "(все)" suffix here - this is the manager type itself, not an object class;
+    # as a set the bare type comes via v8:TypeSet, and format_single_type_set formats it.
     m = re.match(r'^cfg:(\w+)$', raw)
     if m and m.group(1) in object_type_map:
         return object_type_map[m.group(1)]
@@ -807,15 +807,15 @@ def format_source_type(raw):
     return raw
 
 
-# Источники подписки задаются и списком типов (v8:Type), и множеством (v8:TypeSet — определяемый
-# тип или целый класс «все документы»). В корпусе множеством задана треть подписок (в erp_8.3.24
-# 151 из 492 — вообще без v8:Type), поэтому чтение только v8:Type оставляло их без строки
-# «Источники»: подписка выглядела так, будто ни на что не срабатывает. Оба узла читаем одним
-# XPath, в порядке документа — так же, как meta-decompile.
+# Subscription sources are set both by a type list (v8:Type) and by a set (v8:TypeSet - a defined
+# type or a whole class "all documents"). In the corpus a third of subscriptions are set by a set (in erp_8.3.24
+# 151 of 492 - with no v8:Type at all), so reading only v8:Type left them without the
+# "Источники" line: the subscription looked as if it fires on nothing. We read both nodes with one
+# XPath, in document order - the same way as meta-decompile.
 #
-# Множества и явные типы возвращаем врозь: явных бывает много (в корпусе до 1353 в одной
-# подписке), а множеств — не больше восьми. Поэтому в сводке множества называем всегда, а
-# явные типы сворачиваем в счётчик: по одному числу не видно, что подписка бьёт по целому классу.
+# Sets and explicit types are returned separately: explicit ones can be many (in the corpus up to 1353 in one
+# subscription), while sets are no more than eight. Therefore in the summary we always name the sets, and
+# collapse explicit types into a counter: a single number does not show that the subscription covers a whole class.
 def get_subscription_source_list(source_node):
     types = []
     sets = []
@@ -891,7 +891,7 @@ def get_object_support_status(obj_uuid):
     try:
         if _sg_is_external_root(object_path):
             return None
-        # Корень конфигурации ищем тем же климбом, что и состав определяемых типов.
+        # We search for the configuration root with the same climb as for defined type compositions.
         root = get_config_root_dir()
         bin_path = os.path.join(root, "Ext", "ParentConfigurations.bin") if root else None
         if not bin_path or not os.path.exists(bin_path):
@@ -1097,11 +1097,11 @@ if drill_name and child_objs is not None:
                 drill_done = True
                 break
 
-    # Не нашли среди дочерних объектов — пробуем стандартные реквизиты ниже
+    # Not found among child objects - try standard attributes below
 
-# Drill-down по стандартному реквизиту — единственный способ увидеть состав типов целиком,
-# когда в сводке он свёрнут в счётчик. Живёт в Properties, а не в ChildObjects, поэтому идёт
-# отдельной веткой и работает даже у объектов без ChildObjects.
+# Drill-down by standard attribute is the only way to see the full type composition
+# when it is collapsed into a counter in the summary. It lives in Properties, not in ChildObjects, so it goes
+# in a separate branch and works even for objects without ChildObjects.
 if drill_name and not drill_done:
     std_all = get_standard_attributes(props, md_type, "full") + get_standard_attributes_full(props, md_type, obj_name)
     for s in std_all:
@@ -1109,7 +1109,7 @@ if drill_name and not drill_done:
             continue
         out(f"Стандартный реквизит: {s['Name']}")
 
-        # Состав типов разворачиваем списком: ради этого drill-down и нужен
+        # Expand the type composition as a list: that is what the drill-down is for
         type_list = []
         type_src = find(props, "md:Type") if drill_name == "ТипЗначения" else None
         if type_src is not None:
@@ -1166,9 +1166,9 @@ if not drill_done:
                 out(f"Расширенное представление списка: {ext_list_presentation}")
 
     if mode == "brief":
-        # Подчинённость — единственный факт структуры, который из brief не выводится никак,
-        # а без него код записи элемента падает. Про обязательность здесь намеренно молчим:
-        # обязательными бывают и обычные реквизиты, а их brief не разбирает.
+        # Subordination is the only structural fact that cannot be derived from brief at all,
+        # and without it item write code fails. We deliberately stay silent about requiredness here:
+        # ordinary attributes can be required too, and brief does not parse them.
         if md_type == "Catalog":
             owners_node = find(props, "md:Owners")
             owner_names = []
@@ -1214,11 +1214,11 @@ if not drill_done:
         if md_type == "DefinedType":
             type_node2 = find(props, "md:Type")
             if type_node2 is not None:
-                # Оба узла, одним XPath и в порядке документа. v8:TypeSet внутри определяемого
-                # типа платформа НЕ принимает («Недопустимый тип», замерено на 8.3.24.1691 для
-                # AnyRef, голого CatalogRef, Characteristic.X и вложенного DefinedType.X),
-                # поэтому в выгрузке его не бывает — но в рукотворном файле бывает, и тогда
-                # чтение только v8:Type МОЛЧА теряло узел, а счётчик «Типы (N)» врал.
+                # Both nodes, with one XPath and in document order. The platform does NOT accept v8:TypeSet
+                # inside a defined type ("Недопустимый тип", measured on 8.3.24.1691 for
+                # AnyRef, bare CatalogRef, Characteristic.X and nested DefinedType.X),
+                # so it never occurs in a dump - but it can occur in a hand-made file, and then
+                # reading only v8:Type SILENTLY lost the node, and the "Типы (N)" counter lied.
                 types = []
                 for t in find_all(type_node2, "v8:Type|v8:TypeSet"):
                     if local_name(t) == "TypeSet":
@@ -1283,8 +1283,8 @@ if not drill_done:
                 es_parts.append(f"Обработчик: {h_name}")
             source = find(props, "md:Source")
             if source is not None:
-                # brief называет множества, а явные типы считает: по одному числу не видно, что
-                # подписка срабатывает на целый класс документов или на состав определяемого типа.
+                # brief names sets and counts explicit types: a single number does not show that
+                # the subscription fires on a whole class of documents or on a defined type composition.
                 src_types, src_sets = get_subscription_source_list(source)
                 total = len(src_types) + len(src_sets)
                 if total > 0:
@@ -1323,15 +1323,15 @@ if not drill_done:
         if md_type == "Document":
             posting = find(props, "md:Posting")
             parts = []
-            # Номер уехал в блок стандартных реквизитов — здесь остаются свойства объекта
+            # Номер moved to the standard attributes block - only object properties remain here
             if posting is not None:
                 parts.append(f"Проведение: {'да' if inner_text(posting) == 'Allow' else 'нет'}")
             if parts:
                 out(" | ".join(parts))
 
-        # Свойства иерархии и подчинения. Иерархия — не только у справочников: свойство
-        # Hierarchical есть и у ПВХ (в корпусе acc/erp/ut/unf их 13), а без этой строки
-        # в full появлялся Родитель, происхождение которого было ниоткуда не видно.
+        # Hierarchy and subordination properties. Hierarchy is not only on catalogs: the
+        # Hierarchical property also exists on ПВХ (13 of them in the acc/erp/ut/unf corpus), and without this line
+        # in full a Родитель appeared whose origin was not visible from anywhere.
         parts = []
         hier = find(props, "md:Hierarchical")
         if hier is not None and inner_text(hier) == "true":
@@ -1344,8 +1344,8 @@ if not drill_done:
             else:
                 ht_text += ", без ограничения уровней"
             parts.append(f"Иерархический: {ht_text}")
-        # Код и Наименование уехали в блок стандартных реквизитов — здесь только свойства объекта.
-        # Подчинение печатаем лишь когда оно отличается от дефолта ToItems.
+        # Код and Наименование moved to the standard attributes block - only object properties remain here.
+        # We print subordination only when it differs from the ToItems default.
         if md_type == "Catalog":
             sub = find(props, "md:SubordinationUse")
             if sub is not None and inner_text(sub) != "ToItems":
@@ -1396,11 +1396,11 @@ if not drill_done:
         if md_type == "DefinedType":
             type_node2 = find(props, "md:Type")
             if type_node2 is not None:
-                # Оба узла, одним XPath и в порядке документа. v8:TypeSet внутри определяемого
-                # типа платформа НЕ принимает («Недопустимый тип», замерено на 8.3.24.1691 для
-                # AnyRef, голого CatalogRef, Characteristic.X и вложенного DefinedType.X),
-                # поэтому в выгрузке его не бывает — но в рукотворном файле бывает, и тогда
-                # чтение только v8:Type МОЛЧА теряло узел, а счётчик «Типы (N)» врал.
+                # Both nodes, with one XPath and in document order. The platform does NOT accept v8:TypeSet
+                # inside a defined type ("Недопустимый тип", measured on 8.3.24.1691 for
+                # AnyRef, bare CatalogRef, Characteristic.X and nested DefinedType.X),
+                # so it never occurs in a dump - but it can occur in a hand-made file, and then
+                # reading only v8:Type SILENTLY lost the node, and the "Типы (N)" counter lied.
                 types = []
                 for t in find_all(type_node2, "v8:Type|v8:TypeSet"):
                     if local_name(t) == "TypeSet":
@@ -1470,8 +1470,8 @@ if not drill_done:
                 total = len(src_types) + len(src_sets)
                 if total > 0:
                     out(f"Источники ({total}):")
-                    # full печатает всё: режим для этого и нужен, а длину держит постраничник.
-                    # В overview явные типы сворачиваем в счётчик — их бывает больше тысячи.
+                    # full prints everything: that is what the mode is for, and the pager controls the length.
+                    # In overview we collapse explicit types into a counter - there can be more than a thousand.
                     list_types = mode == "full" or len(src_types) <= COMPOSED_TYPE_THRESHOLD
                     if list_types:
                         for s in src_types:
@@ -1557,7 +1557,7 @@ if not drill_done:
                 for r in res:
                     out(format_attr_line(r, ml))
 
-        # Внешний источник данных: таблицы и функции
+        # External data source: tables and functions
         if md_type == "ExternalDataSource":
             dlcm = props.find("md:DataLockControlMode", NS)
             if dlcm is not None:
@@ -1581,7 +1581,7 @@ if not drill_done:
                         expr = (fn_expr.text or "") if fn_expr is not None else ""
                         out(f"  {fn_name} → {expr}" + (f" : {ret}" if ret else ""))
 
-        # Таблица внешнего источника: свойства и поля
+        # External data source table: properties and fields
         if md_type == "Table":
             def _g(tag):
                 n = props.find(f"md:{tag}", NS)
@@ -1723,15 +1723,15 @@ if not drill_done:
             if commands:
                 out(f"Команды: {', '.join(commands)}")
 
-    # Единственная подсказка на весь вывод — чем развернуть свёрнутый в счётчик состав
+    # The only hint for the whole output - how to expand a composition collapsed into a counter
     if collapsed_names:
         hints = ", ".join(f"-Name {n}" for n in collapsed_names)
         out("")
         out(f"Полный состав типов: {hints}")
 
-# Глоссарий множеств — после всего остального: в строках типов стоят только имена, и это
-# единственное место, где имя превращается в состав. brief не глоссируем: там типов реквизитов
-# нет вовсе, а множества источников подписки он называет прямо в строке.
+# The set glossary comes after everything else: type lines contain only names, and this is
+# the only place where a name turns into a composition. We do not gloss brief: it has no attribute types
+# at all, and it names subscription source sets right in the line.
 if mode != "brief" and type_set_glossary:
     glossary = get_type_set_glossary_lines()
     if glossary:

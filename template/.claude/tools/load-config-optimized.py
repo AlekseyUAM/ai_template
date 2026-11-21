@@ -1,32 +1,32 @@
 #!/usr/bin/env python
 """
 load-config-optimized.py
-Кроссплатформенная загрузка конфигурации 1С: грузит в ИБ только изменённые файлы
-(git diff относительно HEAD по src/cf) через 1c-batch load-config --list-file.
+Cross-platform 1C configuration load: loads only changed files into the IB
+(git diff against HEAD under src/cf) via 1c-batch load-config --list-file.
 
-Частичная загрузка — единственный режим: она корректно отрабатывает все операции
-(добавление/удаление реквизита, добавление/удаление объекта) с тем же результатом,
-что и полная перезагрузка, но быстрее.
+Partial load is the only mode: it correctly handles all operations
+(adding/removing an attribute, adding/removing an object) with the same result
+as a full reload, but faster.
 
-Использование:
+Usage:
     python .claude/tools/load-config-optimized.py [--state PATH]
                                                 [--allow-warnings]
 
-С --state грузятся только файлы, изменившиеся с последней успешной загрузки:
-в PATH хранится манифест sha256 (обычно logs/task#<id>/load-state.json).
-Без --state — весь git diff vs HEAD, как раньше.
+With --state only files changed since the last successful load are loaded:
+PATH holds a sha256 manifest (usually logs/task#<id>/load-state.json).
+Without --state - the whole git diff vs HEAD, as before.
 
-Скрипт печатает ход загрузки в stdout. Коды возврата:
-    0 — загрузка применена, предупреждений платформы нет (или передано
-        --allow-warnings), либо «нет изменённых файлов»;
-    2 — загрузка применена, но платформа проигнорировала часть свойств или
-        выдала прочие предупреждения (facet, Исключение XDTO, неверное
-        значение перечисления и т.п.): исходники некорректны, state не
-        сохраняется;
-    иное — код возврата дочернего 1c-batch load-config.
+The script prints load progress to stdout. Return codes:
+    0 - load applied, no platform warnings (or --allow-warnings
+        was passed), or "no changed files";
+    2 - load applied, but the platform ignored some properties or
+        produced other warnings (facet, Исключение XDTO, invalid
+        enum value, etc.): the sources are incorrect, state is not
+        saved;
+    otherwise - return code of the child 1c-batch load-config.
 
-Оркестратор запускает его синхронно (обычный Bash без run_in_background)
-с перенаправлением вывода в лог — см. правило `optimized-config-loading`.
+The orchestrator runs it synchronously (a regular Bash without run_in_background)
+with output redirected to a log - see rule `optimized-config-loading`.
 """
 
 import argparse
@@ -47,31 +47,31 @@ from typing import Dict, List, Optional, Tuple
 STATE_VERSION = 1
 STATE_HASH = "sha256"
 
-# Маркеры предупреждений платформы на неверные исходники: загрузка при них
-# применяется (код 0), но часть метаданных молча теряется.
+# Platform warning markers for invalid sources: with them the load is
+# applied (code 0), but some metadata is silently lost.
 _PROPERTY_MARK = "Неверное свойство объекта метаданных"
 _PROPERTY_RE = re.compile(
     r"Свойство (\S+) не входит в состав объекта метаданных (\w+)")
-# «facet» платформа пишет без скобок («facet фиксации ControlType …»). Простая
-# подстрока ловила бы имена файлов/пути (FacetGroups.xml), поэтому — только
-# слово «facet» с последующим платформенным оборотом (фиксации/перечисления/…);
-# в сводке показываем токен как есть.
+# The platform writes "facet" without brackets ("facet фиксации ControlType ..."). A plain
+# substring would also catch file names/paths (FacetGroups.xml), so - only the
+# word "facet" followed by a platform phrase (фиксации/перечисления/...);
+# the summary shows the token as is.
 _FACET_RE = re.compile(r"\bfacet\s+(?:фиксации|перечисления|движений)",
                        re.IGNORECASE)
 _OTHER_MARKS = ("Исключение XDTO", "Неверное значение перечисления")
-# Транзиентная блокировка ИБ (фоновая обработка/чужой сеанс). Повторяем
-# загрузку: по опыту второй прогон проходит без правок исходников.
+# Transient IB lock (background job/another session). Retry the
+# load: experience shows the second run passes without source changes.
 _LOCK_MARK = "Ошибка исключительной блокировки информационной базы"
 _LOCK_RETRY_DELAYS = (30, 60)
 
 def _force_utf8_output() -> None:
-    """Перевести stdout/stderr в UTF-8.
+    """Switch stdout/stderr to UTF-8.
 
-    При перенаправлении вывода в файл (правило optimized-config-loading пишет лог)
-    Python на Windows берёт ANSI-кодировку локали (cp1251), в которой нет эмодзи
-    из print() — скрипт падал бы на «'charmap' codec can't encode character».
-    reconfigure доступен с Python 3.7; errors="replace" — чтобы вывод не ронял
-    загрузку даже на несовместимом символе.
+    When output is redirected to a file (the optimized-config-loading rule writes a log),
+    Python on Windows uses the ANSI locale encoding (cp1251), which lacks emoji
+    from print() - the script would fail with "'charmap' codec can't encode character".
+    reconfigure is available since Python 3.7; errors="replace" - so output does not crash
+    the load even on an incompatible character.
     """
     for stream in (sys.stdout, sys.stderr):
         try:
@@ -80,22 +80,22 @@ def _force_utf8_output() -> None:
             pass
 
 def get_project_root() -> Path:
-    """Получи корень проекта"""
+    """Get the project root"""
     script_dir = Path(__file__).parent
     return script_dir.parent.parent
 
 def batch_cmd() -> List[str]:
-    """Префикс команды: локальная (проектная) копия 1c-batch через wrapper."""
+    """Command prefix: local (project) copy of 1c-batch via wrapper."""
     wrapper = get_project_root() / ".claude/skills/1c-batch/scripts/1c-batch.py"
     return [sys.executable, str(wrapper)]
 
 def _object_root(rel: str) -> str:
-    """Свести путь файла внутри src/cf к корневому файлу объекта метаданных.
+    """Reduce a file path inside src/cf to the root file of the metadata object.
 
-    Корневой файл объекта (<Вид>/<Имя>.xml) платформа в -listFile грузит вместе
-    с его дочерними объектами, но НЕ с их содержимым: формы, макеты и модули
-    нужно перечислять отдельными файлами (это делает get_changed_files). Здесь
-    по любому подфайлу вычисляется только корень объекта.
+    The root file of an object (<Kind>/<Name>.xml) is loaded by the platform in -listFile together
+    with its child objects, but NOT with their content: forms, templates and modules
+    must be listed as separate files (get_changed_files does that). Here
+    only the object root is computed from any subfile.
 
         Configuration.xml                           -> Configuration.xml
         Catalogs/Номенклатура.xml                   -> Catalogs/Номенклатура.xml
@@ -105,7 +105,7 @@ def _object_root(rel: str) -> str:
     rel = rel.replace("\\", "/")
     parts = rel.split("/")
     if len(parts) <= 1:
-        # Файл верхнего уровня (Configuration.xml и т.п.)
+        # Top-level file (Configuration.xml etc.)
         return rel
     kind, name = parts[0], parts[1]
     if name.endswith(".xml"):
@@ -114,21 +114,21 @@ def _object_root(rel: str) -> str:
 
 
 def get_dirty_paths() -> List[str]:
-    """Сырые изменённые пути (относительно src/cf) из git.
+    """Raw changed paths (relative to src/cf) from git.
 
-    Учитывает отслеживаемые изменения (git diff HEAD) и новые untracked-файлы
-    (git ls-files --others). Пути нормализуются к прямым слэшам, префикс
-    src/cf/ отбрасывается, ConfigDumpInfo.xml (в т.ч. вложенный) исключается:
-    это не объект метаданных, через -listFile он даёт ошибку «URL ... не может
-    быть преобразован в полное имя объекта метаданных»; платформа обновит его
-    сама по флагу -updateConfigDumpInfo.
+    Accounts for tracked changes (git diff HEAD) and new untracked files
+    (git ls-files --others). Paths are normalized to forward slashes, the
+    src/cf/ prefix is dropped, ConfigDumpInfo.xml (including nested) is excluded:
+    it is not a metadata object, via -listFile it gives the error "URL ... не может
+    быть преобразован в полное имя объекта метаданных"; the platform will update it
+    itself with the -updateConfigDumpInfo flag.
     """
     project_root = get_project_root()
     os.chdir(project_root)
 
-    # core.quotePath=false — чтобы кириллические имена не экранировались в \nnn.
-    # encoding="utf-8" — git выводит UTF-8 (при quotePath=false); без явной
-    # кодировки text=True декодирует выводом локали (cp1251) и падает на кириллице.
+    # core.quotePath=false - so Cyrillic names are not escaped to \nnn.
+    # encoding="utf-8" - git outputs UTF-8 (with quotePath=false); without an explicit
+    # encoding text=True decodes with the locale output (cp1251) and fails on Cyrillic.
     raw: List[str] = []
     try:
         diff = subprocess.run(
@@ -137,7 +137,7 @@ def get_dirty_paths() -> List[str]:
             capture_output=True, text=True, check=False, encoding="utf-8",
         )
         if diff.returncode != 0:
-            # HEAD может не существовать (пустой репозиторий)
+            # HEAD may not exist (empty repository)
             diff = subprocess.run(
                 ["git", "-c", "core.quotePath=false", "diff", "--name-only",
                  "--", "src/cf/"],
@@ -172,19 +172,19 @@ def get_dirty_paths() -> List[str]:
 
 
 def expand_to_load_paths(raw: List[str]) -> List[str]:
-    """Развернуть изменённые пути в список файлов для -listFile.
+    """Expand changed paths into a file list for -listFile.
 
-    По образцу навыка db-load-git в список попадают:
-      - корневой файл каждого изменённого объекта (<Вид>/<Имя>.xml);
-      - сам изменённый файл (XML вложенных объектов: Forms/<Ф>.xml,
-        Templates/<М>.xml; модули; Ext/*) — платформа по корню вложенные
-        объекты и их содержимое не грузит;
-      - для изменённого не-XML файла или файла внутри Ext — все файлы каталога
-        Ext объекта (как в db-load-git).
+    Following the db-load-git skill pattern, the list includes:
+      - the root file of each changed object (<Kind>/<Name>.xml);
+      - the changed file itself (XML of nested objects: Forms/<F>.xml,
+        Templates/<T>.xml; modules; Ext/*) - the platform does not load nested
+        objects and their content by root;
+      - for a changed non-XML file or a file inside Ext - all files of the
+        object's Ext directory (as in db-load-git).
 
-    Удалённые файлы пропускаются: платформа молча игнорирует отсутствующий файл
-    в -listFile; корень объекта при этом добавляется, если существует, — через
-    него платформа подхватит изменённый состав.
+    Deleted files are skipped: the platform silently ignores a missing file
+    in -listFile; the object root is still added if it exists - through
+    it the platform picks up the changed composition.
     """
     cf_dir = get_project_root() / "src" / "cf"
     seen = set()
@@ -198,28 +198,28 @@ def expand_to_load_paths(raw: List[str]) -> List[str]:
         result.append(rel)
 
     for rel in raw:
-        # Корневой файл объекта грузим всегда, если он существует. Configuration.xml
-        # остаётся в списке и при удалении объекта — через него платформа подхватит
-        # изменённый состав.
+        # The object root file is always loaded if it exists. Configuration.xml
+        # stays in the list even when an object is deleted - through it the platform picks up
+        # the changed composition.
         root = _object_root(rel)
         if root == "Configuration.xml" or (cf_dir / root).exists():
             add(root)
 
-        # Удалённый файл платформа в -listFile молча пропускает — не добавляем.
+        # The platform silently skips a deleted file in -listFile - do not add it.
         if not (cf_dir / rel).exists():
             continue
 
         parts = rel.split("/")
-        # Файл верхнего уровня или сам корень объекта уже обработаны выше.
+        # Top-level file or the object root itself already handled above.
         if len(parts) <= 2:
             continue
 
-        # Сам изменённый подфайл: XML вложенных объектов (Forms/*.xml,
-        # Templates/*.xml), модули, Ext/*.
+        # The changed subfile itself: XML of nested objects (Forms/*.xml,
+        # Templates/*.xml), modules, Ext/*.
         add(rel)
 
-        # Для не-XML файла или файла внутри Ext — все файлы каталога Ext объекта
-        # (как в db-load-git): отдельный изменённый модуль не несёт остального Ext.
+        # For a non-XML file or a file inside Ext - all files of the object's Ext directory
+        # (as in db-load-git): a separate changed module does not carry the rest of Ext.
         if (not rel.endswith(".xml")) or "Ext" in parts:
             ext_dir = cf_dir / parts[0] / parts[1] / "Ext"
             if ext_dir.is_dir():
@@ -231,12 +231,12 @@ def expand_to_load_paths(raw: List[str]) -> List[str]:
 
 
 def get_changed_files() -> List[str]:
-    """Изменённые файлы конфигурации для -listFile (без учёта состояния)."""
+    """Changed configuration files for -listFile (ignoring state)."""
     files, _, _, _ = collect_changes(None)
     return files
 
 def file_sha256(path: Path) -> Optional[str]:
-    """sha256 содержимого файла; None, если файл отсутствует или не читается."""
+    """sha256 of file content; None if the file is missing or unreadable."""
     try:
         digest = hashlib.sha256()
         with open(path, "rb") as fh:
@@ -248,10 +248,10 @@ def file_sha256(path: Path) -> Optional[str]:
 
 
 def load_state(path: Optional[str]) -> Dict[str, str]:
-    """Прочитать манифест «что уже загружено»; при любой проблеме — пусто.
+    """Read the "what is already loaded" manifest; on any problem - empty.
 
-    Битый JSON, неизвестная версия/алгоритм или отсутствие файла не срывают
-    загрузку: вызывающий грузит полный diff vs HEAD. Проблема только логируется.
+    Broken JSON, unknown version/algorithm or a missing file do not break the
+    load: the caller loads the full diff vs HEAD. The problem is only logged.
     """
     if not path:
         return {}
@@ -278,7 +278,7 @@ def load_state(path: Optional[str]) -> Dict[str, str]:
 
 
 def save_state(path: Optional[str], files: Dict[str, str]) -> None:
-    """Атомарно записать манифест; ошибка записи не срывает загрузку."""
+    """Atomically write the manifest; a write error does not break the load."""
     if not path:
         return
     data = {
@@ -306,13 +306,13 @@ def save_state(path: Optional[str], files: Dict[str, str]) -> None:
 def filter_loaded(
     candidates: List[str], state: Dict[str, str]
 ) -> Tuple[List[str], Dict[str, str], List[str], List[str]]:
-    """Разделить кандидатов на изменённых и уже загруженных.
+    """Split candidates into changed and already loaded.
 
-    Кандидаты — объединение сырых путей из git и ключей прежнего состояния:
-    второе ловит «изменил → загрузил → откатил к HEAD» — файл исчез из diff,
-    но его текущее содержимое отличается от загруженного. Возвращает
-    (изменённые, снимок для нового состояния, удалённые, пропущенные).
-    Снимок включает все существующие кандидаты — и изменённые, и нет.
+    Candidates are the union of raw git paths and keys of the previous state:
+    the latter catches "changed -> loaded -> reverted to HEAD" - the file disappeared from the diff,
+    but its current content differs from what was loaded. Returns
+    (changed, snapshot for the new state, deleted, skipped).
+    The snapshot includes all existing candidates - both changed and not.
     """
     cf_dir = get_project_root() / "src" / "cf"
     order: List[str] = []
@@ -344,10 +344,10 @@ def filter_loaded(
 def collect_changes(
     state: Optional[Dict[str, str]] = None
 ) -> Tuple[List[str], Optional[Dict[str, str]], List[str], List[str]]:
-    """Собрать файлы для загрузки с учётом состояния.
+    """Collect files for loading considering state.
 
-    state=None — без состояния (весь diff vs HEAD), снимок не снимается.
-    state={} — состояние включено, но файла ещё нет: снимок будет создан.
+    state=None - without state (whole diff vs HEAD), no snapshot is taken.
+    state={} - state is enabled, but the file does not exist yet: a snapshot will be created.
     """
     dirty = get_dirty_paths()
     if state is None:
@@ -356,7 +356,7 @@ def collect_changes(
     return expand_to_load_paths(changed), snapshot, deleted, skipped
 
 def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
-    """Аргументы командной строки."""
+    """Command line arguments."""
     parser = argparse.ArgumentParser(
         description="Частичная загрузка изменённых файлов конфигурации 1С")
     parser.add_argument(
@@ -371,14 +371,14 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
 
 @dataclass
 class PlatformWarnings:
-    """Сводка предупреждений платформы о неверных исходниках.
+    """Summary of platform warnings about invalid sources.
 
-    - count: всего предупреждений по всем проверяемым маркерам;
-    - groups: (вид объекта, свойство) → count по строкам
-      «Свойство X не входит в состав объекта метаданных <Вид>» — счёт по
-      строкам, а не по уникальным значениям, поэтому повторяющаяся в логе
-      строка учитывается каждый раз;
-    - other: (маркер, count) по остальным проверяемым маркерам.
+    - count: total warnings across all checked markers;
+    - groups: (object kind, property) -> count by lines
+      "Свойство X не входит в состав объекта метаданных <Вид>" - counted by
+      lines, not unique values, so a repeated log line
+      counts every time;
+    - other: (marker, count) by the remaining checked markers.
     """
     count: int
     groups: "OrderedDict[Tuple[str, str], int]"
@@ -389,19 +389,19 @@ class PlatformWarnings:
 
 
 def platform_warnings(text: str) -> PlatformWarnings:
-    """Собрать сводку предупреждений платформы о неверных исходниках."""
+    """Build a summary of platform warnings about invalid sources."""
     groups: "OrderedDict[Tuple[str, str], int]" = OrderedDict()
     other: "OrderedDict[str, int]" = OrderedDict()
     for line in text.splitlines():
         if _PROPERTY_MARK in line:
             match = _PROPERTY_RE.search(line)
             if match:
-                # В сообщении: «Свойство <имя> … <Вид>», в группе (Вид, имя).
+                # In the message: "Свойство <name> ... <Kind>", in the group (Kind, name).
                 key = (match.group(2), match.group(1))
                 groups[key] = groups.get(key, 0) + 1
             else:
                 other[_PROPERTY_MARK] = other.get(_PROPERTY_MARK, 0) + 1
-            # Строка с маркером свойства не считается ещё и «прочим».
+            # A line with a property marker is not counted also as "other".
             continue
         if _FACET_RE.search(line):
             other["facet"] = other.get("facet", 0) + 1
@@ -414,7 +414,7 @@ def platform_warnings(text: str) -> PlatformWarnings:
 
 
 def print_platform_warnings(summary: PlatformWarnings) -> None:
-    """Напечатать сводку предупреждений платформы."""
+    """Print the platform warning summary."""
     if not summary:
         return
     print()
@@ -433,11 +433,11 @@ def print_platform_warnings(summary: PlatformWarnings) -> None:
 def run_optimized_load(files: List[str], allow_warnings: bool = False,
                        *, retry_delays=_LOCK_RETRY_DELAYS,
                        sleep=time.sleep) -> int:
-    """Выполни оптимизированную загрузку конфигурации и проверь предупреждения.
+    """Perform the optimized configuration load and check warnings.
 
-    Блокировка ИБ (`Ошибка исключительной блокировки…`) транзиентна: повторяем
-    загрузку по `retry_delays` (по умолчанию 30 и 60 с). `sleep` параметризован
-    для тестов.
+    IB lock (`Ошибка исключительной блокировки…`) is transient: the load is retried
+    per `retry_delays` (30 and 60 s by default). `sleep` is parameterized
+    for tests.
     """
     if not files:
         print("✅ Нет изменённых файлов конфигурации")
@@ -446,15 +446,15 @@ def run_optimized_load(files: List[str], allow_warnings: bool = False,
     print(f"📋 Найдено изменённых файлов: {len(files)}")
     print()
 
-    # Покажи список файлов
+    # Show the file list
     print("Файлы для загрузки:")
     for f in files:
         print(f"  - {f}")
     print()
 
-    # Создай временный файл со списком. encoding='utf-8' обязателен: конфигуратор
-    # читает -listFile как UTF-8, а без явной кодировки файл пишется в кодировке
-    # локали (cp1251 на Windows) и пути с кириллицей ломаются.
+    # Create a temporary file with the list. encoding='utf-8' is mandatory: the Configurator
+    # reads -listFile as UTF-8, and without an explicit encoding the file is written in the
+    # locale encoding (cp1251 on Windows) and paths with Cyrillic break.
     with tempfile.NamedTemporaryFile(
         mode='w',
         suffix='.txt',
@@ -471,9 +471,9 @@ def run_optimized_load(files: List[str], allow_warnings: bool = False,
         print()
         print(f"Команда: 1c-batch load-config src/cf --list-file {temp_list}")
 
-        # Вывод дочернего процесса перехватывается, печатается в лог как раньше
-        # и анализируется: платформа при неверном свойстве метаданных только
-        # пишет предупреждение, но завершается кодом 0.
+        # The child process output is captured, printed to the log as before
+        # and analyzed: on an invalid metadata property the platform only
+        # writes a warning, but exits with code 0.
         attempt = 0
         while True:
             result = subprocess.run(
@@ -521,14 +521,14 @@ def run_optimized_load(files: List[str], allow_warnings: bool = False,
         return 1
 
     finally:
-        # Удали временный файл
+        # Remove the temporary file
         try:
             os.unlink(temp_list)
         except:
             pass
 
 def main(argv: Optional[List[str]] = None) -> int:
-    """Главная функция"""
+    """Main function"""
     _force_utf8_output()
     args = parse_args(argv)
     state_path = os.path.abspath(args.state) if args.state else None
@@ -558,9 +558,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 0
 
     code = run_optimized_load(files, allow_warnings=args.allow_warnings)
-    # Сохраняем состояние только на успех: при коде 2 (проигнорированные
-    # свойства) исходники нужно чинить, и повторный запуск должен взять те же
-    # файлы, а не считать их загруженными.
+    # Save state only on success: on code 2 (ignored
+    # properties) the sources must be fixed, and a repeated run should take the same
+    # files instead of considering them loaded.
     if code == 0 and state_path is not None:
         save_state(state_path, snapshot or {})
     return code

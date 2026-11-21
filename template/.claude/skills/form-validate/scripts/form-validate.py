@@ -8,16 +8,16 @@ import re
 import sys
 from lxml import etree
 
-# Регистронезависимый ввод: имена параметров и значения choices принимаются
-# в любом регистре (в argparse по умолчанию совпадение точное).
+# Case-insensitive input: option names and choices values are accepted
+# in any case (argparse matching is exact by default).
 def ci_parse_args(parser, argv=None):
-    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
+    """parse_args: option names and choices values are accepted in any case."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
         if tok.startswith('-') and tok.lower() in names:
             argv[i] = names[tok.lower()]
-    # choices — зеркало [ValidateSet]; канонизируем ДО разбора, иначе argparse отвергнет регистр
+    # choices - mirror of [ValidateSet]; canonicalize BEFORE parsing, otherwise argparse rejects the case
     choice_map = {}
     for a in parser._actions:
         if a.choices:
@@ -73,8 +73,8 @@ VALID_CFG_PREFIXES = {
 }
 
 
-# Корень автономной внешней обработки/отчёта. Копия общего эталона (семья
-# support-guard: is_external_root, авторитет — cf-edit).
+# Root of a standalone external data processor/report. Copy of the shared reference (the
+# support-guard family: is_external_root, authority - cf-edit).
 def _sg_is_external_root(xml_path):
     if not os.path.isfile(xml_path):
         return False
@@ -88,8 +88,8 @@ def _sg_is_external_root(xml_path):
     return False
 
 
-# Штамп версии формата — атрибут version КОРНЕВОГО элемента файла. Копия общего эталона (семья
-# root_version, авторитет — meta-validate).
+# Format version stamp - the version attribute of the file's ROOT element. Copy of the shared reference (the
+# root_version family, authority - meta-validate).
 def root_version(xml_path):
     if not os.path.isfile(xml_path):
         return None
@@ -104,8 +104,8 @@ def root_version(xml_path):
     return None
 
 
-# Якорь выгрузки: корень автономной EPF/ERF либо Configuration.xml, ближайший вверх. Копия общего
-# эталона (семья find_dump_anchor, авторитет — meta-validate).
+# Dump anchor: the root of a standalone EPF/ERF or Configuration.xml, nearest upwards. Copy of the shared
+# reference (the find_dump_anchor family, authority - meta-validate).
 def find_dump_anchor(start_dir):
     d = start_dir
     for _ in range(15):
@@ -123,8 +123,8 @@ def find_dump_anchor(start_dir):
     return None
 
 
-# Владелец тела X/Ext/<файл>.xml — дескриптор X.xml рядом с каталогом X. У тел конфигурации (и
-# расширения) соседа-дескриптора нет, владелец — Configuration.xml внутри X. Иначе — не определён.
+# Owner of the body X/Ext/<файл>.xml - the descriptor X.xml next to directory X. Configuration bodies (and
+# extension ones) have no neighboring descriptor; the owner is Configuration.xml inside X. Otherwise - not determined.
 def ext_body_owner(body_path):
     ext_dir = os.path.dirname(body_path)
     if os.path.basename(ext_dir) != "Ext":
@@ -139,16 +139,16 @@ def ext_body_owner(body_path):
 
 
 # ── Format version ───────────────────────────────────────────
-# Проверенный диапазон версий формата выгрузки: 2.17 (8.3.24) … 2.21 (8.5). Полная лестница —
-# docs/1c-configuration-spec.md, «Лестница версий». Версию задаёт платформа ВЫГРУЗКИ, а не режим
-# совместимости конфигурации. Версии ниже 2.17 (платформы 8.3.23 и старше) существуют, но навыки
-# на них не проверялись — это предупреждение о непокрытии, а не о некорректности файла.
+# Verified range of dump format versions: 2.17 (8.3.24) ... 2.21 (8.5). The full ladder -
+# docs/1c-configuration-spec.md, "Version ladder". The version is set by the DUMP platform, not by the configuration
+# compatibility mode. Versions below 2.17 (platforms 8.3.23 and older) exist, but the skills
+# were not verified on them - this is a warning about non-coverage, not about file incorrectness.
 FORMAT_VERIFIED_MIN = "2.17"
 FORMAT_VERIFIED_MAX = "2.21"
 
 
 def format_rank(ver):
-    """"2.20" → 220, "2.9" → 209. Строковое сравнение неверно ("2.9" > "2.17")."""
+    """"2.20" → 220, "2.9" → 209. String comparison is wrong ("2.9" > "2.17")."""
     m = re.match(r'^(\d+)\.(\d+)$', ver or '')
     return int(m.group(1)) * 100 + int(m.group(2)) if m else 0
 
@@ -209,10 +209,10 @@ def main():
     root = tree.getroot()
 
     # Detect context: config vs EPF/ERF
-    # Ближайший якорь выгрузки вверх от формы. Configuration.xml → конфигурация; корень EPF/ERF → внешняя
-    # обработка/отчёт. Ближайший побеждает: автономная обработка остаётся автономной, даже если её
-    # исходники лежат внутри дерева с Configuration.xml (типовая раскладка проекта: src/cf рядом с
-    # src/epf). Иначе её собственные External*-типы считались бы ошибкой.
+    # The nearest dump anchor upwards from the form. Configuration.xml → configuration; EPF/ERF root → external
+    # data processor/report. The nearest one wins: a standalone processor stays standalone even if its
+    # sources lie inside a tree with Configuration.xml (typical project layout: src/cf next to
+    # src/epf). Otherwise its own External* types would be considered an error.
     dump_anchor = find_dump_anchor(os.path.dirname(os.path.abspath(form_path)))
     is_config_context = bool(dump_anchor) and os.path.basename(dump_anchor) == 'Configuration.xml'
 
@@ -281,9 +281,9 @@ def main():
         if acb is not None:
             acb_name = acb.get("name", "")
             acb_id = acb.get("id", "")
-            # id=-1 — соглашение, а не требование: в корпусе УТ/БП/ERP так у 21 094 форм из 21 097,
-            # но три формы платформа выгружает с обычным id и грузит их без нареканий. Поэтому
-            # предупреждение; ошибка — только если id вовсе не число.
+            # id=-1 is a convention, not a requirement: in the UT/BSP/ERP corpus this holds for 21 094 of 21 097 forms,
+            # but the platform dumps three forms with an ordinary id and loads them without complaint. Hence a
+            # warning; an error - only if id is not a number at all.
             if acb_id == "-1":
                 report_ok(f"AutoCommandBar: name='{acb_name}', id={acb_id}")
             elif re.match(r'^-?\d+$', acb_id):
@@ -295,7 +295,7 @@ def main():
 
     # --- Collect all elements with IDs ---
     element_ids = {}    # id -> name
-    element_names = {}  # name -> id (имена элементов уникальны в пределах формы)
+    element_names = {}  # name -> id (element names are unique within the form)
     all_elements = []  # list of dicts {Name, Tag, Id, ParentName, Node}
 
     def collect_elements(node, parent_name):
@@ -324,7 +324,7 @@ def main():
                     else:
                         element_ids[eid] = name
 
-                    # Имена элементов уникальны (требование 1С)
+                    # Element names are unique (1C requirement)
                     if name in element_names:
                         report_error(f"Duplicate element name '{name}': id={eid} and id={element_names[name]}")
                     else:
@@ -371,7 +371,7 @@ def main():
         attr_name = attr.get("name", "")
         attr_id = attr.get("id", "")
         if attr_name:
-            # Имена реквизитов уникальны среди реквизитов (отдельный неймспейс от элементов)
+            # Attribute names are unique among attributes (a separate namespace from elements)
             if attr_name in attr_map:
                 report_error(f"Duplicate attribute name '{attr_name}': id={attr_id} and id={attr_map[attr_name].get('id', '')}")
             attr_map[attr_name] = attr
@@ -383,7 +383,7 @@ def main():
 
         # Column IDs uniqueness within parent
         col_ids = {}
-        col_names = {}  # имена колонок уникальны в пределах своего реквизита
+        col_names = {}  # column names are unique within their attribute
         columns = attr.find(f"{{{F_NS}}}Columns")
         if columns is not None:
             for col in columns.findall(f"{{{F_NS}}}Column"):
@@ -417,7 +417,7 @@ def main():
         cmd_name = cmd.get("name", "")
         cmd_id = cmd.get("id", "")
         if cmd_name:
-            # Имена команд уникальны среди команд (отдельный неймспейс)
+            # Command names are unique among commands (separate namespace)
             if cmd_name in cmd_map:
                 report_error(f"Duplicate command name '{cmd_name}': id={cmd_id} and id={cmd_map[cmd_name].get('id', '')}")
             cmd_map[cmd_name] = cmd
@@ -431,8 +431,8 @@ def main():
         if cmd_ids:
             report_ok(f"Unique command IDs: {len(cmd_ids)} entries")
 
-    # --- Collect parameters (separate name pool, без id) ---
-    param_names = {}  # name -> True (имена параметров уникальны среди параметров)
+    # --- Collect parameters (separate name pool, no id) ---
+    param_names = {}  # name -> True (parameter names are unique among parameters)
     params_parent = root.find(f"{{{F_NS}}}Parameters")
     if params_parent is not None:
         for param in params_parent.findall(f"{{{F_NS}}}Parameter"):
@@ -542,14 +542,14 @@ def main():
                 root_attr = segments[0]
 
                 # Resolve Items.<TableName>.CurrentData.<Field>... — table element, not attribute.
-                # Разрешаем ЦЕПОЧКОЙ: таблица во вложенной таблице сама привязана через Items.*, и один
-                # шаг оставлял корнем литерал «Items» — форма платформы объявлялась битой (типовые
-                # НастройкаПравилОбработкиЗаявокСотрудников в БП и ERP).
+                # Resolve as a CHAIN: a table inside a nested table is itself bound via Items.*, and one
+                # step left the literal "Items" as the root - a platform form was declared broken (standard
+                # НастройкаПравилОбработкиЗаявокСотрудников in BSP and ERP).
                 items_hops = 0
                 items_broken = False
                 while root_attr == 'Items':
                     items_hops += 1
-                    if items_hops > 10:          # страховка от кольца ссылок
+                    if items_hops > 10:          # protection against a reference cycle
                         items_broken = True
                         break
                     if len(segments) < 3 or segments[2] != 'CurrentData':
@@ -676,11 +676,11 @@ def main():
         action_errors = 0
         action_checked = 0
 
-        # Предупреждение, а не ошибка: <Action> может назначаться в рантайме
-        # (`Команда.Действие = "Подключаемый_…"` в ПриСозданииНаСервере) — приём типовых конфигураций
-        # там, где обработчик существует не во всякой сборке. Назначать может и чужой модуль
-        # (переопределяемый слой, подключаемые команды), так что по одному Form.xml не решить.
-        # Корпус УТ/БП/ERP: 406 таких команд на 275 формах, произведённых платформой.
+        # A warning, not an error: <Action> can be assigned at runtime
+        # (`Команда.Действие = "Подключаемый_…"` in ПриСозданииНаСервере) - a technique of standard configurations
+        # where the handler does not exist in every build. Another module can also assign it
+        # (override layer, pluggable commands), so it cannot be decided from Form.xml alone.
+        # UT/BSP/ERP corpus: 406 such commands in 275 platform-produced forms.
         for cmd in cmd_nodes:
             if stopped:
                 break
@@ -825,14 +825,14 @@ def main():
             if (ext_attr_count + ext_cmd_count) > 0:
                 report_ok(f"Extension ID ranges: {ext_attr_count} attr(s), {ext_cmd_count} cmd(s) \u2014 all >= 1000000")
 
-        # 11d. \u041f\u0443\u0442\u0438 \u043d\u0430 \u043e\u0441\u043d\u043e\u0432\u043d\u043e\u0439 \u0440\u0435\u043a\u0432\u0438\u0437\u0438\u0442, \u043a\u043e\u0442\u043e\u0440\u043e\u0433\u043e \u0444\u043e\u0440\u043c\u0430 \u043d\u0435 \u043e\u0431\u044a\u044f\u0432\u043b\u044f\u0435\u0442.
-        # Check 5 \u0442\u0430\u043a\u043e\u0435 \u043f\u0440\u043e\u043f\u0443\u0441\u043a\u0430\u0435\u0442: \u0443 \u0437\u0430\u0438\u043c\u0441\u0442\u0432\u043e\u0432\u0430\u043d\u043d\u043e\u0439 \u0444\u043e\u0440\u043c\u044b \u043e\u043d \u043d\u0435 \u043f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442 \u0431\u0430\u0437\u043e\u0432\u044b\u0435 \u044d\u043b\u0435\u043c\u0435\u043d\u0442\u044b (id < 1000000),
-        # \u0430 \u043f\u0440\u0438\u0432\u044f\u0437\u043a\u0438 \u0432 <xr:Link> \u0432\u043e\u043e\u0431\u0449\u0435 \u0432\u043d\u0435 \u0435\u0433\u043e \u0441\u043f\u0438\u0441\u043a\u0430 \u0442\u0435\u0433\u043e\u0432. \u041c\u0435\u0436\u0434\u0443 \u0442\u0435\u043c \u044d\u0442\u043e \u0440\u043e\u0432\u043d\u043e \u0442\u043e\u0442 \u0441\u043b\u0443\u0447\u0430\u0439, \u043d\u0430 \u043a\u043e\u0442\u043e\u0440\u043e\u043c
-        # \u043f\u043b\u0430\u0442\u0444\u043e\u0440\u043c\u0430 \u043e\u0442\u0432\u0435\u0440\u0433\u0430\u0435\u0442 \u0437\u0430\u0433\u0440\u0443\u0437\u043a\u0443: \u00ab\u041d\u0435\u0432\u0435\u0440\u043d\u044b\u0439 \u043f\u0443\u0442\u044c \u043a \u043f\u043e\u043b\u044e - \u041e\u0431\u044a\u0435\u043a\u0442.X\u00bb. \u041f\u0440\u0430\u0432\u0438\u043b\u043e: \u0435\u0441\u043b\u0438 \u043e\u0441\u043d\u043e\u0432\u043d\u043e\u0439 \u0440\u0435\u043a\u0432\u0438\u0437\u0438\u0442
-        # \u043d\u0435 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d \u0432 <Attributes> \u0444\u043e\u0440\u043c\u044b, \u043b\u044e\u0431\u043e\u0439 \u043f\u0443\u0442\u044c \u0441 \u0435\u0433\u043e \u043a\u043e\u0440\u043d\u0435\u043c \u043d\u0435 \u0440\u0430\u0437\u0440\u0435\u0448\u0438\u0442\u0441\u044f.
-        # \u041a\u043e\u0440\u0435\u043d\u044c \u0431\u0435\u0440\u0451\u0442\u0441\u044f \u0438\u0437 \u043e\u0441\u043d\u043e\u0432\u043d\u043e\u0433\u043e \u0440\u0435\u043a\u0432\u0438\u0437\u0438\u0442\u0430 BaseForm: \u00ab\u041e\u0431\u044a\u0435\u043a\u0442\u00bb \u043e\u043d \u0442\u043e\u043b\u044c\u043a\u043e \u0443 \u0444\u043e\u0440\u043c\u044b \u043e\u0431\u044a\u0435\u043a\u0442\u0430, \u0443 \u0444\u043e\u0440\u043c\u044b
-        # \u0441\u043f\u0438\u0441\u043a\u0430 \u044d\u0442\u043e \u00ab\u0421\u043f\u0438\u0441\u043e\u043a\u00bb, \u0443 \u0444\u043e\u0440\u043c\u044b \u0437\u0430\u043f\u0438\u0441\u0438 \u0440\u0435\u0433\u0438\u0441\u0442\u0440\u0430 \u00ab\u0417\u0430\u043f\u0438\u0441\u044c\u00bb. \u0421 \u0437\u0430\u0448\u0438\u0442\u044b\u043c \u00ab\u041e\u0431\u044a\u0435\u043a\u0442\u00bb \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0430 \u043d\u0430 \u0442\u0430\u043a\u0438\u0445
-        # \u0444\u043e\u0440\u043c\u0430\u0445 \u043c\u043e\u043b\u0447\u0430 \u043d\u0435 \u0441\u0440\u0430\u0431\u0430\u0442\u044b\u0432\u0430\u043b\u0430.
+        # 11d. Paths rooted at a main attribute that the form does not declare.
+        # Check 5 skips this: for a borrowed form it does not check base elements (id < 1000000),
+        # and bindings in <xr:Link> are outside its tag list altogether. Meanwhile this is exactly the case where
+        # the platform rejects loading: "Invalid field path - Объект.X". Rule: if the main attribute
+        # is not declared in the form's <Attributes>, any path rooted at it will not resolve.
+        # The root is taken from the BaseForm main attribute: it is "Объект" only for an object form, for a
+        # list form it is "Список", for a register record form "Запись". With a hardcoded "Объект" the check on such
+        # forms silently did not fire.
         main_attr_declared = False
         for attr in attr_nodes:
             ma_node = attr.find(f"{{{F_NS}}}MainAttribute")
@@ -841,8 +841,8 @@ def main():
                 break
 
         if not main_attr_declared:
-            # \u0417\u043d\u0430\u0447\u0435\u043d\u0438\u044f \u043f\u0440\u0438\u0432\u044f\u0437\u043e\u043a \u0438\u0449\u0435\u043c \u0442\u0435\u043a\u0441\u0442\u043e\u043c: \u0438\u043d\u0442\u0435\u0440\u0435\u0441\u0443\u044e\u0442 \u0438 \u043e\u0431\u044b\u0447\u043d\u044b\u0435 \u0442\u0435\u0433\u0438, \u0438 <xr:DataPath> \u0432\u043d\u0443\u0442\u0440\u0438
-            # <ChoiceParameterLinks>, \u0430 \u0442\u0435 \u0436\u0438\u0432\u0443\u0442 \u0432 \u0447\u0443\u0436\u043e\u043c \u043f\u0440\u043e\u0441\u0442\u0440\u0430\u043d\u0441\u0442\u0432\u0435 \u0438\u043c\u0451\u043d.
+            # Search binding values as text: both ordinary tags and <xr:DataPath> inside
+            # <ChoiceParameterLinks> are of interest, and those live in a foreign namespace.
             with open(form_path, "r", encoding="utf-8-sig") as fh:
                 raw_form = fh.read()
             main_base = base_form_node.find(f"{{{F_NS}}}Attributes/{{{F_NS}}}Attribute[{{{F_NS}}}MainAttribute='true']")
@@ -900,8 +900,8 @@ def main():
             elif tv.startswith("cfg:"):
                 suffix = tv[4:]  # after "cfg:"
                 prefix = suffix.split(".")[0]
-                # Тип без имени объекта: динамический список, набор констант, любой отчёт — ровно те три,
-                # что встречаются в формах корпуса (УТ, ERP, БП, УНФ); иное без имени — вероятная опечатка
+                # A type without an object name: dynamic list, constants set, any report - exactly the three
+                # that occur in corpus forms (UT, ERP, BSP, UNF); anything else without a name is a likely typo
                 if ("." in suffix and prefix in VALID_CFG_PREFIXES) or suffix in ("DynamicList", "ConstantsSet", "ReportObject"):
                     # ExternalDataProcessorObject/ExternalReportObject valid only in EPF/ERF context
                     if is_config_context and prefix in ('ExternalDataProcessorObject', 'ExternalReportObject'):
@@ -922,11 +922,11 @@ def main():
             else:
                 report_ok('12. Types: no type values to check')
 
-    # --- Check 13: префиксы в значениях объявлены в самом файле ---
-    # `cfg:DataProcessorObject.X` в <v8:Type> при незадекларированном xmlns:cfg — валидный XML, который
-    # платформа не читает вовсе: «Исключение XDTO произошло при чтении файла». Ошибка типична для
-    # рукописного XML: префикс скопирован из чужой формы, а объявление в корне забыто. Область видимости
-    # считаем по узлу (nsmap элемента), а не по корню: локальная xmlns на элементе законна.
+    # --- Check 13: prefixes in values are declared in the file itself ---
+    # `cfg:DataProcessorObject.X` in <v8:Type> with an undeclared xmlns:cfg is valid XML that
+    # the platform does not read at all: "XDTO exception occurred while reading the file". The error is typical for
+    # handwritten XML: the prefix was copied from another form, and the declaration in the root was forgotten. Scope
+    # is computed per node (the element's nsmap), not per root: a local xmlns on an element is legitimate.
     if not stopped:
         prefix_errors = 0
         prefix_checked = 0
@@ -961,18 +961,18 @@ def main():
         elif prefix_errors == 0:
             report_ok(f'13. Namespace prefixes: {prefix_checked} values, all declared')
 
-    # --- Check 14: версия формата формы — как у её дескриптора; сверка с выгрузкой ---
-    # Тело формы и дескриптор Forms/<Имя>.xml (у общей формы — CommonForms/<Имя>.xml) платформа загружает
-    # только в одной версии: «Версия формата загружаемого файла … отличается от версии формата ранее
-    # загруженных файлов». С остальной выгрузкой форма может расходиться — платформа такое грузит, это
-    # лишь неоднородность выгрузки (типично после мержа веток, выгруженных разными платформами).
+    # --- Check 14: form format version - as in its descriptor; compare with the dump ---
+    # The form body and the descriptor Forms/<Имя>.xml (for a common form - CommonForms/<Имя>.xml) are loaded by the platform
+    # only in one version: "The format version of the file being loaded ... differs from the format version of previously
+    # loaded files". The form may differ from the rest of the dump - the platform loads that, it is
+    # merely dump heterogeneity (typical after merging branches dumped by different platforms).
     if not stopped:
         form_ver = root.get('version', '')
         owner_path = ext_body_owner(os.path.abspath(form_path))
         owner_ver = root_version(owner_path) if owner_path else None
         dump_ver = root_version(dump_anchor) if dump_anchor else None
 
-        # У заимствованной формы расширения второй штамп — <BaseForm version=…>; платформа сверяет с дескриптором и его.
+        # A borrowed extension form has a second stamp - <BaseForm version=…>; the platform compares it with the descriptor too.
         base_form_ver = ''
         for ch in root:
             if isinstance(ch.tag, str) and etree.QName(ch.tag).localname == 'BaseForm':

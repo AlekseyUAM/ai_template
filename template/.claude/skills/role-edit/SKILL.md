@@ -1,6 +1,6 @@
 ---
 name: role-edit
-description: Точечное редактирование существующей роли 1С. Используй когда нужно добавить, снять или запретить права, настроить RLS-ограничения и шаблоны, изменить свойства роли без потери прочих прав и UUID
+description: Point edits of an existing 1C role. Use when you need to add, remove or deny rights, set up RLS restrictions and templates, change role properties without losing other rights and UUIDs
 argument-hint: <RolePath> -Operation <op> -Value "<val>" | -DefinitionFile <json> [-NoValidate]
 allowed-tools:
   - Bash
@@ -9,45 +9,45 @@ allowed-tools:
   - Glob
 ---
 
-# /role-edit — точечное редактирование роли 1С
+# /role-edit - point edits of a 1C role
 
-Меняет права существующей роли на месте: UUID, прочие права, RLS и шаблоны сохраняются.
-Создание новой роли — `/role-compile`.
+Changes rights of an existing role in place: UUID, other rights, RLS and templates are preserved.
+To create a new role - `/role-compile`.
 
-## Параметры и команда
+## Parameters and command
 
-| Параметр | Описание |
+| Parameter | Description |
 |----------|----------|
-| `RolePath` | Каталог роли, `Roles/Имя.xml` или `Roles/Имя/Ext/Rights.xml` |
-| `Operation` | Одна операция из таблицы ниже |
-| `Value` | Значение операции; несколько значений — через `;;` |
-| `DefinitionFile` | JSON-массив операций (альтернатива `Operation`) — так задают несколько разных операций |
-| `NoValidate` | Не запускать `role-validate` после правки |
+| `RolePath` | Role directory, `Roles/Имя.xml` or `Roles/Имя/Ext/Rights.xml` |
+| `Operation` | One operation from the table below |
+| `Value` | Operation value; several values - separated by `;;` |
+| `DefinitionFile` | JSON array of operations (alternative to `Operation`) - this is how several different operations are set |
+| `NoValidate` | Do not run `role-validate` after the edit |
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/role-edit.py" -RolePath "<роль>" -Operation <op> -Value "<значение>"
 ```
 
-Операции применяются в том порядке, в котором перечислены.
+Operations are applied in the order listed.
 
-## Операции
+## Operations
 
-| Операция | Формат `Value` | Описание |
+| Operation | `Value` format | Description |
 |----------|----------------|----------|
-| `add-rights` | `Тип.Имя: Право1, Право2` или `Тип.Имя: @пресет` | Добавить права, прежние сохранить |
-| `set-rights` | то же | Заменить набор прав объекта целиком |
-| `remove-rights` | `Тип.Имя: Право1, Право2` — снять права<br>`Тип.Имя` — удалить объект целиком | Снять права |
-| `deny-rights` | `Тип.Имя: Право1, Право2` | Закрыть реквизит или ТЧ, которые иначе наследуют права объекта |
-| `set-rls` | `Тип.Имя.Право: условие`<br>`Тип.Имя.Право[Поле1, Поле2]: условие` | Ограничение доступа к данным |
-| `remove-rls` | `Тип.Имя.Право` — снять все<br>`Тип.Имя.Право[Поле1]` — снять одну строку | Снять ограничение, право оставить |
-| `add-template` | `Имя(Параметры): условие` | Добавить шаблон ограничения |
-| `set-template` | то же | Заменить шаблон, а если его нет — добавить |
-| `remove-template` | `Имя(Параметры)` или `Имя` | Удалить шаблон |
-| `modify-property` | `setForNewObjects=true`<br>`setForAttributesByDefault=false`<br>`independentRightsOfChildObjects=true` | Глобальные флаги роли |
-| `set-synonym` | текст | Синоним роли |
-| `set-comment` | текст | Комментарий роли |
+| `add-rights` | `Тип.Имя: Право1, Право2` or `Тип.Имя: @пресет` | Add rights, keep existing ones |
+| `set-rights` | same | Replace the object's right set entirely |
+| `remove-rights` | `Тип.Имя: Право1, Право2` - remove rights<br>`Тип.Имя` - delete the object entirely | Remove rights |
+| `deny-rights` | `Тип.Имя: Право1, Право2` | Close an attribute or tabular section that would otherwise inherit the object's rights |
+| `set-rls` | `Тип.Имя.Право: условие`<br>`Тип.Имя.Право[Поле1, Поле2]: условие` | Data access restriction |
+| `remove-rls` | `Тип.Имя.Право` - remove all<br>`Тип.Имя.Право[Поле1]` - remove one row | Remove the restriction, keep the right |
+| `add-template` | `Имя(Параметры): условие` | Add a restriction template |
+| `set-template` | same | Replace the template, or add it if absent |
+| `remove-template` | `Имя(Параметры)` or `Имя` | Delete the template |
+| `modify-property` | `setForNewObjects=true`<br>`setForAttributesByDefault=false`<br>`independentRightsOfChildObjects=true` | Global role flags |
+| `set-synonym` | text | Role synonym |
+| `set-comment` | text | Role comment |
 
-## Быстрые примеры
+## Quick examples
 
 ```bash
 # Добавить права нового регистра, ничего не потеряв
@@ -63,7 +63,7 @@ python "${CLAUDE_SKILL_DIR}/scripts/role-edit.py" -RolePath "<роль>" -Operat
 ... -RolePath "src/Roles/Менеджер" -Operation deny-rights -Value "Catalog.Товары.Attribute.Цена: View"
 ```
 
-Несколько разных операций — списком в файле:
+Several different operations - as a list in a file:
 
 ```json
 [
@@ -76,40 +76,40 @@ python "${CLAUDE_SKILL_DIR}/scripts/role-edit.py" -RolePath "<роль>" -Operat
 ... -RolePath "src/Roles/Менеджер" -DefinitionFile "операции.json"
 ```
 
-## Права
+## Rights
 
-Имена объектов и прав — те же, что в `/role-compile`: `Catalog`, `Read`, пресеты `@view` и
-`@edit`, вложенные пути (`Catalog.Контрагенты.Attribute.ИНН: View, Edit`), короткая запись сервиса
-(`HTTPService.ЭДО: Use` раскрывается по всем методам шаблонов URL).
+Object and right names are the same as in `/role-compile`: `Catalog`, `Read`, presets `@view` and
+`@edit`, nested paths (`Catalog.Контрагенты.Attribute.ИНН: View, Edit`), service short notation
+(`HTTPService.ЭДО: Use` expands over all methods of URL templates).
 
-`remove-rights` и `deny-rights` задевают больше перечисленного: уходят и права, которым снятое
-нужно (сняли `Read` — уйдут `Update`, `View`, `Edit`). Снятое каскадом перечисляется в выводе.
+`remove-rights` and `deny-rights` affect more than listed: rights that depend on the removed one
+also go (remove `Read` - `Update`, `View`, `Edit` go). Cascaded removals are listed in the output.
 
-Ошибка в значении — отказ до записи, файл не меняется. Полные таблицы «тип → права» и виды
-вложенности — в справке `/role-compile`.
+An error in a value is a refusal before writing; the file is not changed. Full type-to-rights tables and nesting
+kinds are in the `/role-compile` reference.
 
 ## RLS
 
-Ограничения права — это список строк, как в таблице «Ограничения доступа к данным» редактора.
-Строка без списка полей действует на все прочие поля, строка со списком — только на них.
-Типовой приём: закрыть данные целиком, но оставить поля представления ссылки открытыми, иначе
-ссылки на объект превратятся в «объект не найден»:
+Right restrictions are a list of rows, like the "Data access restrictions" table of the editor.
+A row without a field list applies to all other fields; a row with a list applies only to them.
+Typical technique: close the data entirely but leave reference presentation fields open, otherwise
+references to the object become "object not found":
 
 ```bash
 ... -Operation set-rls -Value "Catalog.Товары.Read: ГДЕ ЛОЖЬ"
 ... -Operation set-rls -Value "Catalog.Товары.Read[Ссылка, Код, Наименование]: "
 ```
 
-Строка с тем же набором полей заменяется, с другим — добавляется. Право должно быть уже выдано:
-ограничение без права платформа игнорирует, поэтому навык откажет.
+A row with the same field set is replaced; with a different one it is added. The right must already be granted:
+the platform ignores a restriction without the right, so the skill refuses.
 
-Ссылка на шаблон — `#ИмяШаблона("")`; `&` в условиях экранируется автоматически.
+Template reference - `#ИмяШаблона("")`; `&` in conditions is escaped automatically.
 
-## Значение из файла
+## Value from a file
 
-Вместо текста можно указать `@путь` — условие RLS, тело шаблона, синоним и комментарий берутся из
-файла. Относительный путь ищется рядом с `DefinitionFile`, затем в текущем каталоге. Разделитель
-`;;` внутри файла остаётся обычным текстом.
+Instead of text you can specify `@путь` - the RLS condition, template body, synonym and comment are taken from
+the file. A relative path is looked up next to `DefinitionFile`, then in the current directory. The separator
+`;;` inside a file remains plain text.
 
 ```bash
 ... -Operation set-rls -Value "Catalog.Товары.Read: @условие.txt"
@@ -117,7 +117,7 @@ python "${CLAUDE_SKILL_DIR}/scripts/role-edit.py" -RolePath "<роль>" -Operat
 ... -Operation set-comment -Value "@комментарий.txt"
 ```
 
-## Верификация
+## Verification
 
 ```
 /role-info <RightsPath>      — сводка прав после правки

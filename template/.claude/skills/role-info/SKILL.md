@@ -1,44 +1,43 @@
 ---
 name: role-info
-description: Компактная сводка прав роли 1С из Rights.xml — объекты, права, RLS, шаблоны ограничений. Используй для аудита прав — какие объекты и действия доступны, ограничения RLS
+description: Compact summary of 1C role rights from Rights.xml - objects, rights, RLS, restriction templates. Use for rights audit - which objects and actions are available, RLS restrictions
 argument-hint: <RightsPath>
 allowed-tools:
   - Bash
   - Read
 ---
 
-# /role-info — анализ роли 1С
+# /role-info - 1C role analysis
 
-Парсит `Rights.xml` роли и выдаёт компактную сводку: объекты сгруппированы по типу, показаны только разрешённые права. Сжатие: тысячи строк XML → 50–150 строк текста.
+Parses the role's `Rights.xml` and produces a compact summary: objects are grouped by type, only granted rights are shown. Compression: thousands of XML lines -> 50-150 lines of text.
 
-## Использование
+## Usage
 
 ```
 /role-info <RightsPath>
 ```
 
-**RightsPath** — путь к файлу `Rights.xml` роли (обычно `Roles/ИмяРоли/Ext/Rights.xml`).
+**RightsPath** - path to the role's `Rights.xml` file (usually `Roles/ИмяРоли/Ext/Rights.xml`).
 
-## Запуск скрипта
+## Running the script
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/role-info.py" -RightsPath <path> -OutFile <output.txt>
 ```
 
-### Параметры
+### Parameters
 
-| Параметр | Обязательный | Описание |
+| Parameter | Required | Description |
 |----------|:------------:|----------|
-| `-RightsPath` | да | Путь к Rights.xml |
-| `-ShowDenied` | нет | Показать запрещённые права (по умолчанию скрыты) |
-| `-Limit` | нет | Макс. строк вывода (по умолчанию `150`). `0` = без ограничений |
-| `-Offset` | нет | Пропустить N строк — для пагинации (по умолчанию `0`) |
-| `-OutFile` | нет | Записать результат в файл (UTF-8 BOM). Без этого — вывод в консоль |
+| `-RightsPath` | yes | Path to Rights.xml |
+| `-ShowDenied` | no | Show denied rights (hidden by default) |
+| `-Limit` | no | Max output lines (default `150`). `0` = no limit |
+| `-Offset` | no | Skip N lines - for pagination (default `0`) |
+| `-OutFile` | no | Write the result to a file (UTF-8 BOM). Without it - output to console |
 
-**Важно:** Всегда используй `-OutFile` и читай результат через Read tool. Прямой вывод в консоль через bash ломает кириллицу.
+**Important:** Always use `-OutFile` and read the result with the Read tool. Direct console output via bash breaks Cyrillic.
 
-Для большой роли при усечении вывода:
+For a large role when output is truncated:
 ```bash
 ... -Offset 150            # пагинация: пропустить первые 150 строк
 ```
-

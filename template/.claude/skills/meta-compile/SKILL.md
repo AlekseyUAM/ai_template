@@ -1,6 +1,6 @@
 ---
 name: meta-compile
-description: Создать объект метаданных 1С. Используй когда нужно создать или добавить справочник, документ, регистр, перечисление, константу, общий модуль, обработку, отчёт и др.
+description: Create a 1C metadata object. Use when you need to create or add a catalog, document, register, enum, constant, common module, data processor, report, etc.
 argument-hint: <JsonPath> <OutputDir>
 allowed-tools:
   - Bash
@@ -9,43 +9,43 @@ allowed-tools:
   - Glob
 ---
 
-# /meta-compile — генерация объектов метаданных из JSON
+# /meta-compile - generating metadata objects from JSON
 
-Принимает JSON-определение объекта → генерирует XML + модули в структуре выгрузки конфигурации и
-регистрирует объект в `Configuration.xml`.
+Accepts an object JSON definition -> generates XML + modules in the configuration dump structure and
+registers the object in `Configuration.xml`.
 
-`ConfigDumpInfo.xml` намеренно не трогается: это служебный файл версий объектов, которым управляет
-платформа (для инкрементальной выгрузки).
+`ConfigDumpInfo.xml` is intentionally not touched: it is a service file of object versions managed by
+the platform (for incremental dump).
 
-## Порядок работы
+## Workflow
 
-1. Составь JSON по синтаксису ниже → запиши во временный файл.
-2. Запусти скрипт.
-3. Изменить созданный объект — `/meta-edit`; проверить — `/meta-validate`.
+1. Compose JSON using the syntax below -> write it to a temporary file.
+2. Run the script.
+3. Modify the created object - `/meta-edit`; validate - `/meta-validate`.
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/meta-compile.py" -JsonPath "<json>" -OutputDir "<ConfigDir>"
 ```
 
-| Параметр | Описание |
+| Parameter | Description |
 |----------|----------|
-| `JsonPath` | Путь к JSON-файлу |
-| `OutputDir` | Корень выгрузки конфигурации (где `Configuration.xml`, `Catalogs/`, `Documents/`, …) |
+| `JsonPath` | Path to the JSON file |
+| `OutputDir` | Root of the configuration dump (where `Configuration.xml`, `Catalogs/`, `Documents/`, ... are) |
 
-## Формат JSON
+## JSON format
 
-**Один объект** `{ ... }` или **массив** объектов `[{ ... }, { ... }]` (batch — несколько объектов за прогон).
+**Single object** `{ ... }` or an **array** of objects `[{ ... }, { ... }]` (batch - several objects per run).
 
 ```json
 { "type": "Catalog", "name": "Номенклатура", "...свойства типа...": "..." }
 ```
 
-`type` и `name` — обязательные. Остальное — по типу (см. индекс ниже). `synonym` по умолчанию выводится из
-`name` (CamelCase → слова через пробел); можно задать явно строкой или мультиязычно: `"synonym": { "ru": "…", "en": "…" }`.
+`type` and `name` are required. The rest depends on the type (see the index below). By default `synonym` is derived from
+`name` (CamelCase -> words separated by spaces); it can be set explicitly as a string or multilingual: `"synonym": { "ru": "…", "en": "…" }`.
 
-## Реквизиты (shorthand)
+## Attributes (shorthand)
 
-Массивы `attributes`, `dimensions`, `resources` и колонки в `tabularSections` задаются строками:
+The `attributes`, `dimensions`, `resources` arrays and columns in `tabularSections` are specified as strings:
 
 ```
 "Имя"                          → String(10)
@@ -53,42 +53,42 @@ python "${CLAUDE_SKILL_DIR}/scripts/meta-compile.py" -JsonPath "<json>" -OutputD
 "Имя: Тип | req, index"        → с флагами
 ```
 
-**Типы:** `String(100)`, `String(10, fixed)` (фикс. длина), `Number(15,2)`, `Boolean`, `Date`, `DateTime`,
-`Time`, ссылочные `CatalogRef.Xxx` / `DocumentRef.Xxx` / `EnumRef.Xxx` / `DefinedType.Xxx` и т.п.
-Составной тип — через `+`: `"Значение: String + Number(15,2) + CatalogRef.Контрагенты"`.
+**Types:** `String(100)`, `String(10, fixed)` (fixed length), `Number(15,2)`, `Boolean`, `Date`, `DateTime`,
+`Time`, reference `CatalogRef.Xxx` / `DocumentRef.Xxx` / `EnumRef.Xxx` / `DefinedType.Xxx`, etc.
+Composite type - via `+`: `"Значение: String + Number(15,2) + CatalogRef.Контрагенты"`.
 
-**Флаги** (после `|`, через запятую):
+**Flags** (after `|`, comma-separated):
 
-| Флаг | Значение | Где |
+| Flag | Meaning | Where |
 |------|----------|-----|
-| `req` | обязательное заполнение | attributes, dimensions, resources |
-| `index` | индексировать | attributes, dimensions |
-| `indexAdditional` | индекс с доп. упорядочиванием | attributes |
-| `multiline` | многострочное поле | attributes |
-| `nonneg` | неотрицательное (Number) | attributes, resources |
-| `master` | ведущее измерение | dimensions (регистры) |
-| `mainFilter` | основной отбор | dimensions (регистры) |
-| `denyIncomplete` | запрет незаполненных | dimensions |
-| `useInTotals` | использовать в итогах | dimensions (регистр накопления) |
+| `req` | required filling | attributes, dimensions, resources |
+| `index` | index | attributes, dimensions |
+| `indexAdditional` | index with additional ordering | attributes |
+| `multiline` | multiline field | attributes |
+| `nonneg` | non-negative (Number) | attributes, resources |
+| `master` | leading dimension | dimensions (registers) |
+| `mainFilter` | main filter | dimensions (registers) |
+| `denyIncomplete` | deny incomplete | dimensions |
+| `useInTotals` | use in totals | dimensions (accumulation register) |
 
-Реквизиту нужны свойства сверх shorthand (значение заполнения, параметры выбора, формат, подсказка, …) —
-задаётся **объектной формой**, см. `reference/attributes.md`.
+If an attribute needs properties beyond shorthand (fill value, choice parameters, format, tooltip, ...),
+use the **object form**, see `reference/attributes.md`.
 
-## Табличные части
+## Tabular sections
 
 ```json
 "tabularSections": { "Товары": ["Номенклатура: CatalogRef.Номенклатура", "Количество: Number(15,3)"] }
 ```
 
-Ключ — имя ТЧ, значение — массив колонок (shorthand) ЛИБО объект со свойствами ТЧ (см. `reference/attributes.md`).
+The key is the tabular section name, the value is a column array (shorthand) OR an object with tabular section properties (see `reference/attributes.md`).
 
-## Индекс: свойства по типам
+## Index: properties by type
 
-Для каждого типа — свой reference-файл со свойствами, дефолтами и допустимыми значениями:
+Each type has its own reference file with properties, defaults and allowed values:
 
-| Тип(ы) | Файл |
+| Type(s) | File |
 |--------|------|
-| Catalog (справочник) | `reference/catalog.md` |
+| Catalog (Справочник) | `reference/catalog.md` |
 | Document, DocumentJournal, Sequence, DocumentNumerator | `reference/document.md` |
 | InformationRegister, AccumulationRegister, AccountingRegister, CalculationRegister | `reference/registers.md` |
 | ChartOfAccounts, ChartOfCharacteristicTypes, ChartOfCalculationTypes | `reference/charts.md` |
@@ -98,25 +98,25 @@ python "${CLAUDE_SKILL_DIR}/scripts/meta-compile.py" -JsonPath "<json>" -OutputD
 | CommonModule, ScheduledJob, EventSubscription | `reference/code.md` |
 | HTTPService, WebService | `reference/web.md` |
 | Enum, Constant, DefinedType | `reference/simple.md` |
-| ExternalDataSource (внешний источник данных) | `reference/external-data-source.md` |
-| FunctionalOption, FilterCriterion, SettingsStorage, CommonForm, CommonPicture, CommonTemplate, служебные | `reference/other-types.md` |
+| ExternalDataSource (external data source) | `reference/external-data-source.md` |
+| FunctionalOption, FilterCriterion, SettingsStorage, CommonForm, CommonPicture, CommonTemplate, service ones | `reference/other-types.md` |
 
-Кросс-типовые детали:
-- **`reference/attributes.md`** — объектная форма реквизита и колонки ТЧ (значение заполнения, параметры
-  выбора, формат, подсказка, границы, …) + свойства самой ТЧ.
-- **`reference/blocks.md`** — блоки объекта: представления, команды (+ характеристики/стандартные реквизиты).
+Cross-type details:
+- **`reference/attributes.md`** - object form of an attribute and tabular section column (fill value, choice
+  parameters, format, tooltip, bounds, ...) + properties of the tabular section itself.
+- **`reference/blocks.md`** - object blocks: presentations, commands (+ characteristics/standard attributes).
 
-Эта инструкция и reference-файлы — полная документация. Не ищи примеры XML в выгрузках конфигураций.
+This instruction and the reference files are the complete documentation. Do not look for XML examples in configuration dumps.
 
-## Примеры
+## Examples
 
-Справочник с реквизитами:
+Catalog with attributes:
 ```json
 { "type": "Catalog", "name": "Организации", "descriptionLength": 100,
   "attributes": ["ИНН: String(12)", "КПП: String(9)", "Директор: CatalogRef.ФизическиеЛица"] }
 ```
 
-Документ с движениями и ТЧ:
+Document with movements and a tabular section:
 ```json
 { "type": "Document", "name": "ПриходнаяНакладная",
   "registerRecords": ["AccumulationRegister.ОстаткиТоваров"],
@@ -124,7 +124,7 @@ python "${CLAUDE_SKILL_DIR}/scripts/meta-compile.py" -JsonPath "<json>" -OutputD
   "tabularSections": { "Товары": ["Номенклатура: CatalogRef.Номенклатура", "Количество: Number(15,3)", "Цена: Number(15,2)"] } }
 ```
 
-Регистр сведений:
+Information register:
 ```json
 { "type": "InformationRegister", "name": "КурсыВалют", "periodicity": "Day",
   "dimensions": ["Валюта: CatalogRef.Валюты | master, mainFilter, denyIncomplete"],

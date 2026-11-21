@@ -1,81 +1,81 @@
 ---
 name: 1c-batch
-description: "Пакетные операции с платформой 1С:Предприятие 8. Выгрузка/загрузка конфигураций и расширений в XML, сборка/разборка внешних обработок (.epf/.erf), выгрузка/загрузка ИБ, создание баз, проверка конфигурации, объединение/сравнение конфигураций, работа со свойствами конфигурации. Используй когда нужно: работать с конфигурацией или расширениями 1С, собрать или разобрать обработку/отчёт, выгрузить или загрузить ИБ, запустить 1С:Предприятие или конфигуратор."
+description: "Batch operations with the 1C:Enterprise 8 platform. Dump/load configurations and extensions to/from XML, build/unpack external data processors (.epf/.erf), dump/load infobases, create infobases, check configuration, merge/compare configurations, work with configuration properties. Use when you need to: work with a 1C configuration or extensions, build or unpack a data processor/report, dump or load an infobase, run 1C:Enterprise or Configurator."
 ---
 
 # 1c-batch
 
-Кроссплатформенный Python-инструмент для пакетных операций с платформой 1С:Предприятие 8.
+Cross-platform Python tool for batch operations with the 1C:Enterprise 8 platform.
 
-## Запуск
+## Run
 
-Запускать **из корня проекта** (где лежит `.1c-devbase.json`).
+Run **from the project root** (where `.1c-devbase.json` lives).
 
-В этом проекте инструмент исполняется через **wrapper локальной копии** — так
-работает версия из `.claude/skills`, а не глобально установленная:
+In this project the tool runs through a **local-copy wrapper** - that way the version
+from `.claude/skills` is used, not the globally installed one:
 
 ```bash
 python .claude/skills/1c-batch/scripts/1c-batch.py <команда> [аргументы] [опции]
 ```
 
-Ниже в примерах для краткости пишется `1c-batch <команда>` — это та же команда;
-подставляй вызов через wrapper выше. (Глобальная pip-команда `1c-batch`, если
-установлена, исполняет общий для всех проектов экземпляр — не проектную копию.)
+Below, examples write `1c-batch <команда>` for brevity - it is the same command;
+substitute the wrapper call above. (The global pip command `1c-batch`, if installed,
+runs an instance shared by all projects - not the project copy.)
 
 ---
 
-## Работа с обработками (EPF/ERF)
+## Working with data processors (EPF/ERF)
 
-### dump-epf — разборка обработки в XML
+### dump-epf - unpack a data processor to XML
 
 ```bash
 1c-batch dump-epf <XML_DIR> <EPF_FILE> [--format Plain|Hierarchical]
 ```
 
-- `XML_DIR` — каталог для выгрузки XML
-- `EPF_FILE` — путь к исходной обработке `.epf` или `.erf`
-- `--format` — формат выгрузки (Plain или Hierarchical)
+- `XML_DIR` - directory for the XML dump
+- `EPF_FILE` - path to the source `.epf` or `.erf` data processor
+- `--format` - dump format (Plain or Hierarchical)
 
-### build-epf — сборка обработки из XML
+### build-epf - build a data processor from XML
 
 ```bash
 1c-batch build-epf <XML_DIR> <EPF_FILE>
 ```
 
-- `XML_DIR` — каталог с XML-исходниками
-- `EPF_FILE` — путь к результирующему файлу `.epf` или `.erf`
+- `XML_DIR` - directory with XML sources
+- `EPF_FILE` - path to the resulting `.epf` or `.erf` file
 
 ---
 
-## Работа с конфигурацией
+## Working with configuration
 
-### dump-config — выгрузка конфигурации в XML
+### dump-config - dump configuration to XML
 
 ```bash
 1c-batch dump-config <DIRECTORY> [--update] [--extension ИМЯ] [--all-extensions] [--format Plain|Hierarchical]
 ```
 
-- `DIRECTORY` — каталог для выгрузки
-- `--update` — инкрементальная выгрузка (только изменения, с -force)
-- `--extension` — выгрузить конкретное расширение
-- `--all-extensions` — выгрузить все расширения
-- `--format` — формат выгрузки
+- `DIRECTORY` - dump directory
+- `--update` - incremental dump (changes only, with -force)
+- `--extension` - dump a specific extension
+- `--all-extensions` - dump all extensions
+- `--format` - dump format
 
-### load-config — загрузка конфигурации из XML
+### load-config - load configuration from XML
 
 ```bash
 1c-batch load-config <DIRECTORY> [--files СПИСОК] [--list-file ФАЙЛ] [--format Plain|Hierarchical] [--partial] [--extension ИМЯ] [--skip-db-update]
 ```
 
-- `DIRECTORY` — каталог с XML-файлами
-- `--files` — список файлов через запятую для частичной загрузки
-- `--list-file` — путь к файлу-списку
-- `--format` — формат (Plain или Hierarchical)
-- `--partial` — частичная загрузка
-- `--extension` — загрузить в расширение
-- `--skip-db-update` — не обновлять конфигурацию БД (по умолчанию обновляется)
+- `DIRECTORY` - directory with XML files
+- `--files` - comma-separated list of files for partial load
+- `--list-file` - path to the list file
+- `--format` - format (Plain or Hierarchical)
+- `--partial` - partial load
+- `--extension` - load into an extension
+- `--skip-db-update` - do not update the DB configuration (updated by default)
 
-Примеры:
+Examples:
 ```bash
 # Полная загрузка
 1c-batch load-config src/cf
@@ -87,19 +87,19 @@ python .claude/skills/1c-batch/scripts/1c-batch.py <команда> [аргум�
 1c-batch load-config src/cf --skip-db-update
 ```
 
-### dump-cfg — сохранение конфигурации в .cf
+### dump-cfg - save configuration to .cf
 
 ```bash
 1c-batch dump-cfg <FILEPATH> [--extension ИМЯ]
 ```
 
-### load-cfg — загрузка конфигурации из .cf
+### load-cfg - load configuration from .cf
 
 ```bash
 1c-batch load-cfg <FILEPATH> [--extension ИМЯ]
 ```
 
-### update-db-cfg — обновление конфигурации БД
+### update-db-cfg - update the DB configuration
 
 ```bash
 1c-batch update-db-cfg [--dynamic +|-] [--server] [--extension ИМЯ]
@@ -107,42 +107,42 @@ python .claude/skills/1c-batch/scripts/1c-batch.py <команда> [аргум�
 
 ---
 
-## Работа с расширениями
+## Working with extensions
 
-### dump-extension — выгрузка расширения в XML
+### dump-extension - dump an extension to XML
 
 ```bash
 1c-batch dump-extension <DIRECTORY> --name ИМЯ [--update] [--format Plain|Hierarchical]
 ```
 
-### load-extension — загрузка расширения из XML
+### load-extension - load an extension from XML
 
 ```bash
 1c-batch load-extension <DIRECTORY> --name ИМЯ [--skip-db-update]
 ```
 
-По умолчанию после загрузки выполняется обновление расширения в БД.
+By default, after loading, the extension is updated in the DB.
 
-### dump-cfg-extension — сохранение расширения в .cfe
+### dump-cfg-extension - save an extension to .cfe
 
 ```bash
 1c-batch dump-cfg-extension <FILEPATH> --name ИМЯ
 ```
 
-### load-cfg-extension — загрузка расширения из .cfe
+### load-cfg-extension - load an extension from .cfe
 
 ```bash
 1c-batch load-cfg-extension <FILEPATH> --name ИМЯ
 ```
 
-### delete-extension — удаление расширения
+### delete-extension - delete an extension
 
 ```bash
 1c-batch delete-extension --name ИМЯ
 1c-batch delete-extension --all
 ```
 
-### list-extensions — список расширений
+### list-extensions - list extensions
 
 ```bash
 1c-batch list-extensions
@@ -150,24 +150,24 @@ python .claude/skills/1c-batch/scripts/1c-batch.py <команда> [аргум�
 
 ---
 
-## Запуск 1С
+## Running 1C
 
-### run-enterprise — запуск предприятия
+### run-enterprise - start 1C:Enterprise
 
 ```bash
 1c-batch run-enterprise [EPF_FILE] [-C СТРОКА]
 ```
 
-- `EPF_FILE` — обработка для автозапуска (опционально)
-- `-C`, `--c` — строка параметра запуска `/C`, передаётся в конфигурацию
-  (`ПараметрЗапуска`). Значение не кавычится вручную — квотинг делает ОС.
+- `EPF_FILE` - data processor to auto-run (optional)
+- `-C`, `--c` - value of the `/C` launch parameter, passed to the configuration
+  (`ПараметрЗапуска`). The value is not quoted manually - the OS does the quoting.
 
 ```bash
 # Запуск с параметром /C (например, автозапуск юнит-тестов)
 1c-batch run-enterprise -C "ВыполнитьЗапускЮнитТестов=/abs/configs/test.json"
 ```
 
-### run-designer — запуск конфигуратора
+### run-designer - start Configurator
 
 ```bash
 1c-batch run-designer
@@ -175,33 +175,33 @@ python .claude/skills/1c-batch/scripts/1c-batch.py <команда> [аргум�
 
 ---
 
-## База данных
+## Database
 
-### dump-ib — выгрузка ИБ в .dt
+### dump-ib - dump the infobase to .dt
 
 ```bash
 1c-batch dump-ib <FILEPATH>
 ```
 
-### restore-ib — загрузка ИБ из .dt
+### restore-ib - restore the infobase from .dt
 
 ```bash
 1c-batch restore-ib <FILEPATH> [--jobs-count N]
 ```
 
-### create-infobase — создание информационной базы
+### create-infobase - create an infobase
 
 ```bash
 1c-batch create-infobase --path /путь/к/базе [--add-to-list ИМЯ] [--use-template ШАБЛОН]
 ```
 
-### ib-restore-integrity — восстановление структуры ИБ
+### ib-restore-integrity - restore the infobase structure
 
 ```bash
 1c-batch ib-restore-integrity
 ```
 
-### ib-check-and-repair — тестирование и исправление ИБ
+### ib-check-and-repair - test and repair the infobase
 
 ```bash
 1c-batch ib-check-and-repair [--reindex] [--log-integrity] [--recalc-totals] [--ib-compression] [--rebuild]
@@ -209,15 +209,15 @@ python .claude/skills/1c-batch/scripts/1c-batch.py <команда> [аргум�
 
 ---
 
-## Проверки
+## Checks
 
-### check-config — проверка конфигурации
+### check-config - check the configuration
 
 ```bash
 1c-batch check-config [--config-log-integrity] [--incorrect-references] [--thin-client] [--server] [--extension ИМЯ] [--all-extensions]
 ```
 
-### check-modules — проверка модулей
+### check-modules - check modules
 
 ```bash
 1c-batch check-modules [--thin-client] [--server] [--extension ИМЯ] [--all-extensions]
@@ -225,15 +225,15 @@ python .claude/skills/1c-batch/scripts/1c-batch.py <команда> [аргум�
 
 ---
 
-## Сравнение и объединение
+## Comparison and merging
 
-### merge-cfg — объединение конфигураций
+### merge-cfg - merge configurations
 
 ```bash
 1c-batch merge-cfg <FILEPATH> [--settings ФАЙЛ_НАСТРОЕК] [--force]
 ```
 
-### compare-cfg — сравнение конфигураций
+### compare-cfg - compare configurations
 
 ```bash
 1c-batch compare-cfg --first-type ТИП --second-type ТИП [--report-format ФОРМАТ] [--report-file ФАЙЛ]
@@ -241,15 +241,15 @@ python .claude/skills/1c-batch/scripts/1c-batch.py <команда> [аргум�
 
 ---
 
-## Свойства конфигурации
+## Configuration properties
 
-### dump-config-files — выгрузка свойств
+### dump-config-files - dump properties
 
 ```bash
 1c-batch dump-config-files <DIRECTORY> [--module] [--template] [--help-flag] [--all-writable] [--picture] [--right] [--extension ИМЯ]
 ```
 
-### load-config-files — загрузка свойств
+### load-config-files - load properties
 
 ```bash
 1c-batch load-config-files <DIRECTORY> [--module] [--template] [--help-flag] [--all-writable] [--picture] [--right] [--extension ИМЯ]
@@ -257,45 +257,45 @@ python .claude/skills/1c-batch/scripts/1c-batch.py <команда> [аргум�
 
 ---
 
-## Обслуживание
+## Maintenance
 
-### reduce-event-log — сокращение журнала регистрации
+### reduce-event-log - reduce the event log
 
 ```bash
 1c-batch reduce-event-log <ДАТА>
 ```
 
-- `ДАТА` — дата в формате YYYYMMDD
+- `ДАТА` - date in YYYYMMDD format
 
 ---
 
-## Сценарии использования
+## Usage scenarios
 
-### Исправить ошибку в обработке
+### Fix a bug in a data processor
 
-1. Разобрать: `1c-batch dump-epf src/epf/МояОбработка.xml Исходная.epf`
-2. Отредактировать BSL-файлы в `src/epf/МояОбработка/`
-3. Собрать: `1c-batch build-epf src/epf/МояОбработка.xml build/МояОбработка.epf`
-4. Проверить: `1c-batch run-enterprise build/МояОбработка.epf`
+1. Unpack: `1c-batch dump-epf src/epf/МояОбработка.xml Исходная.epf`
+2. Edit the BSL files in `src/epf/МояОбработка/`
+3. Build: `1c-batch build-epf src/epf/МояОбработка.xml build/МояОбработка.epf`
+4. Check: `1c-batch run-enterprise build/МояОбработка.epf`
 
-### Загрузка изменённого модуля
+### Load a modified module
 
 ```bash
 1c-batch load-config src/cf --files "CommonModules/МойМодуль/Ext/Module.bsl"
 ```
 
-### Обновить расширение
+### Update an extension
 
-1. Выгрузить: `1c-batch dump-extension src/cfe/МоёРасширение --name МоёРасширение`
-2. Внести изменения в XML-файлы
-3. Загрузить: `1c-batch load-extension src/cfe/МоёРасширение --name МоёРасширение`
+1. Dump: `1c-batch dump-extension src/cfe/МоёРасширение --name МоёРасширение`
+2. Make changes to the XML files
+3. Load: `1c-batch load-extension src/cfe/МоёРасширение --name МоёРасширение`
 
-### Выгрузка/загрузка ИБ (резервная копия)
+### Dump/load the infobase (backup)
 
-1. Выгрузить: `1c-batch dump-ib backup.dt`
-2. Загрузить: `1c-batch restore-ib backup.dt`
+1. Dump: `1c-batch dump-ib backup.dt`
+2. Load: `1c-batch restore-ib backup.dt`
 
-### Сохранение конфигурации в .cf
+### Save configuration to .cf
 
 ```bash
 1c-batch dump-cfg backup.cf
@@ -304,18 +304,18 @@ python .claude/skills/1c-batch/scripts/1c-batch.py <команда> [аргум�
 
 ---
 
-## Правила использования
+## Usage rules
 
-**При выгрузке конфигурации или расширения:** если пользователь явно не указал тип выгрузки (полная или инкрементальная), спросить его перед выполнением:
-- Полная выгрузка — выгружает все объекты заново
-- Инкрементальная (`--update`) — выгружает только изменённые объекты (быстрее)
+**When dumping a configuration or extension:** if the user did not explicitly specify the dump type (full or incremental), ask before executing:
+- Full dump - dumps all objects from scratch
+- Incremental (`--update`) - dumps only changed objects (faster)
 
 ---
 
-## Важно
+## Important
 
-- **Обработки:** первый аргумент — XML-каталог, второй — файл .epf/.erf
-- **Конфигурация/расширения:** первый аргумент — каталог
-- При ошибке — ненулевой код возврата
-- Логи сохраняются в каталоге `logs/`
-- Конфигурация подключения — в файле `.1c-devbase.json` в корне проекта
+- **Data processors:** the first argument is the XML directory, the second is the .epf/.erf file
+- **Configuration/extensions:** the first argument is the directory
+- On error - non-zero return code
+- Logs are saved in the `logs/` directory
+- Connection configuration is in `.1c-devbase.json` in the project root

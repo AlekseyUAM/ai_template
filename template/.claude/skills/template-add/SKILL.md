@@ -1,6 +1,6 @@
 ---
 name: template-add
-description: Добавить пустой макет к объекту 1С. Используй когда нужно создать у объекта новый макет
+description: Add an empty template to a 1C object. Use when you need to create a new template for an object
 argument-hint: <ObjectName> <TemplateName> <TemplateType>
 allowed-tools:
   - Bash
@@ -11,9 +11,9 @@ allowed-tools:
   - Grep
 ---
 
-# /template-add — Добавление макета
+# /template-add - Add a template
 
-Создаёт макет указанного типа и регистрирует его в корневом XML объекта.
+Creates a template of the specified type and registers it in the object's root XML.
 
 ## Usage
 
@@ -21,60 +21,60 @@ allowed-tools:
 /template-add <ObjectName> <TemplateName> <TemplateType>
 ```
 
-| Параметр      | Обязательный | По умолчанию    | Описание                                         |
+| Parameter     | Required | Default         | Description                                      |
 |---------------|:------------:|-----------------|--------------------------------------------------|
-| ObjectName    | да           | —               | Имя объекта                                      |
-| TemplateName  | да           | —               | Имя макета                                       |
-| TemplateType  | да           | —               | Тип: HTML, Text, SpreadsheetDocument, BinaryData, DataCompositionSchema |
-| Synonym       | нет          | = TemplateName  | Синоним макета                                   |
-| Lang          | нет          | `ru`            | Код языка страницы — только для типа HTML. Повторный вызов с другим языком добавляет страницу в существующий макет |
-| SrcDir        | нет          | `src`           | Путь к папке типа объектов (`Reports`, `DataProcessors`, `Catalogs`, `Documents`...), внутри которой лежит `<ObjectName>.xml`. Дефолт `src` подходит для каталогов с внешними обработками/отчётами, лежащими рядом |
-| -SetMainSKD   | нет          | —               | Принудительно установить MainDataCompositionSchema |
+| ObjectName    | yes          | -               | Object name                                      |
+| TemplateName  | yes          | -               | Template name                                    |
+| TemplateType  | yes          | -               | Type: HTML, Text, SpreadsheetDocument, BinaryData, DataCompositionSchema |
+| Synonym       | no           | = TemplateName  | Template synonym                                 |
+| Lang          | no           | `ru`            | Page language code - for the HTML type only. A repeated call with another language adds a page to the existing template |
+| SrcDir        | no           | `src`           | Path to the object type folder (`Reports`, `DataProcessors`, `Catalogs`, `Documents`...), which contains `<ObjectName>.xml`. The default `src` suits directories with external data processors/reports lying nearby |
+| -SetMainSKD   | no           | -               | Force setting MainDataCompositionSchema |
 
-## Команда
+## Command
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/template-add.py" -ObjectName "<ObjectName>" -TemplateName "<TemplateName>" -TemplateType "<TemplateType>" [-Synonym "<Synonym>"] [-Lang "<Lang>"] [-SrcDir "<SrcDir>"] [-SetMainSKD]
 ```
 
-## Пример
+## Example
 
-Добавить основную СКД к отчёту в расширении:
+Add the main DCS to a report in an extension:
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/template-add.py" -ObjectName "ОтчётПродажи" -TemplateName "ОсновнаяСхемаКомпоновкиДанных" -TemplateType "DataCompositionSchema" -SrcDir "src/cfe/МоёРасширение/Reports"
 ```
 
-## Маппинг типов
+## Type mapping
 
-Пользователь может указать тип в свободной форме. Определи нужный по контексту:
+The user may specify the type in free form. Determine the needed one from context:
 
-| Пользователь пишет                          | TemplateType        | Расширение | Содержимое              |
+| User writes                                 | TemplateType        | Extension | Content                 |
 |---------------------------------------------|---------------------|------------|-------------------------|
-| HTML                                        | HTMLDocument        | `Template/<lang>.html` | Пустой HTML-документ |
-| Text, текстовый документ, текст             | TextDocument        | `.txt`     | Пустой файл             |
-| SpreadsheetDocument, табличный документ, MXL | SpreadsheetDocument | `.xml`     | Минимальный spreadsheet |
-| BinaryData, двоичные данные                 | BinaryData          | `.bin`     | Пустой файл             |
-| DataCompositionSchema, СКД, схема компоновки | DataCompositionSchema | `.xml`   | Минимальная DCS-схема   |
+| HTML                                        | HTMLDocument        | `Template/<lang>.html` | Empty HTML document |
+| Text, text document, text                   | TextDocument        | `.txt`     | Empty file              |
+| SpreadsheetDocument, spreadsheet document, MXL | SpreadsheetDocument | `.xml`     | Minimal spreadsheet |
+| BinaryData, binary data                     | BinaryData          | `.bin`     | Empty file              |
+| DataCompositionSchema, DCS, composition schema | DataCompositionSchema | `.xml`   | Minimal DCS schema      |
 
-## Конвенция именования
+## Naming convention
 
-Для макетов **печатных форм** (тип SpreadsheetDocument) применяй префикс `ПФ_MXL_`:
+For **print form** templates (SpreadsheetDocument type) use the `ПФ_MXL_` prefix:
 
-| Контекст                                                         | Формат имени               | Пример                  |
+| Context                                                          | Name format                | Example                 |
 |------------------------------------------------------------------|----------------------------|-------------------------|
-| Печатная форма (дополнительная обработка вида ПечатнаяФорма, или пользователь явно говорит «печатная форма») | `ПФ_MXL_<КраткоеИмя>`     | `ПФ_MXL_М11`, `ПФ_MXL_СчётФактура`, `ПФ_MXL_КонвертDL` |
-| Прочие макеты (загрузка данных, служебные, настройки)            | Без префикса               | `МакетЗагрузки`, `НастройкиПечати` |
+| Print form (a supplementary data processor of PrintForm kind, or the user explicitly says "print form") | `ПФ_MXL_<КраткоеИмя>`     | `ПФ_MXL_М11`, `ПФ_MXL_СчётФактура`, `ПФ_MXL_КонвертDL` |
+| Other templates (data loading, service, settings)                | Without prefix             | `МакетЗагрузки`, `НастройкиПечати` |
 
-Если пользователь указал имя макета без префикса, но контекст — печатная форма, **добавь префикс `ПФ_MXL_` автоматически** и сообщи об этом.
+If the user specified a template name without the prefix but the context is a print form, **add the `ПФ_MXL_` prefix automatically** and report it.
 
-## MainDataCompositionSchema (авто)
+## MainDataCompositionSchema (auto)
 
-При добавлении макета типа `DataCompositionSchema` к `ExternalReport` или `Report`:
-- Если `MainDataCompositionSchema` пуст — автоматически заполняется ссылкой на макет
-- Используй `--SetMainSKD` чтобы перезаписать существующее значение
+When adding a template of `DataCompositionSchema` type to `ExternalReport` or `Report`:
+- If `MainDataCompositionSchema` is empty - it is filled automatically with a reference to the template
+- Use `--SetMainSKD` to overwrite the existing value
 
-## Что создаётся
+## What is created
 
 ```
 <SrcDir>/<ObjectName>/Templates/
@@ -85,7 +85,7 @@ python "${CLAUDE_SKILL_DIR}/scripts/template-add.py" -ObjectName "ОтчётПр
         └── Template/<lang>.html    # HTML: содержимое (Template.xml — дескриптор)
 ```
 
-## Что модифицируется
+## What is modified
 
-- `<SrcDir>/<ObjectName>.xml` — добавляется `<Template>` в конец `ChildObjects`
-- Для ExternalReport/Report: может обновляться `MainDataCompositionSchema`
+- `<SrcDir>/<ObjectName>.xml` - a `<Template>` is added to the end of `ChildObjects`
+- For ExternalReport/Report: `MainDataCompositionSchema` may be updated

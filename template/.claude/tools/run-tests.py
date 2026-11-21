@@ -1,59 +1,59 @@
 #!/usr/bin/env python
 """
 run-tests.py
-Кроссплатформенный запуск юнит-тестов 1С: стартует базу в режиме предприятия
-через `1c-batch run-enterprise -C "ВыполнитьЗапускЮнитТестов=<абс. путь к конфигу>"`.
+Cross-platform 1C unit test run: starts the base in enterprise mode
+via `1c-batch run-enterprise -C "ВыполнитьЗапускЮнитТестов=<abs. path to config>"`.
 
-Перед запуском предприятия модули компилируются пакетным конфигуратором
-(`1c-batch check-modules`): ошибка компиляции в предприятии выводится модальным
-окном, из-за которого сеанс висит вечно, а оркестратор ждёт его завершения в фоне
-и не узнаёт об ошибке. Конфигуратор же пишет ошибки в лог и завершается кодом, без
-модальных окон. Проверяются сначала модули расширения с тестами, затем модули
-основной конфигурации: ошибка компиляции в основной конфигурации (модуль,
-загруженный на этапе разработки вне расширения) тоже всплыла бы модальным окном.
-Сама проверка модулей ограничена 600 c на процесс — зависшая проверка убивается по
-дереву и считается ошибкой среды, а не компиляции. Сам прогон предприятия
-запускается с таймаутом — чтобы зависший сеанс не держал задачу бесконечно. Если
-сеанс завершился по таймауту, скрипт дополнительно проверяет модули основной
-конфигурации: причиной зависания мог стать модуль, изменённый после предпроверки.
+Before starting the enterprise, the modules are compiled by the batch Configurator
+(`1c-batch check-modules`): a compilation error in the enterprise is shown in a modal
+window, which makes the session hang forever while the orchestrator waits for it in the background
+and never learns about the error. The Configurator writes errors to the log and exits with a code, without
+modal windows. The extension modules with tests are checked first, then the modules of the
+main configuration: a compilation error in the main configuration (a module
+loaded during development outside the extension) would also pop up as a modal window.
+The module check itself is limited to 600 c per process - a hanging check is killed by
+tree and counts as an environment error, not a compilation error. The enterprise run itself
+is started with a timeout - so a hanging session does not hold the task forever. If
+the session ended by timeout, the script additionally checks the main configuration
+modules: the hang could be caused by a module changed after the pre-check.
 
-Использование:
-    python .claude/tools/run-tests.py [КОНФИГ] [--extension ИМЯ]
-                                      [--timeout СЕК] [--no-check]
+Usage:
+    python .claude/tools/run-tests.py [CONFIG] [--extension NAME]
+                                      [--timeout SEC] [--no-check]
                                       [--no-check-main] [--no-cache]
-                                      [--test СЦЕНАРИИ]
+                                      [--test SCENARIOS]
 
-КОНФИГ         путь к JSON-файлу конфигурации тестов (по умолчанию configs/test.json),
-              передаётся в конфигурацию как абсолютный путь.
-Результат      после прогона копируется в result.<n>.json рядом с result.json —
-              история прогонов не теряется при повторных смоуках и --test.
---extension   имя расширения с тестами для компиляции (по умолчанию ЮнитТесты).
---timeout     таймаут сеанса предприятия в секундах (по умолчанию 600).
-              Для отладочного прогона (--test) задавайте короткий таймаут явно,
-              например `--timeout 60` — значение определяет вызывающий.
---no-check    пропустить предварительную компиляцию модулей (расширения и
-              основной конфигурации).
---no-check-main пропустить только проверку модулей основной конфигурации;
-              расширение с тестами проверяется.
---no-cache    не использовать кэш успешной проверки модулей (по хэшу исходников).
---test        имена сценариев через запятую для отладочного прогона
-              (например, `--test СебестоимостьФИФО,ПроверкаСклада`);
-              остальные сценарии модуля не выполняются.
+CONFIG         path to the test configuration JSON file (default configs/test.json),
+              passed to the configuration as an absolute path.
+Result         after the run is copied to result.<n>.json next to result.json -
+              run history is not lost on repeated smoke runs and --test.
+--extension   name of the extension with tests for compilation (default ЮнитТесты).
+--timeout     enterprise session timeout in seconds (default 600).
+              For a debug run (--test) set a short timeout explicitly,
+              e.g. `--timeout 60` - the value is decided by the caller.
+--no-check    skip preliminary module compilation (extension and
+              main configuration).
+--no-check-main skip only the main configuration module check;
+              the extension with tests is checked.
+--no-cache    do not use the successful module check cache (by source hash).
+--test        comma-separated scenario names for a debug run
+              (e.g. `--test СебестоимостьФИФО,ПроверкаСклада`);
+              the rest of the module's scenarios are not executed.
 
-Коды возврата:
-    0    штатное завершение
-    1    ошибка запуска
-    2    ошибка компиляции модулей расширения или основной конфигурации
-         (в т.ч. до запуска предприятия; после таймаута — ошибка найдена
-         в основной конфигурации)
-    3    среда/лицензия/таймаут проверки модулей (проверка не уложилась
-         в 600 c, дерево процессов убито) — это НЕ ошибка компиляции;
-         так же при диагностике после таймаута сеанса: среда/лицензия или
-         таймаут самой диагностической проверки
-    4    прогон состоялся, но есть проваленные тесты (result.json свежий)
-    5    result.json не найден, невалиден или список тестов пуст
-    124  таймаут сеанса предприятия без ошибки компиляции и без проблемы
-         среды в диагностике
+Return codes:
+    0    normal completion
+    1    launch error
+    2    compilation error in extension or main configuration modules
+         (including before the enterprise start; after a timeout - the error is found
+         in the main configuration)
+    3    environment/license/module check timeout (the check did not fit
+         in 600 c, the process tree was killed) - this is NOT a compilation error;
+         likewise for diagnostics after a session timeout: environment/license or
+         timeout of the diagnostic check itself
+    4    the run happened but there are failed tests (result.json is fresh)
+    5    result.json not found, invalid or the test list is empty
+    124  enterprise session timeout without a compilation error and without an
+         environment problem in diagnostics
 """
 
 import argparse
@@ -67,15 +67,15 @@ import subprocess
 import sys
 from pathlib import Path
 
-# Имя параметра запуска, который конфигурация обрабатывает в /C
+# Name of the launch parameter the configuration handles in /C
 LAUNCH_PARAM = "ВыполнитьЗапускЮнитТестов"
 DEFAULT_CONFIG = "configs/test.json"
 DEFAULT_EXTENSION = "ЮнитТесты"
 DEFAULT_TIMEOUT = 600
-# Жёсткий таймаут проверки модулей: зависшая проверка не должна держать задачу.
+# Hard timeout of the module check: a hanging check must not hold the task.
 CHECK_MODULES_TIMEOUT = 600
 
-# Коды возврата
+# Return codes
 RC_OK = 0
 RC_LAUNCH_ERROR = 1
 RC_COMPILE_ERROR = 2
@@ -83,27 +83,27 @@ RC_ENV_ERROR = 3
 RC_TIMEOUT = 124
 RC_TESTS_FAILED = 4
 RC_NO_RESULT = 5
-# Внутренний код check_modules: проверка не уложилась в CHECK_MODULES_TIMEOUT.
-# Наружу отдаётся как RC_ENV_ERROR; отдельный код нужен, чтобы диагностика
-# таймаута отличала таймаут самой проверки от ошибки среды (лицензия и т.п.).
+# Internal check_modules code: the check did not fit in CHECK_MODULES_TIMEOUT.
+# Returned to the outside as RC_ENV_ERROR; a separate code is needed so that timeout
+# diagnostics can tell the check's own timeout from an environment error (license etc.).
 RC_CHECK_TIMEOUT = -1
 
 RESULT_DONE_KEY = "Выполнено"
 RESULT_ERROR_KEY = "ОписаниеОшибки"
 RESULT_TESTS_KEY = "РезультатТестов"
 
-# Маркеры ошибки компиляции в выводе конфигуратора (/CheckModules). Нужны на случай,
-# если конфигуратор отчитался успехом, но написал ошибку в лог; при обычной ошибке
-# он и так возвращает ненулевой код.
+# Compilation error markers in the Configurator output (/CheckModules). Needed in case
+# the Configurator reports success but wrote an error to the log; on a normal error
+# it returns a non-zero code anyway.
 COMPILE_ERROR_MARKERS = (
     "ОшибкаКомпиляцииВстроенногоЯзыка",
     "Ошибка компиляции модуля",
     "Процедура или функция с указанным именем уже определена",
 )
 
-# Маркеры того, что проблема не в коде, а в среде: нет бинарника платформы,
-# не подхватилась лицензия, нет доступа к базе/файлам. Такой rc нельзя отдавать
-# агенту как «ошибка компиляции» — он пойдёт править рабочий код.
+# Markers that the problem is not in the code but in the environment: no platform binary,
+# license not picked up, no access to the base/files. Such rc must not be given
+# to the agent as a "compilation error" - it would go and change working code.
 ENV_ERROR_MARKERS = (
     "Traceback (most recent call last)",
     "No such file or directory",
@@ -122,10 +122,10 @@ ENV_ERROR_MARKERS = (
 
 
 def _force_utf8_output() -> None:
-    """Перевести stdout/stderr скрипта в UTF-8.
+    """Switch the script's stdout/stderr to UTF-8.
 
-    При перенаправлении вывода в файл (оркестратор пишет лог прогона) Python на
-    Windows берёт ANSI-кодировку локали (cp1251), в которой нет эмодзи из print().
+    When output is redirected to a file (the orchestrator writes the run log), Python on
+    Windows uses the ANSI locale encoding (cp1251), which lacks emoji from print().
     """
     for stream in (sys.stdout, sys.stderr):
         try:
@@ -135,10 +135,10 @@ def _force_utf8_output() -> None:
 
 
 def _child_env() -> dict:
-    """Окружение для дочернего 1c-batch: вывод конфигуратора в UTF-8.
+    """Environment for the child 1c-batch: Configurator output in UTF-8.
 
-    Без этого на Windows вывод (и лог) конфигуратора приходит в cp1251 и
-    нечитаем при захвате через capture_output.
+    Without this, on Windows the Configurator output (and log) comes in cp1251 and is
+    unreadable when captured via capture_output.
     """
     env = dict(os.environ)
     env["PYTHONIOENCODING"] = "utf-8"
@@ -147,25 +147,25 @@ def _child_env() -> dict:
 
 
 def get_project_root() -> Path:
-    """Корень проекта (на два уровня выше .claude/tools)."""
+    """Project root (two levels above .claude/tools)."""
     return Path(__file__).resolve().parent.parent.parent
 
 
 def batch_cmd() -> list[str]:
-    """Префикс команды: локальная (проектная) копия 1c-batch через wrapper."""
+    """Command prefix: local (project) copy of 1c-batch via wrapper."""
     wrapper = get_project_root() / ".claude/skills/1c-batch/scripts/1c-batch.py"
     return [sys.executable, str(wrapper)]
 
 
 def _check_source_dir(project_root: Path, extension: str | None) -> Path:
-    """Каталог, который проверяет check-modules: src/cf или src/cfe/<ext>."""
+    """Directory checked by check-modules: src/cf or src/cfe/<ext>."""
     if extension:
         return project_root / "src" / "cfe" / extension
     return project_root / "src" / "cf"
 
 
 def _tree_hash(root: Path) -> str | None:
-    """Хэш исходников проверки; None — каталога нет (кэш не используем)."""
+    """Hash of the check sources; None - no directory (cache is not used)."""
     if not root.is_dir():
         return None
     digest = hashlib.sha256()
@@ -226,20 +226,20 @@ def _cache_store(project_root: Path, extension: str | None,
 def check_modules(project_root: Path, extension: str | None = None,
                   title: str = "Предварительная компиляция модулей",
                   use_cache: bool = True) -> int:
-    """Проверка модулей пакетным конфигуратором (/CheckModules).
+    """Module check by the batch Configurator (/CheckModules).
 
-    Если extension задано, проверяются модули только этого расширения
-    (`-Extension ИМЯ`), иначе — модули основной конфигурации.
+    If extension is given, only the modules of that extension are checked
+    (`-Extension NAME`), otherwise - the main configuration modules.
 
-    Возвращает RC_OK при успехе и RC_COMPILE_ERROR при ошибке компиляции
-    (ненулевой код конфигуратора или маркер ошибки в выводе). Конфигуратор пишет
-    ошибки в лог и завершается — без модальных окон, которые вешают предприятие.
-    Проблемы среды (лицензия, база) — RC_ENV_ERROR.
+    Returns RC_OK on success and RC_COMPILE_ERROR on a compilation error
+    (non-zero Configurator code or an error marker in the output). The Configurator writes
+    errors to the log and exits - without modal windows that hang the enterprise.
+    Environment problems (license, base) - RC_ENV_ERROR.
 
-    Вся проверка ограничена CHECK_MODULES_TIMEOUT секундами: по истечении таймаута
-    дерево процессов проверки убивается (как у run_enterprise) и возвращается
-    RC_ENV_ERROR — это проблема среды, а не компиляции. Код именно таймаута
-    получают через _check_modules_raw (нужен diagnose_timeout).
+    The whole check is limited to CHECK_MODULES_TIMEOUT seconds: after the timeout
+    the check process tree is killed (as in run_enterprise) and
+    RC_ENV_ERROR is returned - this is an environment problem, not compilation. The exact
+    timeout code is obtained via _check_modules_raw (needed by diagnose_timeout).
     """
     source = _check_source_dir(project_root, extension)
     source_hash = _tree_hash(source) if use_cache else None
@@ -256,7 +256,7 @@ def check_modules(project_root: Path, extension: str | None = None,
 
 def _check_modules_raw(project_root: Path, extension: str | None = None,
                        title: str = "Предварительная компиляция модулей") -> int:
-    """check_modules без перевода таймаута: возвращает RC_CHECK_TIMEOUT."""
+    """check_modules without timeout translation: returns RC_CHECK_TIMEOUT."""
     cmd = batch_cmd() + ["check-modules", "--thin-client", "--server"]
     if extension:
         cmd += ["--extension", extension]
@@ -275,7 +275,7 @@ def _check_modules_raw(project_root: Path, extension: str | None = None,
         "errors": "replace",
     }
     if os.name == "nt":
-        # Своя группа процессов — чтобы убивать только своё дерево.
+        # Own process group - to kill only our own tree.
         popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
     else:
         popen_kwargs["start_new_session"] = True
@@ -291,8 +291,8 @@ def _check_modules_raw(project_root: Path, extension: str | None = None,
         stdout, stderr = proc.communicate(timeout=CHECK_MODULES_TIMEOUT)
     except subprocess.TimeoutExpired as exc:
         print()
-        # Вывод до зависания — единственная зацепка, что за проблема среды.
-        # После SIGKILL communicate может отдать None вместо строк.
+        # Output before the hang is the only clue about the environment problem.
+        # After SIGKILL communicate may return None instead of strings.
         partial = ((exc.output or "") + (exc.stderr or ""))
         if isinstance(partial, bytes):
             partial = partial.decode("utf-8", errors="replace")
@@ -316,8 +316,8 @@ def _check_modules_raw(project_root: Path, extension: str | None = None,
     compile_markers = [m for m in COMPILE_ERROR_MARKERS if m in output]
     env_markers = [m for m in ENV_ERROR_MARKERS if m in output]
     if returncode != 0 or compile_markers:
-        # Ошибка компиляции важнее env-маркеров: конфигуратор мог написать и то,
-        # и другое, но чинить надо код.
+        # Compilation error is more important than env markers: the Configurator could write
+        # both, but the code must be fixed.
         if not compile_markers and env_markers:
             print(f"❌ Не удалось запустить проверку модулей "
                   f"(код {returncode}): проблема среды/лицензии.")
@@ -334,12 +334,12 @@ def _check_modules_raw(project_root: Path, extension: str | None = None,
 
 
 def _kill_tree(proc: subprocess.Popen) -> None:
-    """Принудительно завершить дерево процессов запущенного сеанса — и обёртку
-    1c-batch, и порождённый ею 1cv8.
+    """Forcefully terminate the process tree of the started session - both the 1c-batch
+    wrapper and the 1cv8 it spawned.
 
-    Трогаем только своё дерево: чужие сеансы 1С (другие базы, конфигуратор
-    пользователя) не затрагиваются. На Windows — taskkill /T по PID обёртки,
-    на POSIX — SIGKILL по группе процессов (сеанс создан через start_new_session).
+    We touch only our own tree: other 1C sessions (other bases, the user's
+    Configurator) are not affected. On Windows - taskkill /T by the wrapper PID,
+    on POSIX - SIGKILL by process group (the session is created via start_new_session).
     """
     if os.name == "nt":
         subprocess.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)],
@@ -356,10 +356,10 @@ def _kill_tree(proc: subprocess.Popen) -> None:
 
 
 def run_enterprise(project_root: Path, c_value: str, timeout: int) -> int:
-    """Запусти предприятие с параметром /C для прогона тестов, с таймаутом.
+    """Run the enterprise with the /C parameter for the test run, with a timeout.
 
-    Предприятие запускается через Popen в отдельной группе процессов; по истечении
-    таймаута дерево процессов убивается, возвращается RC_TIMEOUT.
+    The enterprise is started via Popen in a separate process group; after the
+    timeout the process tree is killed, RC_TIMEOUT is returned.
     """
     cmd = batch_cmd() + ["run-enterprise", "--wait", "-C", c_value]
 
@@ -369,7 +369,7 @@ def run_enterprise(project_root: Path, c_value: str, timeout: int) -> int:
 
     popen_kwargs: dict = {"cwd": project_root, "env": _child_env()}
     if os.name == "nt":
-        # Своя группа процессов — чтобы убивать только своё дерево.
+        # Own process group - to kill only our own tree.
         popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
     else:
         popen_kwargs["start_new_session"] = True
@@ -399,14 +399,14 @@ def run_enterprise(project_root: Path, c_value: str, timeout: int) -> int:
 
 
 def diagnose_timeout(project_root: Path) -> int:
-    """Проверить модули основной конфигурации после таймаута сеанса.
+    """Check the main configuration modules after a session timeout.
 
-    Сеанс мог зависнуть на модальном окне ошибки компиляции модуля, который
-    загружен в базу на этапе разработки и не входит в расширение с тестами
-    (модули расширения проверяет предварительная компиляция). Если ошибка
-    найдена, возвращает RC_COMPILE_ERROR — это причина таймаута. Если сама
-    проверка не уложилась в таймаут или не запустилась из-за среды/лицензии —
-    RC_ENV_ERROR: это проблема среды, а не зависший код. Иначе оставляет
+    The session could hang on a modal compilation error window for a module that
+    was loaded into the base during development and is not part of the test extension
+    (extension modules are checked by preliminary compilation). If the error is
+    found, returns RC_COMPILE_ERROR - this is the cause of the timeout. If the check
+    itself did not fit the timeout or did not start due to environment/license -
+    RC_ENV_ERROR: this is an environment problem, not hanging code. Otherwise leaves
     RC_TIMEOUT.
     """
     print()
@@ -425,8 +425,8 @@ def diagnose_timeout(project_root: Path) -> int:
         return RC_COMPILE_ERROR
 
     if rc in (RC_CHECK_TIMEOUT, RC_ENV_ERROR):
-        # Не выдаём проблему диагностики (таймаут проверки или среда/лицензия)
-        # за таймаут сеанса: причину ищут в среде, код править не надо.
+        # Do not pass off a diagnostic problem (check timeout or environment/license)
+        # as a session timeout: the cause is sought in the environment, no code fix is needed.
         what = ("Диагностика не уложилась в таймаут проверки модулей"
                 if rc == RC_CHECK_TIMEOUT
                 else "Диагностику провести не удалось (ошибка среды/лицензии)")
@@ -443,12 +443,12 @@ def diagnose_timeout(project_root: Path) -> int:
 
 def make_effective_config(project_root: Path, config_path: Path,
                           scenarios: str | None) -> Path | None:
-    """Создать временный конфиг с отбором сценариев для отладочного прогона.
+    """Create a temporary config with scenario selection for a debug run.
 
-    Временный конфиг пишется в каталог logs проекта (он не попадает в git) и
-    отличается от исходного только полем "Сценарии" — имена через запятую.
-    Возвращает путь к конфигу для запуска; None — если исходный конфиг не
-    удалось прочитать.
+    The temporary config is written to the project logs directory (it does not go to git) and
+    differs from the original only in the "Сценарии" field - comma-separated names.
+    Returns the config path for launch; None - if the original config could not
+    be read.
     """
     if not scenarios:
         return config_path
@@ -481,7 +481,7 @@ def make_effective_config(project_root: Path, config_path: Path,
 
 
 def _result_log_path(project_root: Path, config_path: Path) -> Path | None:
-    """Путь к result.json из конфига тестов (поле ИмяФайлаЛог)."""
+    """Path to result.json from the test config (field ИмяФайлаЛог)."""
     try:
         data = json.loads(config_path.read_text(encoding="utf-8-sig"))
     except (OSError, ValueError) as err:
@@ -497,7 +497,7 @@ def _result_log_path(project_root: Path, config_path: Path) -> Path | None:
 
 
 def _reset_result_log(path: Path | None) -> None:
-    """Удалить прошлый результат: после прогона файл может быть только свежим."""
+    """Delete the previous result: after the run the file may only be fresh."""
     if path is None:
         print("⚠️  В конфиге не задан ИмяФайлаЛог — результат после прогона не прочитать.")
         return
@@ -512,7 +512,7 @@ def _reset_result_log(path: Path | None) -> None:
 
 
 def _snapshot_result(path: Path | None) -> None:
-    """Сохранить копию result.json как result.<n>.json — история прогонов."""
+    """Save a copy of result.json as result.<n>.json - run history."""
     if path is None or not path.is_file():
         return
     numbers = []
@@ -530,7 +530,7 @@ def _snapshot_result(path: Path | None) -> None:
 
 
 def _read_and_print_result(path: Path | None) -> int:
-    """Прочитать result.json, напечатать сводку и вернуть 0/4/5."""
+    """Read result.json, print the summary and return 0/4/5."""
     if path is None:
         print("❌ В конфиге тестов не задан ИмяФайлаЛог — результат некуда прочитать.")
         return RC_NO_RESULT
@@ -579,17 +579,17 @@ def _read_and_print_result(path: Path | None) -> int:
 def run_tests(config_arg: str, extension: str, timeout: int, no_check: bool,
               scenarios: str | None = None, no_check_main: bool = False,
               no_cache: bool = False) -> int:
-    """Скомпилируй модули и запусти предприятие для прогона тестов."""
+    """Compile the modules and run the enterprise for the test run."""
     project_root = get_project_root()
 
-    # Абсолютный путь к конфигу тестов
+    # Absolute path to the test config
     config_path = Path(config_arg)
     if not config_path.is_absolute():
         config_path = (project_root / config_path).resolve()
     else:
         config_path = config_path.resolve()
 
-    # Проверки файла
+    # File checks
     if not config_path.exists():
         print(f"❌ Файл конфигурации тестов не найден: {config_path}", file=sys.stderr)
         return RC_LAUNCH_ERROR
@@ -608,7 +608,7 @@ def run_tests(config_arg: str, extension: str, timeout: int, no_check: bool,
     print(f"   Конфиг: {effective_config}")
     print()
 
-    # Предварительная компиляция — чтобы ошибка не всплыла модальным окном в предприятии.
+    # Preliminary compilation - so the error does not pop up as a modal window in the enterprise.
     if not no_check:
         rc = check_modules(project_root, extension, use_cache=not no_cache)
         if rc != RC_OK:

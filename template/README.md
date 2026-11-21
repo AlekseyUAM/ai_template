@@ -1,45 +1,45 @@
-# template/ — шаблон разворачиваемого окружения
+# template/ - deployable environment template
 
-Здесь хранится содержимое окружения Claude-агентов, которое разворачивается в `.claude/` проекта:
+This holds the content of the Claude agent environment that is deployed into the project's `.claude/`:
 
-- `checklists/` — чеклисты этапов задачи (analyst, architect, developer-tests, developer,
-  reviewer, technical-writer). Это не субагенты: задача выполняется одним потоком,
-  чеклист читается и проходится исполнителем. Этап `testing` отдельного чеклиста не
-  имеет — его ведёт исполнитель по правилу `single-agent-workflow`.
-- `skills/` — навыки агентов (каждый в отдельном подкаталоге со своим `SKILL.md`)
-- `rules/` — правила работы; основное — `single-agent-workflow.md` (этапы, git,
-  загрузка в ИБ, тесты, циклы)
-- `hooks/` — хуки:
-  - `bsl_nudge.py` — подсказки при редактировании BSL;
-  - `route_to_checklists.py` — UserPromptSubmit-хук: включает single-agent режим и
-    перечисляет enabled-этапы задачи как чеклисты (с учётом `TASK_STAGE`);
-  - `code_index_guard.py` — PreToolUse-хук: перенаправляет нативные
-    Read/Grep/Glob/Bash/PowerShell по индексированным каталогам в инструменты
-    `code_index`. Конфиг `code-index-guard.toml` генерируется при развёртывании
-    окружения; без него хук инертен. `max_denies` (по умолчанию 2) ограничивает
-    число отказов подряд для одного вызова — после исчерпания нативный вызов
-    разрешается, чтобы локальная модель не зациклилась. Откат — удалить блок
-    `PreToolUse` из `.claude/settings.json`; обновление окружения впишет его
-    заново, для постоянного отключения уберите MCP code-index из проекта.
-- `tools/` — вспомогательные инструменты (например, `task_status.py`)
-- `CLAUDE.md` — краткий протокол single-agent режима (разворачивается в корень проекта)
-- `settings.local.json.example` — пример локального профиля LLM (лимиты контекста,
-  deny на Agent/Task, `claudeMdExcludes`). Скопируйте в `.claude/settings.local.json`
-  и подставьте адрес/токен/модель; файл не входит в git.
+- `checklists/` - task stage checklists (analyst, architect, developer-tests, developer,
+  reviewer, technical-writer). These are not subagents: the task runs in a single thread,
+  the checklist is read and worked through by the executor. The `testing` stage has no
+  separate checklist - the executor runs it per the `single-agent-workflow` rule.
+- `skills/` - agent skills (each in its own subdirectory with its own `SKILL.md`)
+- `rules/` - working rules; the main one is `single-agent-workflow.md` (stages, git,
+  infobase load, tests, cycles)
+- `hooks/` - hooks:
+  - `bsl_nudge.py` - hints when editing BSL;
+  - `route_to_checklists.py` - UserPromptSubmit hook: enables single-agent mode and
+    lists the task's enabled stages as checklists (respecting `TASK_STAGE`);
+  - `code_index_guard.py` - PreToolUse hook: redirects native
+    Read/Grep/Glob/Bash/PowerShell on indexed directories to the `code_index` tools.
+    The `code-index-guard.toml` config is generated during environment deployment;
+    without it the hook is inert. `max_denies` (default 2) limits
+    the number of consecutive denials for a single call - after they run out the native call
+    is allowed so the local model does not loop. Rollback - delete the `PreToolUse` block
+    from `.claude/settings.json`; an environment update will write it back,
+    for a permanent disable remove the code-index MCP from the project.
+- `tools/` - helper tools (for example, `task_status.py`)
+- `CLAUDE.md` - brief single-agent mode protocol (deployed to the project root)
+- `settings.local.json.example` - example local LLM profile (context limits,
+  deny on Agent/Task, `claudeMdExcludes`). Copy it to `.claude/settings.local.json`
+  and fill in the address/token/model; the file is not tracked by git.
 
-Развёртывание выполняется функцией `content.deploy_content` из пакета `agentmon.env`.
-Все правки содержимого окружения вносятся здесь — в одном очевидном месте.
+Deployment is performed by the `content.deploy_content` function from the `agentmon.env` package.
+All environment content edits are made here - in one obvious place.
 
-## Миграция старого проекта (agents → checklists)
+## Migrating an old project (agents -> checklists)
 
-Начиная с версии `1.1.0` шаблон использует single-agent режим: вместо
-`.claude/agents/` разворачиваются `.claude/checklists/`, а навык
-`task-orchestration` удалён. Обновление окружения не удаляет устаревшие файлы,
-поэтому в старом проекте один раз вручную удалите:
+Since version `1.1.0` the template uses single-agent mode: instead of
+`.claude/agents/`, `.claude/checklists/` is deployed, and the
+`task-orchestration` skill is removed. An environment update does not delete obsolete files,
+so in an old project remove them manually once:
 
-- `.claude/agents/` (или перенесите свои правки в `.claude/checklists/`);
+- `.claude/agents/` (or move your edits to `.claude/checklists/`);
 - `.claude/skills/task-orchestration/`;
 - `.claude/hooks/route_to_orchestrator.py`.
 
-После этого обновите окружение из AgentMon — появится `CLAUDE.md`,
-`checklists/` и новый хук `route_to_checklists.py`.
+After that update the environment from AgentMon - `CLAUDE.md`,
+`checklists/` and the new `route_to_checklists.py` hook will appear.

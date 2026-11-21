@@ -1,15 +1,15 @@
 #!/usr/bin/env python
-"""Подъём изолированного .venv проекта с зависимостями навыков (кроссплатформенно).
+"""Bring up an isolated project .venv with skill dependencies (cross-platform).
 
-Одна команда:  python setup-venv.py            (рантайм-зависимости)
-               python setup-venv.py --dev      (+ инструменты для юнит-тестов)
+One command:  python setup-venv.py            (runtime dependencies)
+              python setup-venv.py --dev      (+ tools for unit tests)
 
-При развёртывании окружения .venv создаётся автоматически. Этот скрипт нужен на
-свежем клоне (где .venv в .gitignore и отсутствует) либо чтобы доустановить
-зависимости после правок requirements.txt. Идемпотентен: существующий .venv
-переиспользуется, pip install обновляет недостающее.
+During environment deployment .venv is created automatically. This script is needed on
+a fresh clone (where .venv is in .gitignore and absent) or to install
+dependencies after requirements.txt changes. Idempotent: an existing .venv
+is reused, pip install updates what is missing.
 
-Запускается системным python — сам не зависит от пакетов окружения.
+Runs with the system python - it does not depend on environment packages.
 """
 from __future__ import annotations
 

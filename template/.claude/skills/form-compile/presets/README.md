@@ -1,50 +1,50 @@
 # Form Presets
 
-Пресеты управляют раскладкой форм, генерируемых в режиме `--from-object`.
+Presets control the layout of forms generated in `--from-object` mode.
 
-## Как работает
+## How it works
 
-Цепочка merge (каждый следующий уровень перезаписывает предыдущий через deep merge):
+The merge chain (each next level overrides the previous one via deep merge):
 
-1. **Hardcoded defaults** -- встроены в скрипт, ориентированы на ERP
-2. **Built-in preset** -- файл из этой папки (`erp-standard.json` по умолчанию)
-3. **Project-level preset** -- файл `presets/skills/form/<name>.json`, поиск вверх от OutputPath
+1. **Hardcoded defaults** -- built into the script, ERP-oriented
+2. **Built-in preset** -- a file from this folder (`erp-standard.json` by default)
+3. **Project-level preset** -- the file `presets/skills/form/<name>.json`, searched upwards from OutputPath
 
-Имя пресета задаётся параметром `--preset` (по умолчанию `erp-standard`).
+The preset name is set by the `--preset` parameter (default `erp-standard`).
 
-## Project-level пресет
+## Project-level preset
 
-Чтобы переопределить стандартный пресет в своём проекте, создайте файл:
+To override the standard preset in your project, create the file:
 
 ```
 <project-root>/presets/skills/form/erp-standard.json
 ```
 
-Скрипт ищет этот файл, поднимаясь от OutputPath к корню. Первый найденный файл применяется поверх built-in через deep merge -- не нужно копировать весь пресет, достаточно указать только переопределяемые ключи.
+The script searches for this file going up from OutputPath to the root. The first file found is applied on top of the built-in one via deep merge -- you do not need to copy the whole preset, just specify the keys to override.
 
-## Секции
+## Sections
 
-Ключи верхнего уровня в JSON -- секции вида `{тип}.{назначение}`:
+The top-level keys in JSON are sections of the form `{тип}.{назначение}`:
 
-| Секция | Тип объекта | Назначение формы |
+| Section | Object type | Form purpose |
 |--------|-------------|------------------|
-| `document.item` | Document | Форма документа |
-| `document.list` | Document | Форма списка |
-| `document.choice` | Document | Форма выбора |
-| `catalog.item` | Catalog | Форма элемента |
-| `catalog.folder` | Catalog | Форма группы |
-| `catalog.list` | Catalog | Форма списка |
-| `catalog.choice` | Catalog | Форма выбора |
-| `informationRegister.record` | InformationRegister | Форма записи |
-| `informationRegister.list` | InformationRegister | Форма списка |
-| `accumulationRegister.list` | AccumulationRegister | Форма списка |
+| `document.item` | Document | Document form |
+| `document.list` | Document | List form |
+| `document.choice` | Document | Choice form |
+| `catalog.item` | Catalog | Item form |
+| `catalog.folder` | Catalog | Folder form |
+| `catalog.list` | Catalog | List form |
+| `catalog.choice` | Catalog | Choice form |
+| `informationRegister.record` | InformationRegister | Record form |
+| `informationRegister.list` | InformationRegister | List form |
+| `accumulationRegister.list` | AccumulationRegister | List form |
 | `chartOfCharacteristicTypes.*` | ChartOfCharacteristicTypes | item/folder/list/choice |
 | `exchangePlan.*` | ExchangePlan | item/list/choice |
 | `chartOfAccounts.*` | ChartOfAccounts | item/folder/list/choice |
 
 ### basedOn
 
-Секция может наследовать от другой:
+A section can inherit from another:
 
 ```json
 {
@@ -55,48 +55,48 @@
 }
 ```
 
-## Ключи секций
+## Section keys
 
-### Форма объекта (Item/Record)
+### Object form (Item/Record)
 
-| Ключ | Описание | Допустимые значения |
+| Key | Description | Allowed values |
 |------|----------|---------------------|
-| `header.position` | Где размещать шапку | `"insidePage"` -- на первой странице, `"abovePages"` -- над страницами |
-| `header.layout` | Колонки шапки | `"1col"`, `"2col"` |
-| `header.distribute` | Распределение в 2 колонках | `"even"`, `"left"`, `"right"` |
-| `header.dateTitle` | Заголовок даты (Document) | строка, напр. `"от"` |
-| `footer.fields` | Поля в подвале | массив имён реквизитов, напр. `["Комментарий"]` |
-| `footer.position` | Где размещать подвал | `"insidePage"`, `"belowPages"`, `"none"` |
-| `tabularSections.container` | Контейнер табчастей | `"pages"` -- на вкладках, `"inline"` -- в корне, `"single-no-pages"` -- одна ТЧ без страниц |
-| `tabularSections.exclude` | Исключить табчасти | массив имён, напр. `["ДополнительныеРеквизиты"]` |
-| `tabularSections.lineNumber` | Колонка НомерСтроки | `true` / `false` |
-| `additional.position` | Блок доп. реквизитов | `"page"` -- отдельная вкладка, `"below"` -- под табчастями, `"none"` -- не создавать |
-| `additional.layout` | Колонки доп. блока | `"1col"`, `"2col"` |
-| `additional.bspGroup` | Группа ДополнительныеРеквизиты | `true` / `false` |
-| `codeDescription.layout` | Код + Наименование | `"horizontal"`, `"vertical"` |
-| `codeDescription.order` | Порядок Код/Наименование | `"descriptionFirst"`, `"codeFirst"` |
-| `parent.title` | Заголовок поля Родитель | строка, напр. `"Входит в группу"` |
-| `parent.position` | Позиция поля Родитель | `"beforeCodeDescription"`, `"afterCodeDescription"`, `"inHeader"` |
-| `owner.readOnly` | Владелец только для чтения | `true` / `false` |
-| `owner.position` | Позиция поля Владелец | `"first"` |
-| `fieldDefaults.ref.choiceButton` | Кнопка выбора для ссылок | `true` / `false` |
-| `fieldDefaults.boolean.element` | Элемент для Boolean | `"check"` (флажок) |
-| `commandBar` | Командная панель формы | `"auto"`, `"none"` |
-| `properties` | Свойства формы | объект: `autoTitle`, `windowOpeningMode` и др. |
+| `header.position` | Where to place the header | `"insidePage"` -- on the first page, `"abovePages"` -- above the pages |
+| `header.layout` | Header columns | `"1col"`, `"2col"` |
+| `header.distribute` | Distribution in 2 columns | `"even"`, `"left"`, `"right"` |
+| `header.dateTitle` | Date title (Document) | string, e.g. `"от"` |
+| `footer.fields` | Fields in the footer | array of attribute names, e.g. `["Комментарий"]` |
+| `footer.position` | Where to place the footer | `"insidePage"`, `"belowPages"`, `"none"` |
+| `tabularSections.container` | Tabular section container | `"pages"` -- on tabs, `"inline"` -- at the root, `"single-no-pages"` -- one tabular section without pages |
+| `tabularSections.exclude` | Exclude tabular sections | array of names, e.g. `["ДополнительныеРеквизиты"]` |
+| `tabularSections.lineNumber` | LineNumber column | `true` / `false` |
+| `additional.position` | Additional attributes block | `"page"` -- a separate tab, `"below"` -- below the tabular sections, `"none"` -- do not create |
+| `additional.layout` | Additional block columns | `"1col"`, `"2col"` |
+| `additional.bspGroup` | Group ДополнительныеРеквизиты | `true` / `false` |
+| `codeDescription.layout` | Code + Description | `"horizontal"`, `"vertical"` |
+| `codeDescription.order` | Code/Description order | `"descriptionFirst"`, `"codeFirst"` |
+| `parent.title` | Родитель field title | string, e.g. `"Входит в группу"` |
+| `parent.position` | Родитель field position | `"beforeCodeDescription"`, `"afterCodeDescription"`, `"inHeader"` |
+| `owner.readOnly` | Owner read-only | `true` / `false` |
+| `owner.position` | Владелец field position | `"first"` |
+| `fieldDefaults.ref.choiceButton` | Choice button for references | `true` / `false` |
+| `fieldDefaults.boolean.element` | Element for Boolean | `"check"` (checkbox) |
+| `commandBar` | Form command bar | `"auto"`, `"none"` |
+| `properties` | Form properties | object: `autoTitle`, `windowOpeningMode` and others |
 
-### Форма списка (List/Choice)
+### List form (List/Choice)
 
-| Ключ | Описание | Допустимые значения |
+| Key | Description | Allowed values |
 |------|----------|---------------------|
-| `columns` | Какие колонки показывать | `"all"` -- все реквизиты, или массив имён |
-| `columnType` | Тип элемента колонки | `"labelField"`, `"input"` |
-| `hiddenRef` | Скрытая колонка Ref | `true` / `false` |
-| `tableCommandBar` | Командная панель таблицы | `"auto"`, `"none"` |
-| `commandBar` | Командная панель формы | `"auto"`, `"none"` |
-| `choiceMode` | Режим выбора (ChoiceForm) | `true` / `false` |
-| `properties` | Свойства формы | объект: `windowOpeningMode` и др. |
+| `columns` | Which columns to show | `"all"` -- all attributes, or an array of names |
+| `columnType` | Column element type | `"labelField"`, `"input"` |
+| `hiddenRef` | Hidden Ref column | `true` / `false` |
+| `tableCommandBar` | Table command bar | `"auto"`, `"none"` |
+| `commandBar` | Form command bar | `"auto"`, `"none"` |
+| `choiceMode` | Choice mode (ChoiceForm) | `true` / `false` |
+| `properties` | Form properties | object: `windowOpeningMode` and others |
 
-## Пример project-level пресета
+## Example of a project-level preset
 
 ```json
 {
@@ -123,4 +123,4 @@
 }
 ```
 
-Этот файл переопределяет только указанные ключи -- остальное наследуется из built-in пресета.
+This file overrides only the specified keys -- the rest is inherited from the built-in preset.

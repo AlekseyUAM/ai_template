@@ -1,6 +1,6 @@
 ---
 name: mxl-compile
-description: Компиляция табличного документа (MXL) из JSON-определения. Используй когда нужно создать макет печатной формы
+description: Compile a spreadsheet document (MXL) from a JSON definition. Use when you need to create a print form template
 argument-hint: <JsonPath> <OutputPath>
 allowed-tools:
   - Bash
@@ -9,54 +9,54 @@ allowed-tools:
   - Glob
 ---
 
-# /mxl-compile — Компилятор макета из DSL
+# /mxl-compile - Template compiler from DSL
 
-Принимает компактное JSON-определение макета (области, параметры, стили) → генерирует Template.xml табличного документа 1С: палитры, индексы, объединения, namespace.
+Accepts a compact JSON template definition (areas, parameters, styles) -> generates Template.xml of a 1C spreadsheet document: palettes, indexes, merges, namespace.
 
-## Использование
+## Usage
 
 ```
 /mxl-compile <JsonPath> <OutputPath>
 ```
 
-## Параметры
+## Parameters
 
-| Параметр   | Обязательный | Описание                           |
+| Parameter  | Required     | Description                        |
 |------------|:------------:|------------------------------------|
-| JsonPath   | да           | Путь к JSON-определению макета     |
-| OutputPath | да           | Путь для генерации Template.xml    |
+| JsonPath   | yes          | Path to the JSON template definition |
+| OutputPath | yes          | Path for generating Template.xml   |
 
-## Команда
+## Command
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/mxl-compile.py" -JsonPath "<путь>.json" -OutputPath "<путь>/Template.xml"
 ```
 
-## Рабочий процесс
+## Workflow
 
-1. Написать JSON-определение (Write tool) → файл `.json`
-2. Вызвать `/mxl-compile` для генерации Template.xml
-3. Вызвать `/mxl-validate` для проверки корректности
-4. Вызвать `/mxl-info` для верификации структуры
+1. Write the JSON definition (Write tool) -> file `.json`
+2. Call `/mxl-compile` to generate Template.xml
+3. Call `/mxl-validate` to validate correctness
+4. Call `/mxl-info` to verify the structure
 
-**Если макет создаётся по изображению** (скриншот, скан печатной формы) — сначала вызвать `/img-grid` для наложения сетки, по ней определить границы колонок и пропорции, затем использовать `"Nx"` ширины + `"page"` для автоматического расчёта размеров.
+**If the template is created from an image** (screenshot, scan of a print form) - first call `/img-grid` to overlay a grid, use it to determine column boundaries and proportions, then use `"Nx"` widths + `"page"` for automatic size calculation.
 
-## Что читать под задачу
+## What to read per task
 
-Ниже — всё, что нужно для типового макета. Остальное лежит по файлу на задачу, читать нужно
-только свой:
+Below is everything needed for a typical template. The rest lives one file per task; read
+only your own:
 
-| Задача | Ключи | Файл |
+| Task | Keys | File |
 |---|---|---|
-| Свойство стиля вне частых: отступ, защита, узор, маска, поведение при выводе | — | `reference/style-properties.md` |
-| Область, не описываемая диапазоном строк; свои ширины колонок у части документа | `namedAreas`, `columnSets`, `columnSet` | `reference/layout.md` |
-| Колонтитулы, ориентация, поля, масштаб | `header`, `footer`, `printSettings` | `reference/print.md` |
-| Картинка, фигура или надпись поверх сетки; картинка в ячейке | `pictures`, `drawings`, `pictureParameter` | `reference/drawings.md` |
-| Ячейки для ввода данных пользователем | `valueType`, `controlType`, `value` | `reference/input-cells.md` |
-| Сворачиваемые группы строк или колонок | `rowGroups`, `columnGroups` | `reference/groups.md` |
-| Всплывающая подсказка у ячейки | `note` | `reference/notes.md` |
+| Style property outside the common ones: indent, protection, pattern, mask, print behavior | - | `reference/style-properties.md` |
+| Area not described by a row range; own column widths for part of the document | `namedAreas`, `columnSets`, `columnSet` | `reference/layout.md` |
+| Headers/footers, orientation, margins, scale | `header`, `footer`, `printSettings` | `reference/print.md` |
+| Picture, shape or text label on top of the grid; picture in a cell | `pictures`, `drawings`, `pictureParameter` | `reference/drawings.md` |
+| Cells for user data input | `valueType`, `controlType`, `value` | `reference/input-cells.md` |
+| Collapsible row or column groups | `rowGroups`, `columnGroups` | `reference/groups.md` |
+| Tooltip on a cell | `note` | `reference/notes.md` |
 
-## Пример
+## Example
 
 ```json
 {
@@ -93,10 +93,10 @@ python "${CLAUDE_SKILL_DIR}/scripts/mxl-compile.py" -JsonPath "<путь>.json" 
 }
 ```
 
-Шапка таблицы и итог записаны позиционно — позиция берётся из порядка, `col` не нужен;
-строка таблицы записана ячейками с `col`, потому что у них разные стили и расшифровка.
+The table header and total are written positionally - the position comes from the order, `col` is not needed;
+the table row is written with cells that have `col` because they have different styles and decryption.
 
-## Структура DSL
+## DSL structure
 
 ```
 { columns, page, defaultWidth, columnWidths, columnStyles, textLanguages,
@@ -113,56 +113,56 @@ python "${CLAUDE_SKILL_DIR}/scripts/mxl-compile.py" -JsonPath "<путь>.json" 
 }
 ```
 
-Верхний уровень: `columns` обязателен, остальное по необходимости.
+Top level: `columns` is required, the rest as needed.
 
-| Ключ | Описание |
+| Key | Description |
 |---|---|
-| `columns` | Количество колонок раскладки по умолчанию |
-| `page` | Формат страницы: `"A4-landscape"` (780), `"A4-portrait"` (540) или число. Сам вычисляет `defaultWidth` из суммы пропорций `"Nx"` |
-| `defaultWidth` | Ширина колонок по умолчанию (10) |
-| `columnWidths` | Ширины: ключи 1-based (`"1"`, `"3-14"`, `"5,7,9"`), значение — число или `"2x"` (доля от `defaultWidth`) |
-| `columnStyles` | Стиль на колонку целиком: те же ключи диапазонов, значение — имя стиля |
-| `textLanguages` | Языки, на которые разворачивается текст, заданный строкой (по умолчанию `["ru"]`) |
-| `areas` | Области — диапазоны подряд идущих строк, в порядке документа |
+| `columns` | Number of layout columns by default |
+| `page` | Page format: `"A4-landscape"` (780), `"A4-portrait"` (540) or a number. Computes `defaultWidth` itself from the sum of `"Nx"` proportions |
+| `defaultWidth` | Default column width (10) |
+| `columnWidths` | Widths: 1-based keys (`"1"`, `"3-14"`, `"5,7,9"`), value - a number or `"2x"` (fraction of `defaultWidth`) |
+| `columnStyles` | Style for a whole column: same range keys, value - style name |
+| `textLanguages` | Languages into which text given as a string is expanded (default `["ru"]`) |
+| `areas` | Areas - ranges of consecutive rows, in document order |
 
-## Области, строки, ячейки
+## Areas, rows, cells
 
-**Область** (`areas[]`) — диапазон подряд идущих строк: `name` (необязательно; с именем область
-доступна как `Макет.ПолучитьОбласть("Имя")`) и `rows`. Область без имени — просто кусок сетки.
+**Area** (`areas[]`) - a range of consecutive rows: `name` (optional; with a name the area
+is available as `Макет.ПолучитьОбласть("Имя")`) and `rows`. An area without a name is just a piece of the grid.
 
-**Строка** (`rows[]`): `height`, `hidden`, `rowStyle`, `cells`. Пустая строка — `{}`,
-а `{ "empty": 3 }` заменяет три подряд. `height` и `hidden` — свойства самой строки, у ячейки
-таких нет.
+**Row** (`rows[]`): `height`, `hidden`, `rowStyle`, `cells`. An empty row is `{}`,
+and `{ "empty": 3 }` replaces three in a row. `height` and `hidden` are properties of the row itself; a cell
+has none of them.
 
-**Ячейка** (`cells[]`):
+**Cell** (`cells[]`):
 
-| Ключ | Описание |
+| Key | Description |
 |---|---|
-| `col` | Позиция колонки, 1-based |
-| `span` / `rowspan` | Объединение вправо / вниз |
-| `style` | Имя стиля; перекрывает `rowStyle` для этой ячейки |
-| `param` | Параметр заполнения — `Область.Параметры.Имя = …` |
-| `text` | Статический текст: строка или объект «язык → текст» |
-| `template` | Текст со вставками `[Параметр]` |
-| `detail` | Параметр расшифровки; ставится и без `param` |
+| `col` | Column position, 1-based |
+| `span` / `rowspan` | Merge right / down |
+| `style` | Style name; overrides `rowStyle` for this cell |
+| `param` | Fill parameter - `Область.Параметры.Имя = …` |
+| `text` | Static text: a string or a "language -> text" object |
+| `template` | Text with `[Параметр]` inserts |
+| `detail` | Decryption parameter; can be set without `param` |
 
-Содержимое задаётся ровно одним ключом из `param` / `text` / `template`; ячейка без них —
-пустая (нужна, например, ради рамки). Пустая строка `"text": ""` — это тоже текст, а не
-отсутствие текста.
+Content is set by exactly one of `param` / `text` / `template`; a cell without them is
+empty (needed, for example, for a border). The empty string `"text": ""` is also text, not
+the absence of text.
 
-### Короткая форма: список ячеек позиционно
+### Short form: positional cell list
 
-Позиция берётся из порядка, `col` не нужен:
+Position comes from the order, `col` is not needed:
 
-| Элемент | Значение |
+| Element | Meaning |
 |---|---|
-| `"текст"` | Статический текст |
-| `{ "ru": "…", "en": "…" }` | Тот же текст на нескольких языках |
-| `"{Имя}"` | Параметр заполнения |
-| `">"` | Продолжение ячейки слева — увеличивает её `span` |
-| `"|"` | Продолжение ячейки сверху — увеличивает её `rowspan` |
-| `null` | Пропуск колонки |
-| `{ … }` | Обычная ячейка без `col` — когда нужны `style`, `detail`, `template` |
+| `"текст"` | Static text |
+| `{ "ru": "…", "en": "…" }` | The same text in several languages |
+| `"{Имя}"` | Fill parameter |
+| `">"` | Continuation of the cell on the left - increases its `span` |
+| `"|"` | Continuation of the cell above - increases its `rowspan` |
+| `null` | Skip column |
+| `{ … }` | Regular cell without `col` - when `style`, `detail`, `template` are needed |
 
 ```json
 "rows": [
@@ -172,53 +172,52 @@ python "${CLAUDE_SKILL_DIR}/scripts/mxl-compile.py" -JsonPath "<путь>.json" 
 ]
 ```
 
-Здесь «Вид» и «Итог» объединены по вертикали, «Остаток» — по горизонтали на две колонки.
+Here "Вид" and "Итог" are merged vertically, "Остаток" - horizontally across two columns.
 
-Позиционный список — это форма записи ЯЧЕЕК, а не строки. Если у строки нет своих свойств, он
-и есть строка (как в примере выше). Если нужны `height`, `hidden` или `rowStyle` — тот же
-список кладётся в `cells`:
+The positional list is a way to write CELLS, not a row. If the row has no properties of its own, it
+is the row (as in the example above). If `height`, `hidden` or `rowStyle` are needed, the same
+list is placed in `cells`:
 
 ```json
 { "rowStyle": "итог", "cells": [null, null, null, "Итого:", "{Всего}"] }
 ```
 
-### `rowStyle` — оформление строки
+### `rowStyle` - row formatting
 
-Стиль ложится на ВСЮ ширину строки: колонки без явных ячеек получают его тоже — так выходят
-сплошные рамки в табличной части. Он же становится оформлением самой строки. Ячейки с `rowspan`
-из предыдущих строк при этом пропускаются.
+The style applies to the WHOLE row width: columns without explicit cells get it too - this is how
+solid borders in a tabular section come out. It also becomes the formatting of the row itself. Cells with `rowspan`
+from previous rows are skipped.
 
-## Оформление
+## Formatting
 
-Ячейка, строка и колонка ссылаются на один и тот же именованный стиль: ячейка — ключом `style`,
-строка — `rowStyle`, колонка — через `columnStyles`.
+A cell, row and column refer to the same named style: a cell with the `style` key,
+a row with `rowStyle`, a column via `columnStyles`.
 
-**Шрифт** (`fonts.<имя>`): `face` (Arial), `size` (10), `bold`, `italic`, `underline`,
-`strikeout`. Либо ссылка вместо описания: `{ "ref": "style:TextFont" }`,
-`{ "ref": "sys:DefaultGUIFont" }`. Шрифт `"default"` берётся, когда стиль не указал свой.
+**Font** (`fonts.<имя>`): `face` (Arial), `size` (10), `bold`, `italic`, `underline`,
+`strikeout`. Or a reference instead of a description: `{ "ref": "style:TextFont" }`,
+`{ "ref": "sys:DefaultGUIFont" }`. The `"default"` font is used when the style does not specify its own.
 
-**Частые ключи стиля** — имя ключа совпадает с именем свойства в выгрузке, значения перечислений
-регистр не различают:
+**Common style keys** - the key name matches the property name in the export, enum values
+are case-insensitive:
 
-| Ключ | Значение |
+| Key | Value |
 |---|---|
-| `font` | Имя из `fonts` |
+| `font` | Name from `fonts` |
 | `horizontalAlignment` | `Left`, `Center`, `Right`, `Justify`, `Auto` |
 | `verticalAlignment` | `Top`, `Center`, `Bottom` |
-| `textPlacement` | Длинный текст: `Wrap` (перенос), `Cut` (обрезать), `Block`, `Auto` |
-| `border` | Рамка со всех сторон |
-| `leftBorder`, `topBorder`, `rightBorder`, `bottomBorder` | Отдельная сторона |
-| `borderColor` | Цвет рамки |
-| `backColor`, `textColor` | Цвет фона и текста |
-| `format` | Формат данных 1С: `"ЧЦ=15; ЧДЦ=2"`, `"ДФ=dd.MM.yyyy"` |
+| `textPlacement` | Long text: `Wrap` (wrap), `Cut` (cut), `Block`, `Auto` |
+| `border` | Border on all sides |
+| `leftBorder`, `topBorder`, `rightBorder`, `bottomBorder` | Separate side |
+| `borderColor` | Border color |
+| `backColor`, `textColor` | Background and text color |
+| `format` | 1C data format: `"ЧЦ=15; ЧДЦ=2"`, `"ДФ=dd.MM.yyyy"` |
 
-**Рамка**: `"Solid"` (ширина 1) либо `{ "style": "Solid", "width": 2 }`. Стили линии: `None`,
+**Border**: `"Solid"` (width 1) or `{ "style": "Solid", "width": 2 }`. Line styles: `None`,
 `Solid`, `Dotted`, `Dashed`, `DashDotted`, `DashDottedDotted`, `ThinDashed`, `LargeDashed`,
-`ThickDashed`, `Double`. Стороны можно задавать по отдельности всегда: совпавшие четыре
-компилятор свернёт сам.
+`ThickDashed`, `Double`. Sides can always be set separately: the compiler will collapse the four matching ones itself.
 
-**Цвет** — нотация платформы: `#RRGGBB`, `style:ИмяСтиля` (элемент стиля конфигурации),
-`web:Имя`, `win:Имя`. Несуществующее имя платформа отвергнет при загрузке.
+**Color** - platform notation: `#RRGGBB`, `style:ИмяСтиля` (configuration style item),
+`web:Имя`, `win:Имя`. A nonexistent name will be rejected by the platform on load.
 
 ```json
 "styles": {

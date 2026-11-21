@@ -9,7 +9,7 @@ def test_each_checklist_lists_environment():
     for name in ("analyst", "architect", "developer-tests", "developer",
                  "reviewer", "technical-writer"):
         text = (CHECKLISTS / f"{name}.md").read_text(encoding="utf-8")
-        assert "Возможности окружения" in text, name
+        assert "Environment capabilities" in text, name
         assert "code_index" in text, name
         assert ".claude/skills" in text, name
 
@@ -25,7 +25,7 @@ def test_each_checklist_has_output_artifact():
     for name in ("analyst", "architect", "developer-tests", "developer",
                  "reviewer", "technical-writer"):
         text = (CHECKLISTS / f"{name}.md").read_text(encoding="utf-8")
-        assert "## Выход" in text, name
+        assert "## Output" in text, name
 
 
 def test_single_agent_rule_handles_db_load():
@@ -42,6 +42,6 @@ def test_long_operations_are_synchronous():
     for path in (RULES / "single-agent-workflow.md",
                  RULES / "optimized-config-loading.md"):
         text = path.read_text(encoding="utf-8")
-        assert "синхронно" in text, path
+        assert "synchronously" in text, path
         assert "run_in_background" in text, path
         assert "харнесс сам разбудит" not in text, path

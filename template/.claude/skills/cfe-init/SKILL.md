@@ -1,6 +1,6 @@
 ---
 name: cfe-init
-description: Создать расширение конфигурации 1С (CFE) — scaffold XML-исходников. Используй когда нужно создать новое расширение для исправления, доработки или дополнения конфигурации
+description: Create a 1C configuration extension (CFE) - scaffold XML sources. Use when you need to create a new extension to fix, customize or supplement a configuration
 argument-hint: <Name> [-ConfigPath <path>] [-Purpose Patch|Customization|AddOn] [-CompatibilityMode Version8_3_24]
 allowed-tools:
   - Bash
@@ -8,46 +8,46 @@ allowed-tools:
   - Glob
 ---
 
-# /cfe-init — Создание расширения конфигурации 1С
+# /cfe-init - Creating a 1C configuration extension
 
-Создаёт scaffold расширения: `Configuration.xml`, `Languages/Русский.xml`, опционально `Roles/`.
+Creates an extension scaffold: `Configuration.xml`, `Languages/Русский.xml`, optionally `Roles/`.
 
-## Подготовка
+## Preparation
 
-Если есть выгрузка базовой конфигурации, передай `-ConfigPath` — скрипт автоматически определит `CompatibilityMode` и UUID языка из базовой конфигурации.
+If there is an export of the base configuration, pass `-ConfigPath` - the script will automatically determine `CompatibilityMode` and the language UUID from the base configuration.
 
-### Авто-определение ConfigPath
+### ConfigPath auto-detection
 
-Если пользователь не указал `-ConfigPath` — попробуй определить автоматически:
-1. Прочитай `.v8-project.json` из корня проекта
-2. Разреши целевую базу (по имени, ветке или `default` — алгоритм из `/db-list`)
-3. Если у базы есть поле `configSrc` — используй как `-ConfigPath`
-4. Если `configSrc` нет — спроси у пользователя
+If the user did not specify `-ConfigPath` - try to detect it automatically:
+1. Read `.v8-project.json` from the project root
+2. Resolve the target infobase (by name, branch or `default` - the algorithm from `/db-list`)
+3. If the infobase has a `configSrc` field - use it as `-ConfigPath`
+4. If there is no `configSrc` - ask the user
 
-Если `.v8-project.json` не найден и `-ConfigPath` не задан — расширение создастся с предупреждением (UUID языка = нули, CompatibilityMode по умолчанию).
+If `.v8-project.json` is not found and `-ConfigPath` is not set - the extension will be created with a warning (language UUID = zeros, default CompatibilityMode).
 
-## Параметры
+## Parameters
 
-| Параметр | Описание | По умолчанию |
+| Parameter | Description | Default |
 |----------|----------|--------------|
-| `Name` | Имя расширения (обязат.) | — |
-| `Synonym` | Синоним | = Name |
-| `NamePrefix` | Префикс собственных объектов | = Name + "_" |
-| `OutputDir` | Каталог для создания; клади расширение в свой подкаталог, названный по имени: `src\cfe\<Name>` | `src` |
-| `Purpose` | `Patch` (исправление) / `Customization` (доработка) / `AddOn` (дополнение) | `Customization` |
-| `Version` | Версия расширения | — |
-| `Vendor` | Поставщик | — |
-| `CompatibilityMode` | Режим совместимости; при заданном `ConfigPath` определяется по базовой конфигурации и этот параметр не нужен | `Version8_3_24` |
-| `ConfigPath` | Путь к выгрузке базовой конфигурации (авто-определяет CompatibilityMode и Language UUID) | — |
-| `NoRole` | Без основной роли | false |
+| `Name` | Extension name (required) | - |
+| `Synonym` | Synonym | = Name |
+| `NamePrefix` | Prefix of own objects | = Name + "_" |
+| `OutputDir` | Directory to create; put the extension in its own subdirectory named after it: `src\cfe\<Name>` | `src` |
+| `Purpose` | `Patch` (fix) / `Customization` (rework) / `AddOn` (add-on) | `Customization` |
+| `Version` | Extension version | - |
+| `Vendor` | Vendor | - |
+| `CompatibilityMode` | Compatibility mode; when `ConfigPath` is set it is determined from the base configuration and this parameter is not needed | `Version8_3_24` |
+| `ConfigPath` | Path to the base configuration export (auto-determines CompatibilityMode and Language UUID) | - |
+| `NoRole` | Without the main role | false |
 
-## Команда
+## Command
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/cfe-init.py" -Name "МоёРасширение" -OutputDir "src\cfe\МоёРасширение" -ConfigPath "src\cf"
 ```
 
-## Примеры
+## Examples
 
 ```bash
 # Расширение для ERP с авто-определением совместимости из базовой конфигурации
@@ -63,9 +63,8 @@ python "${CLAUDE_SKILL_DIR}/scripts/cfe-init.py" -Name "МоёРасширени
 ... -Name ИсправлениеБага -NamePrefix "ИБ_" -Purpose Patch -NoRole -OutputDir src\cfe\ИсправлениеБага
 ```
 
-## Верификация
+## Verification
 
 ```
 /cfe-validate <OutputDir> -ConfigPath <ConfigPath>
 ```
-

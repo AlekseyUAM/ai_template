@@ -1,7 +1,7 @@
-"""Членство пути в локальном index.db и исключения (порт code-index-guard main.rs).
+"""Path membership in the local index.db and exclusions (port of code-index-guard main.rs).
 
-`sqlite3` импортируется лениво: на горячем пути хука (вне тестов) БД трогается
-только когда путь попал в индексированный префикс.
+`sqlite3` is imported lazily: on the hook hot path (outside tests) the DB is touched
+only when the path falls under an indexed prefix.
 """
 import json
 import sys
@@ -9,7 +9,7 @@ from pathlib import Path
 
 from .paths import default_case_insensitive, fold_path, glob_match
 
-# Встроенные исключения — то, что walker code-index не обходит никогда.
+# Built-in exclusions - what the code-index walker never traverses.
 NEVER_INDEXED = frozenset({
     ".git",
     "node_modules",
@@ -25,9 +25,9 @@ def _warn(msg: str) -> None:
 
 
 def file_mtime_secs(path: str) -> int | None:
-    """mtime файла на диске в unix-секундах — для сравнения с `files.mtime`.
+    """File mtime on disk in unix seconds - for comparison with `files.mtime`.
 
-    None → файла нет или он недоступен (тогда свежесть не проверяем).
+    None -> no file or it is unavailable (then freshness is not checked).
     """
     try:
         return int(Path(path).stat().st_mtime)
@@ -37,11 +37,11 @@ def file_mtime_secs(path: str) -> int | None:
 
 def serveability(db: str, rel: str, *, case_insensitive: bool | None = None
                  ) -> tuple[bool, int | None] | None:
-    """(отдаётся ли файл через MCP, mtime записи в индексе) либо None при сбое.
+    """(whether the file is served via MCP, mtime of the index record) or None on failure.
 
-    Отдаётся, если есть text_contents-строка (v5) либо text_files-строка (v4),
-    либо file_contents с oversize=0. Нет строки в files / oversize=1 / прочее —
-    MCP не отдаст.
+    Served if there is a text_contents row (v5) or a text_files row (v4),
+    or file_contents with oversize=0. No row in files / oversize=1 / otherwise -
+    MCP will not serve it.
     """
     import sqlite3
 
@@ -56,10 +56,10 @@ def serveability(db: str, rel: str, *, case_insensitive: bool | None = None
                 "SELECT 1 FROM sqlite_master "
                 "WHERE type='table' AND name='text_contents' LIMIT 1"
             ).fetchone() is not None
-            # Схема v5 хранит текст в text_contents, v4 — в text_files. Неверная
-            # таблица дала бы «no such table» → guard молча перестал бы блокировать.
+            # Schema v5 stores text in text_contents, v4 in text_files. A wrong
+            # table would give "no such table" -> the guard would silently stop blocking.
             table = "text_contents" if has_text_contents else "text_files"
-            # Регистр — по правилу системы: на Linux `README.md` не находит `readme.md`.
+            # Case follows the system rule: on Linux `README.md` does not find `readme.md`.
             collate = " COLLATE NOCASE" if case_insensitive else ""
             sql = (
                 f"SELECT (SELECT 1 FROM {table} t WHERE t.file_id = f.id LIMIT 1), "
@@ -68,33 +68,33 @@ def serveability(db: str, rel: str, *, case_insensitive: bool | None = None
             )
             row = conn.execute(sql, (rel,)).fetchone()
         except sqlite3.Error as e:
-            # Реальную SQL/схема-ошибку логируем, чтобы рассинхрон схемы был виден.
+            # Log the real SQL/schema error so schema drift is visible.
             _warn(f"serveability query failed on {db}: {e}")
             return None
     finally:
         conn.close()
     if row is None:
-        # «Строки нет» — не в индексе: ни serveable, ни mtime.
+        # "No row" - not in the index: neither serveable nor mtime.
         return (False, None)
     is_text, oversize, mtime = row
     if is_text is not None:
-        # Есть text_contents-строка (v5) / text_files-строка (v4) → read_file отдаст.
+        # There is a text_contents row (v5) / text_files row (v4) -> read_file will serve it.
         serve = True
     elif oversize is not None:
-        # Код: отдаётся, только если контент сохранён (oversize=0).
+        # Code: served only if the content is stored (oversize=0).
         serve = oversize == 0
     else:
-        # «Голая» строка в files без контента — MCP не отдаст.
+        # "Bare" row in files without content - MCP will not serve it.
         serve = False
     return (serve, mtime)
 
 
 def read_is_blockable(root: str, rel: str, *, case_insensitive: bool | None = None
                       ) -> bool:
-    """True → файл доказуемо отдаётся через MCP (можно блокировать нативный Read).
+    """True -> the file is provably served via MCP (native Read may be blocked).
 
-    Блокируем ТОЛЬКО при наличии локального index.db: без него (индекс на
-    удалённой ноде, путь ещё не проиндексирован) членство не проверить → воздержание.
+    Block ONLY when a local index.db exists: without it (index on a
+    remote node, path not indexed yet) membership cannot be verified -> abstain.
     """
     db = Path(root) / ".code-index" / "index.db"
     if not db.exists():
@@ -105,8 +105,8 @@ def read_is_blockable(root: str, rel: str, *, case_insensitive: bool | None = No
     serve, idx_mtime = res
     if not serve:
         return False
-    # Свежесть: диск новее записи в индексе → наблюдатель ещё не догнал, MCP
-    # отдаст устаревшее содержимое. Воздерживаемся — пусть Read прочтёт актуальное.
+    # Freshness: disk newer than the index record -> the watcher has not caught up, MCP
+    # would serve stale content. Abstain - let Read read the current version.
     disk = file_mtime_secs(f"{root}/{rel}")
     if idx_mtime is not None and disk is not None and disk > idx_mtime:
         return False
@@ -114,28 +114,28 @@ def read_is_blockable(root: str, rel: str, *, case_insensitive: bool | None = No
 
 
 def dir_changed_since_index(root: str, rel: str) -> bool:
-    """True → каталог `root/rel` (mtime) новее локального index.db.
+    """True -> directory `root/rel` (mtime) is newer than the local index.db.
 
-    Новые файлы → нативный листинг может показать то, чего нет в MCP:
-    list_files знает только проиндексированное. При отсутствии БД или
-    каталога свежесть не доказать — False (решает вызывающий по своей политике).
+    New files -> a native listing may show what MCP does not have:
+    list_files knows only the indexed content. Without a DB or
+    directory, freshness cannot be proven - False (the caller decides by its own policy).
     """
     try:
         dir_mtime = int((Path(root) / rel).stat().st_mtime)
         db_mtime = int((Path(root) / ".code-index" / "index.db").stat().st_mtime)
     except OSError:
         return False
-    # int-секунды, как в file_mtime_secs. Отсечка долей секунды: изменение в
-    # ту же секунду, что и запись индекса, выглядит «не новее» — такой каталог
-    # считается свежим по индексу. Python сравнивает int без переполнения, так
-    # что большие значения mtime (например, далёкое будущее) сравнение не ломают.
+    # int seconds, as in file_mtime_secs. Fraction-of-a-second cutoff: a change in
+    # the same second as the index record looks "not newer" - such a directory
+    # is considered fresh per the index. Python compares ints without overflow, so
+    # large mtime values (e.g. the far future) do not break the comparison.
     if dir_mtime > db_mtime:
         return True
     return False
 
 
 def _read_project_config(root: str) -> dict | None:
-    # Только чтение: у хука нет причин трогать файлы проекта.
+    # Read only: the hook has no reason to touch project files.
     try:
         with open(f"{root}/.code-index/config.json", encoding="utf-8") as fh:
             text = fh.read()
@@ -150,12 +150,12 @@ def _read_project_config(root: str) -> dict | None:
 
 def excluded_from_index(root: str, rel: str, *, case_insensitive: bool | None = None
                         ) -> bool:
-    """Исключён ли путь из индекса — по встроенному списку И по настройкам проекта.
+    """Whether a path is excluded from the index - by the built-in list AND by project settings.
 
-    Без второй половины гард выдаёт дед-энды: `exclude_dirs` и
-    `exclude_file_patterns` из `<repo>/.code-index/config.json` не попадают
-    в индекс, и MCP их не отдаст. Сравнение — ПО СЕГМЕНТАМ, а не подстрокой:
-    встроенный список задан как `/.venv/`, а путь обычно относительный.
+    Without the second half the guard produces dead ends: `exclude_dirs` and
+    `exclude_file_patterns` from `<repo>/.code-index/config.json` are not indexed,
+    and MCP will not serve them. Comparison is BY SEGMENTS, not by substring:
+    the built-in list is given as `/.venv/`, while a path is usually relative.
     """
     if case_insensitive is None:
         case_insensitive = default_case_insensitive()
@@ -165,9 +165,9 @@ def excluded_from_index(root: str, rel: str, *, case_insensitive: bool | None = 
     if any(s in NEVER_INDEXED for s in segments):
         return True
 
-    # Конкретный существующий файл — спрашиваем ФАКТ у индекса, а не гадаем по
-    # расширению: так отсекаются дотфайлы, `Dockerfile`, `.svg` и прочее, чего
-    # walker не берёт (списка типов снаружи нет — он зашит в индексаторе).
+    # A specific existing file - ask the index for the FACT instead of guessing by
+    # extension: this filters out dotfiles, `Dockerfile`, `.svg` and other things the
+    # walker does not take (there is no type list outside - it is hardcoded in the indexer).
     if "*" not in rel_l and "?" not in rel_l:
         full = f"{root.replace(chr(92), '/').rstrip('/')}/{rel_l}"
         if Path(full).is_file() and not read_is_blockable(
@@ -187,7 +187,7 @@ def excluded_from_index(root: str, rel: str, *, case_insensitive: bool | None = 
                 return True
     pats = cfg.get("exclude_file_patterns")
     if isinstance(pats, list):
-        # Образец сверяем с КАЖДЫМ сегментом: цель бывает и файлом, и маской.
+        # Compare the pattern with EVERY segment: the target is both a file and a mask.
         for p in pats:
             if not isinstance(p, str):
                 continue

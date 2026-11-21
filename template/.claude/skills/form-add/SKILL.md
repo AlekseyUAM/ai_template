@@ -1,6 +1,6 @@
 ---
 name: form-add
-description: Добавить пустую управляемую форму к объекту 1С. Используй когда нужно создать у объекта новую форму
+description: Add an empty managed form to a 1C object. Use when you need to create a new form for an object
 argument-hint: <ObjectPath> <FormName> [-Purpose <Purpose>] [-Synonym <Synonym>] [-SetDefault]
 allowed-tools:
   - Bash
@@ -11,13 +11,13 @@ allowed-tools:
   - Grep
 ---
 
-# /form-add — Добавление формы к объекту конфигурации
+# /form-add - Adding a form to a configuration object
 
-Создаёт управляемую форму (metadata XML + Form.xml + Module.bsl) и регистрирует её в корневом XML объекта конфигурации (Document, Catalog, InformationRegister и др.).
+Creates a managed form (metadata XML + Form.xml + Module.bsl) and registers it in the root XML of the configuration object (Document, Catalog, InformationRegister, etc.).
 
-> **Отчёты на СКД.** Для отчёта с основной схемой компоновки собственная форма не нужна:
-> платформа строит автоформу по СКД. Не вызывай `form-add` для отчёта и не назначай
-> `defaultForm` без явного требования ТЗ.
+> **DCS reports.** A report with a main data composition schema does not need its own form:
+> the platform builds an auto-form from the DCS. Do not call `form-add` for a report and do not assign
+> `defaultForm` without an explicit requirement in the specification.
 
 ## Usage
 
@@ -25,38 +25,38 @@ allowed-tools:
 /form-add <ObjectPath> <FormName> [-Purpose <Purpose>] [-Synonym <Synonym>] [-SetDefault]
 ```
 
-| Параметр    | Обязательный | По умолчанию | Описание                                     |
+| Parameter   | Required     | Default      | Description                                  |
 |-------------|:------------:|--------------|----------------------------------------------|
-| ObjectPath  | да           | —            | Путь к XML-файлу объекта (Documents/Док.xml)  |
-| FormName    | да           | —            | Имя формы (ФормаДокумента)                    |
-| Purpose     | нет          | основная форма вида | Назначение формы — см. таблицу ниже: у справочника это форма объекта, у регистра сведений — форма записи, у журнала — форма списка |
-| Synonym     | нет          | = FormName   | Синоним формы                                 |
-| -SetDefault | нет          | авто         | Сделать основной. Без флага основной становится первая форма каждого назначения |
+| ObjectPath  | yes          | -            | Path to the object XML file (Documents/Док.xml) |
+| FormName    | yes          | -            | Form name (ФормаДокумента)                    |
+| Purpose     | no           | main form of the kind | Form purpose - see the table below: for a catalog this is the object form, for an information register - the record form, for a journal - the list form |
+| Synonym     | no           | = FormName   | Form synonym                                 |
+| -SetDefault | no           | auto         | Make it the main one. Without the flag, the first form of each purpose becomes the main one |
 
-## Команда
+## Command
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/form-add.py" -ObjectPath "<ObjectPath>" -FormName "<FormName>" [-Purpose "<Purpose>"] [-Synonym "<Synonym>"] [-SetDefault]
 ```
 
-## Purpose — назначение формы
+## Purpose - form purpose
 
-| Purpose | Какая форма | Становится основной |
+| Purpose | Which form | Becomes the main one |
 |---------|-------------|---------------------|
-| Object | форма объекта (элемента, документа, обработки) | да |
-| List | форма списка | да |
-| Choice | форма выбора | да |
-| Folder | форма группы | да |
-| FolderChoice | форма выбора группы | да |
-| Record | форма записи | да |
-| RecordSet | форма набора записей | нет — в платформе нет такого свойства |
-| Save | форма сохранения настроек | да |
-| Load | форма загрузки настроек | да |
-| Custom | произвольная форма, без привязки к объекту | нет |
+| Object | object form (item, document, data processor) | yes |
+| List | list form | yes |
+| Choice | choice form | yes |
+| Folder | folder form | yes |
+| FolderChoice | folder choice form | yes |
+| Record | record form | yes |
+| RecordSet | record set form | no - the platform has no such property |
+| Save | settings save form | yes |
+| Load | settings load form | yes |
+| Custom | arbitrary form, not bound to the object | no |
 
-### Что доступно типу объекта
+### What is available for an object type
 
-| Тип объекта | Назначения |
+| Object type | Purposes |
 |-------------|------------|
 | Catalog, ChartOfCharacteristicTypes | Object, Folder, List, Choice, FolderChoice, Custom |
 | Document, ChartOfAccounts, ChartOfCalculationTypes, ExchangePlan, BusinessProcess, Task | Object, List, Choice, Custom |
@@ -66,16 +66,16 @@ python "${CLAUDE_SKILL_DIR}/scripts/form-add.py" -ObjectPath "<ObjectPath>" -For
 | DocumentJournal, FilterCriterion | List, Custom |
 | Enum | List, Choice, Custom |
 | SettingsStorage | Save, Load, Custom |
-| Table (таблица внешнего источника) | `tableDataType=ObjectData` — Object, List, Choice, Custom; `NonobjectData` — Record, List, Choice, Custom |
+| Table (external data source table) | `tableDataType=ObjectData` - Object, List, Choice, Custom; `NonobjectData` - Record, List, Choice, Custom |
 
-Недопустимое сочетание отклоняется со списком доступных для этого типа. У константы собственных
-форм нет — для неё используется общая форма (`CommonForm`).
+An invalid combination is rejected with the list of purposes available for that type. A constant has no
+forms of its own - a common form (`CommonForm`) is used for it.
 
-Таблица внешнего источника адресуется файлом таблицы:
-`ExternalDataSources/<Источник>/Tables/<Таблица>.xml`. Ссылки в такой форме трёхчастные;
-без `-Purpose` берётся форма объекта, а у таблицы с составным ключом — форма записи.
+An external data source table is addressed by the table file:
+`ExternalDataSources/<Источник>/Tables/<Таблица>.xml`. References in such a form are three-part;
+without `-Purpose` the object form is taken, and for a table with a composite key - the record form.
 
-## Примеры
+## Examples
 
 ```
 # Форма документа
@@ -96,7 +96,7 @@ python "${CLAUDE_SKILL_DIR}/scripts/form-add.py" -ObjectPath "<ObjectPath>" -For
 
 ## Workflow
 
-1. `/form-add` — создать каркас формы
-2. `/form-compile` или `/form-edit` — наполнить Form.xml элементами
-3. `/form-validate` — проверить корректность
-4. `/form-info` — проанализировать результат
+1. `/form-add` - create the form skeleton
+2. `/form-compile` or `/form-edit` - fill Form.xml with elements
+3. `/form-validate` - check correctness
+4. `/form-info` - analyze the result

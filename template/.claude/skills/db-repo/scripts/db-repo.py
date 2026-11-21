@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 # db-repo v1.18 — 1C configuration repository operations
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
-# NB: движок только 1cv8 — ibcmd работу с хранилищем не поддерживает (нет такого режима).
-"""Работа с хранилищем конфигурации 1С.
+# NB: engine is 1cv8 only - ibcmd does not support repository operations (no such mode).
+"""1C configuration repository operations.
 
-Захват и помещение объектов, получение изменений, подключение базы к хранилищу,
-история версий, администрирование хранилища.
+Capturing and committing objects, receiving changes, binding a base to a repository,
+version history, repository administration.
 """
 
 import argparse
@@ -21,9 +21,9 @@ import tempfile
 
 
 # --- Additional platform arguments ---
-# Свои ключи: доп. аргументами нельзя ни подсунуть вторую пакетную операцию, ни подменить
-# реквизиты хранилища. Список команд перечислен поимённо — arg_key_match считает совпадением
-# только точное имя или имя с не-буквой следом, поэтому общий префикс ключи не покрыл бы.
+# Own keys: extra arguments cannot inject a second batch operation or override repository
+# credentials. The command list is enumerated by name - arg_key_match counts as a match
+# only an exact name or a name followed by a non-letter, so a common prefix would not cover the keys.
 V8_OWNED_KEYS = [
     "DESIGNER", "ENTERPRISE", "CREATEINFOBASE", "CONFIG",
     "/F", "/S", "/N", "/P", "/Out", "/DisableStartupDialogs", "/DisableStartupMessages",
@@ -37,11 +37,11 @@ V8_OWNED_KEYS = [
     "/ConfigurationRepositoryOptimizeData", "/ConfigurationRepositoryClearCache",
     "/ConfigurationRepositoryClearLocalCache", "/ConfigurationRepositoryClearGlobalCache",
 ]
-# Пакетные команды платформы. В одной командной строке DESIGNER выполняет ТОЛЬКО ПОСЛЕДНЮЮ,
-# остальные молча отбрасывает (проверено на 8.3.24: /LoadConfigFromFiles вместе с
-# /CheckCanApplyConfigurationExtensions завершились кодом 0 с пустым логом, и загрузка НЕ
-# состоялась). Такая команда в дополнительных аргументах подменяет собой операцию навыка, а навык
-# отчитывается успехом. Дополнительные аргументы — это опции, а не режимы.
+# Platform batch commands. In one command line DESIGNER runs ONLY THE LAST one,
+# silently discarding the rest (checked on 8.3.24: /LoadConfigFromFiles together with
+# /CheckCanApplyConfigurationExtensions exited with code 0 and an empty log, and the load did
+# NOT happen). Such a command in extra arguments replaces the skill's operation, and the skill
+# reports success. Extra arguments are options, not modes.
 V8_BATCH_KEYS = [
     "/CheckConfig", "/CheckModules", "/CheckCanApplyConfigurationExtensions",
     "/DumpDBCfgList", "/DeleteCfg", "/UpdateCfg", "/CompareCfg", "/MergeCfg",
@@ -52,20 +52,20 @@ IBCMD_OWNED_KEYS = []
 V8_SECRET_KEYS = ["/P", "/UC", "/WSP", "/AWSP", "/ConfigurationRepositoryP", "-Pwd"]
 IBCMD_SECRET_KEYS = []
 
-# Известные ключи хранилища — всё, что начинается с /ConfigurationRepository и не совпало с ними,
-# это опечатка или усечение. Отдельная проверка нужна потому, что усечённый ключ платформа НЕ
-# считает ошибкой: она открывает конфигуратор интерактивно и висит вечно (в /Out только BOM).
+# Known repository keys - anything starting with /ConfigurationRepository that does not match
+# them is a typo or truncation. A separate check is needed because the platform does NOT treat
+# a truncated key as an error: it opens the Configurator interactively and hangs forever (only BOM in /Out).
 REPO_KNOWN_KEYS = [k for k in V8_OWNED_KEYS if k.startswith("/ConfigurationRepository")]
 
 
 def ci_parse_args(parser, argv=None):
-    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
+    """parse_args: parameter names and choices values are accepted in any case."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
         if tok.startswith('-') and tok.lower() in names:
             argv[i] = names[tok.lower()]
-    # choices — зеркало [ValidateSet]; канонизируем ДО разбора, иначе argparse отвергнет регистр
+    # choices mirrors [ValidateSet]; canonicalize BEFORE parsing, otherwise argparse rejects the case
     choice_map = {}
     for a in parser._actions:
         if a.choices:
@@ -81,8 +81,9 @@ def ci_parse_args(parser, argv=None):
 def _find_project_v8path(args):
     """Walk up from CWD to find .v8-project.json and read its v8path.
 
-    v8path записи базы сильнее корневого: в одном проекте базы живут на разных версиях
-    платформы, а версию формата выгрузки задаёт та платформа, которая выгружает.
+    The v8path of a database record is stronger than the root one: in one project databases
+    live on different platform versions, and the dump format version is set by the platform
+    that performs the dump.
     """
     db = find_project_database(args)
     if db and db.get("v8path"):
@@ -242,7 +243,7 @@ def resolve_v8path(v8path, args):
                 + glob.glob(r"C:\Program Files (x86)\1cv8\*\bin\1cv8.exe")
             )
         else:
-            # *nix-раскладка путей установки платформы 1С.
+            # *nix layout of 1C platform installation paths.
             candidates = glob.glob("/opt/1cv8/*/1cv8")
         if candidates:
             v8path = max(candidates, key=_version_key)
@@ -251,7 +252,7 @@ def resolve_v8path(v8path, args):
             print("Error: 1C executable not found. Specify -V8Path")
             sys.exit(1)
     if os.path.isdir(v8path):
-        # PY-only: на *nix исполняемый называется "1cv8" (без .exe); ibcmd — только явным путём.
+        # PY-only: on *nix the executable is named "1cv8" (no .exe); ibcmd - only by explicit path.
         exe = "1cv8.exe" if os.name == "nt" else "1cv8"
         v8path = os.path.join(v8path, exe)
     if not os.path.isfile(v8path):
@@ -315,29 +316,29 @@ def run_v8(v8path, arguments):
     1C's parser expects them, on Windows and on *nix alike. Windows list2cmdline would
     escape those quotes, so there the command line is handed over ready-made.
 
-    На POSIX аргументы уходят СПИСКОМ, и кавычки, нужные для склейки на Windows, стали бы
-    частью значения: путь с пробелом платформа не находит («Неопределена информационная
-    база»), многословный -comment теряет молча. Поэтому здесь снимается ОДИН слой
-    обрамляющих кавычек. Склеенные ключи (/N"user", /ConfigurationRepositoryF"путь",
-    File="…") не задеты: у них кавычки внутри токена, а не по краям.
+    On POSIX the arguments go as a LIST, and the quotes needed for joining on Windows would
+    become part of the value: the platform does not find a path with a space («Неопределена
+    информационная база»), and a multi-word -comment silently loses. Therefore ONE layer of
+    surrounding quotes is stripped here. Glued keys (/N"user", /ConfigurationRepositoryF"путь",
+    File="…") are untouched: their quotes are inside the token, not on the edges.
     """
     if os.name == "nt":
         cmd = '"' + v8path + '" ' + " ".join(arguments)
     else:
         def strip_framing_quotes(a):
-            # Кавычки, которыми мы обрамляем значения ради склейки на Windows, на POSIX
-            # становятся ЧАСТЬЮ значения. Проверено на darwin: путь с пробелом отдельным
-            # токеном даёт «Неопределена информационная база», а склеенный
-            # /ConfigurationRepositoryF"путь с пробелом" — «завершилось с ошибкой»;
-            # без кавычек обе формы работают.
+            # The quotes we wrap values with for joining on Windows become PART OF the
+            # value on POSIX. Checked on darwin: a path with a space as a separate
+            # token gives «Неопределена информационная база», and the glued
+            # /ConfigurationRepositoryF"путь с пробелом" - «завершилось с ошибкой»;
+            # without quotes both forms work.
             if len(a) > 1 and a[0] == '"' and a[-1] == '"':
-                return a[1:-1]                       # "значение" отдельным токеном
+                return a[1:-1]                       # "value" as a separate token
             if a[0:1] == "/" and a[-1:] == '"' and '"' in a[:-1]:
                 i = a.index('"')
                 return a[:i] + a[i + 1:-1]           # /N"имя" -> /Nимя
-            return a                                 # File="…" не трогаем: там кавычки —
-                                                     # часть синтаксиса строки соединения,
-                                                     # и с ними на POSIX всё работает
+            return a                                 # File="…" left untouched: there the quotes
+                                                     # are part of the connection string syntax,
+                                                     # and with them everything works on POSIX
         cmd = [v8path] + [strip_framing_quotes(a) for a in arguments]
     r = subprocess.run(cmd, input=b"", capture_output=True)
     r.stdout = decode_platform_bytes(r.stdout)
@@ -404,7 +405,7 @@ def assert_no_truncated_repo_keys(arglist):
 
 
 def resolve_extra_args(v8_extra, hints):
-    """Движок только 1cv8, поэтому ветки ibcmd (в остальных db-* она есть) здесь нет."""
+    """Engine is 1cv8 only, so there is no ibcmd branch here (the other db-* skills have it)."""
     extra = project_extra_args("v8args") + list(v8_extra)
     if extra:
         assert_extra_args(extra, "1cv8", hints)
@@ -412,10 +413,10 @@ def resolve_extra_args(v8_extra, hints):
     return extra
 
 
-# --- Запись базы в .v8-project.json ---
-# Модель не передаёт ни путь к платформе конкретной базы, ни реквизиты хранилища: скрипт
-# сопоставляет параметры соединения с записью в databases[] и берёт их оттуда. Тот же приём,
-# что в cf-edit.py (сопоставление по configSrc).
+# --- Database record in .v8-project.json ---
+# The model passes neither the platform path of a specific database nor the repository
+# credentials: the script matches the connection parameters against a record in databases[]
+# and takes them from there. The same technique as in cf-edit.py (matching by configSrc).
 def _sg_find_v8project(start_dir):
     d = start_dir
     for _ in range(20):
@@ -440,7 +441,7 @@ def same_path(a, b):
 
 
 def find_project_database(args):
-    """Запись базы в реестре, соответствующая переданному соединению. None, если не найдена."""
+    """The database record in the registry matching the given connection. None if not found."""
     pf = _sg_find_v8project(os.getcwd())
     if not pf:
         return None
@@ -460,12 +461,12 @@ def find_project_database(args):
 
 
 def resolve_repository_settings(args):
-    """Возвращает dict path/user/password/from_registry. Явные -Repository* сильнее реестра."""
+    """Returns a dict path/user/password/from_registry. Explicit -Repository* beats the registry."""
     db_rec = find_project_database(args)
     rec = None
     if db_rec:
         if args.Extension:
-            # У расширения СВОЁ хранилище со своим путём (проверено): выбирается парой
+            # An extension has ITS OWN repository with its own path (checked): selected by the pair
             # /ConfigurationRepositoryF"<путь расширения>" + -Extension "<Имя>".
             for ext in db_rec.get("extensions") or []:
                 if (ext.get("name") or "").lower() == args.Extension.lower():
@@ -475,7 +476,7 @@ def resolve_repository_settings(args):
             rec = db_rec.get("repository")
     path = args.RepositoryPath or ((rec or {}).get("path") or None)
     user = args.RepositoryUser or ((rec or {}).get("user") or None)
-    # Пустой пароль = отсутствующий: 1С требует опускать ключ целиком, а не передавать пустое значение.
+    # Empty password = absent: 1C requires omitting the key entirely, not passing an empty value.
     pwd = args.RepositoryPassword or ((rec or {}).get("password") or None)
     return {
         "path": path.strip().strip('"') if path else None,
@@ -486,7 +487,7 @@ def resolve_repository_settings(args):
 
 
 def repository_args(repo):
-    """Ключи доступа к хранилищу. Форма — кавычки ВНУТРИ токена, как у /N и /P."""
+    """Repository access keys. The form is quotes INSIDE the token, as with /N and /P."""
     a = []
     if not repo or not repo.get("path"):
         return a
@@ -498,18 +499,18 @@ def repository_args(repo):
     return a
 
 
-# --- Список объектов ---
-# Наружу — один формат: плоский список имён, как у db-dump-xml -Mode Partial -Objects.
-# Платформенный XML (http://v8.1c.ru/8.3/config/objects) генерируется здесь и модели не показывается.
+# --- Object list ---
+# One format outward: a flat list of names, like db-dump-xml -Mode Partial -Objects.
+# The platform XML (http://v8.1c.ru/8.3/config/objects) is generated here and not shown to the model.
 #
-# Нормализовать имена не нужно: платформа принимает и русские, и английские имена типов
-# (Catalog.Склады → «Объект захвачен: Справочник.Склады») и подчинённые пути в обеих раскладках.
+# No need to normalize names: the platform accepts both Russian and English type names
+# (Catalog.Склады -> «Объект захвачен: Справочник.Склады») and subordinate paths in both layouts.
 CONFIG_ROOT_ALIASES = ["Конфигурация", "Configuration"]
 
-# Подчинённые сущности, которые НЕ являются объектами хранилища: в XML владельца они записаны
-# вложенным определением, своего файла и UUID у них нет — захватывать нечего. Отдельными объектами
-# регистрируются только те, кто записан ССЫЛКОЙ по имени: форма, макет, команда.
-# Платформа на такой запрос отвечает «Загруженный список объектов пуст» — без имени и без причины.
+# Subordinate entities that are NOT repository objects: in the owner's XML they are recorded
+# as a nested definition, they have no file or UUID of their own - there is nothing to capture.
+# Only those recorded by NAME reference are registered as separate objects: form, template, command.
+# The platform answers such a request with «Загруженный список объектов пуст» - no name, no reason.
 INLINE_CHILD_KINDS = [
     "Реквизит", "Attribute",
     "СтандартныйРеквизит", "StandardAttribute",
@@ -530,7 +531,7 @@ def xml_attr(value):
 
 
 def requested_objects(args):
-    """Плоский список имён из -Objects и/или -ObjectsFile. Пустой список = вся конфигурация."""
+    """Flat list of names from -Objects and/or -ObjectsFile. An empty list = the whole configuration."""
     out = []
     if args.Objects:
         out += [s.strip() for s in args.Objects.split(",") if s.strip()]
@@ -551,8 +552,8 @@ def requested_objects(args):
 
 
 def resolve_lockable_objects(names):
-    """Заменяет части объекта на сам объект. Это не сужение и не расширение запроса: владелец —
-    минимально возможная единица захвата для того, что просили."""
+    """Replace parts of an object with the object itself. This is neither narrowing nor widening
+    the request: the owner is the smallest possible capture unit for what was asked."""
     out = []
     notes = []
     for n in names:
@@ -571,20 +572,20 @@ def resolve_lockable_objects(names):
 
 
 def write_objects_list_xml(names, path, with_children):
-    """Пишет платформенный XML со списком объектов, возвращает путь к файлу."""
+    """Write the platform XML with the object list, return the file path."""
     child = "true" if with_children else "false"
     lines = ['<Objects xmlns="http://v8.1c.ru/8.3/config/objects" version="1.0">']
     for n in names:
         if n in CONFIG_ROOT_ALIASES:
-            # Корень конфигурации — отдельный элемент. Нужен, чтобы добавить или удалить объект:
-            # без захвата корня частичная загрузка нового объекта не проходит.
+            # The configuration root is a separate element. Needed to add or delete an object:
+            # without capturing the root, a partial load of a new object does not go through.
             lines.append('    <Configuration includeChildObjects="%s"/>' % child)
             continue
         esc = xml_attr(n)
         is_subsystem = bool(re.match(r"^(Подсистема|Subsystem)\.", n))
         if is_subsystem and with_children:
-            # includeChildObjects у подсистемы означает вложенные ПОДСИСТЕМЫ, а её состав
-            # подтягивает только вложенный <Subsystem> — поэтому под -WithChildren нужны оба.
+            # includeChildObjects on a subsystem means nested SUBSYSTEMS, while its composition
+            # is pulled only by the nested <Subsystem> - so under -WithChildren both are needed.
             lines.append('    <Object fullName="%s" includeChildObjects="true">' % esc)
             lines.append('        <Subsystem includeObjectsFromSubordinateSubsystems="true"/>')
             lines.append('    </Object>')
@@ -596,9 +597,9 @@ def write_objects_list_xml(names, path, with_children):
     return path
 
 
-# --- Разбор лога операции ---
-# Платформа отчитывается ПОСТРОЧНО, и код возврата про фактический результат не говорит:
-# захват не атомарен (код 1 при реально захваченном объекте), а все no-op'ы дают код 0.
+# --- Operation log parsing ---
+# The platform reports LINE BY LINE, and the exit code says nothing about the actual result:
+# capture is not atomic (code 1 with an object actually captured), while all no-ops give code 0.
 def read_repo_log(log_text):
     r = {
         "locked": [], "locked_by_other": [], "received": [], "committed": [],
@@ -646,16 +647,16 @@ def read_repo_log(log_text):
     return r
 
 
-# --- Полученные объекты → готовая команда перевыгрузки ---
-# Захват и обновление МОЛЧА подтягивают свежие версии в локальную конфигурацию. Если после этого
-# загрузить старые исходники, чужие изменения откатятся без единой ошибки. Выгрузку не делаем сами
-# (она затрёт локальные правки) — печатаем готовую команду.
+# --- Received objects -> ready re-dump command ---
+# Capture and update SILENTLY pull fresh versions into the local configuration. If old sources
+# are loaded after that, other people's changes roll back without a single error. We do not dump
+# ourselves (it would overwrite local edits) - we print a ready command.
 def owner_objects(names):
     owners = []
     for n in names:
         parts = n.split(".")
         if len(parts) == 1:
-            continue  # корень конфигурации: частично по имени не выгружается
+            continue  # configuration root: not dumped partially by name
         owner = "%s.%s" % (parts[0], parts[1]) if len(parts) > 2 else n
         if owner not in owners:
             owners.append(owner)
@@ -685,9 +686,9 @@ def print_received_warning(received):
         print("используйте /db-dump-xml -Mode Changes.")
 
 
-# --- Подкоманды ---
-# Ключ выбирается по таблице: произвольный ключ задать нельзя. Неизвестная подкоманда — ошибка,
-# а не проброс: платформа на неизвестный ключ открывает конфигуратор и висит.
+# --- Subcommands ---
+# The key is chosen from a table: an arbitrary key cannot be set. An unknown subcommand is an
+# error, not a pass-through: on an unknown key the platform opens the Configurator and hangs.
 COMMAND_KEYS = {
     "lock": "/ConfigurationRepositoryLock",
     "unlock": "/ConfigurationRepositoryUnlock",
@@ -705,7 +706,7 @@ COMMAND_KEYS = {
     "clear-cache": "/ConfigurationRepositoryClearCache",
 }
 
-# Прощающий ввод: синонимы намеренно НЕ документируются, в SKILL.md одна каноничная форма.
+# Forgiving input: aliases are deliberately NOT documented, SKILL.md has one canonical form.
 COMMAND_ALIASES = {
     "capture": "lock", "захватить": "lock",
     "release": "unlock", "отменить-захват": "unlock",
@@ -720,8 +721,8 @@ COMMAND_ALIASES = {
 
 def resolve_command(raw):
     c = raw.strip().lower()
-    # unbind отличается от unlock одной буквой, а последствия разные: отмена захвата против
-    # отключения базы от хранилища. Молча угадывать нельзя.
+    # unbind differs from unlock by one letter, but the consequences differ: canceling capture
+    # vs. detaching the base from the repository. We must not guess silently.
     if c == "unbind":
         print("Error: 'unbind' is ambiguous — did you mean 'unlock' (release captured objects) "
               "or 'disconnect' (detach the base from the repository)?")
@@ -733,18 +734,18 @@ def resolve_command(raw):
     return c
 
 
-# --- Вердикт ---
-# Код возврата платформы про фактический результат не говорит: захват и помещение НЕ атомарны
-# (код 1 при реально захваченном объекте), а все no-op'ы дают код 0. Меряем не «изменилось ли»,
-# а «достигнуто ли запрошенное»: достигнуто, в том числе уже было — 0; частично — 0 с поимённым
-# предупреждением; не достигнуто ничего — 1.
+# --- Verdict ---
+# The platform's exit code says nothing about the actual result: capture and commit are NOT
+# atomic (code 1 with an object actually captured), while all no-ops give code 0. We measure not
+# "did anything change" but "was what was requested achieved": achieved, including already
+# achieved - 0; partially - 0 with a per-name warning; nothing achieved - 1.
 def object_key(name):
-    """Ключ для сопоставления запрошенного с тем, что назвала платформа. Имена типов в паре
-    «запрос ↔ лог» бывают на разных языках: платформа ПРИНИМАЕТ Catalog.Номенклатура, а
-    ОТВЕЧАЕТ всегда Справочник.Номенклатура. Поэтому сравниваем только собственные имена —
-    нечётные сегменты пути; они в обеих раскладках одинаковы, и карта типов не нужна.
-    Цена приёма: Справочник.Х и Документ.Х дают один ключ. Влияет только на формулировку
-    вердикта, не на выполненную операцию."""
+    """Key for matching what was requested against what the platform named. Type names in a
+    "request <-> log" pair may be in different languages: the platform ACCEPTS Catalog.Номенклатура
+    but always ANSWERS Справочник.Номенклатура. Therefore we compare only the own names -
+    the odd segments of the path; they are the same in both layouts, and no type map is needed.
+    The price of this trick: Справочник.Х and Документ.Х give one key. Affects only the wording
+    of the verdict, not the operation performed."""
     segs = name.split(".")
     own = segs[1::2]
     if not own:
@@ -752,8 +753,8 @@ def object_key(name):
     return ".".join(own).lower()
 
 
-# Операция над всей конфигурацией перечисляет тысячи объектов. Печатаем начало списка,
-# остальное кладём в файл: модели нужен факт и путь, а не простыня.
+# An operation on the whole configuration lists thousands of objects. We print the start of the
+# list and put the rest in a file: the model needs the fact and the path, not a wall of text.
 LIST_LIMIT = 20
 
 
@@ -793,8 +794,8 @@ def write_repo_verdict(cmd, log, platform_exit, requested, report_format="", out
         return 1
 
     if cmd == "lock":
-        # Порядок вывода: факты, затем вердикт, и только потом совет. Совет длинный, и
-        # между фактами и вердиктом он прятал бы главную строку.
+        # Output order: facts, then the verdict, and only then the advice. The advice is long, and
+        # between the facts and the verdict it would hide the main line.
         print_repo_objects("Захвачено", log["locked"], "locked")
         if log["locked_by_other"]:
             print("Не удалось захватить (%d):" % len(log["locked_by_other"]))
@@ -806,9 +807,9 @@ def write_repo_verdict(cmd, log, platform_exit, requested, report_format="", out
                 print("  … и ещё %d; полный список: %s"
                       % (len(log["locked_by_other"]) - LIST_LIMIT, path))
         if not log["locked"] and log["locked_by_other"]:
-            # «Уже захвачено мной» платформа не печатает вовсе, поэтому отличить его от
-            # «не захвачено» по логу нельзя — сверяем с тем, что просили. Заняты ВСЕ
-            # запрошенные объекты только тогда, когда каждый из них назван занятым.
+            # "Already captured by me" is not printed by the platform at all, so it cannot be told
+            # from "not captured" by the log - we compare against what was requested. ALL requested
+            # objects are blocked only when every one of them is named as blocked.
             blocked = {object_key(o["name"]) for o in log["locked_by_other"]}
             asked = [object_key(n) for n in requested]
             all_blocked = (not asked) or all(k in blocked for k in asked)
@@ -821,7 +822,7 @@ def write_repo_verdict(cmd, log, platform_exit, requested, report_format="", out
             print_received_warning(log["received"])
             return 0
         if not log["locked"] and platform_exit == 0:
-            # Захват уже захваченного СОБОЙ: платформа не печатает ни блока операции, ни строк.
+            # Capturing what is ALREADY captured by yourself: the platform prints neither an operation block nor lines.
             print("Объекты уже захвачены вами — изменений не потребовалось.")
             print_received_warning(log["received"])
             return 0
@@ -838,7 +839,7 @@ def write_repo_verdict(cmd, log, platform_exit, requested, report_format="", out
         return platform_exit
 
     if cmd == "unlock":
-        # Отмена захвата атомарна: при локальных изменениях платформа отменяет операцию целиком.
+        # Capture cancellation is atomic: on local changes the platform cancels the operation entirely.
         if platform_exit != 0:
             if log["modified"]:
                 print("Отмена захвата не выполнена: у объектов есть локальные изменения (%d):" % len(log["modified"]))
@@ -861,8 +862,8 @@ def write_repo_verdict(cmd, log, platform_exit, requested, report_format="", out
 
     if cmd == "commit":
         if platform_exit != 0:
-            # Платформа отдаёт голую «Ошибка помещения изменений объектов в хранилище» —
-            # ни объекта, ни причины, одинаково для всех причин. Диагностику даём свою.
+            # The platform gives a bare «Ошибка помещения изменений объектов в хранилище» -
+            # no object, no cause, the same for all causes. We provide our own diagnostics.
             print("Помещение не выполнено (код %s)%s" % (platform_exit, describe_exit(platform_exit)))
             print("Платформа не называет причину. Проверьте:")
             print("  - захвачен ли объект вами: /db-repo lock")
@@ -880,9 +881,9 @@ def write_repo_verdict(cmd, log, platform_exit, requested, report_format="", out
             print("Получение изменений не выполнено (код %s)%s" % (platform_exit, describe_exit(platform_exit)))
             return 1
         if not log["has_operation_block"]:
-            # У подключённой базы лог всегда содержит блок операции — даже когда получать нечего.
-            # Его отсутствие означает, что база к хранилищу НЕ подключена, а тогда эта команда
-            # молча заменяет всю конфигурацию содержимым хранилища и рапортует успех.
+            # A bound base's log always contains an operation block - even when there is nothing to receive.
+            # Its absence means the base is NOT bound to the repository, and then this command
+            # silently replaces the whole configuration with the repository content and reports success.
             print("Error: the platform reported success but printed no repository operation block.")
             print("       Похоже, база НЕ подключена к хранилищу — в этом случае команда заменяет")
             print("       всю конфигурацию базы содержимым хранилища. Проверьте состояние базы.")
@@ -897,8 +898,8 @@ def write_repo_verdict(cmd, log, platform_exit, requested, report_format="", out
     if platform_exit != 0:
         print("Команда '%s' завершилась с ошибкой (код %s)%s"
               % (cmd, platform_exit, describe_exit(platform_exit)))
-        # Подключение базы, у которой конфигурация уже есть, платформа отклоняет без
-        # подсказки — а действие ровно одно, и оно необратимо.
+        # Binding a base that already has a configuration is rejected by the platform without
+        # a hint - yet there is exactly one action, and it is irreversible.
         if "связанная с данным хранилищем" in (log.get("raw") or ""):
             print("[hint] за этим пользователем хранилища уже числится другая база.")
             print("       Подключить всё равно — -ForceBindAlreadyBindedUser.")
@@ -911,9 +912,9 @@ def write_repo_verdict(cmd, log, platform_exit, requested, report_format="", out
     if cmd == "report" and report_format == "txt" and os.path.exists(output_file):
         with open(output_file, encoding="utf-8-sig") as f:
             lines = f.read().rstrip().splitlines()
-        # Короткий отчёт печатаем целиком, длинный — не печатаем ВОВСЕ. Обрезанный отчёт
-        # по версиям опаснее длинного: он читается как полный ответ, и по куску легко
-        # заключить «объект не менялся». Список объектов при обрезке хотя бы очевидно неполон.
+        # A short report is printed in full, a long one is NOT printed AT ALL. A truncated version
+        # report is more dangerous than a long one: it reads as a complete answer, and from a piece
+        # one easily concludes "the object did not change". A truncated object list is at least obviously incomplete.
         if len(lines) <= 100:
             print("--- %s ---" % output_file)
             print(chr(10).join(lines))
@@ -945,8 +946,8 @@ def main():
     parser.add_argument("-Objects", default="")
     parser.add_argument("-ObjectsFile", default="")
     parser.add_argument("-WithChildren", action="store_true")
-    # Операция над ВСЕЙ конфигурацией. Отдельный флаг, а не умолчание при забытом -Objects:
-    # захват всей конфигурации на большой базе идёт долго и блокирует работу всей команде.
+    # Operation on the WHOLE configuration. A separate flag rather than a default when -Objects is forgotten:
+    # capturing the whole configuration on a large base takes long and blocks work for the whole team.
     parser.add_argument("-All", dest="All", action="store_true")
     parser.add_argument("-Comment", default="")
     parser.add_argument("-KeepLocked", action="store_true")
@@ -1013,10 +1014,10 @@ def main():
                   "in .v8-project.json, or pass -RepositoryPath")
         sys.exit(1)
 
-    # Подтверждение деструктивных операций спрашивает модель (см. SKILL.md) — так же, как у полной
-    # загрузки в db-load-xml. Здесь остаётся только то, что моделью не проверяется: команда update на
-    # базе, про которую реестр не знает, что она подключена к хранилищу. На НЕподключённой базе
-    # UpdateCfg молча заменяет всю конфигурацию содержимым хранилища и рапортует успех.
+    # Confirmation of destructive operations is requested by the model (see SKILL.md) - same as for
+    # a full load in db-load-xml. Here only what the model does not check remains: the update command
+    # on a base that the registry does not know is bound to a repository. On a base NOT bound,
+    # UpdateCfg silently replaces the whole configuration with the repository content and reports success.
     if cmd == "update" and not repo["from_registry"] and not args.RepositoryPath:
         print("Error: the database record in .v8-project.json declares no repository — refusing to run update")
         print("       On a base NOT bound to a repository this command silently REPLACES the whole configuration")
@@ -1029,9 +1030,9 @@ def main():
         print("Error: -Objects/-ObjectsFile does not apply to '%s'" % cmd)
         sys.exit(1)
 
-    # Операции над всей конфигурацией требуют явного -All. Умолчанием это быть не может: захват
-    # всей конфигурации на большой базе идёт долго и блокирует работу всей команде, а получается
-    # такой вызов от одного забытого -Objects.
+    # Operations on the whole configuration require an explicit -All. It cannot be a default:
+    # capturing the whole configuration on a large base takes long and blocks work for the whole
+    # team, and such a call results from one forgotten -Objects.
     whole_config_aware = ["lock", "unlock", "commit"]
     if args.All and requested:
         print("Error: -All (whole configuration) contradicts -Objects/-ObjectsFile — pick one")
@@ -1041,7 +1042,7 @@ def main():
         print('       Укажите объекты: -Objects "Справочник.Номенклатура"')
         print("       Это и нужно — подтвердите явно: -All")
         sys.exit(1)
-    # Корень с подчинёнными — это тоже вся конфигурация, хотя выглядит как «захвачу корень».
+    # The root with children is also the whole configuration, though it looks like "I'll capture the root".
     if args.WithChildren:
         root_asked = [n for n in requested if n in CONFIG_ROOT_ALIASES]
         if root_asked:
@@ -1051,7 +1052,7 @@ def main():
             sys.exit(1)
 
     if cmd == "report" and not args.OutputFile:
-        # Отчёт печатается в вывод, поэтому путь нужен только если его хотят сохранить.
+        # The report is printed to the output, so a path is needed only when it is to be saved.
         args.OutputFile = os.path.join(tempfile.gettempdir(), "db-repo-report-%d.%s" % (random.randint(1, 2 ** 31), args.ReportFormat))
     if cmd == "dump-cfg" and not args.OutputFile:
         print("Error: -OutputFile (path to the .cf file) is required for dump-cfg")
@@ -1077,7 +1078,7 @@ def main():
     temp_dir = os.path.join(tempfile.gettempdir(), "db_repo_%d" % random.randint(1, 2 ** 31))
     os.makedirs(temp_dir, exist_ok=True)
     try:
-        # --- Соединение ---
+        # --- Connection ---
         arguments = ["DESIGNER"]
         if args.InfoBaseServer and args.InfoBaseRef:
             arguments += ["/S", '"%s/%s"' % (args.InfoBaseServer, args.InfoBaseRef)]
@@ -1089,7 +1090,7 @@ def main():
             arguments.append('/P"%s"' % args.Password)
         arguments += repository_args(repo)
 
-        # --- Команда ---
+        # --- Command ---
         key = COMMAND_KEYS[cmd]
         if cmd == "clear-cache":
             key = {"local": "/ConfigurationRepositoryClearLocalCache",
@@ -1113,7 +1114,7 @@ def main():
                 arguments.append("-force")
         elif cmd == "commit":
             if args.Comment:
-                # Многострочный комментарий задаётся своим -comment на каждую строку.
+                # A multi-line comment is set with its own -comment for each line.
                 for line in args.Comment.splitlines():
                     arguments += ["-comment", '"%s"' % line]
             if args.KeepLocked:
@@ -1200,16 +1201,16 @@ def main():
 
         log_text = ""
         if os.path.exists(log_file):
-            # /Out — всегда UTF-8 с BOM.
+            # /Out is always UTF-8 with BOM.
             with open(log_file, encoding="utf-8-sig") as f:
                 log_text = f.read()
         log = read_repo_log(log_text)
         verdict = write_repo_verdict(cmd, log, exit_code, requested,
                                      args.ReportFormat, args.OutputFile)
-        # Разбор мог не покрыть причину (у commit её вовсе нет в логе) — при отказе показываем сырой лог.
+        # Parsing may not cover the cause (commit has none in the log at all) - on failure we show the raw log.
         if verdict != 0 and log_text.strip():
-            # Лог операции над всей конфигурацией — тысячи строк. Показываем хвост: итог и причина
-            # отказа платформа пишет в конце.
+            # The log of an operation on the whole configuration is thousands of lines. We show the tail:
+            # the platform writes the result and the failure cause at the end.
             log_lines = log_text.rstrip().splitlines()
             log_limit = 200
             print("--- Log ---")
@@ -1218,10 +1219,10 @@ def main():
                 log_lines = log_lines[-log_limit:]
             print("\n".join(log_lines))
             print("--- End ---")
-        # Реестр — не формальность: без repository реквизиты придётся передавать в каждом вызове,
-        # а update откажется работать вовсе. Модель об этом не вспомнит, поэтому даём готовый блок.
-        # «Соединение не установлено» у сетевого хранилища означает не отсутствие реквизитов,
-        # а недоступный сервер — трактовка «добавьте repository» увела бы не туда.
+        # The registry is not a formality: without repository the credentials must be passed on every
+        # call, and update refuses to work at all. The model will not remember this, so we give a ready
+        # block. "Connection not established" for a network repository means the server is unreachable,
+        # not missing credentials - the "add repository" interpretation would lead astray.
         if verdict != 0 and "Соединение с хранилищем конфигурации не установлено" in log_text:
             if re.match(r"^tcp://", repo["path"] or ""):
                 print("[hint] сервер хранилища недоступен по адресу %s." % repo["path"])
@@ -1233,7 +1234,7 @@ def main():
                 print("[hint] хранилище недоступно по пути %s — проверьте путь и реквизиты."
                       % repo["path"])
 
-        # Признак — что путь задали аргументом: значит в реестре его нет (или он другой).
+        # The sign is that the path was given as an argument: that means it is not in the registry (or differs).
         if verdict == 0 and cmd in ("create", "connect") and args.RepositoryPath:
             json_path = repo["path"].replace("\\", "\\\\")
             print("")

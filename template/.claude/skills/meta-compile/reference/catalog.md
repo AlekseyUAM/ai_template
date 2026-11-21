@@ -5,27 +5,27 @@
   "attributes": ["ИНН: String(12)", "КПП: String(9)"] }
 ```
 
-## Свойства
+## Properties
 
-| Ключ | Умолчание | Значения |
+| Key | Default | Values |
 |------|-----------|----------|
-| `comment` | пусто | строка |
+| `comment` | empty | string |
 | `hierarchical` | `false` | bool |
 | `hierarchyType` | `HierarchyFoldersAndItems` | `HierarchyFoldersAndItems` / `HierarchyOfItems` |
-| `limitLevelCount` | `false` | bool (ограничивать кол-во уровней) |
-| `levelCount` | `2` | число уровней (при `limitLevelCount`) |
-| `foldersOnTop` | `true` | bool (группы сверху) |
-| `owners` | `[]` | массив владельцев: `["Catalog.Контрагенты"]` |
-| `subordinationUse` | `ToItems` | `ToItems` / `ToFolders` / `ToFoldersAndItems` (кому подчинён) |
-| `codeLength` | `9` | длина кода (0 — без кода) |
+| `limitLevelCount` | `false` | bool (limit the number of levels) |
+| `levelCount` | `2` | number of levels (with `limitLevelCount`) |
+| `foldersOnTop` | `true` | bool (folders on top) |
+| `owners` | `[]` | array of owners: `["Catalog.Контрагенты"]` |
+| `subordinationUse` | `ToItems` | `ToItems` / `ToFolders` / `ToFoldersAndItems` (whom it is subordinate to) |
+| `codeLength` | `9` | code length (0 - no code) |
 | `codeType` | `String` | `String` / `Number` |
 | `codeAllowedLength` | `Variable` | `Variable` / `Fixed` |
 | `codeSeries` | `WholeCatalog` | `WholeCatalog` / `WithinSubordination` / `WithinOwnerSubordination` |
-| `autonumbering` | `true` | bool (автонумерация) |
-| `checkUnique` | `false` | bool (контроль уникальности кода) |
-| `descriptionLength` | `25` | длина наименования |
+| `autonumbering` | `true` | bool (autonumbering) |
+| `checkUnique` | `false` | bool (code uniqueness check) |
+| `descriptionLength` | `25` | description length |
 | `defaultPresentation` | `AsDescription` | `AsDescription` / `AsCode` |
-| `quickChoice` | `true` | bool (быстрый выбор) |
+| `quickChoice` | `true` | bool (quick choice) |
 | `choiceMode` | `BothWays` | `BothWays` / `QuickChoice` / `FromForm` |
 | `editType` | `InDialog` | `InDialog` / `InList` / `BothWays` |
 | `createOnInput` | `Use` | `Auto` / `Use` / `DontUse` |
@@ -37,19 +37,19 @@
 | `dataLockControlMode` | `Managed` | `Automatic` / `Managed` |
 | `useStandardCommands` | `true` | bool |
 | `includeHelpInContents` | `false` | bool |
-| `attributes` | `[]` | реквизиты (shorthand / объектная форма) |
-| `tabularSections` | `{}` | табличные части |
+| `attributes` | `[]` | attributes (shorthand / object form) |
+| `tabularSections` | `{}` | tabular sections |
 
-**Формы.** Ссылка на форму — `Тип.Объект.Form.ИмяФормы` (напр. `Catalog.Организации.Form.ФормаЭлемента`).
-Слоты основных форм: `defaultObjectForm`, `defaultFolderForm`, `defaultListForm`, `defaultChoiceForm`,
-`defaultFolderChoiceForm`; вспомогательных — те же имена с префиксом `auxiliary` (`auxiliaryObjectForm`, …).
+**Forms.** A form reference is `Тип.Объект.Form.ИмяФормы` (e.g. `Catalog.Организации.Form.ФормаЭлемента`).
+Main form slots: `defaultObjectForm`, `defaultFolderForm`, `defaultListForm`, `defaultChoiceForm`,
+`defaultFolderChoiceForm`; auxiliary ones - the same names with the `auxiliary` prefix (`auxiliaryObjectForm`, …).
 
-## `predefined` — предопределённые элементы
+## `predefined` - predefined items
 
-Массив предопределённых элементов → `Ext/Predefined.xml`. Элемент — строка (плоский случай) или объект (иерархия).
+An array of predefined items -> `Ext/Predefined.xml`. An item is a string (flat case) or an object (hierarchy).
 
-**Строка:** `"(Код) Имя [Наименование]"` — `Имя` обязательно; `(Код)` и `[Наименование]` опциональны.
-Без `[...]` наименование выводится из имени; `[]` — пустое; `[текст]` — заданное.
+**String:** `"(Код) Имя [Наименование]"` - `Имя` is required; `(Код)` and `[Наименование]` are optional.
+Without `[...]` the description is derived from the name; `[]` - empty; `[текст]` - the given one.
 
 ```json
 "predefined": [
@@ -60,12 +60,12 @@
 ]
 ```
 
-**Объект:** `name` (обязательно), `code`, `description` (наименование), `isFolder` (признак группы),
-`childItems` (вложенные, рекурсивно). Тип кода — по свойству `codeType`.
+**Object:** `name` (required), `code`, `description` (name), `isFolder` (folder flag),
+`childItems` (nested, recursively). The code type is per the `codeType` property.
 
-## Дополнительно
+## Additional
 
-- Свойства реквизитов и табличных частей — `attributes.md`.
-- Представления (`objectPresentation`, `listPresentation`, …), команды объекта, характеристики
-  («ДопРеквизиты и сведения»), кастомизация стандартных реквизитов, `inputByString` / `dataLockFields` /
-  `basedOn` — `blocks.md`.
+- Attribute and tabular section properties - `attributes.md`.
+- Presentations (`objectPresentation`, `listPresentation`, …), object commands, characteristics
+  ("Additional attributes and information"), standard attribute customization, `inputByString` / `dataLockFields` /
+  `basedOn` - `blocks.md`.

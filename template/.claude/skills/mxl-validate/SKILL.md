@@ -1,6 +1,6 @@
 ---
 name: mxl-validate
-description: Валидация макета табличного документа (MXL). Используй после создания или модификации макета для проверки корректности
+description: Validate a spreadsheet document (MXL) template. Use after creating or modifying a template to check correctness
 argument-hint: <TemplatePath> [-Detailed] [-MaxErrors 20]
 allowed-tools:
   - Bash
@@ -8,22 +8,21 @@ allowed-tools:
   - Glob
 ---
 
-# /mxl-validate — валидация макета табличного документа (MXL)
+# /mxl-validate - spreadsheet document (MXL) template validation
 
-Проверяет Template.xml на структурные ошибки: индексы, ссылки на палитры, диапазоны именованных областей и объединений, согласованность ячеек-полей ввода.
+Checks Template.xml for structural errors: indexes, palette references, named area and merge ranges, consistency of input field cells.
 
-## Параметры
+## Parameters
 
-| Параметр      | Обяз. | Умолч. | Описание                                 |
+| Parameter     | Req.  | Default | Description                                |
 |---------------|:-----:|---------|--------------------------------------------|
-| TemplatePath  | да    | —       | Путь к макету (директория или Template.xml) |
-| Detailed      | нет   | —       | Подробный вывод (все проверки, включая успешные) |
-| MaxErrors     | нет   | 20      | Остановиться после N ошибок                |
+| TemplatePath  | yes   | -       | Path to the template (directory or Template.xml) |
+| Detailed      | no    | -       | Detailed output (all checks, including successful ones) |
+| MaxErrors     | no    | 20      | Stop after N errors                        |
 
-## Команда
+## Command
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/mxl-validate.py" -TemplatePath "Catalogs/Номенклатура/Templates/Макет"
 python "${CLAUDE_SKILL_DIR}/scripts/mxl-validate.py" -TemplatePath "src/МояОбработка/Templates/ПечатнаяФорма"
 ```
-

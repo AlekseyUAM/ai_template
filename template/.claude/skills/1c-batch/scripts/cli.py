@@ -1,4 +1,4 @@
-"""CLI точка входа — команда 1c-batch."""
+"""CLI entry point - the 1c-batch command."""
 
 import sys
 
@@ -9,11 +9,11 @@ from .runner import run_batch, run_create_infobase, run_interactive
 
 
 def _arg(key: str, value: str | None = None) -> list[str]:
-    """Формирование аргумента 1С: ключ и значение как отдельные argv-элементы.
+    """Build a 1C argument: key and value as separate argv items.
 
-    Значения НЕ кавычатся — subprocess.run передаёт список напрямую через
-    execvp (POSIX) или list2cmdline (Windows), и квотинг делает ОС.
-    Если value не указан — возвращает только ключ (для флагов).
+    Values are NOT quoted - subprocess.run passes the list directly via
+    execvp (POSIX) or list2cmdline (Windows), and the OS does the quoting.
+    If value is not given - returns only the key (for flags).
     """
     if value is None:
         return [key]
@@ -23,13 +23,13 @@ def _arg(key: str, value: str | None = None) -> list[str]:
 @click.group()
 @click.pass_context
 def cli(ctx: click.Context) -> None:
-    """1c-batch — пакетные операции с 1С:Предприятие 8."""
+    """1c-batch - batch operations with 1C:Enterprise 8."""
     ctx.ensure_object(dict)
     cfg = _load_config()
     ctx.obj["config"] = cfg
 
 
-# ── Запуск ──────────────────────────────────────────────────────────
+# ── Run ─────────────────────────────────────────────────------------
 
 @cli.command()
 @click.argument("epf", required=False)
@@ -40,7 +40,7 @@ def cli(ctx: click.Context) -> None:
 @click.pass_context
 def run_enterprise(ctx: click.Context, epf: str | None, c_param: str | None,
                    wait: bool) -> None:
-    """Запуск в режиме предприятия."""
+    """Run in Enterprise mode."""
     cfg = ctx.obj["config"]
     extra: list[str] = []
     if epf:
@@ -54,12 +54,12 @@ def run_enterprise(ctx: click.Context, epf: str | None, c_param: str | None,
 @cli.command()
 @click.pass_context
 def run_designer(ctx: click.Context) -> None:
-    """Запуск конфигуратора."""
+    """Run the Configurator."""
     cfg = ctx.obj["config"]
     run_interactive(cfg, "DESIGNER")
 
 
-# ── Конфигурация ────────────────────────────────────────────────────
+# ── Configuration ───────────────────────────────────────────────────
 
 @cli.command()
 @click.argument("directory")
@@ -69,7 +69,7 @@ def run_designer(ctx: click.Context) -> None:
 @click.option("--format", "fmt", type=click.Choice(["Plain", "Hierarchical"]), default=None, help="Формат выгрузки (-Format)")
 @click.pass_context
 def dump_config(ctx: click.Context, directory: str, update: bool, extension: str | None, all_extensions: bool, fmt: str | None) -> None:
-    """Выгрузка конфигурации в XML."""
+    """Dump the configuration to XML."""
     cfg = ctx.obj["config"]
     args = _arg("/DumpConfigToFiles", directory)
     if extension:
@@ -94,7 +94,7 @@ def dump_config(ctx: click.Context, directory: str, update: bool, extension: str
 @click.pass_context
 def load_config(ctx: click.Context, directory: str, files: str | None, list_file: str | None,
                 fmt: str | None, partial: bool, extension: str | None, skip_db_update: bool) -> None:
-    """Загрузка конфигурации из XML."""
+    """Load the configuration from XML."""
     cfg = ctx.obj["config"]
     args = _arg("/LoadConfigFromFiles", directory)
     if extension:
@@ -118,7 +118,7 @@ def load_config(ctx: click.Context, directory: str, files: str | None, list_file
 @click.option("--extension", default=None, help="Имя расширения (-Extension)")
 @click.pass_context
 def dump_cfg(ctx: click.Context, filepath: str, extension: str | None) -> None:
-    """Сохранение конфигурации в файл .cf."""
+    """Save the configuration to a .cf file."""
     cfg = ctx.obj["config"]
     args = _arg("/DumpCfg", filepath)
     if extension:
@@ -131,7 +131,7 @@ def dump_cfg(ctx: click.Context, filepath: str, extension: str | None) -> None:
 @click.option("--extension", default=None, help="Имя расширения (-Extension)")
 @click.pass_context
 def load_cfg(ctx: click.Context, filepath: str, extension: str | None) -> None:
-    """Загрузка конфигурации из файла .cf."""
+    """Load the configuration from a .cf file."""
     cfg = ctx.obj["config"]
     args = _arg("/LoadCfg", filepath)
     if extension:
@@ -145,7 +145,7 @@ def load_cfg(ctx: click.Context, filepath: str, extension: str | None) -> None:
 @click.option("--extension", default=None, help="Имя расширения (-Extension)")
 @click.pass_context
 def update_db_cfg(ctx: click.Context, dynamic: str | None, server: bool, extension: str | None) -> None:
-    """Обновление конфигурации БД."""
+    """Update the DB configuration."""
     cfg = ctx.obj["config"]
     args = ["/UpdateDBCfg"]
     if dynamic:
@@ -157,7 +157,7 @@ def update_db_cfg(ctx: click.Context, dynamic: str | None, server: bool, extensi
     sys.exit(run_batch(cfg, "update-db-cfg", args))
 
 
-# ── Расширения ──────────────────────────────────────────────────────
+# ── Extensions ──────────────────────────────────────────────────────
 
 @cli.command()
 @click.argument("directory")
@@ -166,7 +166,7 @@ def update_db_cfg(ctx: click.Context, dynamic: str | None, server: bool, extensi
 @click.option("--format", "fmt", type=click.Choice(["Plain", "Hierarchical"]), default=None, help="Формат выгрузки")
 @click.pass_context
 def dump_extension(ctx: click.Context, directory: str, name: str, update: bool, fmt: str | None) -> None:
-    """Выгрузка расширения в XML."""
+    """Dump an extension to XML."""
     cfg = ctx.obj["config"]
     args = _arg("/DumpConfigToFiles", directory) + _arg("-Extension", name)
     if update:
@@ -182,7 +182,7 @@ def dump_extension(ctx: click.Context, directory: str, name: str, update: bool, 
 @click.option("--skip-db-update", is_flag=True, help="Не обновлять конфигурацию БД")
 @click.pass_context
 def load_extension(ctx: click.Context, directory: str, name: str, skip_db_update: bool) -> None:
-    """Загрузка расширения из XML."""
+    """Load an extension from XML."""
     cfg = ctx.obj["config"]
     args = _arg("/LoadConfigFromFiles", directory) + _arg("-Extension", name) + ["-updateConfigDumpInfo"]
     if not skip_db_update:
@@ -195,7 +195,7 @@ def load_extension(ctx: click.Context, directory: str, name: str, skip_db_update
 @click.option("--name", required=True, help="Имя расширения")
 @click.pass_context
 def dump_cfg_extension(ctx: click.Context, filepath: str, name: str) -> None:
-    """Сохранение расширения в .cfe."""
+    """Save an extension to .cfe."""
     cfg = ctx.obj["config"]
     args = _arg("/DumpCfg", filepath) + _arg("-Extension", name)
     sys.exit(run_batch(cfg, "dump-cfg-extension", args))
@@ -206,7 +206,7 @@ def dump_cfg_extension(ctx: click.Context, filepath: str, name: str) -> None:
 @click.option("--name", required=True, help="Имя расширения")
 @click.pass_context
 def load_cfg_extension(ctx: click.Context, filepath: str, name: str) -> None:
-    """Загрузка расширения из .cfe."""
+    """Load an extension from .cfe."""
     cfg = ctx.obj["config"]
     args = _arg("/LoadCfg", filepath) + _arg("-Extension", name)
     sys.exit(run_batch(cfg, "load-cfg-extension", args))
@@ -217,7 +217,7 @@ def load_cfg_extension(ctx: click.Context, filepath: str, name: str) -> None:
 @click.option("--all", "all_ext", is_flag=True, help="Удалить все расширения (-AllExtensions)")
 @click.pass_context
 def delete_extension(ctx: click.Context, name: str | None, all_ext: bool) -> None:
-    """Удаление расширения."""
+    """Delete an extension."""
     cfg = ctx.obj["config"]
     args = ["/DeleteCfg"]
     if name:
@@ -230,13 +230,13 @@ def delete_extension(ctx: click.Context, name: str | None, all_ext: bool) -> Non
 @cli.command()
 @click.pass_context
 def list_extensions(ctx: click.Context) -> None:
-    """Список расширений."""
+    """List extensions."""
     cfg = ctx.obj["config"]
     args = ["/DumpDBCfgList", "-AllExtensions"]
     sys.exit(run_batch(cfg, "list-extensions", args))
 
 
-# ── Обработки (EPF/ERF) ────────────────────────────────────────────
+# ── Data processors (EPF/ERF) ──────────────────────────────────────
 
 @cli.command()
 @click.argument("xml_dir")
@@ -244,7 +244,7 @@ def list_extensions(ctx: click.Context) -> None:
 @click.option("--format", "fmt", type=click.Choice(["Plain", "Hierarchical"]), default=None, help="Формат выгрузки (-Format)")
 @click.pass_context
 def dump_epf(ctx: click.Context, xml_dir: str, epf_file: str, fmt: str | None) -> None:
-    """Разборка обработки/отчёта в XML."""
+    """Unpack a data processor/report into XML."""
     cfg = ctx.obj["config"]
     args = _arg("/DumpExternalDataProcessorOrReportToFiles", xml_dir) + [epf_file]
     if fmt:
@@ -257,19 +257,19 @@ def dump_epf(ctx: click.Context, xml_dir: str, epf_file: str, fmt: str | None) -
 @click.argument("epf_file")
 @click.pass_context
 def build_epf(ctx: click.Context, xml_dir: str, epf_file: str) -> None:
-    """Сборка обработки/отчёта из XML."""
+    """Build a data processor/report from XML."""
     cfg = ctx.obj["config"]
     args = _arg("/LoadExternalDataProcessorOrReportFromFiles", xml_dir) + [epf_file]
     sys.exit(run_batch(cfg, "build-epf", args))
 
 
-# ── База данных ─────────────────────────────────────────────────────
+# ── Database ────────────────────────────────────────────────────────
 
 @cli.command()
 @click.argument("filepath")
 @click.pass_context
 def dump_ib(ctx: click.Context, filepath: str) -> None:
-    """Выгрузка ИБ в .dt."""
+    """Dump the infobase to .dt."""
     cfg = ctx.obj["config"]
     args = _arg("/DumpIB", filepath)
     sys.exit(run_batch(cfg, "dump-ib", args))
@@ -280,7 +280,7 @@ def dump_ib(ctx: click.Context, filepath: str) -> None:
 @click.option("--jobs-count", type=int, default=None, help="Количество фоновых заданий (-JobsCount)")
 @click.pass_context
 def restore_ib(ctx: click.Context, filepath: str, jobs_count: int | None) -> None:
-    """Загрузка ИБ из .dt."""
+    """Load the infobase from .dt."""
     cfg = ctx.obj["config"]
     args = _arg("/RestoreIB", filepath)
     if jobs_count is not None:
@@ -294,7 +294,7 @@ def restore_ib(ctx: click.Context, filepath: str, jobs_count: int | None) -> Non
 @click.option("--use-template", default=None, help="Путь к шаблону (/UseTemplate)")
 @click.pass_context
 def create_infobase(ctx: click.Context, path: str, add_to_list: str | None, use_template: str | None) -> None:
-    """Создание информационной базы."""
+    """Create an infobase."""
     cfg = ctx.obj["config"]
     extra: list[str] = []
     if add_to_list:
@@ -307,7 +307,7 @@ def create_infobase(ctx: click.Context, path: str, add_to_list: str | None, use_
 @cli.command()
 @click.pass_context
 def ib_restore_integrity(ctx: click.Context) -> None:
-    """Восстановление структуры ИБ."""
+    """Restore the infobase structure."""
     cfg = ctx.obj["config"]
     args = ["/IBRestoreIntegrity"]
     sys.exit(run_batch(cfg, "ib-restore-integrity", args))
@@ -322,7 +322,7 @@ def ib_restore_integrity(ctx: click.Context) -> None:
 @click.pass_context
 def ib_check_and_repair(ctx: click.Context, reindex: bool, log_integrity: bool,
                         recalc_totals: bool, ib_compression: bool, rebuild: bool) -> None:
-    """Тестирование и исправление ИБ."""
+    """Test and repair the infobase."""
     cfg = ctx.obj["config"]
     args = ["/IBCheckAndRepair"]
     if reindex:
@@ -338,7 +338,7 @@ def ib_check_and_repair(ctx: click.Context, reindex: bool, log_integrity: bool,
     sys.exit(run_batch(cfg, "ib-check-and-repair", args))
 
 
-# ── Проверки ────────────────────────────────────────────────────────
+# ── Checks ──────────────────────────────────────────────────────────
 
 @cli.command()
 @click.option("--config-log-integrity", is_flag=True, help="Проверка логической целостности конфигурации (-ConfigLogIntegrity)")
@@ -350,7 +350,7 @@ def ib_check_and_repair(ctx: click.Context, reindex: bool, log_integrity: bool,
 @click.pass_context
 def check_config(ctx: click.Context, config_log_integrity: bool, incorrect_references: bool,
                  thin_client: bool, server: bool, extension: str | None, all_extensions: bool) -> None:
-    """Проверка конфигурации."""
+    """Check the configuration."""
     cfg = ctx.obj["config"]
     args = ["/CheckConfig"]
     if config_log_integrity:
@@ -375,7 +375,7 @@ def check_config(ctx: click.Context, config_log_integrity: bool, incorrect_refer
 @click.option("--all-extensions", is_flag=True, help="Все расширения (-AllExtensions)")
 @click.pass_context
 def check_modules(ctx: click.Context, thin_client: bool, server: bool, extension: str | None, all_extensions: bool) -> None:
-    """Проверка модулей."""
+    """Check modules."""
     cfg = ctx.obj["config"]
     args = ["/CheckModules"]
     if thin_client:
@@ -389,7 +389,7 @@ def check_modules(ctx: click.Context, thin_client: bool, server: bool, extension
     sys.exit(run_batch(cfg, "check-modules", args))
 
 
-# ── Сравнение ───────────────────────────────────────────────────────
+# ── Comparison ──────────────────────────────────────────────────────
 
 @cli.command()
 @click.argument("filepath")
@@ -397,7 +397,7 @@ def check_modules(ctx: click.Context, thin_client: bool, server: bool, extension
 @click.option("--force", is_flag=True, help="Принудительное объединение (-force)")
 @click.pass_context
 def merge_cfg(ctx: click.Context, filepath: str, settings: str | None, force: bool) -> None:
-    """Объединение конфигураций."""
+    """Merge configurations."""
     cfg = ctx.obj["config"]
     args = _arg("/MergeCfg", filepath)
     if settings:
@@ -415,7 +415,7 @@ def merge_cfg(ctx: click.Context, filepath: str, settings: str | None, force: bo
 @click.pass_context
 def compare_cfg(ctx: click.Context, first_type: str, second_type: str,
                 report_format: str | None, report_file: str | None) -> None:
-    """Сравнение конфигураций."""
+    """Compare configurations."""
     cfg = ctx.obj["config"]
     args = ["/CompareCfg"] + _arg("-FirstConfigurationType", first_type) + _arg("-SecondConfigurationType", second_type)
     if report_format:
@@ -425,7 +425,7 @@ def compare_cfg(ctx: click.Context, first_type: str, second_type: str,
     sys.exit(run_batch(cfg, "compare-cfg", args))
 
 
-# ── Свойства конфигурации ──────────────────────────────────────────
+# ── Configuration properties ───────────────────────────────────────
 
 @cli.command()
 @click.argument("directory")
@@ -440,7 +440,7 @@ def compare_cfg(ctx: click.Context, first_type: str, second_type: str,
 def dump_config_files(ctx: click.Context, directory: str, module: bool, template: bool,
                       help_flag: bool, all_writable: bool, picture: bool, right: bool,
                       extension: str | None) -> None:
-    """Выгрузка свойств конфигурации (модули, макеты, права)."""
+    """Dump configuration properties (modules, templates, rights)."""
     cfg = ctx.obj["config"]
     args = _arg("/DumpConfigFiles", directory)
     if module:
@@ -473,7 +473,7 @@ def dump_config_files(ctx: click.Context, directory: str, module: bool, template
 def load_config_files(ctx: click.Context, directory: str, module: bool, template: bool,
                       help_flag: bool, all_writable: bool, picture: bool, right: bool,
                       extension: str | None) -> None:
-    """Загрузка свойств конфигурации."""
+    """Load configuration properties."""
     cfg = ctx.obj["config"]
     args = _arg("/LoadConfigFiles", directory)
     if module:
@@ -493,13 +493,13 @@ def load_config_files(ctx: click.Context, directory: str, module: bool, template
     sys.exit(run_batch(cfg, "load-config-files", args))
 
 
-# ── Обслуживание ────────────────────────────────────────────────────
+# ── Maintenance ─────────────────────────────────────────────────────
 
 @cli.command()
 @click.argument("date", required=True)
 @click.pass_context
 def reduce_event_log(ctx: click.Context, date: str) -> None:
-    """Сокращение журнала регистрации. DATE — дата в формате YYYYMMDD."""
+    """Reduce the event log. DATE - date in YYYYMMDD format."""
     cfg = ctx.obj["config"]
     args = _arg("/ReduceEventLogSize", date)
     sys.exit(run_batch(cfg, "reduce-event-log", args))

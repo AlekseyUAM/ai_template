@@ -6,8 +6,8 @@ import sys
 
 from lxml import etree
 
-# Эти пространства имён предоставляет сама платформа — пакетов в конфигурации
-# для них нет и быть не должно (выведено по корпусу)
+# These namespaces are provided by the platform itself - there are no packages in the
+# configuration for them and there should not be (derived from the corpus)
 PLATFORM_NS = {
     "http://v8.1c.ru/8.1/data/core",
     "http://v8.1c.ru/8.1/data/enterprise",
@@ -21,16 +21,16 @@ PLATFORM_NS = {
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
-# Регистронезависимый ввод: имена параметров и значения choices принимаются
-# в любом регистре (в argparse по умолчанию совпадение точное).
+# Case-insensitive input: parameter names and choices values are accepted
+# in any case (argparse matches exactly by default).
 def ci_parse_args(parser, argv=None):
-    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
+    """parse_args: parameter names and choices values are accepted in any case."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
         if tok.startswith('-') and tok.lower() in names:
             argv[i] = names[tok.lower()]
-    # choices — зеркало [ValidateSet]; канонизируем ДО разбора, иначе argparse отвергнет регистр
+    # choices - mirror of [ValidateSet]; canonicalize BEFORE parsing, otherwise argparse rejects the case
     choice_map = {}
     for a in parser._actions:
         if a.choices:
@@ -122,7 +122,7 @@ file_name = os.path.basename(os.path.dirname(os.path.dirname(bin_path)))
 
 config_dir = args.ConfigDir
 if not config_dir:
-    # .../XDTOPackages/<Имя>/Ext/Package.bin -> .../XDTOPackages -> корень
+    # .../XDTOPackages/<Имя>/Ext/Package.bin -> .../XDTOPackages -> root
     config_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(bin_path))))
 
 
@@ -141,12 +141,12 @@ def finalize():
 
 
 def _parse_xml(source, from_string=False):
-    """Разбор с узким отступлением для не-URI пространств имён.
+    """Parsing with a narrow fallback for non-URI namespaces.
 
-    Платформа допускает в targetNamespace произвольную строку (в выгрузке БП есть
-    пакет с кириллическим «ДопФайлУниверсальный»), .NET такое принимает, а libxml2
-    отвергает. Откатываемся на восстанавливающий разбор ТОЛЬКО на этой ошибке,
-    иначе по-настоящему битый XML перестал бы отличаться от корректного.
+    The platform allows an arbitrary string in targetNamespace (the BSP dump has a
+    package with the Cyrillic «ДопФайлУниверсальный»), .NET accepts this, while libxml2
+    rejects it. We fall back to recovering parsing ONLY on this error, otherwise truly
+    broken XML would stop being distinguishable from valid XML.
     """
     try:
         return (etree.fromstring(source) if from_string else etree.parse(source))
@@ -217,9 +217,9 @@ for n in pkg:
     elif ln == "property" and n.get("name"):
         global_props.add(n.get("name"))
 
-# ── порядок элементов верхнего уровня ────────────────────────
-# Модель требует import -> property -> valueType -> objectType. Нарушение платформа
-# не прощает: db-update падает с «Ошибка преобразования данных XDTO».
+# ── top-level element order ─────────────────────────────────
+# The model requires import -> property -> valueType -> objectType. The platform does
+# not forgive a violation: db-update fails with «Ошибка преобразования данных XDTO».
 TOP_ORDER = ["import", "property", "valueType", "objectType"]
 prev_rank = -1
 order_ok = True
@@ -333,8 +333,8 @@ if any_type_props and imports:
 
 # ── 7. unused imports ────────────────────────────────────────
 
-# Сам по себе неиспользуемый импорт безвреден и встречается в четверти пакетов
-# типовых конфигураций. Сигналом он становится только вместе с anyType.
+# An unused import by itself is harmless and occurs in a quarter of typical configuration
+# packages. It becomes a signal only together with anyType.
 unused = [i for i in imports if i not in used_namespaces]
 if unused and any_type_props:
     report_warn(f'Импорт(ы) без единого использованного типа: {", ".join(unused)} — '
@@ -365,7 +365,7 @@ for t in pkg.iter():
     nm = t.get("name") or "(анонимный тип)"
 
     if t.get("length") and (t.get("minLength") or t.get("maxLength")):
-        # Спецификация XSD это запрещает, но платформа такие типы хранит — предупреждение, не ошибка
+        # The XSD specification forbids this, but the platform stores such types - a warning, not an error
         report_warn(f"{nm} : length задан вместе с minLength/maxLength — "
                     "спецификация XSD считает их взаимоисключающими")
     min_l, max_l = t.get("minLength"), t.get("maxLength")
@@ -407,8 +407,8 @@ for p in pkg.iter():
         report_error(f'Свойство "{p.get("name")}": lowerBound ({lb}) больше upperBound ({ub})')
     if p.get("name") is None and p.get("ref") is None:
         report_error("Свойство без name и без ref")
-    # В модели XDTO fixed — булев признак, само значение лежит в default.
-    # В XML-схеме наоборот: fixed="V" совмещает признак и значение.
+    # In the XDTO model fixed is a boolean flag; the value itself is in default.
+    # In XML Schema it is the opposite: fixed="V" combines the flag and the value.
     fx = p.get("fixed")
     if fx is not None:
         p_name = p.get("name") if p.get("name") is not None else p.get("ref")
@@ -466,7 +466,7 @@ for p_ in pkg.iter():
     if state["stopped"]:
         break
 
-# Анонимный тип внутри valueType задаёт базовый тип и xsi:type не несёт
+# An anonymous type inside valueType defines the base type and carries no xsi:type
 for vt in pkg.iter():
     if not isinstance(vt.tag, str) or local(vt) != "valueType":
         continue
@@ -475,7 +475,7 @@ for vt in pkg.iter():
             report_warn(f'{vt.get("name")} : у <typeDef> внутри <valueType> задан xsi:type — '
                         "платформа его здесь не пишет")
 
-# Род базового типа должен совпадать
+# The kind of the base type must match
 for t in pkg.iter():
     if not isinstance(t.tag, str) or t.get("base") is None:
         continue
@@ -496,7 +496,7 @@ for t in pkg.iter():
                      "а valueType может строиться только на простом типе")
         struct_ok = False
 
-# Union без состава
+# Union without members
 for t in pkg.iter():
     if not isinstance(t.tag, str) or local(t) not in ("valueType", "typeDef"):
         continue
@@ -559,7 +559,7 @@ if os.path.exists(config_xml):
                     clash.append(other)
             except Exception:  # noqa: BLE001
                 pass
-        # Платформа отвергает пакет, если импортируемого namespace нет в конфигурации:
+        # The platform rejects a package if an imported namespace is not in the configuration:
         # «Ошибка проверки модели XDTO: xdto-package-3.3 … не определен»
         known_ns = {}
         for other in sorted(os.listdir(pkg_root)):

@@ -1,76 +1,76 @@
-# Продвинутые конструкции типов
+# Advanced type constructs
 
-Примитивы (`string(n)`, `number(p,s)`, `boolean`, `date`/`dateTime`, …) и одиночные ссылки (`CatalogRef.Контрагенты`, `DocumentRef.Заказ`, `EnumRef.X`, …) описаны в основной инструкции. Здесь — типы, которые нельзя выразить одним именем: составные типы, наборы типов и платформенные наборы ссылок.
+Primitives (`string(n)`, `number(p,s)`, `boolean`, `date`/`dateTime`, …) and single references (`CatalogRef.Контрагенты`, `DocumentRef.Заказ`, `EnumRef.X`, …) are described in the main instruction. Here are types that cannot be expressed by a single name: composite types, type sets and platform reference sets.
 
-Любая из этих конструкций пишется в поле `type` реквизита, реквизита-параметра или поля.
+Any of these constructs is written in the `type` field of an attribute, a parameter attribute or a field.
 
-## Составные типы
+## Composite types
 
-Несколько типов на одном реквизите — части перечисляются через разделитель `" | "` (можно `+`). Реквизит сможет принимать значение любого из перечисленных типов:
+Several types on one attribute - the parts are listed with the separator `" | "` (`+` is also allowed). The attribute will be able to accept a value of any of the listed types:
 
 ```json
 { "name": "Плательщик",
   "type": "CatalogRef.Организации | CatalogRef.ИндивидуальныеПредприниматели" }
 ```
 
-Смешивать можно типы из разных категорий — ссылки, примитивы, наборы типов:
+Types from different categories can be mixed - references, primitives, type sets:
 
 ```json
 { "name": "Источник",
   "type": "CatalogRef.Контрагенты | DocumentRef.Заказ | string(150)" }
 ```
 
-Каждая часть — самостоятельный токен из этого файла или из основной инструкции. Порядок частей произвольный.
+Each part is a self-contained token from this file or from the main instruction. The order of parts is arbitrary.
 
-## Наборы типов (TypeSet)
+## Type sets (TypeSet)
 
-«Набор типов» подставляется вместо конкретного типа — это один токен, а не перечисление. Применимо и в составном типе как одна из частей.
+A "type set" is substituted instead of a concrete type - it is one token, not an enumeration. It is also applicable inside a composite type as one of the parts.
 
-| Токен `type` | Смысл |
+| `type` token | Meaning |
 |------|-------|
-| `"DefinedType.ИмяТипа"` | определяемый тип конфигурации |
-| `"Characteristic.ИмяПлана"` | тип значения характеристики (по плану видов характеристик) |
-| `"AnyRef"` | любая ссылка |
-| `"AnyIBRef"` | любая ссылка информационной базы |
+| `"DefinedType.ИмяТипа"` | defined type of the configuration |
+| `"Characteristic.ИмяПлана"` | value type of a characteristic (by the chart of characteristic types) |
+| `"AnyRef"` | any reference |
+| `"AnyIBRef"` | any infobase reference |
 
-Определяемый тип — реквизит принимает то, что задано в определяемом типе конфигурации (например `DefinedType.ДенежнаяСумма`):
+Defined type - the attribute accepts what is set in the configuration's defined type (for example `DefinedType.ДенежнаяСумма`):
 
 ```json
 { "name": "Сумма", "type": "DefinedType.ДенежнаяСумма" }
 ```
 
-Характеристика — тип значения берётся из плана видов характеристик:
+Characteristic - the value type is taken from the chart of characteristic types:
 
 ```json
 { "name": "Значение", "type": "Characteristic.ДополнительныеРеквизиты" }
 ```
 
-## Платформенные наборы ссылок
+## Platform reference sets
 
-«Голый» ссылочный токен **без `.Имя`** означает «любая ссылка этой категории объектов»:
+A "bare" reference token **without `.Имя`** means "any reference of this object category":
 
-| Токен `type` | Смысл |
+| `type` token | Meaning |
 |------|-------|
-| `"CatalogRef"` | любая ссылка справочника |
-| `"DocumentRef"` | любая ссылка документа |
-| `"EnumRef"` | любая ссылка перечисления |
-| `"ExchangePlanRef"` | любая ссылка плана обмена |
-| `"TaskRef"` | любая ссылка задачи |
-| `"BusinessProcessRef"` | любая ссылка бизнес-процесса |
-| `"ChartOfCharacteristicTypesRef"` | любая ссылка плана видов характеристик |
-| `"ChartOfAccountsRef"` | любая ссылка плана счетов |
-| `"ChartOfCalculationTypesRef"` | любая ссылка плана видов расчёта |
+| `"CatalogRef"` | any catalog reference |
+| `"DocumentRef"` | any document reference |
+| `"EnumRef"` | any enum reference |
+| `"ExchangePlanRef"` | any exchange plan reference |
+| `"TaskRef"` | any task reference |
+| `"BusinessProcessRef"` | any business process reference |
+| `"ChartOfCharacteristicTypesRef"` | any chart of characteristic types reference |
+| `"ChartOfAccountsRef"` | any chart of accounts reference |
+| `"ChartOfCalculationTypesRef"` | any chart of calculation types reference |
 
-Различие с одиночной ссылкой — только в наличии `.Имя`:
+The difference from a single reference is only the presence of `.Имя`:
 
-- `"CatalogRef.Валюты"` — конкретный справочник «Валюты»;
-- `"CatalogRef"` — любой справочник.
+- `"CatalogRef.Валюты"` - a concrete catalog "Валюты";
+- `"CatalogRef"` - any catalog.
 
 ```json
 { "name": "ЛюбойСправочник", "type": "CatalogRef" }
 ```
 
-Эти наборы тоже комбинируются в составном типе:
+These sets also combine in a composite type:
 
 ```json
 { "name": "Объект", "type": "CatalogRef | DocumentRef" }

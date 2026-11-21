@@ -8,16 +8,16 @@ import re
 import sys
 from lxml import etree
 
-# Регистронезависимый ввод: имена параметров и значения choices принимаются
-# в любом регистре (в argparse по умолчанию совпадение точное).
+# Case-insensitive input: parameter names and choices values are accepted
+# in any case (in argparse exact match is the default).
 def ci_parse_args(parser, argv=None):
-    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
+    """parse_args: parameter names and choices values are accepted in any case."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
         if tok.startswith('-') and tok.lower() in names:
             argv[i] = names[tok.lower()]
-    # choices — зеркало [ValidateSet]; канонизируем ДО разбора, иначе argparse отвергнет регистр
+    # choices - a mirror of [ValidateSet]; we canonicalize BEFORE parsing, otherwise argparse rejects the case
     choice_map = {}
     for a in parser._actions:
         if a.choices:
@@ -154,7 +154,7 @@ def get_bsl_files(obj_type, obj_name, extension_path):
             if item.lower().endswith(".bsl"):
                 bsl_files.append(os.path.join(ext_dir, item))
 
-    # Модуль общей формы — у неё самой, Ext/Form/Module.bsl (у прочих объектов такого файла нет)
+    # A common form's module is its own, Ext/Form/Module.bsl (other objects have no such file)
     own_form_module = os.path.join(ext_dir, "Form", "Module.bsl")
     if os.path.isfile(own_form_module):
         bsl_files.append(own_form_module)
@@ -450,7 +450,7 @@ def mode_a(objects, extension_path):
                         else:
                             print(f"             Form.{fn} ({form_tag})")
 
-            # Общая форма — сама форма: перехваты событий и команд из её Ext/Form.xml
+            # A common form is the form itself: event and command interceptors from its Ext/Form.xml
             if obj["Type"] == "CommonForm":
                 cf_form_xml = os.path.join(extension_path, info["DirName"], info["Name"], "Ext", "Form.xml")
                 cfi = get_form_interceptors(cf_form_xml)

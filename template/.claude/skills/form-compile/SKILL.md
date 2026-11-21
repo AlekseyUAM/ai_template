@@ -1,6 +1,6 @@
 ---
 name: form-compile
-description: Компиляция управляемой формы 1С из JSON-определения или из метаданных объекта. Используй когда нужно создать форму с нуля по описанию элементов или сгенерировать типовую форму
+description: Compile a 1C managed form from a JSON definition or from object metadata. Use when you need to create a form from scratch by an element description or generate a typical form
 argument-hint: <JsonPath> <OutputPath> | -FromObject <OutputPath>
 allowed-tools:
   - Bash
@@ -9,23 +9,23 @@ allowed-tools:
   - Glob
 ---
 
-# /form-compile — Генерация Form.xml
+# /form-compile - Form.xml generation
 
-Два режима:
-1. **JSON DSL** — из JSON-определения формы
-2. **From object** (`-FromObject`) — автоматически из метаданных объекта 1С по пресету ERP
+Two modes:
+1. **JSON DSL** - from a form JSON definition
+2. **From object** (`-FromObject`) - automatically from 1C object metadata by an ERP preset
 
-> **При проектировании формы с нуля (5+ элементов или нечёткие требования)** — вызовите `/form-patterns` для загрузки справочника. Для простых форм (1–3 поля) — не нужно.
+> **When designing a form from scratch (5+ elements or vague requirements)** - call `/form-patterns` to load the reference. For simple forms (1-3 fields) - not needed.
 
-## Параметры
+## Parameters
 
-| Параметр   | Обязательный | Описание                        |
+| Parameter  | Required     | Description                     |
 |------------|:------------:|---------------------------------|
-| JsonPath   | режим 1      | Путь к JSON-определению формы   |
-| OutputPath | да           | Путь к выходному Form.xml       |
-| FromObject | режим 2      | Флаг (без значения) — генерация по метаданным объекта |
+| JsonPath   | mode 1       | Path to the form JSON definition |
+| OutputPath | yes          | Path to the output Form.xml     |
+| FromObject | mode 2       | Flag (no value) - generation by object metadata |
 
-## Команда
+## Command
 
 ```bash
 # Режим JSON DSL
@@ -35,9 +35,9 @@ python "${CLAUDE_SKILL_DIR}/scripts/form-compile.py" -JsonPath "<json>" -OutputP
 python "${CLAUDE_SKILL_DIR}/scripts/form-compile.py" -FromObject -OutputPath "<.../TypePlural/ObjectName/Forms/FormName/Ext/Form.xml>"
 ```
 
-## JSON DSL — справка
+## JSON DSL - reference
 
-### Структура верхнего уровня
+### Top-level structure
 
 ```json
 {
@@ -52,50 +52,50 @@ python "${CLAUDE_SKILL_DIR}/scripts/form-compile.py" -FromObject -OutputPath "<.
 }
 ```
 
-- `title` — заголовок формы (multilingual). Можно указать и в `properties`, но лучше на верхнем уровне
-- `properties` — свойства формы: `autoTitle`, `windowOpeningMode`, `commandBarLocation`, `saveDataInSettings`, `width`, `height` и др.
-- `events` — обработчики событий формы (ключ: имя события 1С, значение: имя процедуры)
-- `excludedCommands` — исключённые стандартные команды
+- `title` - form title (multilingual). Can also be set in `properties`, but better at the top level
+- `properties` - form properties: `autoTitle`, `windowOpeningMode`, `commandBarLocation`, `saveDataInSettings`, `width`, `height` and others
+- `events` - form event handlers (key: 1C event name, value: procedure name)
+- `excludedCommands` - excluded standard commands
 
-### Элементы (ключ определяет тип)
+### Elements (the key determines the type)
 
-| DSL ключ     | XML элемент       | Значение ключа                                    |
+| DSL key      | XML element       | Key value                                         |
 |--------------|-------------------|---------------------------------------------------|
-| `"group"`    | UsualGroup        | ориентация: `"vertical"` / `"horizontalIfPossible"` / `"alwaysHorizontal"` (поведение — отдельный ключ `behavior`) |
-| `"columnGroup"` | ColumnGroup    | `"horizontal"` / `"vertical"` / `"inCell"` — только внутри `columns` таблицы |
-| `"input"`    | InputField        | имя элемента                                      |
-| `"check"`    | CheckBoxField     | имя                                               |
-| `"radio"`    | RadioButtonField  | имя                                               |
-| `"label"`    | LabelDecoration   | имя (текст задаётся через `title`)                |
-| `"labelField"` | LabelField      | имя                                               |
-| `"table"`    | Table             | имя                                               |
-| `"pages"`    | Pages             | имя                                               |
-| `"page"`     | Page              | имя                                               |
-| `"button"`   | Button            | имя                                               |
-| `"picture"`  | PictureDecoration | имя                                               |
-| `"picField"` | PictureField      | имя                                               |
-| `"calendar"` | CalendarField     | имя                                               |
-| `"cmdBar"`   | CommandBar        | имя                                               |
-| `"autoCmdBar"` | AutoCommandBar формы | имя — наполняет главную АКП формы (id=-1), не попадает в `<ChildItems>` |
-| `"popup"`    | Popup             | имя                                               |
+| `"group"`    | UsualGroup        | orientation: `"vertical"` / `"horizontalIfPossible"` / `"alwaysHorizontal"` (behavior is a separate key `behavior`) |
+| `"columnGroup"` | ColumnGroup    | `"horizontal"` / `"vertical"` / `"inCell"` - only inside table `columns` |
+| `"input"`    | InputField        | element name                                      |
+| `"check"`    | CheckBoxField     | name                                              |
+| `"radio"`    | RadioButtonField  | name                                              |
+| `"label"`    | LabelDecoration   | name (text is set via `title`)                    |
+| `"labelField"` | LabelField      | name                                              |
+| `"table"`    | Table             | name                                              |
+| `"pages"`    | Pages             | name                                              |
+| `"page"`     | Page              | name                                              |
+| `"button"`   | Button            | name                                              |
+| `"picture"`  | PictureDecoration | name                                              |
+| `"picField"` | PictureField      | name                                              |
+| `"calendar"` | CalendarField     | name                                              |
+| `"cmdBar"`   | CommandBar        | name                                              |
+| `"autoCmdBar"` | form AutoCommandBar | name - fills the main form command bar (id=-1), does not go into `<ChildItems>` |
+| `"popup"`    | Popup             | name                                              |
 
-### Общие свойства (все типы элементов)
+### Common properties (all element types)
 
-| Ключ | Описание |
+| Key | Description |
 |------|----------|
-| `name` | Переопределить имя (по умолчанию = значение ключа типа). Имена уникальны во всех коллекциях формы (элементы, реквизиты, команды, колонки) |
-| `title` | Заголовок элемента |
-| `tooltip` | Всплывающая подсказка элемента (строка или `{ru,en}`) |
-| `visible: false` | Скрыть (синоним: `hidden: true`) |
-| `enabled: false` | Сделать недоступным (синоним: `disabled: true`) |
-| `readOnly: true` | Только чтение |
-| `events: {...}` | Обработчики событий: `{ "OnChange": "ИмяОбработчика" }`. Тот же формат, что у событий формы. Значение `null` → имя обработчика сгенерируется автоматически |
+| `name` | Override the name (by default = the type key value). Names are unique across all form collections (elements, attributes, commands, columns) |
+| `title` | Element title |
+| `tooltip` | Element tooltip (string or `{ru,en}`) |
+| `visible: false` | Hide (synonym: `hidden: true`) |
+| `enabled: false` | Make unavailable (synonym: `disabled: true`) |
+| `readOnly: true` | Read-only |
+| `events: {...}` | Event handlers: `{ "OnChange": "ИмяОбработчика" }`. Same format as form events. A `null` value -> the handler name is generated automatically |
 
-### Допустимые имена событий (`events`)
+### Valid event names (`events`)
 
-Компилятор предупреждает о неизвестных событиях. Имена регистрозависимы — используйте точно как указано.
+The compiler warns about unknown events. Names are case-sensitive - use them exactly as specified.
 
-**Форма** (`events`): `OnCreateAtServer`, `OnOpen`, `BeforeClose`, `OnClose`, `NotificationProcessing`, `ChoiceProcessing`, `OnReadAtServer`, `BeforeWriteAtServer`, `OnWriteAtServer`, `AfterWriteAtServer`, `BeforeWrite`, `AfterWrite`, `FillCheckProcessingAtServer`, `BeforeLoadDataFromSettingsAtServer`, `OnLoadDataFromSettingsAtServer`, `ExternalEvent`, `Opening`
+**Form** (`events`): `OnCreateAtServer`, `OnOpen`, `BeforeClose`, `OnClose`, `NotificationProcessing`, `ChoiceProcessing`, `OnReadAtServer`, `BeforeWriteAtServer`, `OnWriteAtServer`, `AfterWriteAtServer`, `BeforeWrite`, `AfterWrite`, `FillCheckProcessingAtServer`, `BeforeLoadDataFromSettingsAtServer`, `OnLoadDataFromSettingsAtServer`, `ExternalEvent`, `Opening`
 
 **input / picField**: `OnChange`, `StartChoice`, `ChoiceProcessing`, `AutoComplete`, `TextEditEnd`, `Clearing`, `Creating`, `EditTextChange`
 
@@ -111,51 +111,51 @@ python "${CLAUDE_SKILL_DIR}/scripts/form-compile.py" -FromObject -OutputPath "<.
 
 **pages**: `OnCurrentPageChange`
 
-### Поле ввода (input)
+### Input field (input)
 
-| Ключ | Описание | Пример |
+| Key | Description | Example |
 |------|----------|--------|
-| `path` | DataPath — привязка к данным | `"Объект.Организация"` |
-| `titleLocation` | Размещение заголовка | `"none"`, `"left"`, `"right"`, `"top"`, `"bottom"`, `"auto"` |
-| `multiLine: true` | Многострочное поле | текстовое поле, комментарий |
-| `passwordMode: true` | Режим пароля (звёздочки) | поле ввода пароля |
-| `choiceButton: true` | Кнопка выбора ("...") | ссылочное поле |
-| `clearButton: true` | Кнопка очистки ("X") | |
-| `spinButton: true` | Кнопка прокрутки | числовые поля |
-| `dropListButton: true` | Кнопка выпадающего списка | |
-| `markIncomplete: true` | Пометка незаполненного | обязательные поля |
-| `skipOnInput: true` | Пропускать при обходе Tab | |
-| `inputHint` | Подсказка в пустом поле | `"Введите наименование..."` |
-| `width` / `height` | Размер | числа |
-| `autoMaxWidth: false` | Снять авто-ограничение ширины (поле растянется) | |
-| `maxWidth` / `maxHeight` | Жёсткое ограничение размера | числа; обычно вместе с `autoMaxWidth: false` |
-| `horizontalStretch: true` | Растягивать по ширине | |
+| `path` | DataPath - binding to data | `"Объект.Организация"` |
+| `titleLocation` | Title placement | `"none"`, `"left"`, `"right"`, `"top"`, `"bottom"`, `"auto"` |
+| `multiLine: true` | Multiline field | text field, comment |
+| `passwordMode: true` | Password mode (asterisks) | password input field |
+| `choiceButton: true` | Choice button ("...") | reference field |
+| `clearButton: true` | Clear button ("X") | |
+| `spinButton: true` | Spin button | numeric fields |
+| `dropListButton: true` | Drop-down list button | |
+| `markIncomplete: true` | Mark incomplete | required fields |
+| `skipOnInput: true` | Skip on Tab traversal | |
+| `inputHint` | Hint in an empty field | `"Введите наименование..."` |
+| `width` / `height` | Size | numbers |
+| `autoMaxWidth: false` | Remove the auto width limit (the field will stretch) | |
+| `maxWidth` / `maxHeight` | Hard size limit | numbers; usually together with `autoMaxWidth: false` |
+| `horizontalStretch: true` | Stretch horizontally | |
 
-### Чекбокс (check)
+### Checkbox (check)
 
-| Ключ | Описание |
+| Key | Description |
 |------|----------|
 | `path` | DataPath |
-| `titleLocation` | Размещение заголовка |
+| `titleLocation` | Title placement |
 
-### Поле переключателя (radio)
+### Radio switch field (radio)
 
-Радиокнопки или тумблер для выбора одного значения из списка.
+Radio buttons or a tumbler to choose one value from a list.
 
-| Ключ | Описание | Пример |
+| Key | Description | Example |
 |------|----------|--------|
-| `path` | DataPath — привязка к реквизиту | `"СпособКурса"` |
-| `radioButtonType` | Вид переключателя | `"Auto"` (по умолчанию), `"RadioButtons"`, `"Tumbler"` |
-| `columnsCount` | Число колонок раскладки | `1`, `2`, ... |
-| `titleLocation` | Размещение заголовка | по умолчанию `"none"` |
-| `choiceList` | Список вариантов: массив `{value, presentation}` | см. ниже |
+| `path` | DataPath - binding to an attribute | `"СпособКурса"` |
+| `radioButtonType` | Switch kind | `"Auto"` (default), `"RadioButtons"`, `"Tumbler"` |
+| `columnsCount` | Number of layout columns | `1`, `2`, ... |
+| `titleLocation` | Title placement | by default `"none"` |
+| `choiceList` | List of options: array `{value, presentation}` | see below |
 
 `choiceList[*]`:
 
-| Ключ | Описание |
+| Key | Description |
 |------|----------|
-| `value` | Значение варианта. Строка/число/булево; для перечисления — `"Enum.ИмяТипа.EnumValue.ИмяЗначения"` |
-| `presentation` | Текст рядом с переключателем. Строка (русский) либо объект `{ru, en, ...}` для мультиязычности |
+| `value` | Option value. String/number/boolean; for an enum - `"Enum.ИмяТипа.EnumValue.ИмяЗначения"` |
+| `presentation` | Text next to the switch. A string (Russian) or an object `{ru, en, ...}` for multilingual support |
 
 ```json
 {
@@ -169,65 +169,65 @@ python "${CLAUDE_SKILL_DIR}/scripts/form-compile.py" -FromObject -OutputPath "<.
 }
 ```
 
-### Надпись-декорация (label)
+### Label decoration (label)
 
-| Ключ | Описание |
+| Key | Description |
 |------|----------|
-| `title` | Текст надписи (обязательно) |
-| `hyperlink: true` | Сделать ссылкой |
-| `width` / `height` | Размер |
+| `title` | Label text (required) |
+| `hyperlink: true` | Make it a link |
+| `width` / `height` | Size |
 
-### Группа (group)
+### Group (group)
 
-Значение ключа задаёт **ориентацию**: `"vertical"`, `"horizontalIfPossible"`, `"alwaysHorizontal"`.
+The key value sets the **orientation**: `"vertical"`, `"horizontalIfPossible"`, `"alwaysHorizontal"`.
 
-| Ключ | Описание |
+| Key | Description |
 |------|----------|
-| `behavior` | Поведение группы: `"collapsible"` (сворачиваемая) / `"popup"` (всплывающая). Опустить = обычная |
-| `showTitle: true` | Показывать заголовок группы |
-| `united: false` | Левый край полей ввода выравнивается только в пределах этой группы (по умолчанию `true` — сквозное выравнивание по самому длинному заголовку, в т.ч. с соседними группами) |
-| `collapsed: true` | Для `behavior: "collapsible"` / `"popup"` — группа создаётся свёрнутой |
-| `controlRepresentation` | Отображение управления свёрткой (`behavior: "collapsible"`): `"TitleHyperlink"` (гиперссылка заголовка, по умолчанию) / `"Picture"` (картинка) |
+| `behavior` | Group behavior: `"collapsible"` (collapsible) / `"popup"` (popup). Omit = regular |
+| `showTitle: true` | Show the group title |
+| `united: false` | The left edge of input fields is aligned only within this group (by default `true` - end-to-end alignment by the longest title, including with neighboring groups) |
+| `collapsed: true` | For `behavior: "collapsible"` / `"popup"` - the group is created collapsed |
+| `controlRepresentation` | Collapse control representation (`behavior: "collapsible"`): `"TitleHyperlink"` (title hyperlink, default) / `"Picture"` (picture) |
 | `representation` | `"none"`, `"normal"`, `"weak"`, `"strong"` |
-| `children: [...]` | Вложенные элементы |
+| `children: [...]` | Nested elements |
 
-### Таблица (table)
+### Table (table)
 
-**Важно**: таблица требует связанный реквизит формы типа `ValueTable` с колонками (см. раздел "Связки").
+**Important**: a table requires a linked form attribute of type `ValueTable` with columns (see the "Links" section).
 
-| Ключ | Описание |
+| Key | Description |
 |------|----------|
-| `path` | DataPath (привязка к реквизиту-таблице) |
-| `columns: [...]` | Колонки — массив элементов (обычно `input`) |
-| `changeRowSet: true` | Разрешить добавление/удаление строк |
-| `changeRowOrder: true` | Разрешить перемещение строк |
-| `height` | Высота в строках таблицы |
-| `header: false` | Скрыть шапку |
-| `footer: true` | Показать подвал |
+| `path` | DataPath (binding to the table attribute) |
+| `columns: [...]` | Columns - an array of elements (usually `input`) |
+| `changeRowSet: true` | Allow adding/deleting rows |
+| `changeRowOrder: true` | Allow moving rows |
+| `height` | Height in table rows |
+| `header: false` | Hide the header |
+| `footer: true` | Show the footer |
 | `commandBarLocation` | `"None"`, `"Top"`, `"Bottom"`, `"Auto"` |
 | `searchStringLocation` | `"None"`, `"Top"`, `"Bottom"`, `"CommandBar"`, `"PullFromTop"`, `"Auto"` |
-| `choiceMode: true` | Режим выбора (для форм выбора) |
-| `initialTreeView` | `"ExpandTopLevel"` и др. (иерархические списки) |
-| `enableDrag: true` | Разрешить перетаскивание |
-| `enableStartDrag: true` | Разрешить начало перетаскивания |
-| `rowPictureDataPath` | Путь к картинке строки (напр. `"Список.DefaultPicture"`) |
-| `tableAutofill: false` | Управление Autofill внутреннего AutoCommandBar |
+| `choiceMode: true` | Choice mode (for choice forms) |
+| `initialTreeView` | `"ExpandTopLevel"` and others (hierarchical lists) |
+| `enableDrag: true` | Allow dragging |
+| `enableStartDrag: true` | Allow starting a drag |
+| `rowPictureDataPath` | Path to the row picture (e.g. `"Список.DefaultPicture"`) |
+| `tableAutofill: false` | Control Autofill of the internal AutoCommandBar |
 
-Колонки можно группировать через `columnGroup` (см. ниже).
+Columns can be grouped via `columnGroup` (see below).
 
-### Группа колонок (columnGroup)
+### Column group (columnGroup)
 
-Используется только внутри `columns` таблицы. Значение ключа задаёт ориентацию: `"horizontal"`, `"vertical"`, `"inCell"` (склеивает колонки в одну ячейку шапки). Допускается вложение `columnGroup` в `columnGroup`.
+Used only inside table `columns`. The key value sets the orientation: `"horizontal"`, `"vertical"`, `"inCell"` (merges columns into one header cell). Nesting `columnGroup` inside `columnGroup` is allowed.
 
-| Ключ | Описание |
+| Key | Description |
 |------|----------|
-| `name` | Имя элемента (рекомендуется задавать явно) |
-| `title` | Заголовок группы |
-| `showTitle: false` | Скрыть заголовок |
-| `showInHeader: true/false` | Показывать ли группу в шапке таблицы |
-| `width` | Ширина |
-| `horizontalStretch: false` | Растягивание |
-| `children: [...]` | Колонки внутри группы (`input`, `labelField`, `picField`, вложенный `columnGroup` …) |
+| `name` | Element name (recommended to set explicitly) |
+| `title` | Group title |
+| `showTitle: false` | Hide the title |
+| `showInHeader: true/false` | Whether to show the group in the table header |
+| `width` | Width |
+| `horizontalStretch: false` | Stretching |
+| `children: [...]` | Columns inside the group (`input`, `labelField`, `picField`, nested `columnGroup` ...) |
 
 ```json
 { "table": "Список", "path": "Список", "columns": [
@@ -242,58 +242,58 @@ python "${CLAUDE_SKILL_DIR}/scripts/form-compile.py" -FromObject -OutputPath "<.
 ]}
 ```
 
-### Картинка-поле (picField)
+### Picture field (picField)
 
-PictureField, привязанный к булеву/числу, рисует иконку только при заданном `valuesPicture`:
+A PictureField bound to a boolean/number draws an icon only when `valuesPicture` is set:
 
-| Ключ | Описание |
+| Key | Description |
 |------|----------|
-| `valuesPicture` | Ref картинки значения: `"StdPicture.Favorites"`, `"CommonPicture.X"` |
-| `loadTransparent: true` | Скрыть кадр «нет значения» |
+| `valuesPicture` | Value picture ref: `"StdPicture.Favorites"`, `"CommonPicture.X"` |
+| `loadTransparent: true` | Hide the "no value" frame |
 
-### Страницы (pages + page)
+### Pages (pages + page)
 
-| Ключ (pages) | Описание |
+| Key (pages) | Description |
 |------|----------|
-| `pagesRepresentation` | `"None"`, `"TabsOnTop"`, `"TabsOnBottom"` и др. |
-| `children: [...]` | Массив `page` |
+| `pagesRepresentation` | `"None"`, `"TabsOnTop"`, `"TabsOnBottom"` and others |
+| `children: [...]` | Array of `page` |
 
-| Ключ (page) | Описание |
+| Key (page) | Description |
 |------|----------|
-| `title` | Заголовок вкладки |
-| `group` | Ориентация внутри страницы |
-| `children: [...]` | Содержимое страницы |
+| `title` | Tab title |
+| `group` | Orientation inside the page |
+| `children: [...]` | Page content |
 
-### Кнопка (button)
+### Button (button)
 
-| Ключ | Описание |
+| Key | Description |
 |------|----------|
-| `command` | Имя команды формы → `Form.Command.Имя` |
-| `stdCommand` | Стандартная команда: `"Close"` → `Form.StandardCommand.Close`; с точкой: `"Товары.Add"` → `Form.Item.Товары.StandardCommand.Add` |
-| `defaultButton: true` | Кнопка по умолчанию |
-| `type` | `"usual"`, `"hyperlink"`. По умолчанию `"usual"`. Конкретный XML-вид (UsualButton/Hyperlink/CommandBarButton/CommandBarHyperlink) подставляется автоматически по контексту |
-| `picture` | Картинка кнопки |
+| `command` | Form command name -> `Form.Command.Имя` |
+| `stdCommand` | Standard command: `"Close"` -> `Form.StandardCommand.Close`; with a dot: `"Товары.Add"` -> `Form.Item.Товары.StandardCommand.Add` |
+| `defaultButton: true` | Default button |
+| `type` | `"usual"`, `"hyperlink"`. Default `"usual"`. The concrete XML kind (UsualButton/Hyperlink/CommandBarButton/CommandBarHyperlink) is substituted automatically by context |
+| `picture` | Button picture |
 | `representation` | `"Auto"`, `"Text"`, `"Picture"`, `"PictureAndText"` |
 | `locationInCommandBar` | `"Auto"`, `"InCommandBar"`, `"InAdditionalSubmenu"` |
 
-### Командная панель (cmdBar)
+### Command bar (cmdBar)
 
-Дополнительная пользовательская панель команд, размещается как обычный элемент в layout формы.
+An additional custom command bar, placed as a regular element in the form layout.
 
-| Ключ | Описание |
+| Key | Description |
 |------|----------|
-| `autofill: true` | Автозаполнение стандартными командами |
-| `children: [...]` | Кнопки панели |
+| `autofill: true` | Autofill with standard commands |
+| `children: [...]` | Bar buttons |
 
-### Главная автокомандная панель формы (autoCmdBar)
+### Main form auto command bar (autoCmdBar)
 
-Наполняет встроенную AutoCommandBar формы (id=-1) кастомными кнопками. Указывать только если нужно добавить свои кнопки на главную панель или явно управлять автозаполнением.
+Fills the form's built-in AutoCommandBar (id=-1) with custom buttons. Specify only if you need to add your own buttons to the main bar or explicitly control autofill.
 
-| Ключ | Описание |
+| Key | Description |
 |------|----------|
-| `autofill: true/false` | Автозаполнение стандартными командами |
+| `autofill: true/false` | Autofill with standard commands |
 | `horizontalAlign` | `"Left"` / `"Center"` / `"Right"` |
-| `children: [...]` | Кнопки/popup |
+| `children: [...]` | Buttons/popup |
 
 ```json
 { "autoCmdBar": "ФормаКоманднаяПанель", "autofill": true, "children": [
@@ -302,16 +302,16 @@ PictureField, привязанный к булеву/числу, рисует и
 ]}
 ```
 
-Кнопки основных действий формы и подменю размещают здесь, а не в отдельной группе на форме. Отдельной кнопкой в layout — только если она логически привязана к конкретному полю или группе.
+Place the form's main action buttons and submenus here, not in a separate group on the form. Use a separate button in the layout only if it is logically bound to a specific field or group.
 
-### Выпадающее меню (popup)
+### Drop-down menu (popup)
 
-| Ключ | Описание |
+| Key | Description |
 |------|----------|
-| `title` | Заголовок подменю |
-| `children: [...]` | Кнопки подменю |
+| `title` | Submenu title |
+| `children: [...]` | Submenu buttons |
 
-Используется внутри `cmdBar` для группировки кнопок в подменю:
+Used inside `cmdBar` to group buttons into a submenu:
 ```json
 { "cmdBar": "Панель", "children": [
   { "popup": "Добавить", "title": "Добавить", "children": [
@@ -321,7 +321,7 @@ PictureField, привязанный к булеву/числу, рисует и
 ]}
 ```
 
-### Реквизиты (attributes)
+### Attributes (attributes)
 
 ```json
 { "name": "Объект", "type": "DataProcessorObject.Загрузка", "main": true }
@@ -335,45 +335,45 @@ PictureField, привязанный к булеву/числу, рисует и
 ]}
 ```
 
-- `savedData: true` — сохраняемые данные
-- `main: true` — главный реквизит формы (например, основной `*Object.*`, `DynamicList`, `*RecordSet.*`)
+- `savedData: true` - saved data
+- `main: true` - the main form attribute (for example, the main `*Object.*`, `DynamicList`, `*RecordSet.*`)
 
-### Команды (commands)
+### Commands (commands)
 
 ```json
 { "name": "Загрузить", "action": "ЗагрузитьОбработка", "shortcut": "Ctrl+Enter" }
 ```
 
-- `title` — заголовок (если отличается от name)
-- `picture` — картинка команды
+- `title` - title (if it differs from name)
+- `picture` - command picture
 
-### Система типов
+### Type system
 
-**Примитивные:**
+**Primitive:**
 
 | DSL                    | XML                                    |
 |------------------------|----------------------------------------|
 | `"string"` / `"string(100)"` | `xs:string` + StringQualifiers  |
 | `"decimal(15,2)"`     | `xs:decimal` + NumberQualifiers        |
-| `"decimal(10,0,nonneg)"` | с AllowedSign=Nonnegative           |
+| `"decimal(10,0,nonneg)"` | with AllowedSign=Nonnegative        |
 | `"boolean"`            | `xs:boolean`                          |
 | `"date"` / `"dateTime"` / `"time"` | `xs:dateTime` + DateFractions |
 
-**Ссылочные и объектные (`cfg:Prefix.Name`):**
+**Reference and object types (`cfg:Prefix.Name`):**
 
-| DSL | Описание |
+| DSL | Description |
 |-----|----------|
-| `"CatalogRef.XXX"` / `"CatalogObject.XXX"` | Справочник |
-| `"DocumentRef.XXX"` / `"DocumentObject.XXX"` | Документ |
-| `"EnumRef.XXX"` | Перечисление |
-| `"DataProcessorObject.XXX"` / `"ReportObject.XXX"` | Обработка / Отчёт |
-| `"InformationRegisterRecordSet.XXX"` | Набор записей регистра сведений |
-| `"AccumulationRegisterRecordSet.XXX"` | Набор записей регистра накопления |
-| `"DynamicList"` | Динамический список |
+| `"CatalogRef.XXX"` / `"CatalogObject.XXX"` | Catalog |
+| `"DocumentRef.XXX"` / `"DocumentObject.XXX"` | Document |
+| `"EnumRef.XXX"` | Enum |
+| `"DataProcessorObject.XXX"` / `"ReportObject.XXX"` | Data processor / Report |
+| `"InformationRegisterRecordSet.XXX"` | Information register record set |
+| `"AccumulationRegisterRecordSet.XXX"` | Accumulation register record set |
+| `"DynamicList"` | Dynamic list |
 
-Также допустимы: `ChartOfAccountsRef/Object`, `ChartOfCharacteristicTypesRef/Object`, `ChartOfCalculationTypesRef/Object`, `ExchangePlanRef/Object`, `BusinessProcessRef/Object`, `TaskRef/Object`, `AccountingRegisterRecordSet`, `InformationRegisterRecordManager`, `ConstantsSet`.
+Also allowed: `ChartOfAccountsRef/Object`, `ChartOfCharacteristicTypesRef/Object`, `ChartOfCalculationTypesRef/Object`, `ExchangePlanRef/Object`, `BusinessProcessRef/Object`, `TaskRef/Object`, `AccountingRegisterRecordSet`, `InformationRegisterRecordManager`, `ConstantsSet`.
 
-**Платформенные:**
+**Platform types:**
 
 | DSL | XML |
 |-----|-----|
@@ -385,17 +385,17 @@ PictureField, привязанный к булеву/числу, рисует и
 | `"FormattedString"` | `v8ui:FormattedString` |
 | `"Picture"` / `"Color"` / `"Font"` | `v8ui:*` |
 | `"DataCompositionSettings"` | `dcsset:DataCompositionSettings` |
-| `"Type1 \| Type2"` | составной тип (несколько `<v8:Type>`) |
+| `"Type1 \| Type2"` | composite type (several `<v8:Type>`) |
 
-**Недопустимые типы (XDTO-ошибка при загрузке):**
+**Invalid types (XDTO error on load):**
 
-> `FormDataStructure`, `FormDataCollection`, `FormDataTree` — runtime-типы 1С, не существуют в XML-схеме. Вместо них используйте `CatalogObject.XXX`, `DocumentObject.XXX`, `DataProcessorObject.XXX`, `ValueTable`, `ValueTree`.
+> `FormDataStructure`, `FormDataCollection`, `FormDataTree` - runtime types of 1C, they do not exist in the XML schema. Use `CatalogObject.XXX`, `DocumentObject.XXX`, `DataProcessorObject.XXX`, `ValueTable`, `ValueTree` instead.
 
-## Связки: элемент + реквизит
+## Links: element + attribute
 
-Таблица и некоторые поля требуют связанный реквизит. Элемент ссылается на реквизит через `path`.
+A table and some fields require a linked attribute. An element references an attribute via `path`.
 
-**Таблица** — элемент `table` + реквизит `ValueTable`:
+**Table** - a `table` element + a `ValueTable` attribute:
 ```json
 {
   "elements": [
@@ -415,7 +415,7 @@ PictureField, привязанный к булеву/числу, рисует и
 }
 ```
 
-Или, если таблица привязана к реквизиту формы (не к Объект):
+Or, if the table is bound to a form attribute (not to Объект):
 ```json
 {
   "elements": [
@@ -431,9 +431,9 @@ PictureField, привязанный к булеву/числу, рисует и
 }
 ```
 
-## Паттерны
+## Patterns
 
-### Диалог загрузки файла
+### File load dialog
 
 ```json
 {
@@ -463,7 +463,7 @@ PictureField, привязанный к булеву/числу, рисует и
 }
 ```
 
-### Мастер (wizard) с шагами
+### Wizard with steps
 
 ```json
 {
@@ -495,7 +495,7 @@ PictureField, привязанный к булеву/числу, рисует и
 }
 ```
 
-### Список с фильтром и таблицей
+### List with a filter and a table
 
 ```json
 {
@@ -524,45 +524,45 @@ PictureField, привязанный к булеву/числу, рисует и
 }
 ```
 
-## Продвинутые конструкции (по необходимости)
+## Advanced constructs (when needed)
 
-Описанного выше хватает для большинства форм. Под конкретную задачу подгрузите файл из `references/`:
+The above is enough for most forms. For a specific task, load a file from `references/`:
 
-- `dynamic-list.md` — форма списка: источник, отбор, сортировка, группировки, параметры запроса
-- `appearance.md` — условное и статическое оформление элементов (цвета/шрифты/рамки)
-- `choice-params.md` — параметры и связи выбора у полей ввода
-- `command-interface.md` — командный интерфейс формы
-- `roles-access.md` — пользовательская видимость и доступ по ролям
-- `companion-panels.md` — контент расширенной подсказки и контекстного меню
-- `special-fields.md` — поля документа/датчика (HTML, текст, индикатор, ползунок)
-- `charts.md` — диаграммы и планировщик
-- `report-form.md` — свойства формы отчёта
-- `type-system-advanced.md` — наборы и составные типы
-- `table-advanced.md` — расширенные свойства таблиц
-- `layout-advanced.md` — тонкая компоновка и геометрия
+- `dynamic-list.md` - list form: source, filter, sorting, groupings, query parameters
+- `appearance.md` - conditional and static element appearance (colors/fonts/borders)
+- `choice-params.md` - choice parameters and links for input fields
+- `command-interface.md` - form command interface
+- `roles-access.md` - custom visibility and role-based access
+- `companion-panels.md` - content of the extended tooltip and context menu
+- `special-fields.md` - document/sensor fields (HTML, text, indicator, slider)
+- `charts.md` - charts and scheduler
+- `report-form.md` - report form properties
+- `type-system-advanced.md` - sets and composite types
+- `table-advanced.md` - advanced table properties
+- `layout-advanced.md` - fine layout and geometry
 
-## Автогенерация
+## Auto-generation
 
-- **Companion-элементы**: ContextMenu, ExtendedTooltip и др. создаются автоматически
-- **Namespace**: все 17 namespace-деклараций
-- **ID**: последовательная нумерация, AutoCommandBar = id="-1"
-- **Unknown keys**: выводится предупреждение о нераспознанных ключах
+- **Companion elements**: ContextMenu, ExtendedTooltip, etc. are created automatically
+- **Namespace**: all 17 namespace declarations
+- **ID**: sequential numbering, AutoCommandBar = id="-1"
+- **Unknown keys**: a warning is printed about unrecognized keys
 
 ## Workflow
 
-1. **Каркас**: `/form-add` создаёт метаданные формы (`ФормаСписка.xml`), `Module.bsl` и регистрирует форму у объекта.
-2. **Компиляция**: `/form-compile` наполняет `Form.xml` элементами.
-3. **Проверка**: `/form-validate`, `/form-info`.
+1. **Skeleton**: `/form-add` creates the form metadata (`ФормаСписка.xml`), `Module.bsl` and registers the form with the object.
+2. **Compilation**: `/form-compile` fills `Form.xml` with elements.
+3. **Check**: `/form-validate`, `/form-info`.
 
-## Верификация
+## Verification
 
 ```
 /form-validate <OutputPath>    — проверка корректности XML
 /form-info <OutputPath>        — визуальная сводка структуры
 ```
 
-## Особенности для внешних обработок (EPF)
+## Specifics for external data processors (EPF)
 
-- **Тип главного реквизита**: `ExternalDataProcessorObject.ИмяОбработки` (не `DataProcessorObject`)
-- **DataPath**: используйте реквизиты формы (`ИмяРеквизита`), а не `Объект.ИмяРеквизита` — у внешних обработок нет реквизитов объекта в метаданных
-- **Ссылочные типы**: `CatalogRef.XXX`, `DocumentRef.XXX` допустимы в XML, но для сборки EPF потребуется база с целевой конфигурацией (см. навык `1c-batch`, команда `build-epf`)
+- **Main attribute type**: `ExternalDataProcessorObject.ИмяОбработки` (not `DataProcessorObject`)
+- **DataPath**: use form attributes (`ИмяРеквизита`), not `Объект.ИмяРеквизита` - external data processors have no object attributes in the metadata
+- **Reference types**: `CatalogRef.XXX`, `DocumentRef.XXX` are allowed in XML, but building an EPF requires an infobase with the target configuration (see the `1c-batch` skill, `build-epf` command)

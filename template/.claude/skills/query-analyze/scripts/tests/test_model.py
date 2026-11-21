@@ -23,17 +23,17 @@ def test_iter_query_models_yields_leaf():
     ctx = rules.QueryContext("ВЫБРАТЬ 1 КАК П ОБЪЕДИНИТЬ ВЫБРАТЬ 2")
     rows = list(rules.iter_query_models(ctx))
     assert len(rows) == 2
-    # второй участник добавлен через ОБЪЕДИНИТЬ (без ВСЕ) -> distinct True
+    # the second member is added via ОБЪЕДИНИТЬ (without ВСЕ) -> distinct True
     assert rows[1][1] is True
 
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test_model_parse_error_is_graceful():
-    ctx = rules.QueryContext("ВЫБРАТЬ ИЗ ГДЕ ПОДОБНО")  # заведомо битый
+    ctx = rules.QueryContext("ВЫБРАТЬ ИЗ ГДЕ ПОДОБНО")  # deliberately broken
     m = ctx.model
-    # не бросает исключение — результат либо None, либо dict
+    # does not throw - the result is either None or dict
     assert m is None or isinstance(m, dict)
-    # если модель не распарсилась, должна быть зафиксирована причина
+    # if the model did not parse, the reason must be recorded
     if m is None:
         assert ctx.model_error is not None
 
@@ -52,7 +52,7 @@ def test_iter_query_models_empty_when_no_model(monkeypatch):
 
 
 def test_model_error_set_when_bundle_missing(monkeypatch):
-    """ctx.model_error не None, когда бандл парсера отсутствует (Fix 1 — Critical)."""
+    """ctx.model_error is not None when the parser bundle is missing (Fix 1 - Critical)."""
     monkeypatch.setattr(rules, "_PARSER_BUNDLE", "/nonexistent/sdbl_parse.js")
     ctx = rules.QueryContext("ВЫБРАТЬ * ИЗ Спр.Т КАК Т")
     _ = ctx.model
@@ -60,10 +60,10 @@ def test_model_error_set_when_bundle_missing(monkeypatch):
 
 
 def test_ast_rules_produce_no_findings_when_bundle_missing(monkeypatch):
-    """AST-правила не дают находок без бандла — документируем тихий пропуск (Fix 1 — Critical).
+    """AST rules produce no findings without the bundle - documenting the silent skip (Fix 1 - Critical).
 
-    Запрос «ВЫБРАТЬ * ИЗ Спр.Т КАК Т» нарушает select-star,
-    но без парсера находок не будет — правило молча пропускается.
+    The query «ВЫБРАТЬ * ИЗ Спр.Т КАК Т» violates select-star,
+    but without the parser there will be no findings - the rule is silently skipped.
     """
     monkeypatch.setattr(rules, "_PARSER_BUNDLE", "/nonexistent/sdbl_parse.js")
     ctx = rules.QueryContext("ВЫБРАТЬ * ИЗ Спр.Т КАК Т")

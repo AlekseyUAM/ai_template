@@ -4,11 +4,11 @@ Record browser automation sessions as MP4 video files. Uses CDP `Page.startScree
 
 ## Prerequisites
 
-**ffmpeg** must be installed. Choose один из вариантов:
+**ffmpeg** must be installed. Choose one of the options:
 
-### Вариант 1: в проект (рекомендуется)
+### Option 1: into the project (recommended)
 
-Скачать essentials build с https://www.gyan.dev/ffmpeg/builds/, распаковать в `tools/ffmpeg/` проекта:
+Download the essentials build from https://www.gyan.dev/ffmpeg/builds/ and unpack it into the project's `tools/ffmpeg/`:
 
 ```
 tools/ffmpeg/
@@ -19,16 +19,16 @@ tools/ffmpeg/
 └── ...
 ```
 
-Код автоматически найдёт `tools/ffmpeg/bin/ffmpeg.exe` — ничего больше настраивать не нужно.
+The code finds `tools/ffmpeg/bin/ffmpeg.exe` automatically - nothing else needs to be configured.
 
-### Вариант 2: глобально (один раз на машину)
+### Option 2: globally (once per machine)
 
-Скачать, распаковать в любой каталог (напр. `C:\tools\ffmpeg`), добавить `bin/` в системный PATH.
-После этого ffmpeg доступен во всех проектах.
+Download it, unpack it into any directory (e.g. `C:\tools\ffmpeg`), add `bin/` to the system PATH.
+After that ffmpeg is available in all projects.
 
-### Вариант 3: через .v8-project.json (общий путь)
+### Option 3: via .v8-project.json (shared path)
 
-Чтобы не копировать ffmpeg в каждый проект, указать путь в конфиге:
+To avoid copying ffmpeg into every project, specify the path in the config:
 
 ```json
 {
@@ -36,14 +36,14 @@ tools/ffmpeg/
 }
 ```
 
-Модель прочитает это поле и передаст в `startRecording({ ffmpegPath })`.
+The model reads this field and passes it to `startRecording({ ffmpegPath })`.
 
-### Порядок поиска ffmpeg
+### ffmpeg search order
 
-1. `opts.ffmpegPath` — явный путь (из `.v8-project.json` или параметра)
-2. `FFMPEG_PATH` — переменная окружения
-3. `ffmpeg` — в системном PATH
-4. `tools/ffmpeg/bin/ffmpeg.exe` — относительно корня проекта
+1. `opts.ffmpegPath` - explicit path (from `.v8-project.json` or the parameter)
+2. `FFMPEG_PATH` - environment variable
+3. `ffmpeg` - in the system PATH
+4. `tools/ffmpeg/bin/ffmpeg.exe` - relative to the project root
 
 ## API
 

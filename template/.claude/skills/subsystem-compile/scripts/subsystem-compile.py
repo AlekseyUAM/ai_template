@@ -11,18 +11,18 @@ import uuid
 import xml.etree.ElementTree as ET
 from lxml import etree
 
-# Регистронезависимый ввод: имена параметров и значения choices принимаются
-# в любом регистре (в argparse по умолчанию совпадение точное).
+# Case-insensitive input: parameter names and choices values are accepted
+# in any case (argparse matches exactly by default).
 
 def parse_json_input(text, source, expected=None, inline=False):
-    """Разбор пользовательского JSON: одна строка в stderr вместо traceback (issue #80).
+    """Parse user JSON: one line to stderr instead of a traceback (issue #80).
 
-    expected заполняем только для полиморфного входа: у файла подсказка
-    была бы наполнителем — имя файла и текст парсера самодостаточны. inline печатает ещё и то,
-    что доехало: у файла такого вопроса нет, он лежит на диске и его видно целиком.
+    expected is filled only for polymorphic input: for a file the hint would
+    be filler - the file name and the parser text are self-sufficient. inline also prints what
+    arrived: for a file there is no such question, it lies on disk and is visible in full.
 
-    Импорты внутри тела: копия функции живёт в навыках с разными именами модулей
-    (skd-decompile импортирует json локально как _json), а тело обязано быть одинаковым.
+    Imports inside the body: a copy of the function lives in skills with different module names
+    (skd-decompile imports json locally as _json), and the body must be identical.
     """
     import json as _pj
     import sys as _psys
@@ -46,10 +46,10 @@ def parse_json_input(text, source, expected=None, inline=False):
 
 
 def read_json_file(path):
-    """Чтение входного JSON-файла с кодировкой из BOM (issue #80).
+    """Read the input JSON file with the encoding from the BOM (issue #80).
 
-    BOM — объявление самого файла, поэтому ему верим; без BOM ждём строгий UTF-8. Кодовую
-    страницу не подбираем: угаданное имя уехало бы в метаданные молча.
+    The BOM is the file's own declaration, so we trust it; without a BOM we expect strict UTF-8. We do
+    not guess the code page: a guessed name would silently travel into metadata.
     """
     import os as _pos
     import sys as _psys
@@ -76,9 +76,9 @@ def read_json_file(path):
 
 
 class CIDict(dict):
-    # Ключи храним КАК ЕСТЬ: часть из них — имена объектов (табличные части, стандартные
-    # реквизиты), они попадают в XML. Регистронезависим только поиск. Порядок вставки
-    # сохраняется — от него зависит порядок эмиссии.
+    # Keys are stored AS IS: some of them are object names (tabular sections, standard
+    # attributes), they get into the XML. Only lookup is case-insensitive. Insertion order
+    # is preserved - the emission order depends on it.
     def _actual(self, key):
         if not isinstance(key, str) or dict.__contains__(self, key):
             return key
@@ -101,11 +101,11 @@ class CIDict(dict):
         return dict.pop(self, self._actual(key), *default)
 
     def __setitem__(self, key, value):
-        # запись по ключу, отличающемуся регистром, обновляет существующий, а не плодит дубль
+        # writing by a key with a different case updates the existing one instead of creating a duplicate
         dict.__setitem__(self, self._actual(key), value)
 
 def ci_json(obj):
-    """Рекурсивно оборачивает разобранный JSON: словари → CIDict, списки обходятся."""
+    """Recursively wraps parsed JSON: dicts -> CIDict, lists are walked."""
     if isinstance(obj, dict):
         return CIDict((k, ci_json(v)) for k, v in obj.items())
     if isinstance(obj, list):
@@ -113,13 +113,13 @@ def ci_json(obj):
     return obj
 
 def ci_parse_args(parser, argv=None):
-    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
+    """parse_args: parameter names and choices values are accepted in any case."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
         if tok.startswith('-') and tok.lower() in names:
             argv[i] = names[tok.lower()]
-    # choices — зеркало [ValidateSet]; канонизируем ДО разбора, иначе argparse отвергнет регистр
+    # choices - mirror of [ValidateSet]; canonicalize BEFORE parsing, otherwise argparse rejects the case
     choice_map = {}
     for a in parser._actions:
         if a.choices:
@@ -311,8 +311,8 @@ def assert_edit_allowed(target_path, require):
 
 def detect_format_version(d):
     while d:
-        # Автономная внешняя обработка/отчёт: своего Configuration.xml у неё нет, версию несёт
-        # корень самой обработки. Без этого форма и макет внутри обработки 2.21 писались бы 2.17.
+        # Standalone external data processor/report: it has no Configuration.xml of its own; the version is carried by
+        # the root of the processor itself. Without this, a form and a template inside a 2.21 processor would be written as 2.17.
         ext_path = d + ".xml"
         if os.path.isfile(ext_path):
             with open(ext_path, "r", encoding="utf-8-sig") as f:
@@ -335,28 +335,28 @@ def detect_format_version(d):
     return "2.17"
 
 def format_rank(ver):
-    """"2.20" → 220, "2.9" → 209. Строковое сравнение неверно ("2.9" > "2.17")."""
+    """"2.20" -> 220, "2.9" -> 209. String comparison is wrong ("2.9" > "2.17")."""
     m = re.match(r'^(\d+)\.(\d+)$', ver or '')
     return int(m.group(1)) * 100 + int(m.group(2)) if m else 0
 
 
 
 def detect_eol(text):
-    # Перевод строки ВСТАВКИ берём из самого файла: канон CRLF относится к файлам,
-    # которые мы создаём, а правка существующего сохраняет его стиль (#44/#46/#47).
-    # Семантика та же, что у _detect_xml_style в остальных портах: есть CRLF → CRLF.
-    # Мажоритарное правило здесь было расхождением — на смешанном входе оно давало
-    # другой ответ, чем канон, при том же назначении.
+    # Take the INSERT line ending from the file itself: the CRLF canon applies to files
+    # we create, while editing an existing one preserves its style (#44/#46/#47).
+    # The semantics are the same as _detect_xml_style in other ports: CRLF present -> CRLF.
+    # The majority rule was a discrepancy here - on mixed input it gave
+    # a different answer than the canon with the same purpose.
     return '\r\n' if '\r\n' in text else '\n'
 
 def esc_xml(s):
-    # Эскейп ЗНАЧЕНИЯ АТРИБУТА: & < > и кавычка — внутри "..." литеральная " невалидна.
+    # Escape an ATTRIBUTE VALUE: & < > and quote - inside "..." a literal " is invalid.
     return s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;')
 
 
 def esc_xml_text(s):
-    """Экранирование ТЕКСТА элемента: только & < > . Кавычки платформа в тексте не экранирует
-    (92142 сырых кавычки на корпус, ни одной &quot;); &quot; она принимает, но нормализует обратно."""
+    """Escape element TEXT: only & < > . The platform does not escape quotes in text
+    (92142 raw quotes in the corpus, not a single &quot;); it accepts &quot; but normalizes it back."""
     return s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
 
 
@@ -377,8 +377,8 @@ def new_uuid():
 
 
 def write_utf8_bom(path, content):
-    # newline='' — без трансляции: иначе текстовый режим Python дал бы CRLF на Windows
-    # и LF на macOS, то есть вывод навыка зависел бы от ОС.
+    # newline='' - no translation: otherwise Python text mode would give CRLF on Windows
+    # and LF on macOS, that is, the skill output would depend on the OS.
     with open(path, 'w', encoding='utf-8-sig', newline='') as f:
         f.write(content)
 
@@ -393,8 +393,8 @@ def split_camel_case(name):
     return result
 
 
-# Объявления пространств имён — одной переменной: места эмиссии её только подставляют.
-# Правки шапки (как xmlns:pal в формате 2.21) делаются в одном месте, в main.
+# Namespace declarations - in a single variable: the emission sites only substitute it.
+# Header edits (like xmlns:pal in format 2.21) are made in one place, in main.
 XMLNS_DECL = (
     'xmlns="http://v8.1c.ru/8.3/MDClasses"'
     ' xmlns:app="http://v8.1c.ru/8.2/managed-application/core"'
@@ -417,9 +417,9 @@ XMLNS_DECL = (
 
 
 def apply_pal_ns(format_version):
-    """2.21 (8.5) добавила в шапку пространство палитры — ради <Color> у значений перечисления.
-    Вставляем НА МЕСТО (после lf, перед style): платформа держит объявления по алфавиту,
-    дописать в конец нельзя."""
+    """2.21 (8.5) added the palette namespace to the header - for <Color> in enum values.
+    We insert it IN PLACE (after lf, before style): the platform keeps declarations alphabetically,
+    appending at the end is not allowed."""
     global XMLNS_DECL
     if format_rank(format_version) >= 221:
         XMLNS_DECL = XMLNS_DECL.replace(
@@ -450,10 +450,10 @@ def write_child_subsystem_stub(child_path, child_name, format_version):
     write_utf8_bom(child_path, '\r\n'.join(lines))
 
 
-# Канонический порядок видов в <ChildObjects> — эталон в docs/1c-configuration-spec.md,
-# таблица «Порядок типов в ChildObjects». Нужен, чтобы новая группа вида вставала на своё
-# место: иначе платформа переставит её при первой же выгрузке и даст диф на ровном месте.
-# Реестр карт: tests/skills/check-type-maps.mjs.
+# Canonical kind order in <ChildObjects> - the reference is docs/1c-configuration-spec.md,
+# table "Order of types in ChildObjects". Needed so a new kind group takes its
+# place: otherwise the platform will reorder it on the first dump and produce a diff out of nowhere.
+# Map registry: tests/skills/check-type-maps.mjs.
 CHILD_OBJECT_TYPES = [
     'Language', 'Subsystem', 'StyleItem', 'Style',
     'CommonPicture', 'SessionParameter', 'Role', 'CommonTemplate',
@@ -471,20 +471,20 @@ CHILD_OBJECT_TYPES = [
 
 
 def register_in_childobjects(parent_xml_path, parent_tag, child_tag, child_name):
-    """Регистрация объекта в <ChildObjects> родительского XML.
+    """Register an object in <ChildObjects> of the parent XML.
 
-    Вариант семьи: отступ берётся из самого документа, а запись дописывается в конец
-    блока. Отличие от эталона (meta-compile) осознанное: родителем бывает вложенный
-    Subsystem.xml произвольной глубины, где фиксированные три табуляции неверны,
-    а группировать записи по типу внутри подсистемы нечего — потомок там всегда один.
-    Реестр семьи: tests/skills/check-inline-drift.mjs.
-    Возвращает исход: added | already | no-childobj | no-config.
+    Family variant: the indent is taken from the document itself, and the entry is appended to the end
+    of the block. The difference from the reference (meta-compile) is intentional: the parent may be a nested
+    Subsystem.xml of arbitrary depth, where the fixed three tabs are wrong,
+    and there is nothing to group entries by type inside a subsystem - the child there is always single.
+    Family registry: tests/skills/check-inline-drift.mjs.
+    Returns the outcome: added | already | no-childobj | no-config.
     """
     if not os.path.exists(parent_xml_path):
         return 'no-config'
 
-    # newline='' => без трансляции переводов строк: иначе CRLF молча схлопнется
-    # в LF при чтении и файл будет переписан в LF.
+    # newline='' => no newline translation: otherwise CRLF would silently collapse
+    # to LF on read and the file would be rewritten in LF.
     with open(parent_xml_path, 'r', encoding='utf-8-sig', newline='') as f:
         raw_text = f.read()
 
@@ -506,19 +506,19 @@ def register_in_childobjects(parent_xml_path, parent_tag, child_tag, child_name)
         if child.tag == f'{{{md_ns}}}{child_tag}' and child.text == child_name:
             return 'already'
 
-    # Правку ведём по сырому тексту, а не сериализацией ET: она не сохраняет отступы
-    # и теряет xmlns, объявленные только внутри значений атрибутов (#38).
+    # We edit the raw text, not an ET serialization: it does not preserve indents
+    # and loses xmlns declarations that appear only inside attribute values (#38).
     entry = f'<{child_tag}>{esc_xml_text(child_name)}</{child_tag}>'
     empty = re.search(r'<ChildObjects\s*/>', raw_text)
     if empty is not None:
         replacement = '<ChildObjects>' + eol + f'\t\t\t{entry}' + eol + '\t\t</ChildObjects>'
         raw_text = raw_text[:empty.start()] + replacement + raw_text[empty.end():]
     else:
-        # В корне подсистема встаёт перед первой группой вида старше по CHILD_OBJECT_TYPES:
-        # так она попадает и в канонический порядок видов, и в конец своей группы, если та уже
-        # есть. Дописать в конец блока нельзя вдвойне: платформа переставит новую группу при
-        # первой же выгрузке, а существующую подсистема покинула бы, уехав за виды ниже.
-        # Во вложенном Subsystem.xml порядок видов неприменим — потомок там всегда один.
+        # In the root, the subsystem goes before the first kind group older in CHILD_OBJECT_TYPES:
+        # this way it lands both in the canonical kind order and at the end of its group, if that
+        # already exists. Appending to the end of the block is doubly wrong: the platform would move a new group on the
+        # first dump, and the subsystem would leave an existing group, moving below later kinds.
+        # In a nested Subsystem.xml the kind order is not applicable - the child there is always single.
         anchor = None
         if parent_tag == 'Configuration' and child_tag in CHILD_OBJECT_TYPES:
             own_idx = CHILD_OBJECT_TYPES.index(child_tag)
@@ -532,9 +532,9 @@ def register_in_childobjects(parent_xml_path, parent_tag, child_tag, child_name)
             raw_text = (raw_text[:anchor.start()] + anchor.group(1) + entry + eol
                         + raw_text[anchor.start():])
         else:
-            # Отступ вставки берём у закрывающего тега +1 уровень: подстановка
-            # по голому '</ChildObjects>' удваивала бы уже присутствующий отступ
-            # строки (получалось 5 табов вместо 3; через DOM — 3).
+            # Take the insertion indent from the closing tag +1 level: substitution
+            # by a bare '</ChildObjects>' would double the already present line
+            # indent (giving 5 tabs instead of 3; via DOM - 3).
             cm = re.search(r'([ \t]*)</ChildObjects>', raw_text)
             if cm is None:
                 return 'no-childobj'

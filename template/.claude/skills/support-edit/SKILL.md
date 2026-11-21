@@ -1,7 +1,7 @@
 ---
 name: support-edit
-description: Переключение состояния поддержки типовой конфигурации 1С. Используй когда нужно включить возможность редактирования конфигурации или конкретного объекта на поддержке («на замке»)
-argument-hint: -Path <путь> -Set editable|off-support|locked | -Capability on|off
+description: Switch the support state of a typical 1C configuration. Use when you need to enable editing of the configuration or a specific object on support ("locked")
+argument-hint: -Path <path> -Set editable|off-support|locked | -Capability on|off
 allowed-tools:
   - Bash
   - Read
@@ -9,33 +9,33 @@ allowed-tools:
   - Glob
 ---
 
-# /support-edit — переключение состояния поддержки 1С
+# /support-edit - switch 1C support state
 
-Меняет правила поддержки типовой конфигурации: разрешает правку объекта/конфигурации «на замке», снимает с поддержки, включает/выключает возможность изменения. Это осознанное действие — обычно после отказа `support-guard` (готовую команду под конкретный случай печатает сам отказ).
+Changes support rules of a typical configuration: allows editing an object/configuration on support, removes from support, enables/disables the ability to change. This is a deliberate action - usually after a `support-guard` refusal (the refusal itself prints a ready command for the specific case).
 
-Действует только на выгрузку; чтобы применить в информационной базе — загрузить выгрузку (полная загрузка).
+Acts on the dump only; to apply it in the infobase - load the dump (full load).
 
-## Команды
+## Commands
 
-| Что нужно | Команда |
+| What you need | Command |
 |-----------|---------|
-| Разрешить правку объекта | `-Path <объект> -Set editable` |
-| Снять объект с поддержки | `-Path <объект> -Set off-support` |
-| Вернуть объект «на замок» | `-Path <объект> -Set locked` |
-| Разрешить добавление новых объектов в конфигурацию | `-Path <каталог дампа> -Set editable` |
-| Включить / выключить возможность изменения всей конфигурации | `-Path <каталог дампа> -Capability on` / `off` |
+| Allow editing an object | `-Path <объект> -Set editable` |
+| Remove an object from support | `-Path <объект> -Set off-support` |
+| Return an object to support ("locked") | `-Path <объект> -Set locked` |
+| Allow adding new objects to the configuration | `-Path <каталог дампа> -Set editable` |
+| Enable / disable the ability to change the whole configuration | `-Path <каталог дампа> -Capability on` / `off` |
 
-`-Path` — тот же путь, который отклонил `support-guard` (объект, форма, макет или каталог дампа).
+`-Path` - the same path that `support-guard` rejected (object, form, template or dump directory).
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/support-edit.py" -Path "Catalogs/Контрагенты.xml" -Set editable
 ```
 
-## editable или off-support?
+## editable or off-support?
 
-- **editable** — правки разрешены, объект **продолжает получать обновления вендора** (при обновлении возможны конфликты слияния). Бери, когда хочешь дорабатывать и дальше получать обновления.
-- **off-support** — объект **снят с поддержки**: правки свободны, обновления вендора по нему больше не приходят. Это не удаление объекта. Бери, когда объект уводишь из-под обновлений.
+- **editable** - edits are allowed, the object **keeps receiving vendor updates** (merge conflicts are possible on update). Choose when you want to modify and keep receiving updates.
+- **off-support** - the object is **removed from support**: edits are free, vendor updates no longer arrive for it. This is not deletion of the object. Choose when you take the object out of updates.
 
-## Если возможность изменения выключена
+## If the change ability is disabled
 
-Если вся конфигурация read-only (типовая «из коробки»), пообъектный `-Set` не сработает — навык подскажет сначала выполнить `-Capability on`. Это включает возможность изменения (все объекты при этом остаются на замке), после чего открываешь нужные точечно через `-Set editable`.
+If the whole configuration is read-only (typical "out of the box"), per-object `-Set` will not work - the skill will suggest running `-Capability on` first. This enables the change ability (all objects remain locked), after which you open the needed ones pointwise via `-Set editable`.

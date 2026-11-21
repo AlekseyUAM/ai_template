@@ -1,6 +1,6 @@
 ---
 name: meta-decompile
-description: Декомпиляция объекта метаданных 1С в JSON-заготовку формата meta-compile. Используй когда нужно получить черновик DSL-описания нового объекта по образцу другого. Не сохраняет UUID/модули/формы.
+description: Decompile a 1C metadata object into a meta-compile JSON draft. Use when you need to get a DSL description draft of a new object based on another one. Does not preserve UUIDs/modules/forms.
 argument-hint: <ObjectPath> [-OutputPath <out.json>]
 disable-model-invocation: true
 allowed-tools:
@@ -10,43 +10,43 @@ allowed-tools:
   - Glob
 ---
 
-# /meta-decompile — DSL-заготовка из XML объекта метаданных
+# /meta-decompile - DSL draft from metadata object XML
 
-Читает XML объекта метаданных (`Catalogs/Имя.xml` и т.п.) и эмитит компактный JSON в формате `/meta-compile`. Назначение — **взять существующий объект образцом и собрать по нему НОВЫЙ**: декомпилировать → поправить → скомпилировать под другим именем.
+Reads metadata object XML (`Catalogs/Имя.xml`, etc.) and emits compact JSON in the `/meta-compile` format. The purpose is to **take an existing object as a sample and assemble a NEW one from it**: decompile -> adjust -> compile under a different name.
 
-## ⚠️ Главное: это НЕ обратимая выгрузка
+## ⚠️ Main point: this is NOT a reversible dump
 
-Компиляция черновика создаёт **новый объект с новой идентичностью**, а не копию исходного. В JSON **не** попадают: UUID (идентичность самого объекта и всех дочерних), тела модулей, формы, макеты, права. Захватываются только структура и свойства.
+Compiling the draft creates a **new object with a new identity**, not a copy of the original. The JSON does **not** include: UUIDs (the identity of the object itself and all children), module bodies, forms, templates, rights. Only the structure and properties are captured.
 
-Отсюда правило: **никогда не компилируй черновик поверх объекта-источника и не выдавай его за «реимпорт»** — у пересобранного объекта другие UUID, поэтому все ссылки на исходный объект (из кода, других объектов, состава подсистем, предопределённых данных) сломаются, а код модулей и формы пропадут.
+Hence the rule: **never compile the draft over the source object and never present it as a "reimport"** - the reassembled object has different UUIDs, so all references to the source object (from code, other objects, subsystem contents, predefined data) will break, and module code and forms will be lost.
 
-## Когда использовать
+## When to use
 
-**Собрать новый объект по образцу существующего** — получить DSL-заготовку рабочего объекта, переименовать и адаптировать состав, скомпилировать в новый. Быстрее, чем писать DSL с нуля для богатого объекта.
+**Assemble a new object from an existing sample** - get a DSL draft of a working object, rename it and adapt its composition, compile it into a new one. Faster than writing DSL from scratch for a rich object.
 
-## Когда **не** использовать
+## When **not** to use
 
-- **Точечная правка существующего объекта** (добавить реквизит, ТЧ, свойство) → `/meta-edit`. Цикл decompile→compile тут вреден: даёт объект с новой идентичностью и теряет модули/формы.
-- **Сохранить / восстановить / перенести тот же объект** (бэкап, миграция между конфигурациями с сохранением ссылок) → штатная выгрузка 1С (`/db-dump-xml` ↔ `/db-load-xml`, CF), а не decompile.
-- **Просто понять структуру** объекта (реквизиты, ТЧ, типы) без пересборки → `/meta-info` (дешевле, не плодит файл).
+- **Point edit of an existing object** (add an attribute, tabular section, property) -> `/meta-edit`. The decompile->compile cycle is harmful here: it produces an object with a new identity and loses modules/forms.
+- **Save / restore / move the same object** (backup, migration between configurations preserving references) -> the standard 1C dump (`/db-dump-xml` <-> `/db-load-xml`, CF), not decompile.
+- **Just understand the object structure** (attributes, tabular sections, types) without reassembly -> `/meta-info` (cheaper, does not create a file).
 
-## Параметры
+## Parameters
 
-| Параметр | Описание |
+| Parameter | Description |
 |----------|----------|
-| `ObjectPath` | Путь к XML объекта (`Catalogs/Имя.xml`), обязательный |
-| `OutputPath` | Путь к выходному JSON. Если не задан — JSON в stdout |
+| `ObjectPath` | Path to the object XML (`Catalogs/Имя.xml`), required |
+| `OutputPath` | Path to the output JSON. If not set - JSON to stdout |
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/meta-decompile.py" -ObjectPath "<Объект.xml>" -OutputPath "<out.json>"
 ```
 
-Неподдерживаемый тип объекта или не-`MetaDataObject` root → ненулевой код выхода и сообщение в stderr.
+An unsupported object type or a non-`MetaDataObject` root -> a non-zero exit code and a message to stderr.
 
-## Workflow (сборка нового объекта по образцу)
+## Workflow (assembling a new object from a sample)
 
-1. `/meta-decompile <Образец.xml> -OutputPath draft.json` — получить заготовку.
-2. В `draft.json` **сменить `name`** на имя нового объекта и адаптировать состав (реквизиты/ТЧ/свойства). Ссылки на *другие* объекты (владельцы, ввод на основании, типы) — по имени, сохраняются как есть.
-3. `/meta-compile -JsonPath draft.json -OutputDir <ConfigDir>` — собрать (объект получит свежие UUID).
-4. `/meta-validate` + `/meta-info` — проверить.
-5. Модули, формы, макеты, права — добавить отдельно (в черновик они не попадают).
+1. `/meta-decompile <Образец.xml> -OutputPath draft.json` - get a draft.
+2. In `draft.json` **change `name`** to the new object name and adapt the composition (attributes/tabular sections/properties). References to *other* objects (owners, based on input, types) are by name and are preserved as is.
+3. `/meta-compile -JsonPath draft.json -OutputDir <ConfigDir>` - assemble (the object gets fresh UUIDs).
+4. `/meta-validate` + `/meta-info` - validate.
+5. Modules, forms, templates, rights - add separately (they are not included in the draft).

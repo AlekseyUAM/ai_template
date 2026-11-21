@@ -1,25 +1,25 @@
-# Итоги в запросах 1С (секция ИТОГИ)
+# Totals in 1C queries (ИТОГИ section)
 
-Предметная справка: семантика `ИТОГИ`, агрегаты, `NULL` в итоговых строках,
-обход результата. Автоматически неагрегированные поля ловит правило
-`totals-field-not-aggregated` навыка `query-analyze` (severity `error`).
-Ручные проверки запросов — навык `query-review`.
+Domain reference: `ИТОГИ` semantics, aggregates, `NULL` in total rows,
+result iteration. Non-aggregated fields are caught automatically by the
+`totals-field-not-aggregated` rule of the `query-analyze` skill (severity `error`).
+Manual query checks - the `query-review` skill.
 
-## 1. Что делает ИТОГИ
+## 1. What ИТОГИ does
 
-`ИТОГИ` **добавляет** к результату итоговые строки. Детальные строки остаются
-на месте. `СГРУППИРОВАТЬ ПО`, наоборот, сворачивает детальные строки в группы.
+`ИТОГИ` **adds** total rows to the result. Detail rows remain
+in place. `СГРУППИРОВАТЬ ПО`, conversely, collapses detail rows into groups.
 
-| Конструкция | Что делает | Детальные строки |
+| Construct | What it does | Detail rows |
 |---|---|---|
-| `СГРУППИРОВАТЬ ПО` | сворачивает выборку в группы | исчезают |
-| `ИТОГИ ... ПО` | добавляет итоговые строки к выборке | сохраняются |
+| `СГРУППИРОВАТЬ ПО` | collapses the selection into groups | disappear |
+| `ИТОГИ ... ПО` | adds total rows to the selection | are preserved |
 
-`ИТОГИ` можно совмещать с `СГРУППИРОВАТЬ ПО`: `СГРУППИРОВАТЬ ПО` управляет
-детальными строками (сворачивает их), `ИТОГИ` добавляет итоговые уровни. Если
-нужны только свёрнутые группы, `ИТОГИ` не нужны.
+`ИТОГИ` can be combined with `СГРУППИРОВАТЬ ПО`: `СГРУППИРОВАТЬ ПО` manages
+detail rows (collapses them), `ИТОГИ` adds total levels. If only collapsed
+groups are needed, `ИТОГИ` is not needed.
 
-## 2. Синтаксис
+## 2. Syntax
 
 ```sql
 ВЫБРАТЬ
@@ -36,35 +36,34 @@
     [, <Группировка2> ...]
 ```
 
-- `ПО` обязательна.
-- `ОБЩИЕ` добавляет корневую итоговую запись по всей выборке.
-- Порядок группировок в `ПО` задаёт порядок уровней итогов.
-- `УПОРЯДОЧИТЬ ПО` ставится **до** `ИТОГИ`; после `ИТОГИ` — синтаксическая ошибка.
+- `ПО` is mandatory.
+- `ОБЩИЕ` adds a root total record over the whole selection.
+- The order of groupings in `ПО` sets the order of total levels.
+- `УПОРЯДОЧИТЬ ПО` is placed **before** `ИТОГИ`; after `ИТОГИ` - a syntax error.
 
-## 3. Агрегатные функции
+## 3. Aggregate functions
 
-| Функция | Результат |
+| Function | Result |
 |---|---|
-| `СУММА` | сумма значений |
-| `КОЛИЧЕСТВО` | количество значений; `NULL` не учитывается |
-| `КОЛИЧЕСТВО РАЗЛИЧНЫЕ` | количество различных значений; `NULL` не учитывается |
-| `МАКСИМУМ` | максимальное значение |
-| `МИНИМУМ` | минимальное значение |
-| `СРЕДНЕЕ` | среднее значение |
+| `СУММА` | sum of values |
+| `КОЛИЧЕСТВО` | number of values; `NULL` is not counted |
+| `КОЛИЧЕСТВО РАЗЛИЧНЫЕ` | number of distinct values; `NULL` is not counted |
+| `МАКСИМУМ` | maximum value |
+| `МИНИМУМ` | minimum value |
+| `СРЕДНЕЕ` | average value |
 
-## 4. Главное правило: NULL в итоговых строках
+## 4. Main rule: NULL in total rows
 
-В строке итогов доступны только:
+Only the following are available in a total row:
 
-- поля, входящие в группировку `ИТОГИ` (перечисленные в `ПО`);
-- агрегаты, описанные в `ИТОГИ`.
+- fields included in the `ИТОГИ` grouping (listed in `ПО`);
+- aggregates described in `ИТОГИ`.
 
-Все остальные поля в итоговой строке возвращаются как `NULL`. При обходе
-результата и использовании такого поля в выражениях/приведении типа это даёт
-ошибки времени выполнения, например «Преобразование значения к типу Булево не
-может быть выполнено».
+All other fields are returned as `NULL` in the total row. When iterating the
+result and using such a field in expressions/type conversion this causes
+runtime errors, e.g., "Value conversion to Boolean cannot be performed".
 
-Неправильно:
+Incorrect:
 
 ```sql
 ВЫБРАТЬ
@@ -79,9 +78,9 @@
     Номенклатура
 ```
 
-На строках итогов `Склад` будет `NULL`.
+On total rows `Склад` will be `NULL`.
 
-Правильно — агрегировать поле или убрать его из выборки:
+Correct - aggregate the field or remove it from the selection:
 
 ```sql
 ИТОГИ
@@ -91,56 +90,56 @@
     Номенклатура
 ```
 
-**Выбор агрегата для повторяющегося поля.** Если поле одинаково на всех детальных
-строках группировки (постоянное), используйте `МАКСИМУМ`/`МИНИМУМ`, а не `СУММА`:
-`МАКСИМУМ(НаименованиеНоменклатуры)`, `МАКСИМУМ(ТребуетсяКоличество)` — это
-допустимо и не даёт `NULL`. `СУММА` по такому полю умножит его на число детальных
-строк (партий). `СУММА` — только для аддитивных ресурсов (количество/стоимость
-партии). Это правило проверяется и в ручном чеклисте: таблица «поле → агрегат»
-обязательна в `ARCHITECT.md`.
+**Choosing an aggregate for a repeating field.** If a field is the same on all detail
+rows of a grouping (constant), use `МАКСИМУМ`/`МИНИМУМ`, not `СУММА`:
+`МАКСИМУМ(НаименованиеНоменклатуры)`, `МАКСИМУМ(ТребуетсяКоличество)` - this is
+allowed and does not produce `NULL`. `СУММА` over such a field would multiply it by the number of detail
+rows (batches). `СУММА` - only for additive resources (quantity/batch cost). This rule
+is also checked in the manual checklist: the "field → aggregate" table
+is mandatory in `ARCHITECT.md`.
 
-## 5. ОБЩИЕ и иерархия
+## 5. ОБЩИЕ and hierarchy
 
-Общий итог по всей выборке:
+Grand total over the whole selection:
 
 ```sql
 ИТОГИ СУММА(Количество) ПО ОБЩИЕ
 ```
 
-Общий итог, затем итоги по номенклатуре:
+Grand total, then totals by nomenclature:
 
 ```sql
 ИТОГИ СУММА(Количество) ПО ОБЩИЕ, Номенклатура
 ```
 
-Для иерархического поля:
+For a hierarchical field:
 
-- `ИЕРАРХИЯ` — итоги по самому полю и по всем уровням вложенности;
-- `ТОЛЬКО ИЕРАРХИЯ` — итоги только по уровням вложенности, без итога по самому
-  полю.
+- `ИЕРАРХИЯ` - totals by the field itself and all nesting levels;
+- `ТОЛЬКО ИЕРАРХИЯ` - totals only by nesting levels, without a total for the
+  field itself.
 
-## 6. Несколько группировок
+## 6. Several groupings
 
-Каждый уровень `ПО` создаёт отдельный уровень итогов. Обход результата требует
-отдельной вложенной выборки на каждый уровень. Если группировочных полей много и
-нужны итоги по их набору, используйте `АВТОНОМЕРЗАПИСИ` (см. раздел 8), а не
-матрешку из вложенных циклов.
+Each `ПО` level creates a separate total level. Result iteration requires
+a separate nested selection per level. If there are many grouping fields and
+totals are needed over their set, use `АВТОНОМЕРЗАПИСИ` (see section 8), not a
+matryoshka of nested loops.
 
-## 7. Произвольные выражения в итогах
+## 7. Arbitrary expressions in totals
 
-В `ИТОГИ` можно вычислять выражения. Правила:
+Expressions can be computed in `ИТОГИ`. Rules:
 
-- выражению нужен псевдоним `КАК <поле>`; поле с таким именем должно быть в
-  списке выборки;
-- все поля выражения должны присутствовать в списке выборки;
-- в `ИТОГИ` допустимы произвольные выражения (арифметика, `ВЫБОР`, функции)
-  при условии, что вне агрегатов используются только группировочные поля;
-  выражение получает псевдоним из списка выборки;
-- вне агрегатных функций допустимы только поля, по которым считаются итоги;
-- поле группировки, итоги по которому ещё не получены, равно `NULL` — это можно
-  использовать для расчёта показателя только на нужном уровне.
+- the expression needs an alias `КАК <поле>`; a field with that name must be in the
+  select list;
+- all expression fields must be present in the select list;
+- arbitrary expressions (arithmetic, `ВЫБОР`, functions) are allowed in `ИТОГИ`
+  provided that only grouping fields are used outside aggregates;
+  the expression gets its alias from the select list;
+- outside aggregate functions only fields for which totals are calculated are allowed;
+- a grouping field whose totals have not been obtained yet equals `NULL` - this can be
+  used to calculate an indicator only at the desired level.
 
-Пример:
+Example:
 
 ```sql
 ВЫБРАТЬ
@@ -158,15 +157,14 @@
     Номенклатура
 ```
 
-Выражение в `ИТОГИ` строится только из агрегатов, поэтому оно определено и на
-итоговых строках; `Т.Прибыль`/`Т.Оборот` в списке выборки — это значения
-детальных строк.
+An expression in `ИТОГИ` is built only from aggregates, so it is defined on
+total rows too; `Т.Прибыль`/`Т.Оборот` in the select list are detail row values.
 
-## 8. Итоги по набору группировочных полей
+## 8. Totals over a set of grouping fields
 
-Если итоги нужны по совокупности полей (например, Организация + Контрагент +
-Договор), можно не строить вложенные циклы по каждому полю, а получить
-идентификатор набора функцией `АВТОНОМЕРЗАПИСИ` и группировать по нему:
+If totals are needed over a combination of fields (e.g., Organization + Counterparty +
+Contract), you can avoid building nested loops per field and instead get a
+set identifier with the `АВТОНОМЕРЗАПИСИ` function and group by it:
 
 ```sql
 ВЫБРАТЬ
@@ -184,10 +182,10 @@
     ИдентификаторНабора
 ```
 
-Обход результата остаётся одним уровнем `ПоГруппировкам`; реквизиты набора
-получаются через `МАКСИМУМ` и не бывают `NULL` на строках итогов.
+Result iteration remains one `ПоГруппировкам` level; set attributes
+are obtained via `МАКСИМУМ` and are never `NULL` on total rows.
 
-## 9. Обход результата в BSL
+## 9. Result iteration in BSL
 
 ```bsl
 Результат = Запрос.Выполнить();
@@ -200,30 +198,30 @@
 КонецЦикла;
 ```
 
-- `ПоГруппировкам` — обход итоговых группировок;
-- `Прямой` — обход детальных записей (значение по умолчанию);
-- второй параметр `Выбрать` — имя группировки; пропуск означает следующую
-  группировку из `ИТОГИ`, явная пустая строка — детали;
-- при `ОБЩИЕ` верхний уровень — общий итог; чтобы дойти до групп, нужна
-  вложенная выборка от текущей записи.
+- `ПоГруппировкам` - iteration of total groupings;
+- `Прямой` - iteration of detail records (the default);
+- the second `Выбрать` parameter is the grouping name; omitting it means the next
+  grouping from `ИТОГИ`, an explicit empty string - details;
+- with `ОБЩИЕ` the top level is the grand total; to reach the groups you need
+  a nested selection from the current record.
 
-## 10. Типичные ошибки
+## 10. Typical errors
 
-- Неагрегированное поле в `ИТОГИ` → `NULL` на итоговых строках (раздел 4).
-- `УПОРЯДОЧИТЬ ПО` после `ИТОГИ` → синтаксическая ошибка.
-- Обход деталей вместо группировок → итоговые строки теряются или читаются как
-  детальные.
-- `ОБЩИЕ` без вложенной выборки → виден только общий итог.
-- `ИТОГИ` в запросе СКД → двойная агрегация и падение производительности; в СКД
-  итоги задаются средствами компоновки.
-- Агрегат в `ГДЕ` → ошибка; для фильтрации агрегатов используйте `ИМЕЮЩИЕ` или
-  промежуточный запрос.
+- Non-aggregated field in `ИТОГИ` → `NULL` on total rows (section 4).
+- `УПОРЯДОЧИТЬ ПО` after `ИТОГИ` → syntax error.
+- Iterating details instead of groupings → total rows are lost or read as
+  detail rows.
+- `ОБЩИЕ` without a nested selection → only the grand total is visible.
+- `ИТОГИ` in a DCS query → double aggregation and a performance drop; in DCS
+  totals are set by composition means.
+- Aggregate in `ГДЕ` → error; to filter aggregates use `ИМЕЮЩИЕ` or
+  an intermediate query.
 
-## 11. Источники
+## 11. Sources
 
-- «Запросы 1С:Предприятие 8. Итоги» — https://chel1c.ru/querry_summary/
-- «Итоги по объединенной совокупности группировок в запросе» — https://infostart.ru/1c/articles/1328254/
-- «Обход результата запроса по группировкам 1С» — https://aether-lab.ru/guides/1c-query-language/obhod-po-gruppirovkam/
-- «Секция ИТОГИ в запросах 1С: агрегаты только в группировках» — https://confaster.ru/blog/itogi-zaprose-1s/
-- «Язык запросов 1С 8.3 для начинающих программистов: итоги» — https://helpme1s.ru/yazyk-zaprosov-1s-8-3-dlya-nachinayushhix-programmistov-itogi
-- ИТС, «Использование произвольных выражений в итогах языка запроса».
+- "1C:Enterprise 8 queries. Totals" - https://chel1c.ru/querry_summary/
+- "Totals over a combined set of groupings in a query" - https://infostart.ru/1c/articles/1328254/
+- "Iterating a 1C query result by groupings" - https://aether-lab.ru/guides/1c-query-language/obhod-po-gruppirovkam/
+- "ИТОГИ section in 1C queries: aggregates only in groupings" - https://confaster.ru/blog/itogi-zaprose-1s/
+- "1C 8.3 query language for novice programmers: totals" - https://helpme1s.ru/yazyk-zaprosov-1s-8-3-dlya-nachinayushhix-programmistov-itogi
+- ITS, "Using arbitrary expressions in query language totals".

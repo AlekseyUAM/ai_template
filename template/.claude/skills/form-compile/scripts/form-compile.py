@@ -13,18 +13,18 @@ from collections import OrderedDict
 
 from lxml import etree
 
-# Регистронезависимый ввод: имена параметров и значения choices принимаются
-# в любом регистре (в argparse по умолчанию совпадение точное).
+# Case-insensitive input: parameter names and choices values are accepted
+# in any case (argparse matches exactly by default).
 
 def parse_json_input(text, source, expected=None, inline=False):
-    """Разбор пользовательского JSON: одна строка в stderr вместо traceback (issue #80).
+    """Parse user JSON: one line on stderr instead of a traceback (issue #80).
 
-    expected заполняем только для полиморфного входа: у файла подсказка
-    была бы наполнителем — имя файла и текст парсера самодостаточны. inline печатает ещё и то,
-    что доехало: у файла такого вопроса нет, он лежит на диске и его видно целиком.
+    expected is filled only for polymorphic input: for a file the hint
+    would be filler - the file name and the parser text are self-sufficient. inline also prints what
+    arrived: a file has no such question, it lies on disk and is fully visible.
 
-    Импорты внутри тела: копия функции живёт в навыках с разными именами модулей
-    (skd-decompile импортирует json локально как _json), а тело обязано быть одинаковым.
+    Imports inside the body: a copy of the function lives in skills with different module names
+    (skd-decompile imports json locally as _json), and the body must be identical.
     """
     import json as _pj
     import sys as _psys
@@ -48,10 +48,10 @@ def parse_json_input(text, source, expected=None, inline=False):
 
 
 def read_json_file(path):
-    """Чтение входного JSON-файла с кодировкой из BOM (issue #80).
+    """Read the input JSON file with encoding from BOM (issue #80).
 
-    BOM — объявление самого файла, поэтому ему верим; без BOM ждём строгий UTF-8. Кодовую
-    страницу не подбираем: угаданное имя уехало бы в метаданные молча.
+    BOM is the file's own declaration, so we trust it; without BOM we expect strict UTF-8. We do not
+    guess the code page: a guessed name would silently end up in metadata.
     """
     import os as _pos
     import sys as _psys
@@ -78,9 +78,9 @@ def read_json_file(path):
 
 
 class CIDict(dict):
-    # Ключи храним КАК ЕСТЬ: часть из них — имена объектов (табличные части, стандартные
-    # реквизиты), они попадают в XML. Регистронезависим только поиск. Порядок вставки
-    # сохраняется — от него зависит порядок эмиссии.
+    # Keys are stored AS IS: some of them are object names (tabular sections, standard
+    # attributes), they go into XML. Only lookup is case-insensitive. Insertion order
+    # is preserved - the emission order depends on it.
     def _actual(self, key):
         if not isinstance(key, str) or dict.__contains__(self, key):
             return key
@@ -103,11 +103,11 @@ class CIDict(dict):
         return dict.pop(self, self._actual(key), *default)
 
     def __setitem__(self, key, value):
-        # запись по ключу, отличающемуся регистром, обновляет существующий, а не плодит дубль
+        # writing by a key with a different case updates the existing one rather than creating a duplicate
         dict.__setitem__(self, self._actual(key), value)
 
 def ci_json(obj):
-    """Рекурсивно оборачивает разобранный JSON: словари → CIDict, списки обходятся."""
+    """Recursively wraps parsed JSON: dictionaries → CIDict, lists are traversed."""
     if isinstance(obj, dict):
         return CIDict((k, ci_json(v)) for k, v in obj.items())
     if isinstance(obj, list):
@@ -115,13 +115,13 @@ def ci_json(obj):
     return obj
 
 def ci_parse_args(parser, argv=None):
-    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
+    """parse_args: parameter names and choices values are accepted in any case."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
         if tok.startswith('-') and tok.lower() in names:
             argv[i] = names[tok.lower()]
-    # choices — зеркало [ValidateSet]; канонизируем ДО разбора, иначе argparse отвергнет регистр
+    # choices is a mirror of [ValidateSet]; canonicalize BEFORE parsing, otherwise argparse rejects the case
     choice_map = {}
     for a in parser._actions:
         if a.choices:
@@ -137,7 +137,7 @@ def ci_parse_args(parser, argv=None):
 
 # ============================================================
 # Support guard (Ext/ParentConfigurations.bin) — see docs/1c-support-state-spec.md
-# Blocks edits of vendor objects "на замке" / read-only configs. Trigger = bin
+# Blocks edits of vendor objects "locked" / read-only configs. Trigger = bin
 # present; reaction from .v8-project.json editingAllowedCheck (deny|warn|off,
 # default deny). Never throws (except sys.exit on deny) — errors degrade to allow.
 # ============================================================
@@ -654,9 +654,9 @@ def new_field_element(attr_name, data_path, attr_type, field_defaults, extra_pro
     el[el_type] = attr_name
     el['path'] = data_path
 
-    # (ChoiceButton у ref-полей платформа выводит сама; компилятор эмитит true по StartChoice-эвристике.
-    #  Явный choiceButton из декомпиляции эмитится verbatim. Дефолт-«true» здесь НЕ ставим, чтобы
-    #  from-object вывод совпадал с сертифицированным и не плодил ChoiceButton на каждом ref-поле.)
+    # (The platform outputs ChoiceButton for ref fields itself; the compiler emits true by the StartChoice heuristic.
+    #  An explicit choiceButton from decompilation is emitted verbatim. We do NOT set the default "true" here, so that
+    #  from-object output matches the certified one and does not create ChoiceButton on every ref field.)
 
     # Extra props
     if extra_props:
@@ -1550,26 +1550,26 @@ def generate_chart_of_accounts_choice_dsl(meta, preset_data):
 
 
 def esc_xml(s):
-    # Эскейп ЗНАЧЕНИЯ АТРИБУТА: & < > и кавычка — внутри "..." литеральная " невалидна.
+    # Escape ATTRIBUTE VALUE: & < > and a quote - inside "..." a literal " is invalid.
     return s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;')
 
 
 def esc_xml_text(s):
-    # Экранирование ТЕКСТА элемента (<v8:content>, <Value>): только & < > .
-    # Кавычки/апострофы в тексте 1С не экранирует (пишет литерально) — &quot; ломал бы раундтрип.
+    # Escape element TEXT (<v8:content>, <Value>): only & < > .
+    # 1C does not escape quotes/apostrophes in text (writes them literally) - &quot; would break the round-trip.
     return s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
 
 
 def di_attr(el):
-    # DisplayImportance — атрибут открывающего тега элемента (адаптивная важность). "" если нет.
+    # DisplayImportance - attribute of the element's opening tag (adaptive importance). "" if absent.
     if isinstance(el, dict) and el.get('displayImportance'):
         return f' DisplayImportance="{esc_xml(str(el["displayImportance"]))}"'
     return ''
 
 
-# Базовая директория для @file-ссылок в query динсписка (устанавливается в main)
-# Без -JsonPath (режим по метаданным объекта) запросов во входе нет, но база пути должна
-# оставаться валидной — в этой ветке берётся текущий каталог.
+# Base directory for @file references in dynamic list query (set in main)
+# Without -JsonPath (object metadata mode) there are no queries in the input, but the path base must
+# stay valid - in this branch the current directory is used.
 QUERY_BASE_DIR = os.getcwd()
 
 
@@ -1593,7 +1593,7 @@ def resolve_text_from_file(val, base_dir):
 
 
 def emit_ml_items(lines, indent, val):
-    # строка → один ru-элемент; объект {lang: text} → по элементу на язык
+    # string → one ru element; object {lang: text} → one element per language
     if isinstance(val, dict):
         for k, v in val.items():
             lines.append(f"{indent}<v8:item>")
@@ -1618,7 +1618,7 @@ def emit_mltext(lines, indent, tag, text, xsi_type=None):
 
 
 def emit_us_presentation(lines, indent, tag, val):
-    # <dcsset:userSettingPresentation>: плоская строка → xsi:type="xs:string"; мультиязычный → v8:LocalStringType
+    # <dcsset:userSettingPresentation>: flat string → xsi:type="xs:string"; multilingual → v8:LocalStringType
     if val is None:
         return
     if isinstance(val, str):
@@ -1627,7 +1627,7 @@ def emit_us_presentation(lines, indent, tag, val):
         emit_mltext(lines, indent, tag, val, xsi_type='v8:LocalStringType')
 
 
-# Каноничные GUID пустых контейнеров ListSettings (умолчание платформы, ~90% форм).
+# Canonical GUIDs of empty ListSettings containers (platform default, ~90% of forms).
 CANON_FILTER_ID = 'dfcece9d-5077-440b-b6b3-45a5cb4538eb'
 CANON_ORDER_ID = '88619765-ccb3-46c6-ac52-38e9c992ebd4'
 CANON_CA_ID = 'b75fecce-942b-4aed-abc9-e6a02e460fb3'
@@ -1639,8 +1639,8 @@ def new_uuid():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Настройки компоновщика ListSettings: filter/order/conditionalAppearance.
-# Грамматика DSL и эмиссия dcsset скопированы из skd-compile (навыки автономны).
+# ListSettings composer settings: filter/order/conditionalAppearance.
+# The DSL grammar and dcsset emission are copied from skd-compile (skills are autonomous).
 # ─────────────────────────────────────────────────────────────────────────────
 COMPARISON_TYPES = {
     '=': 'Equal', '<>': 'NotEqual',
@@ -1651,10 +1651,10 @@ COMPARISON_TYPES = {
     'contains': 'Contains', 'notContains': 'NotContains',
     'beginsWith': 'BeginsWith', 'notBeginsWith': 'NotBeginsWith',
     'like': 'Like', 'notLike': 'NotLike',
-    'подобно': 'Like', 'неподобно': 'NotLike',  # рус. синоним
+    'подобно': 'Like', 'неподобно': 'NotLike',  # rus. synonym
     'filled': 'Filled', 'notFilled': 'NotFilled',
 }
-# Регистронезависимый лукап: Like/LIKE/ПОДОБНО → канон
+# Case-insensitive lookup: Like/LIKE/ПОДОБНО → canonical
 _COMPARISON_TYPES_CI = {k.lower(): v for k, v in COMPARISON_TYPES.items()}
 
 _REF_TYPE_RE = re.compile(
@@ -1699,7 +1699,7 @@ def parse_filter_shorthand(s):
                 result['value'] = (val_part == 'true')
                 result['valueType'] = 'xs:boolean'
             elif re.match(r'^\d{4}-\d{2}-\d{2}T', val_part):
-                # дата без valueType → emit_filter_item выведет StandardBeginningDate Custom (дефолт даты в фильтре)
+                # date without valueType → emit_filter_item outputs StandardBeginningDate Custom (default date in a filter)
                 result['value'] = val_part
             elif re.match(r'^\d+(\.\d+)?$', val_part):
                 result['value'] = val_part
@@ -1732,9 +1732,9 @@ def _value_type_for(v, explicit=None):
     return 'xs:string'
 
 
-# Значение типа v8:Type (напр. тип «Неопределено» = <prefix>:Undefined) ссылается на тип
-# платформы из namespace http://v8.1c.ru/8.2/data/types — платформа объявляет его ЛОКАЛЬНО
-# на теге значения (префикс авто: d6p1/d8p1/dN…). Без объявления QName битый.
+# A v8:Type value (e.g. type "Undefined" = <prefix>:Undefined) references a
+# platform type from namespace http://v8.1c.ru/8.2/data/types - the platform declares it LOCALLY
+# on the value tag (auto prefix: d6p1/d8p1/dN…). Without the declaration the QName is broken.
 def _value_type_ns_attr(value_type, value):
     if value_type == 'v8:Type':
         m = re.match(r'^([A-Za-z]\w*):', str(value))
@@ -1749,7 +1749,7 @@ def emit_filter_item(lines, item, indent):
         group_type = {'And': 'AndGroup', 'Or': 'OrGroup', 'Not': 'NotGroup'}.get(g, g + 'Group')
         lines.append(f'{indent}<dcsset:item xsi:type="dcsset:FilterItemGroup">')
         if item.get('use') is False:
-            lines.append(f'{indent}\t<dcsset:use>false</dcsset:use>')   # группа отключена (перед groupType)
+            lines.append(f'{indent}\t<dcsset:use>false</dcsset:use>')   # group disabled (before groupType)
         lines.append(f'{indent}\t<dcsset:groupType>{group_type}</dcsset:groupType>')
         if item.get('items'):
             for sub in item['items']:
@@ -1784,7 +1784,7 @@ def emit_filter_item(lines, item, indent):
     if item.get('use') is False:
         lines.append(f'{indent}\t<dcsset:use>false</dcsset:use>')
     lines.append(f'{indent}\t<dcsset:left xsi:type="dcscor:Field">{esc_xml_text(str(item.get("field", "")))}</dcsset:left>')
-    # Регистронезависимый лукап: Like/LIKE/ПОДОБНО → канон; иначе — как есть
+    # Case-insensitive lookup: Like/LIKE/ПОДОБНО → canonical; otherwise - as is
     comp_type = _COMPARISON_TYPES_CI.get(str(item.get('op')).lower())
     if not comp_type:
         comp_type = str(item.get('op'))
@@ -1805,9 +1805,9 @@ def emit_filter_item(lines, item, indent):
     elif val is not None and (
             re.search(r'Standard(Beginning|End)Date$', str(item.get('valueType') or '')) or
             (not item.get('valueType') and isinstance(val, str) and re.match(r'^\d{4}-\d{2}-\d{2}T', val))):
-        # Стандартная дата начала/окончания. Формы: объект {variant, date?} (Custom несёт <v8:date>);
-        # строка-вариант "BeginningOfThisDay" (именованный без даты); голая ISO-дата без valueType —
-        # шорткат для Custom+date (дата в фильтре почти всегда SBD Custom, корпус 268 vs 2 xs:dateTime).
+        # Standard beginning/end date. Forms: object {variant, date?} (Custom carries <v8:date>);
+        # string variant "BeginningOfThisDay" (named without date); bare ISO date without valueType -
+        # shortcut for Custom+date (the date in a filter is almost always SBD Custom, corpus 268 vs 2 xs:dateTime).
         sd_type = re.sub(r'^v8:', '', str(item['valueType'])) if item.get('valueType') else 'StandardBeginningDate'
         if isinstance(val, dict):
             variant = str(val.get('variant', '')); date_v = val.get('date')
@@ -1821,8 +1821,8 @@ def emit_filter_item(lines, item, indent):
             lines.append(f'{indent}\t\t<v8:date>{esc_xml_text(str(date_v))}</v8:date>')
         lines.append(f'{indent}\t</dcsset:right>')
     elif str(val) == '_':
-        # "_" — маркер пустого значения: платформа эмитит пустой self-closing <dcsset:right>
-        # (напр. <dcsset:right xsi:type="dcscor:Field"/> — сравнение с незаданным полем).
+        # "_" is the empty value marker: the platform emits an empty self-closing <dcsset:right>
+        # (e.g. <dcsset:right xsi:type="dcscor:Field"/> - comparison with an unset field).
         vt = str(item['valueType']) if item.get('valueType') else 'xs:string'
         lines.append(f'{indent}\t<dcsset:right xsi:type="{vt}"/>')
     elif val is not None:
@@ -1973,10 +1973,10 @@ def emit_appearance_value(lines, key, val, indent):
                     attr_parts.append(f'{attr_name}="{esc_xml(str(av))}"')
         lines.append(f'{indent}\t<dcscor:value xsi:type="v8ui:Font" {" ".join(attr_parts)}/>')
     elif is_dict and _has_key(inner_val, 'field'):
-        # Ссылка на поле (dcscor:Field) — значение параметра оформления = поле компоновки
+        # Field reference (dcscor:Field) - the appearance parameter value = a composition field
         lines.append(f'{indent}\t<dcscor:value xsi:type="dcscor:Field">{esc_xml_text(str(_get(inner_val, "field")))}</dcscor:value>')
     elif is_dict:
-        # Локализуемый текст параметра оформления: платформа объявляет xsi:type на dcscor:value
+        # Localizable appearance parameter text: the platform declares xsi:type on dcscor:value
         emit_mltext(lines, f'{indent}\t', 'dcscor:value', inner_val, xsi_type='v8:LocalStringType')
     else:
         actual_val = str(inner_val)
@@ -1996,8 +1996,8 @@ def emit_appearance_value(lines, key, val, indent):
         elif actual_val == 'true' or actual_val == 'false':
             lines.append(f'{indent}\t<dcscor:value xsi:type="xs:boolean">{actual_val}</dcscor:value>')
         elif key == 'Текст' or key == 'Заголовок' or key == 'Формат':
-            # Голая строка = плоский xs:string (нелокализованный литерал). Локализуемый → объект {ru,en}.
-            # Пустая строка → самозакрывающийся тег (как у платформы).
+            # A bare string = flat xs:string (non-localized literal). Localizable → object {ru,en}.
+            # Empty string → self-closing tag (as the platform does).
             if actual_val == '':
                 lines.append(f'{indent}\t<dcscor:value xsi:type="xs:string"/>')
             else:
@@ -2015,9 +2015,9 @@ def emit_appearance_value(lines, key, val, indent):
     lines.append(f'{indent}</dcscor:item>')
 
 
-# === Группировка строк динамического списка (DCS-структура ListSettings) ===
-# Линейная цепочка <dcsset:item StructureItemGroup> (каждый уровень = одно поле в groupItems;
-# вложенность — через дочерний <dcsset:item>). Плоская модель уровней (список всегда линеен).
+# === Dynamic list row grouping (DCS structure ListSettings) ===
+# Linear chain of <dcsset:item StructureItemGroup> (each level = one field in groupItems;
+# nesting - via a child <dcsset:item>). Flat model of levels (the list is always linear).
 def get_list_grouping_value(s):
     for k in ('grouping', 'structure', 'группировка'):
         if s.get(k):
@@ -2026,7 +2026,7 @@ def get_list_grouping_value(s):
 
 
 def parse_list_grouping(grouping):
-    # Шорткат "A > B > C" → массив имён; массив строк/объектов → как есть.
+    # Shortcut "A > B > C" → array of names; array of strings/objects → as is.
     if not grouping:
         return []
     if isinstance(grouping, str):
@@ -2048,7 +2048,7 @@ def emit_group_item_field(lines, level, indent):
     lines.append(f'{indent}\t<dcsset:field>{esc_xml_text(field)}</dcsset:field>')
     lines.append(f'{indent}\t<dcsset:groupType>{esc_xml_text(gt)}</dcsset:groupType>')
     lines.append(f'{indent}\t<dcsset:periodAdditionType>{esc_xml_text(pat)}</dcsset:periodAdditionType>')
-    # Авто-детект: ISO-дата → xs:dateTime, иначе путь → dcscor:Field.
+    # Auto-detect: ISO date → xs:dateTime, otherwise path → dcscor:Field.
     pab_t = 'xs:dateTime' if re.match(r'^\d{4}-\d{2}-\d{2}T', pab) else 'dcscor:Field'
     pae_t = 'xs:dateTime' if re.match(r'^\d{4}-\d{2}-\d{2}T', pae) else 'dcscor:Field'
     lines.append(f'{indent}\t<dcsset:periodAdditionBegin xsi:type="{pab_t}">{esc_xml_text(pab)}</dcsset:periodAdditionBegin>')
@@ -2073,9 +2073,9 @@ def emit_list_grouping(lines, grouping, indent):
     emit_list_grouping_levels(lines, levels, 0, indent)
 
 
-# === Вычисляемые поля DataSet динамического списка (<CalculatedField>) ===
-# Зеркало skd calculatedFields: shorthand "Имя [Заголовок]: тип = Выражение #noField #noFilter
-# #noGroup #noOrder" или объект. Форм-специфика: dcssch:-теги + presentationExpression/orderExpression.
+# === Calculated fields of dynamic list DataSet (<CalculatedField>) ===
+# Mirror of skd calculatedFields: shorthand "Имя [Заголовок]: тип = Выражение #noField #noFilter
+# #noGroup #noOrder" or an object. Form specifics: dcssch: tags + presentationExpression/orderExpression.
 _CALC_RESTRICT_MAP = {'noField': 'field', 'noFilter': 'condition', 'noCondition': 'condition',
                       'noGroup': 'group', 'noOrder': 'order'}
 _DCS_COMMON_NS = 'http://v8.1c.ru/8.1/data-composition-system/common'
@@ -2158,8 +2158,8 @@ def emit_calc_fields(lines, calc_fields, indent):
         lines.append(f'{indent}</CalculatedField>')
 
 
-# Ограничения использования поля/вычисляемого поля (useRestriction / attributeUseRestriction).
-# Значение: объект {field?,condition?,group?,order?} | флаг-строка "#noField …" | массив.
+# Field/calculated field usage restrictions (useRestriction / attributeUseRestriction).
+# Value: object {field?,condition?,group?,order?} | flag string "#noField …" | array.
 def parse_restrict(ur):
     if not ur:
         return []
@@ -2213,7 +2213,7 @@ def emit_conditional_appearance(lines, items, indent, block_view_mode=None, bloc
             lines.append(f'{indent}\t\t</dcsset:appearance>')
         if ca.get('presentation'):
             if isinstance(ca['presentation'], dict):
-                # Мультиязык → LocalStringType (платформа объявляет тип у локализованного presentation)
+                # Multilingual → LocalStringType (the platform declares the type on a localized presentation)
                 lines.append(f'{indent}\t\t<dcsset:presentation xsi:type="v8:LocalStringType">')
                 emit_ml_items(lines, f'{indent}\t\t\t', ca['presentation'])
                 lines.append(f'{indent}\t\t</dcsset:presentation>')
@@ -2247,8 +2247,8 @@ def emit_conditional_appearance(lines, items, indent, block_view_mode=None, bloc
 
 
 def write_utf8_bom(path, content):
-    # newline='' — без трансляции: иначе текстовый режим Python дал бы CRLF на Windows
-    # и LF на macOS, то есть вывод навыка зависел бы от ОС.
+    # newline='' - no translation: otherwise Python text mode would give CRLF on Windows
+    # and LF on macOS, i.e. the skill output would depend on the OS.
     with open(path, 'w', encoding='utf-8-sig', newline='') as f:
         f.write(content)
 
@@ -2263,9 +2263,9 @@ def new_id():
     return _next_id
 
 
-# Уникальность имён внутри коллекции (1С: элементы/реквизиты/команды/параметры/колонки — каждое своё
-# пространство имён). Дубль → битый XML, форма не открывается, поэтому fail-fast.
-_seen_element_names = set()  # пул имён элементов (глобально по всей форме)
+# Uniqueness of names within a collection (1C: elements/attributes/commands/parameters/columns - each has its own
+# namespace). A duplicate → broken XML, the form does not open, hence fail-fast.
+_seen_element_names = set()  # element name pool (globally across the whole form)
 
 def _ensure_unique(name, seen, kind):
     if name in seen:
@@ -2368,39 +2368,39 @@ KNOWN_KEYS = {
     "autoRefreshPeriod", "choiceFoldersAndItems", "restoreCurrentRow", "showRoot",
     "allowRootChoice", "updateOnDataChange", "allowGettingCurrentRowURL",
     "userSettingsGroup", "rowsPicture",
-    # AutoCommandBar-маркер (autofill heuristic) на элементе/таблице
+    # AutoCommandBar marker (autofill heuristic) on an element/table
     "autoCmdBar",
-    # дополнения командной панели таблицы (тип-ключи + свойства)
+    # table command bar additions (type keys + properties)
     "searchString", "viewStatus", "searchControl", "source", "horizontalLocation", "additions",
-    # generic-скаляры (pass-through)
+    # generic scalars (pass-through)
     "verticalAlign", "throughAlign", "enableContentChange", "pictureSize", "titleHeight",
     "childItemsWidth", "showLeftMargin", "cellHyperlink", "viewMode", "verticalScrollBar",
     "rowInputMode", "mask", "createButton", "fixingInTable", "verticalSpacing",
-    # InputField choice-скаляры
+    # InputField choice scalars
     "choiceListButton", "quickChoice", "autoChoiceIncomplete",
     "choiceForm", "choiceHistoryOnInput", "footerDataPath", "minValue", "maxValue",
-    # Button — пометка toggle-кнопки
+    # Button - toggle button marker
     "checked",
-    # спец-поля (документ/датчик/диаграмма) — тип-ключи + типоспец. скаляры
+    # special fields (document/gauge/chart) - type keys + type-specific scalars
     "spreadsheet", "html", "textDoc", "formattedDoc", "progressBar", "trackBar",
     "chart", "ganttChart", "graphicalSchema", "planner", "periodField", "dendrogram", "ganttTable",
     "showPercent", "largeStep", "markingStep", "step",
     "horizontalScrollBar", "viewScalingMode", "output", "selectionShowMode", "protection",
     "edit", "showGrid", "showGroups", "showHeaders", "showRowAndColumnNames", "showCellNames",
     "pointerType", "drawingSelectionShowMode", "warningOnEditRepresentation", "markingAppearance",
-    # report-form контекст (generic-скаляры элементов)
+    # report-form context (generic element scalars)
     "horizontalSpacing", "representationInContextMenu", "settingsNamedItemDetailedRepresentation",
-    # хвост: высота элемента списка / ширина выпадающего списка / картинка кнопки выбора / прозрачный пиксель
+    # tail: list item height / dropdown width / choice button picture / transparent pixel
     "itemHeight", "dropListWidth", "choiceButtonPicture", "transparentPixel",
-    # хвост CI-форм: динамический заголовок / расширенное редактирование / высота таблицы
+    # CI form tail: dynamic title / extended editing / table height
     "titleDataPath", "extendedEdit", "maxRowsCount", "autoMaxRowsCount", "heightControlVariant",
     "warningOnEdit", "nonselectedPictureText", "editTextUpdate", "footerText",
 }
 
-# picture/picField — НИЗКИЙ приоритет: 'picture' это и тип (PictureDecoration), и свойство-иконка
-# у popup/button/cmdBar. Тип-ключ владельца (popup/button/…) должен выиграть.
-# pages/page ПЕРЕД group: у Page/Pages ключ 'group' — это направление раскладки детей
-# (<Group>Horizontal</Group>), а не тип UsualGroup. Реальная UsualGroup ключа page/pages не несёт.
+# picture/picField - LOW priority: 'picture' is both a type (PictureDecoration) and an icon property
+# in popup/button/cmdBar. The owner's type key (popup/button/…) must win.
+# pages/page BEFORE group: for Page/Pages the 'group' key is the children layout direction
+# (<Group>Horizontal</Group>), not the UsualGroup type. A real UsualGroup does not carry the page/pages key.
 TYPE_KEYS = ["columnGroup", "buttonGroup", "pages", "page", "group", "input", "check", "radio", "label", "labelField", "table",
              "button", "calendar", "cmdBar", "popup", "searchString", "viewStatus", "searchControl", "picField", "picture",
              "spreadsheet", "html", "textDoc", "formattedDoc", "progressBar", "trackBar",
@@ -2443,7 +2443,7 @@ ELEMENT_TYPE_SYNONYMS = {
     "Кнопка": "button",
     "Popup": "popup",
     "ВсплывающееМеню": "popup",
-    # дополнения командной панели таблицы — forgiving: XML-тег/Type/рус.имя → канон
+    # table command bar additions - forgiving: XML tag/Type/rus.name → canonical
     "SearchStringAddition": "searchString",
     "SearchStringRepresentation": "searchString",
     "строкаПоиска": "searchString",
@@ -2457,7 +2457,7 @@ ELEMENT_TYPE_SYNONYMS = {
     "SearchControl": "searchControl",
     "управлениеПоиском": "searchControl",
     "Управление поиском": "searchControl",
-    # Спец-поля (документ/датчик) — XML-имя/рус. → канон
+    # Special fields (document/gauge) - XML name/rus. → canonical
     "SpreadSheetDocumentField": "spreadsheet",
     "ПолеТабличногоДокумента": "spreadsheet",
     "HTMLDocumentField": "html",
@@ -2484,11 +2484,11 @@ ELEMENT_TYPE_SYNONYMS = {
     "ПолеДендрограммы": "dendrogram",
 }
 
-# Тип-синонимы, применяемые ТОЛЬКО к строковому значению (имя элемента); объект/массив
-# у того же слова — companion-панель (свойство), см. normalize_panel_synonyms.
+# Type synonyms applied ONLY to a string value (element name); an object/array
+# for the same word is a companion panel (property), see normalize_panel_synonyms.
 STR_ONLY_TYPE_SYNONYMS = {"commandBar", "autoCommandBar", "КоманднаяПанель"}
 
-# Companion-панели как СВОЙСТВА (значение объект/массив): синоним → каноника.
+# Companion panels as PROPERTIES (object/array value): synonym → canonical.
 PANEL_SYNONYMS = {
     'commandBar': ['commandBar', 'autoCommandBar', 'AutoCommandBar', 'autoCmdBar', 'cmdBar', 'КоманднаяПанель'],
     'contextMenu': ['contextMenu', 'ContextMenu', 'КонтекстноеМеню'],
@@ -2530,7 +2530,7 @@ ENUM_VALUE_SYNONYMS = {"EnumValue", "ЗначениеПеречисления"}
 
 
 def normalize_meta_type_ref(ref):
-    # "Справочник.Контрагенты" → "Catalog.Контрагенты"; уже англ — без изменений
+    # "Справочник.Контрагенты" → "Catalog.Контрагенты"; already English - unchanged
     if not ref:
         return ref
     dot = ref.find('.')
@@ -2557,7 +2557,7 @@ def normalize_choice_value(value):
     if re.fullmatch(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}', s):
         return {"xsi_type": "xs:dateTime", "text": s}
 
-    # Raw-ссылка по GUID (метаданные.значение) "GUID.GUID" → xr:DesignTimeRef (всегда ссылка, не строка)
+    # Raw reference by GUID (metadata.value) "GUID.GUID" → xr:DesignTimeRef (always a reference, not a string)
     if re.fullmatch(r'[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\.[0-9a-fA-F]{8}-[0-9a-fA-F-]+', s):
         return {"xsi_type": "xr:DesignTimeRef", "text": s}
 
@@ -2575,7 +2575,7 @@ def normalize_choice_value(value):
             normalized = None
             if canon_root == "Enum":
                 if len(parts) == 3 and parts[2] == 'EmptyRef':
-                    # "Enum.X.EmptyRef" — пустая ссылка, НЕ значение перечисления (без .EnumValue.)
+                    # "Enum.X.EmptyRef" - empty reference, NOT an enum value (no .EnumValue.)
                     normalized = f"Enum.{type_name}.EmptyRef"
                 elif len(parts) == 3:
                     normalized = f"Enum.{type_name}.EnumValue.{parts[2]}"
@@ -2620,14 +2620,14 @@ def emit_choice_presentation(lines, pres, indent):
 
 
 def choice_value_tag(norm):
-    # <Value> для choiceList/choiceParameters: пустой текст → самозакрывающийся тег (зеркало платформы).
+    # <Value> for choiceList/choiceParameters: empty text → self-closing tag (platform mirror).
     if not norm["text"]:
         return f'<Value xsi:type="{norm["xsi_type"]}"/>'
     return f'<Value xsi:type="{norm["xsi_type"]}">{esc_xml_text(norm["text"])}</Value>'
 
 
 def emit_choice_list(lines, el, indent):
-    # <ChoiceList> — у RadioButtonField и InputField. Элемент: { value, presentation?/title? }.
+    # <ChoiceList> - on RadioButtonField and InputField. Element: { value, presentation?/title? }.
     choice_list = el.get('choiceList') or []
     if not choice_list:
         return
@@ -2640,8 +2640,8 @@ def emit_choice_list(lines, el, indent):
         has_pres = any(k in item for k in ('presentation', 'представление', 'title'))
         pres_raw = item.get('presentation', item.get('представление', item.get('title')))
 
-        # valueType: явный xsi:type значения (системное перечисление ent:*, иной не-примитив) —
-        # переопределяет авто-детект (normalize_choice_value вывела бы xs:string).
+        # valueType: explicit xsi:type of the value (system enum ent:*, another non-primitive) -
+        # overrides auto-detect (normalize_choice_value would output xs:string).
         vt_raw = item.get('valueType')
         if vt_raw == 'nil':
             norm = {'xsi_type': None, 'text': None, 'nil': True}
@@ -2671,7 +2671,7 @@ def emit_choice_list(lines, el, indent):
 
 
 def get_el_prop(obj, names):
-    # Читает свойство из dict по списку синонимов (первый найденный, иначе None).
+    # Read a property from a dict by synonym list (first found, otherwise None).
     if not isinstance(obj, dict):
         return None
     for n in names:
@@ -2681,7 +2681,7 @@ def get_el_prop(obj, names):
 
 
 def to_scalar_literal(s):
-    # Литерал shorthand → тип: true/false → bool, целое/дробное → число, иначе строка.
+    # Shorthand literal → type: true/false → bool, integer/fractional → number, otherwise string.
     t = str(s).strip()
     if t.lower() == 'true':
         return True
@@ -2695,7 +2695,7 @@ def to_scalar_literal(s):
 
 
 def from_choice_param_shorthand(s):
-    # "name=value" либо "name=v1, v2, …" (запятые → массив). → {name, value}.
+    # "name=value" or "name=v1, v2, …" (commas → array). → {name, value}.
     eq = s.find('=')
     if eq < 0:
         return {'name': s.strip()}
@@ -2707,7 +2707,7 @@ def from_choice_param_shorthand(s):
 
 
 def from_choice_param_link_shorthand(s):
-    # "name=dataPath" либо "name=dataPath:DontChange". → {name, dataPath, valueChange?}.
+    # "name=dataPath" or "name=dataPath:DontChange". → {name, dataPath, valueChange?}.
     eq = s.find('=')
     if eq < 0:
         return {'name': s.strip()}
@@ -2723,7 +2723,7 @@ def from_choice_param_link_shorthand(s):
 
 
 def from_type_link_shorthand(s):
-    # "dataPath" либо "dataPath#linkItem". → {dataPath, linkItem}.
+    # "dataPath" or "dataPath#linkItem". → {dataPath, linkItem}.
     m = re.fullmatch(r'(.*)#(\d+)', str(s))
     if m:
         return {'dataPath': m.group(1).strip(), 'linkItem': int(m.group(2))}
@@ -2731,8 +2731,8 @@ def from_type_link_shorthand(s):
 
 
 def emit_choice_param_value(lines, value, indent):
-    # Внутреннее значение параметра выбора (FormChoiceListDesTimeValue): <Presentation/> + <Value>.
-    # Скаляр → один Value; массив → v8:FixedArray из вложенных FormChoiceListDesTimeValue.
+    # Internal value of a choice parameter (FormChoiceListDesTimeValue): <Presentation/> + <Value>.
+    # Scalar → one Value; array → v8:FixedArray of nested FormChoiceListDesTimeValue.
     lines.append(f'{indent}<Presentation/>')
     if isinstance(value, (list, tuple)):
         lines.append(f'{indent}<Value xsi:type="v8:FixedArray">')
@@ -2749,8 +2749,8 @@ def emit_choice_param_value(lines, value, indent):
 
 
 def emit_choice_parameters(lines, el, indent):
-    # <ChoiceParameters> (параметры выбора поля ввода) — [{name, value}]. value через
-    # normalize_choice_value; массив значений → FixedArray. Рус. синонимы имя/значение.
+    # <ChoiceParameters> (input field choice parameters) - [{name, value}]. value via
+    # normalize_choice_value; value array → FixedArray. Rus. synonyms имя/значение.
     cp = el.get('choiceParameters') or []
     if not cp:
         return
@@ -2763,8 +2763,8 @@ def emit_choice_parameters(lines, el, indent):
         val = get_el_prop(item, ('value', 'значение'))
         name_s = '' if name is None else str(name)
         lines.append(f'{indent}\t<app:item name="{esc_xml(name_s)}">')
-        # Параметр выбора без значения → <app:value xsi:nil="true"/> (платформа, 13 в корпусе);
-        # со значением (в т.ч. пустой строкой) → FormChoiceListDesTimeValue.
+        # Choice parameter without value → <app:value xsi:nil="true"/> (platform, 13 in the corpus);
+        # with a value (including empty string) → FormChoiceListDesTimeValue.
         if not has_val:
             lines.append(f'{indent}\t\t<app:value xsi:nil="true"/>')
         else:
@@ -2776,8 +2776,8 @@ def emit_choice_parameters(lines, el, indent):
 
 
 def emit_choice_parameter_links(lines, el, indent):
-    # <ChoiceParameterLinks> (связи параметров выбора) — [{name, dataPath, valueChange?}].
-    # valueChange всегда эмитится, дефолт Clear; forgiving Clear/DontChange + рус. синонимы.
+    # <ChoiceParameterLinks> (choice parameter links) - [{name, dataPath, valueChange?}].
+    # valueChange is always emitted, default Clear; forgiving Clear/DontChange + rus. synonyms.
     cpl = el.get('choiceParameterLinks') or []
     if not cpl:
         return
@@ -2808,7 +2808,7 @@ def emit_choice_parameter_links(lines, el, indent):
 
 
 def emit_type_link(lines, el, indent):
-    # <TypeLink> (связь по типу) — {dataPath, linkItem}. linkItem дефолт 0.
+    # <TypeLink> (type link) - {dataPath, linkItem}. linkItem default 0.
     tl = el.get('typeLink')
     if not tl:
         return
@@ -2851,9 +2851,9 @@ def get_element_name(el, type_key):
     return str(el.get(type_key, ''))
 
 
-# Собрать упорядоченный список событий элемента (имя, обработчик) из DSL.
-# Основной формат: el['events'] = { Событие: ИмяОбработчика } (None/"" → авто-имя по конвенции).
-# Legacy (принимается ради совместимости): el['on'] (массив) + el['handlers'] (переопределение имён).
+# Build an ordered list of element events (name, handler) from the DSL.
+# Main format: el['events'] = { Event: HandlerName } (None/"" → auto name by convention).
+# Legacy (accepted for compatibility): el['on'] (array) + el['handlers'] (name overrides).
 def get_event_pairs(el, element_name):
     pairs = []
     events = el.get('events')
@@ -2875,7 +2875,7 @@ def get_event_pairs(el, element_name):
     return pairs
 
 
-# Проверить, подключено ли событие к элементу (в любом из форматов).
+# Check whether an event is connected to the element (in any of the formats).
 def test_element_event(el, event_name):
     events = el.get('events')
     if events and event_name in events:
@@ -2901,8 +2901,8 @@ def emit_events(lines, el, element_name, indent, type_key):
     lines.append(f"{indent}</Events>")
 
 
-# Детектор «настоящей» inline-разметки (1С: <link>/<b>/<color>/… и </>). Должен быть
-# идентичен детектору в form-decompile, иначе гибрид-раундтрип поедет.
+# Detector of "real" inline markup (1C: <link>/<b>/<color>/… and </>). It must be
+# identical to the detector in form-decompile, otherwise the hybrid round-trip breaks.
 _FMT_MARKUP_RE = re.compile(r'</>|<\s*(?:link|b|i|u|s|color|colorStyle|bgColor|bgColorStyle|font|fontSize|fontStyle|img)(?:\s|>)', re.I)
 
 
@@ -2914,14 +2914,14 @@ def _has_real_markup(text):
 
 
 def resolve_ml_formatted(val):
-    # {text, formatted} = явный override; строка/мапа → авто-детект formatted
+    # {text, formatted} = explicit override; string/map → auto-detect formatted
     if isinstance(val, dict) and 'text' in val:
         return val['text'], bool(val.get('formatted'))
     return val, _has_real_markup(val)
 
 
-# ExtendedTooltip — это LabelDecoration: own-content (layout/оформление/флаги/hyperlink) ±текст.
-# Признак структурированной формы: объект с любым НЕ-текстовым ключом ({text,formatted}/{ru,en} → текст).
+# ExtendedTooltip is a LabelDecoration: own-content (layout/appearance/flags/hyperlink) ±text.
+# Marker of a structured form: an object with any NON-text key ({text,formatted}/{ru,en} → text).
 COMPANION_STRUCT_KEYS = {
     'width', 'autoMaxWidth', 'maxWidth', 'height', 'autoMaxHeight', 'maxHeight', 'verticalAlign', 'titleHeight',
     'horizontalStretch', 'verticalStretch', 'horizontalAlign', 'groupHorizontalAlign', 'groupVerticalAlign',
@@ -2944,10 +2944,10 @@ def emit_companion(lines, tag, name, indent, content=None):
         lines.append(f'{indent}<{tag} name="{name}" id="{cid}"/>')
         return
     inner = f'{indent}\t'
-    # DI-Attr от собственного объекта компаньона (не от владельца)
+    # DI-Attr from the companion's own object (not from the owner)
     lines.append(f'{indent}<{tag} name="{name}" id="{cid}"{di_attr(content if isinstance(content, dict) else None)}>')
     if isinstance(content, dict) and any(k in content for k in COMPANION_STRUCT_KEYS):
-        # own-content ПЕРЕД Title (в корпусе layout-first 582 vs 10).
+        # own-content BEFORE Title (layout-first in corpus 582 vs 10).
         emit_common_flags(lines, content, inner)
         if content.get('hyperlink') is True:
             lines.append(f'{inner}<Hyperlink>true</Hyperlink>')
@@ -2955,10 +2955,10 @@ def emit_companion(lines, tag, name, indent, content=None):
         emit_appearance(lines, content, inner, 'decoration')
         if 'text' in content:
             emit_companion_title(lines, content, inner)
-        # ToolTip компаньона (подсказка самой расширенной подсказки) — после Title (порядок схемы LabelDecoration)
+        # Companion ToolTip (tooltip of the extended tooltip itself) - after Title (LabelDecoration schema order)
         if content.get('tooltip'):
             emit_mltext(lines, inner, 'ToolTip', content['tooltip'])
-        # События компаньона (ExtendedTooltip = LabelDecoration: напр. URLProcessing у hyperlink-подсказки)
+        # Companion events (ExtendedTooltip = LabelDecoration: e.g. URLProcessing on a hyperlink tooltip)
         emit_events(lines, content, name, inner, 'label')
     else:
         emit_companion_title(lines, content, inner)
@@ -2966,8 +2966,8 @@ def emit_companion(lines, tag, name, indent, content=None):
 
 
 def emit_companion_panel(lines, tag, name, indent, panel):
-    # Companion-командная-панель (ContextMenu/AutoCommandBar) с контентом: { autofill?, horizontalAlign?, children?[] }
-    # или массив = shorthand для { children }. Пусто/нет → self-closing.
+    # Companion command bar (ContextMenu/AutoCommandBar) with content: { autofill?, horizontalAlign?, children?[] }
+    # or an array = shorthand for { children }. Empty/none → self-closing.
     cid = new_id()
     autofill = None
     halign = None
@@ -2981,7 +2981,7 @@ def emit_companion_panel(lines, tag, name, indent, panel):
             halign = str(panel.get('horizontalAlign'))
         children = panel.get('children')
     has_children = bool(children) and len(children) > 0
-    # Платформа пишет <Autofill> только при false; true = дефолт (тег опускается).
+    # The platform writes <Autofill> only for false; true = default (tag omitted).
     emit_af_false = (autofill is False)
     if not emit_af_false and not has_children and not halign:
         lines.append(f'{indent}<{tag} name="{name}" id="{cid}"/>')
@@ -2999,7 +2999,7 @@ def emit_companion_panel(lines, tag, name, indent, panel):
     lines.append(f'{indent}</{tag}>')
 
 
-# Дополнения командной панели таблицы: тип DSL → XML-тег + AdditionSource.Type + суффикс имени.
+# Table command bar additions: DSL type → XML tag + AdditionSource.Type + name suffix.
 ADDITION_TYPE_MAP = {
     'searchString':  {'tag': 'SearchStringAddition',  'type': 'SearchStringRepresentation', 'suffix': 'СтрокаПоиска'},
     'viewStatus':    {'tag': 'ViewStatusAddition',    'type': 'ViewStatusRepresentation',   'suffix': 'СостояниеПросмотра'},
@@ -3010,12 +3010,12 @@ ADDITION_KEY_SYNONYMS = {
     'viewStatus':    ['ViewStatusAddition', 'ViewStatusRepresentation', 'состояниеПросмотра'],
     'searchControl': ['SearchControlAddition', 'SearchControl', 'управлениеПоиском'],
 }
-# Имя текущей таблицы — дефолт source для кастомных дополнений в commandBar.
+# Current table name - default source for custom additions in commandBar.
 _current_table_name = {'name': None}
 
 
 def get_hlocation(el):
-    # HorizontalLocation: auto (дефолт, опускаем) / left / right; forgiving + рус.
+    # HorizontalLocation: auto (default, omit) / left / right; forgiving + rus.
     if not isinstance(el, dict):
         return None
     v = el.get('horizontalLocation')
@@ -3034,7 +3034,7 @@ def get_hlocation(el):
 
 
 def emit_addition_body(lines, props, source, src_type, add_name, indent):
-    # Тело дополнения: AdditionSource + свойства (как у поля) + companions. props может быть None.
+    # Addition body: AdditionSource + properties (like a field) + companions. props may be None.
     inner = f'{indent}\t'
     lines.append(f'{inner}<AdditionSource>')
     lines.append(f'{inner}\t<Item>{source}</Item>')
@@ -3058,7 +3058,7 @@ def emit_addition_body(lines, props, source, src_type, add_name, indent):
 
 
 def emit_addition(lines, el, name, eid, type_key, indent):
-    # Кастомное дополнение (тип-элемент в commandBar): source дефолтит в текущую таблицу.
+    # Custom addition (type element in commandBar): source defaults to the current table.
     m = ADDITION_TYPE_MAP[type_key]
     source = el.get('source') or _current_table_name['name'] or ''
     lines.append(f'{indent}<{m["tag"]} name="{name}" id="{eid}"{di_attr(el)}>')
@@ -3067,7 +3067,7 @@ def emit_addition(lines, el, name, eid, type_key, indent):
 
 
 def emit_table_addition(lines, type_key, table_name, indent, override=None):
-    # Стандартное табличное дополнение (авто-генерация). override — объект отклонений из карты additions.
+    # Standard table addition (auto-generated). override - deviations object from the additions map.
     m = ADDITION_TYPE_MAP[type_key]
     add_name = f'{table_name}{m["suffix"]}'
     aid = new_id()
@@ -3077,7 +3077,7 @@ def emit_table_addition(lines, type_key, table_name, indent, override=None):
 
 
 def get_addition_override(additions, type_key):
-    # Прочитать override-объект для типа из per-table карты additions (с синонимами).
+    # Read the override object for a type from the per-table additions map (with synonyms).
     if not isinstance(additions, dict):
         return None
     for k in [type_key] + ADDITION_KEY_SYNONYMS[type_key]:
@@ -3087,9 +3087,9 @@ def get_addition_override(additions, type_key):
 
 
 # Role-adjustable boolean (xr:Common + 0..N xr:Value name="Role.X").
-# Единый механизм платформы: UserVisible (элементы), View/Edit (атрибуты), Use (команды/кнопки).
-# Значение DSL: скаляр bool → только <xr:Common>; объект { common, roles:{ Имя: bool } } → +пер-ролевые исключения.
-# Имя роли принимаем с/без префикса "Role." (forgiving); на выход всегда с префиксом.
+# The platform's unified mechanism: UserVisible (elements), View/Edit (attributes), Use (commands/buttons).
+# DSL value: bool scalar → only <xr:Common>; object { common, roles:{ Name: bool } } → + per-role exceptions.
+# Role name is accepted with/without the "Role." prefix (forgiving); always output with the prefix.
 def emit_xr_flag(lines, tag, val, indent):
     if val is None:
         return
@@ -3098,15 +3098,15 @@ def emit_xr_flag(lines, tag, val, indent):
         lines.append(f"{indent}\t<xr:Common>{'true' if val else 'false'}</xr:Common>")
         lines.append(f"{indent}</{tag}>")
         return
-    # объектная форма { common, roles }
+    # object form { common, roles }
     common = bool(val.get('common')) if val.get('common') is not None else False
     lines.append(f"{indent}<{tag}>")
     lines.append(f"{indent}\t<xr:Common>{'true' if common else 'false'}</xr:Common>")
     roles = val.get('roles')
     if roles:
         for rname, rval in roles.items():
-            # Forgiving: имя без префикса, с "Role." или кириллическим "Роль." → нормализуем в "Role.".
-            # Роль по GUID (заимствованная/расширение — name="<guid>" без префикса) эмитим как есть.
+            # Forgiving: name without prefix, with "Role." or Cyrillic "Роль." → normalized to "Role.".
+            # Role by GUID (borrowed/extension - name="<guid>" without prefix) is emitted as is.
             rn = re.sub(r'^(Role|Роль)\.', '', rname)
             if not re.match(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$', rn):
                 rn = "Role." + rn
@@ -3125,39 +3125,39 @@ def emit_common_flags(lines, el, indent):
         lines.append(f"{indent}<ReadOnly>true</ReadOnly>")
 
 
-# Общие свойства элемента (любой тип, включая Button/cmdBar): default/skip/drag.
+# Common element properties (any type, including Button/cmdBar): default/skip/drag.
 def emit_common_element_props(lines, el, indent):
     if el.get('defaultItem') is True:
         lines.append(f"{indent}<DefaultItem>true</DefaultItem>")
     if 'skipOnInput' in el and el['skipOnInput'] is not None:
         siv = 'true' if el['skipOnInput'] is True else 'false'
         lines.append(f"{indent}<SkipOnInput>{siv}</SkipOnInput>")
-    # EnableStartDrag — фактическое значение (платформа эмитит и явный false, напр. SpreadSheet)
+    # EnableStartDrag - the actual value (the platform emits explicit false too, e.g. SpreadSheet)
     if el.get('enableStartDrag') is not None:
         lines.append(f'{indent}<EnableStartDrag>{"true" if el["enableStartDrag"] else "false"}</EnableStartDrag>')
     if el.get('fileDragMode'):
         lines.append(f"{indent}<FileDragMode>{el['fileDragMode']}</FileDragMode>")
-    # Cell-свойства поля в таблице (общие для Input/Label/Picture/CheckBox): захват «как есть»
+    # Cell properties of a field in a table (common for Input/Label/Picture/CheckBox): captured "as is"
     for key, tag in (('showInHeader', 'ShowInHeader'), ('showInFooter', 'ShowInFooter'), ('autoCellHeight', 'AutoCellHeight')):
         if el.get(key) is not None:
             lines.append(f'{indent}<{tag}>{"true" if el[key] else "false"}</{tag}>')
-    # Динамический заголовок колонки-группы из данных (HeaderDataPath) — перед HeaderHorizontalAlign (порядок XSD)
+    # Dynamic column group title from data (HeaderDataPath) - before HeaderHorizontalAlign (XSD order)
     if el.get('headerDataPath'):
         lines.append(f"{indent}<HeaderDataPath>{esc_xml_text(str(el['headerDataPath']))}</HeaderDataPath>")
     if el.get('footerHorizontalAlign'):
         lines.append(f"{indent}<FooterHorizontalAlign>{el['footerHorizontalAlign']}</FooterHorizontalAlign>")
     if el.get('headerHorizontalAlign'):
         lines.append(f"{indent}<HeaderHorizontalAlign>{el['headerHorizontalAlign']}</HeaderHorizontalAlign>")
-    # Формат заголовка колонки-группы (ML-текст) — после HeaderHorizontalAlign (порядок XSD)
+    # Column group title format (ML text) - after HeaderHorizontalAlign (XSD order)
     if el.get('headerFormat'):
         emit_mltext(lines, indent, 'HeaderFormat', el['headerFormat'])
 
 
 def emit_picture_ref(lines, val, pic_tag, indent):
-    """Картинка-ссылка с прозрачностью (HeaderPicture/FooterPicture/ValuesPicture/Page Picture).
-    Платформа ВСЕГДА эмитит <xr:LoadTransparent> → пишем всегда (false по умолчанию).
-    Значение: скаляр (Ref) ИЛИ объект {src, loadTransparent, transparentPixel}.
-    src с префиксом "abs:" → встроенная картинка <xr:Abs>; иначе <xr:Ref>."""
+    """Picture reference with transparency (HeaderPicture/FooterPicture/ValuesPicture/Page Picture).
+    The platform ALWAYS emits <xr:LoadTransparent> → we always write it (false by default).
+    Value: scalar (Ref) OR object {src, loadTransparent, transparentPixel}.
+    src with the "abs:" prefix → built-in picture <xr:Abs>; otherwise <xr:Ref>."""
     if not val:
         return
     tpx = None
@@ -3182,18 +3182,18 @@ def emit_picture_ref(lines, val, pic_tag, indent):
 
 
 def emit_column_pics(lines, el, indent):
-    """Картинки заголовка/подвала колонки поля — по схеме сразу после <EditMode>,
-    перед тип-специфичными элементами и layout (порядок XDTO строгий именно здесь)."""
+    """Pictures of the field column header/footer - per schema right after <EditMode>,
+    before type-specific elements and layout (XDTO order is strict exactly here)."""
     emit_picture_ref(lines, el.get('headerPicture'), 'HeaderPicture', indent)
     emit_picture_ref(lines, el.get('footerPicture'), 'FooterPicture', indent)
 
 
 def emit_command_picture(lines, pic, elem_lt, indent):
-    """<Picture> кнопки/попапа/команды. Дефолт LoadTransparent=true, отклонение false
-    (обратная конвенция относительно header/values-картинок). Прощающий ввод:
-    принимает скаляр (Ref) ИЛИ объект {src, loadTransparent} — на случай если модель
-    опишет картинку объектно по аналогии с headerPicture. elem_lt — legacy
-    элемент-уровневый ключ loadTransparent (если в объекте флаг не задан)."""
+    """<Picture> of a button/popup/command. Default LoadTransparent=true, deviation false
+    (reverse convention relative to header/values pictures). Forgiving input:
+    accepts a scalar (Ref) OR object {src, loadTransparent} - in case the model
+    describes the picture as an object by analogy with headerPicture. elem_lt is the legacy
+    element-level loadTransparent key (if the flag is not set in the object)."""
     if not pic:
         return
     lt = None
@@ -3221,11 +3221,11 @@ def emit_command_picture(lines, pic, elem_lt, indent):
     lines.append(f'{indent}</Picture>')
 
 
-# --- Оформление элемента: цвета / шрифты / граница ---
-# Прямые свойства элемента (<TextColor>/<Font>/<Border> + header/footer у полей). Ключи англ.
-# camelCase 1:1 с тегами + приём рус. синонимов. Цвет — verbatim-строка (style:/web:/win:/#RRGGBB);
-# шрифт — строка-ref/объект-атрибуты; граница — строка-ref/
-# объект {width,style}. Порядок тегов — XSD (профиль по базовому типу).
+# --- Element appearance: colors / fonts / border ---
+# Direct element properties (<TextColor>/<Font>/<Border> + header/footer on fields). English keys
+# camelCase 1:1 with tags + acceptance of rus. synonyms. Color - verbatim string (style:/web:/win:/#RRGGBB);
+# font - ref string/attribute object; border - ref string/
+# object {width,style}. Tag order - XSD (profile by base type).
 APPEARANCE_SPEC = {
     'titleTextColor':  ('TitleTextColor', 'color'),
     'titleBackColor':  ('TitleBackColor', 'color'),
@@ -3245,9 +3245,9 @@ APPEARANCE_SYNONYMS = {
     'цветтекстаподвала': 'footerTextColor', 'цветфонаподвала': 'footerBackColor', 'шрифтподвала': 'footerFont',
     'шрифт': 'font', 'рамка': 'border',
 }
-# Синонимы ключей-свойств: русские имена свойств 1С (как в Конфигураторе) → канон. англ. ключ.
-# Ключи нормализованы (lowercase, без пробелов); сопоставление в emit_element тоже. Англ. ключ
-# работает всегда (доп. слой прощающего ввода). Видимость/Доступность НЕ включаем (hidden/disabled инвертирован).
+# Property key synonyms: Russian 1C property names (as in Configurator) → canonical English key.
+# Keys normalized (lowercase, no spaces); matching in emit_element too. The English key
+# always works (additional forgiving-input layer). We do NOT include visibility/enabled (hidden/disabled is inverted).
 PROP_SYNONYMS = {
     'пометка': 'checked',
     'кнопкавыбора': 'choiceButton', 'кнопкаочистки': 'clearButton', 'кнопкарегулирования': 'spinButton',
@@ -3309,7 +3309,7 @@ def emit_border_tag(lines, val, indent):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Planner design-time <Settings xsi:type="pl:Planner"> — настройки планировщика.
+# Planner design-time <Settings xsi:type="pl:Planner"> - planner settings.
 PLANNER_NS = 'http://v8.1c.ru/8.3/data/planner'
 CHART_NS = 'http://v8.1c.ru/8.2/data/chart'
 
@@ -3534,8 +3534,8 @@ def emit_planner_settings(lines, pl, ind):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Chart design-time <Settings xsi:type="d4p1:Chart"> — генерик-эмиттер (зеркало
-# Build-ChartNode декомпилятора + эмиттер узла диаграммы).
+# Chart design-time <Settings xsi:type="d4p1:Chart"> - generic emitter (mirror of the
+# decompiler Build-ChartNode + chart node emitter).
 CHART_ML_FIELDS = {'title', 'lbFormat', 'lbpFormat', 'vsFormat', 'dtFormat', 'dataSourceDescription', 'labelFormat', 'text'}
 CHART_ATTR_FIELDS = {'gaugeQualityBands'}
 CHART_FONT_KEYS = ('ref', 'faceName', 'height', 'bold', 'italic', 'underline', 'strikeout', 'kind', 'scale')
@@ -3615,7 +3615,7 @@ def emit_appearance(lines, el, indent, profile='field'):
             emit_border_tag(lines, val, indent)
 
 
-# Простые скаляры элемента (pass-through, зеркало $script:genericScalars). kind bool/value.
+# Simple element scalars (pass-through, mirror of $script:genericScalars). kind bool/value.
 GENERIC_SCALARS = [
     ('VerticalAlign', 'verticalAlign', 'value'),
     ('ThroughAlign', 'throughAlign', 'value'),
@@ -3649,22 +3649,22 @@ GENERIC_SCALARS = [
     ('ShowRowAndColumnNames', 'showRowAndColumnNames', 'bool'),
     ('ShowCellNames', 'showCellNames', 'bool'),
     ('ShowPercent', 'showPercent', 'bool'),
-    # Report-form контекст: интервал группы / представление кнопки в контекстном меню / детальное представление настройки таблицы
+    # Report-form context: group interval / button representation in the context menu / detailed representation of a table setting
     ('HorizontalSpacing', 'horizontalSpacing', 'value'),
     ('RepresentationInContextMenu', 'representationInContextMenu', 'value'),
     ('SettingsNamedItemDetailedRepresentation', 'settingsNamedItemDetailedRepresentation', 'bool'),
-    # Хвост: высота элемента списка (radio) / ширина выпадающего списка (input)
+    # Tail: list item height (radio) / dropdown width (input)
     ('ItemHeight', 'itemHeight', 'value'),
     ('DropListWidth', 'dropListWidth', 'value'),
-    # Хвост CI-форм: динамический заголовок (Page/Group) / расширенное ред. (input) / высота таблицы по строкам
+    # CI form tail: dynamic title (Page/Group) / extended edit (input) / table height in rows
     ('TitleDataPath', 'titleDataPath', 'value'),
     ('ExtendedEdit', 'extendedEdit', 'bool'),
     ('MaxRowsCount', 'maxRowsCount', 'value'),
     ('AutoMaxRowsCount', 'autoMaxRowsCount', 'bool'),
     ('HeightControlVariant', 'heightControlVariant', 'value'),
     ('EditTextUpdate', 'editTextUpdate', 'value'),
-    # Корпусный хвост: свёртка группы / форма попапа / авто-добавление / выделение отрицательных /
-    # нач. позиция списка / высота списка выбора / три состояния / прокрутка страницы при сжатии
+    # Corpus tail: group collapse / popup form / auto-add / negative selection /
+    # initial list position / choice list height / three states / page scroll on compress
     ('ControlRepresentation', 'controlRepresentation', 'value'),
     ('ShapeRepresentation', 'shapeRepresentation', 'value'),
     ('AutoAddIncomplete', 'autoAddIncomplete', 'bool'),
@@ -3673,9 +3673,9 @@ GENERIC_SCALARS = [
     ('ChoiceListHeight', 'choiceListHeight', 'value'),
     ('ThreeState', 'threeState', 'bool'),
     ('ScrollOnCompress', 'scrollOnCompress', 'bool'),
-    # Сочетание клавиш — общее свойство (команда — отдельный путь)
+    # Keyboard shortcut - common property (command - separate path)
     ('Shortcut', 'shortcut', 'value'),
-    # Батч простых скаляров (input/radio/group/picDecoration/button; Table-специфичные — отдельно)
+    # Batch of simple scalars (input/radio/group/picDecoration/button; Table-specific - separately)
     ('IncompleteChoiceMode', 'incompleteChoiceMode', 'value'),
     ('EqualColumnsWidth', 'equalColumnsWidth', 'bool'),
     ('ChildrenAlign', 'childrenAlign', 'value'),
@@ -3683,25 +3683,25 @@ GENERIC_SCALARS = [
     ('Zoomable', 'zoomable', 'bool'),
     ('Shape', 'shape', 'value'),
     ('PictureLocation', 'pictureLocation', 'value'),
-    # Равная ширина элементов (check/radio) / высота заголовка пункта (radio)
+    # Equal item width (check/radio) / item title height (radio)
     ('EqualItemsWidth', 'equalItemsWidth', 'bool'),
     ('ItemTitleHeight', 'itemTitleHeight', 'value'),
-    # Спец-режим ввода текста (input, моб.: Email/PhoneNumber/...) — листовой enum-скаляр
+    # Special text input mode (input, mobile: Email/PhoneNumber/...) - leaf enum scalar
     ('SpecialTextInputMode', 'specialTextInputMode', 'value'),
-    # Ширина пункта (radio/check) / выбор нескольких значений из выпадающего (input)
+    # Item width (radio/check) / multiple value choice from dropdown (input)
     ('ItemWidth', 'itemWidth', 'value'),
     ('ShowCheckBoxesInDropList', 'showCheckBoxesInDropList', 'bool'),
     ('MultipleValueDataPath', 'multipleValueDataPath', 'value'),
     ('MultipleValuePresentDataPath', 'multipleValuePresentDataPath', 'value'),
-    # Режим авто-показа кнопок открытия/очистки (input, enum)
+    # Auto-show mode of open/clear buttons (input, enum)
     ('AutoShowOpenButtonMode', 'autoShowOpenButtonMode', 'value'),
     ('AutoShowClearButtonMode', 'autoShowClearButtonMode', 'value'),
-    # Оформление/картинка множественного выбора (input, редко; цвета — текст-контент)
+    # Appearance/picture of multiple choice (input, rare; colors - text content)
     ('MultipleValuesTextColor', 'multipleValuesTextColor', 'value'),
     ('MultipleValuesBackColor', 'multipleValuesBackColor', 'value'),
     ('MultipleValuePictureShape', 'multipleValuePictureShape', 'value'),
     ('MultipleValuePictureDataPath', 'multipleValuePictureDataPath', 'value'),
-    # Хвост листовых скаляров (по 1): автокоррекция / уникальность команды / пустое множ.значение / гориз.сжатие
+    # Leaf scalar tail (one each): autocorrection / command uniqueness / empty multiple value / horiz. compression
     ('AutoCorrectionOnTextInput', 'autoCorrectionOnTextInput', 'value'),
     ('SpellCheckingOnTextInput', 'spellCheckingOnTextInput', 'value'),
     ('CommandUniqueness', 'commandUniqueness', 'bool'),
@@ -3724,11 +3724,11 @@ def emit_generic_scalars(lines, el, indent):
 
 
 def emit_layout(lines, el, indent, skip_height=False, multi_line_default=False):
-    # Общие layout-свойства — применимы ко всем элементам. Порядок согласован
-    # с историческим выводом input/label, чтобы не сдвигать существующие снапшоты.
-    # skip_height: подавить <Height> (зарезервирован; Table теперь эмитит <Height> generic-ом + свой <HeightInTableRows>).
-    # multi_line_default: input без явного autoMaxWidth при multiLine → AutoMaxWidth=false.
-    # CommandSet (отключённые команды редактора) — общее свойство поля; в схеме рано (после TitleLocation).
+    # Common layout properties - applicable to all elements. Order is consistent
+    # with the historical input/label output so existing snapshots do not shift.
+    # skip_height: suppress <Height> (reserved; Table now emits <Height> generically + its own <HeightInTableRows>).
+    # multi_line_default: input without explicit autoMaxWidth under multiLine → AutoMaxWidth=false.
+    # CommandSet (disabled editor commands) - common field property; early in the schema (after TitleLocation).
     if el.get('excludedCommands') and len(el['excludedCommands']) > 0:
         lines.append(f'{indent}<CommandSet>')
         for cmd in el['excludedCommands']:
@@ -3779,17 +3779,17 @@ def title_from_name(name):
 
 
 def emit_title(lines, el, name, indent, auto=False):
-    # Нет ключа title → авто-вывод из имени (помощь модели).
-    # Явный title "" (или None) → подавить. Явный непустой → как есть.
+    # No title key → auto-derive from the name (help for the model).
+    # Explicit title "" (or None) → suppress. Explicit non-empty → as is.
     if 'title' in el:
         if el.get('title'):
             emit_mltext(lines, indent, 'Title', el['title'])
     elif auto and name:
         emit_mltext(lines, indent, 'Title', title_from_name(name))
-    # ToolTip элемента (всплывающая подсказка) — по схеме сразу после Title.
+    # Element ToolTip (tooltip) - per schema right after Title.
     if el.get('tooltip'):
         emit_mltext(lines, indent, 'ToolTip', el['tooltip'])
-    # ToolTipRepresentation — режим показа подсказки (None/Button/ShowBottom/…), после ToolTip.
+    # ToolTipRepresentation - tooltip display mode (None/Button/ShowBottom/…), after ToolTip.
     if el.get('tooltipRepresentation'):
         lines.append(f'{indent}<ToolTipRepresentation>{el["tooltipRepresentation"]}</ToolTipRepresentation>')
 
@@ -3802,8 +3802,8 @@ def map_title_loc(v):
 
 
 def emit_title_location(lines, el, indent, smart_default):
-    # Нет ключа → умный дефолт (Right/None), эмитится. "" → подавить (дефолт платформы).
-    # Значение → эмитить с маппингом регистра.
+    # No key → smart default (Right/None), emitted. "" → suppress (platform default).
+    # Value → emit with case mapping.
     if 'titleLocation' in el:
         if el.get('titleLocation'):
             lines.append(f"{indent}<TitleLocation>{map_title_loc(el['titleLocation'])}</TitleLocation>")
@@ -3878,7 +3878,7 @@ _FORM_TYPE_SYNONYMS = {
     "характеристика": "Characteristic",
     "любаяссылка": "AnyRef",
     "любаяссылкаиб": "AnyIBRef",
-    # Платформенные v8-типы (forgiving: англ. без префикса + рус.) → каноничный с префиксом v8:
+    # Platform v8 types (forgiving: English without prefix + Russian) → canonical with the v8: prefix:
     "standardperiod": "v8:StandardPeriod",
     "стандартныйпериод": "v8:StandardPeriod",
     "standardbeginningdate": "v8:StandardBeginningDate",
@@ -3889,33 +3889,33 @@ _FORM_TYPE_SYNONYMS = {
 }
 
 
-# Алиас на локальный словарь: тело resolve_type_str ниже — общая реализация,
-# одинаковая во всех навыках (реестр в tests/skills/check-inline-drift.mjs).
+# Alias for the local dictionary: the resolve_type_str body below is a shared implementation,
+# the same in all skills (registry in tests/skills/check-inline-drift.mjs).
 TYPE_SYNONYMS = _FORM_TYPE_SYNONYMS
 
 
 def resolve_type_str(type_str):
     if not type_str:
         return type_str
-    # Прощающий ввод: ведущий префикс приходит копипастой из выгрузки. Без срезания он ломает
-    # поиск в словаре — русское имя типа остаётся непереведённым, и платформа отвечает
-    # «Неизвестное имя типа». cfg: снимаем всегда — он однозначно означает текущую конфигурацию.
-    # Сгенерированный dNpM: (в корпусе на этом URI встречаются d4p1, d5p1, d6p1 — имя префикса
-    # платформа выдаёт по порядку объявления) снимаем ТОЛЬКО у ссылочных типов, с точкой:
-    # сам по себе префикс многозначен — в формах d5p1:Chart, d5p1:TextDocument,
-    # d5p1:GeographicalSchema адресуют чужие пространства имён, и там он часть значения.
+    # Forgiving input: a leading prefix comes by copy-paste from an export. Without stripping it breaks
+    # dictionary lookup - the Russian type name remains untranslated, and the platform responds
+    # "Unknown type name". cfg: is always stripped - it unambiguously means the current configuration.
+    # Generated dNpM: (in the corpus on this URI there are d4p1, d5p1, d6p1 - the platform gives the prefix name
+    # in declaration order) is stripped ONLY for reference types, with a dot:
+    # by itself the prefix is ambiguous - in forms d5p1:Chart, d5p1:TextDocument,
+    # d5p1:GeographicalSchema address foreign namespaces, and there it is part of the value.
     if type_str.startswith('cfg:'):
         type_str = type_str[4:]
     elif '.' in type_str and re.match(r'^d\d+p\d+:', type_str):
         type_str = type_str[type_str.index(':') + 1:]
-    # Хвосты, которые дописывает вывод meta-info к множествам типов: суффикс обобщённого метатипа
-    # и счётчик состава. Копипаста строки оттуда — обычный путь, поэтому хвост снимаем молча.
-    # Срезаем ТОЛЬКО эти известные формы: круглые скобки заняты параметризованными типами
-    # (Число(15,2)), слепой срез скобок сломал бы их.
+    # Tails that meta-info output appends to type sets: a generalized metatype suffix
+    # and a composition counter. Copy-pasting a line from there is a normal path, so the tail is stripped silently.
+    # We cut ONLY these known forms: parentheses are occupied by parameterized types
+    # (Число(15,2)), a blind parenthesis cut would break them.
     type_str = re.sub(r'\s*\((?:все|all)\)\s*$', '', type_str, flags=re.IGNORECASE).strip()
     type_str = re.sub(r'\s*[—-]\s*(?:типов|types):\s*\d+\s*$', '', type_str, flags=re.IGNORECASE).strip()
     type_str = re.sub(r'\s*\((?:типов|types):\s*\d+\)\s*$', '', type_str, flags=re.IGNORECASE).strip()
-    # Параметризованные типы: Number(15,2), Строка(100)
+    # Parameterized types: Number(15,2), Строка(100)
     m = re.match(r'^([^(]+)\((.+)\)$', type_str)
     if m:
         base_name = m.group(1).strip()
@@ -3924,7 +3924,7 @@ def resolve_type_str(type_str):
         if resolved:
             return f'{resolved}({params})'
         return type_str
-    # Ссылочные типы: СправочникСсылка.Организации -> CatalogRef.Организации
+    # Reference types: СправочникСсылка.Организации -> CatalogRef.Организации
     if '.' in type_str:
         dot_idx = type_str.index('.')
         prefix = type_str[:dot_idx]
@@ -3933,16 +3933,16 @@ def resolve_type_str(type_str):
         if resolved:
             return f'{resolved}{suffix}'
         return type_str
-    # Простое имя
+    # Simple name
     resolved = TYPE_SYNONYMS.get(type_str.lower())
     if resolved:
         return resolved
     return type_str
 def emit_single_type(lines, type_str, indent):
     type_str = resolve_type_str(type_str)
-    # TypeId — тип, заданный глобальным стабильным GUID (<v8:TypeId>, не <v8:Type>). Платформа так
-    # сериализует типы, чьё имя в этом контексте недоступно (определяемые/характеристики). GUID
-    # глобально стабилен → эмитим verbatim (как роль-по-GUID). Маркер декомпилятора: 'typeid:GUID'.
+    # TypeId - a type given by a global stable GUID (<v8:TypeId>, not <v8:Type>). The platform
+    # serializes types this way when their name is unavailable in this context (defined types/characteristics). The GUID
+    # is globally stable → emit verbatim (like role-by-GUID). Decompiler marker: 'typeid:GUID'.
     m = re.match(r'^typeid:([0-9a-fA-F-]{36})$', type_str)
     if m:
         lines.append(f'{indent}<v8:TypeId>{m.group(1)}</v8:TypeId>')
@@ -3952,7 +3952,7 @@ def emit_single_type(lines, type_str, indent):
         lines.append(f'{indent}<v8:Type>xs:boolean</v8:Type>')
         return
 
-    # string or string(N) or string(N,fixed) (AllowedLength: Variable дефолт / Fixed)
+    # string or string(N) or string(N,fixed) (AllowedLength: Variable default / Fixed)
     m = re.match(r'^string(\((\d+)(\s*,\s*(fixed|variable))?\))?$', type_str, re.IGNORECASE)
     if m:
         length = m.group(2) if m.group(2) else '0'
@@ -4005,14 +4005,14 @@ def emit_single_type(lines, type_str, indent):
             lines.append(f'{indent}<v8:Type>{DCS_MAP[type_str]}</v8:Type>')
             return
 
-    # Голые конфигурационные типы (cfg: без .Имя): дин-список, набор констант, общий объект отчёта.
-    # Корпус (acc+erp 8.3.24): DynamicList 5205, ConstantsSet 103, ReportObject 10.
+    # Bare configuration types (cfg: without .Name): dynamic list, constants set, common report object.
+    # Corpus (acc+erp 8.3.24): DynamicList 5205, ConstantsSet 103, ReportObject 10.
     if type_str in ('DynamicList', 'ConstantsSet', 'ReportObject'):
         lines.append(f'{indent}<v8:Type>cfg:{type_str}</v8:Type>')
         return
 
-    # TypeSet (набор типов) → <v8:TypeSet>: определяемый тип / характеристика (именованные)
-    # + «любая ссылка вида» (голый ref-вид без .Имя). Развязка с обычным типом — по наличию точки.
+    # TypeSet (type set) → <v8:TypeSet>: defined type / characteristic (named)
+    # + "any reference of kind" (bare ref kind without .Name). Separation from a normal type - by the presence of a dot.
     if re.match(r'^(DefinedType|Characteristic)\.', type_str):
         lines.append(f'{indent}<v8:TypeSet>cfg:{type_str}</v8:TypeSet>')
         return
@@ -4025,9 +4025,9 @@ def emit_single_type(lines, type_str, indent):
         lines.append(f'{indent}<v8:Type>cfg:{type_str}</v8:Type>')
         return
 
-    # Спец-типы платформы с собственным namespace (объявляется ЛОКАЛЬНО на <v8:Type>).
-    # Префикс d5p1 неоднозначен (5 разных URI), поэтому маппинг по полному значению типа.
-    # К таким типам привязаны спец-поля: mxl→SpreadSheetDocumentField, fd→FormattedDocumentField,
+    # Special platform types with their own namespace (declared LOCALLY on <v8:Type>).
+    # The d5p1 prefix is ambiguous (5 different URIs), so mapping is by the full type value.
+    # Special fields are bound to such types: mxl→SpreadSheetDocumentField, fd→FormattedDocumentField,
     # d5p1:TextDocument→TextDocumentField, pdfdoc→PDF, pl→Planner, chart/geo/graphscheme/data-analysis.
     special_type_ns = {
         "mxl:SpreadsheetDocument": "http://v8.1c.ru/8.2/data/spreadsheet",
@@ -4050,7 +4050,7 @@ def emit_single_type(lines, type_str, indent):
     # Fallback with validation
     if type_str in KNOWN_INVALID_TYPES:
         raise ValueError(f"Invalid form attribute type '{type_str}': {KNOWN_INVALID_TYPES[type_str]}")
-    # Платформенный тип с префиксом (v8:/v8ui:/xs:/dcs*:) — verbatim (напр. v8:UUID, v8:StandardPeriod).
+    # Platform type with a prefix (v8:/v8ui:/xs:/dcs*:) - verbatim (e.g. v8:UUID, v8:StandardPeriod).
     if re.match(r'^(v8|v8ui|xs|ent|style|sys|web|win|dcs\w*):', type_str):
         lines.append(f'{indent}<v8:Type>{type_str}</v8:Type>')
     elif '.' in type_str:
@@ -4061,7 +4061,7 @@ def emit_single_type(lines, type_str, indent):
 
 
 def emit_type(lines, type_str, indent, tag="Type", tag_attrs=""):
-    # tag/tag_attrs — обёртка (по умолчанию <Type>); для valueType ValueList вызывается с
+    # tag/tag_attrs - wrapper (default <Type>); for valueType ValueList it is called with
     # tag="Settings", tag_attrs=' xsi:type="v8:TypeDescription"'.
     if not type_str:
         lines.append(f'{indent}<{tag}{tag_attrs}/>')
@@ -4079,19 +4079,19 @@ def emit_type(lines, type_str, indent, tag="Type", tag_attrs=""):
 # --- Element emitters ---
 
 def emit_element(lines, el, indent, in_cmd_bar=False):
-    # Companion-панели (объект/массив-значение) → commandBar/contextMenu, до тип-синонимов.
+    # Companion panels (object/array value) → commandBar/contextMenu, before type synonyms.
     normalize_panel_synonyms(el)
 
     # Silent synonyms: model often writes XML name or Russian (ПолеПереключателя/RadioButtonField → radio).
-    # commandBar/autoCommandBar/КоманднаяПанель → тип-элемент ТОЛЬКО при строковом значении (имя).
+    # commandBar/autoCommandBar/КоманднаяПанель → type element ONLY for a string value (name).
     for src, dst in ELEMENT_TYPE_SYNONYMS.items():
         if src in el and dst not in el:
             if src in STR_ONLY_TYPE_SYNONYMS and not isinstance(el[src], str):
                 continue
             el[dst] = el.pop(src)
 
-    # Синонимы ключей-свойств (русские имена 1С → канон. англ.). Case/space-insensitive.
-    # Канон побеждает: если задан и русский, и англ. ключ — англ. остаётся, русский отбрасываем.
+    # Property key synonyms (Russian 1C names → canonical English). Case/space-insensitive.
+    # Canon wins: if both Russian and English keys are set - English stays, Russian is dropped.
     for p_name in list(el.keys()):
         norm = p_name.replace(' ', '').lower()
         canon = PROP_SYNONYMS.get(norm)
@@ -4110,9 +4110,9 @@ def emit_element(lines, el, indent, in_cmd_bar=False):
         print("WARNING: Unknown element type, skipping", file=sys.stderr)
         return
 
-    # Validate known keys (внутренние маркеры на _ пропускаем). Оформление (цвета/шрифты/граница)
-    # проверяем против самих структур appearance — канонические ключи + forgiving-синонимы, чтобы
-    # allowlist не дрейфовал при добавлении новых.
+    # Validate known keys (we skip internal markers starting with _). Appearance (colors/fonts/border)
+    # is checked against the appearance structures themselves - canonical keys + forgiving synonyms, so that
+    # the allowlist does not drift when new ones are added.
     for p_name in el.keys():
         if p_name.startswith('_'):
             continue
@@ -4167,7 +4167,7 @@ def emit_element(lines, el, indent, in_cmd_bar=False):
 
 
 def _warn_unrecognized(key, raw, valid, owner):
-    # drop-on-miss enum: значение не распознано → тег не эмитится. Громко, чтобы автор увидел потерю.
+    # drop-on-miss enum: value not recognized → tag is not emitted. Loud, so the author sees the loss.
     print(f"[WARN] Unrecognized {key} '{raw}' on '{owner}'. Valid values: {', '.join(valid)}. Value ignored.")
 
 
@@ -4178,7 +4178,7 @@ def emit_group(lines, el, name, eid, indent):
     emit_title(lines, el, name, inner)
 
     # Group orientation
-    # Group orientation (направление). Legacy: group:'collapsible' = Vertical + behavior collapsible.
+    # Group orientation (direction). Legacy: group:'collapsible' = Vertical + behavior collapsible.
     group_val = str(el.get('group', '')).lower()
     orientation_map = {
         'horizontal': 'Horizontal',
@@ -4194,14 +4194,14 @@ def emit_group(lines, el, name, eid, indent):
     elif group_val:
         _warn_unrecognized('group orientation', el.get('group'), ('vertical', 'horizontalIfPossible', 'alwaysHorizontal'), name)
 
-    # Behavior: ключ behavior (usual/collapsible/popup) → <Behavior>; отсутствие = Авто (не эмитим).
+    # Behavior: key behavior (usual/collapsible/popup) → <Behavior>; absence = Auto (not emitted).
     behavior_val = str(el['behavior']).lower() if el.get('behavior') else ('collapsible' if group_val == 'collapsible' else None)
     bmap = {'usual': 'Usual', 'collapsible': 'Collapsible', 'popup': 'PopUp'}
     if behavior_val and behavior_val in bmap:
         lines.append(f'{inner}<Behavior>{bmap[behavior_val]}</Behavior>')
     elif el.get('behavior') and behavior_val not in bmap:
         _warn_unrecognized('behavior', el.get('behavior'), ('collapsible', 'popup'), name)
-    # Collapsed — у Collapsible и PopUp (не привязано к одному behavior)
+    # Collapsed - on Collapsible and PopUp (not tied to one behavior)
     if el.get('collapsed') is True:
         lines.append(f'{inner}<Collapsed>true</Collapsed>')
 
@@ -4216,14 +4216,14 @@ def emit_group(lines, el, name, eid, indent):
         repr_val = repr_map.get(str(el['representation']), str(el['representation']))
         lines.append(f'{inner}<Representation>{repr_val}</Representation>')
 
-    # Использование текущей строки группы (после Representation, порядок XSD)
+    # Current group row usage (after Representation, XSD order)
     if el.get('currentRowUse'):
         lines.append(f'{inner}<CurrentRowUse>{el["currentRowUse"]}</CurrentRowUse>')
 
     # ShowTitle
     if el.get('showTitle') is not None:
         lines.append(f'{inner}<ShowTitle>{"true" if el["showTitle"] else "false"}</ShowTitle>')
-    # Заголовок свёрнутого представления (collapsible/popup) — мультиязычный текст
+    # Collapsed representation title (collapsible/popup) - multilingual text
     if el.get('collapsedTitle'):
         emit_mltext(lines, inner, 'CollapsedRepresentationTitle', el['collapsedTitle'])
 
@@ -4231,7 +4231,7 @@ def emit_group(lines, el, name, eid, indent):
     if el.get('united') is False:
         lines.append(f'{inner}<United>false</United>')
 
-    # Формат значения пути к данным заголовка (<Format>; парный к titleDataPath группы)
+    # Format of the header data path value (<Format>; paired with the group's titleDataPath)
     if el.get('format'):
         emit_mltext(lines, inner, 'Format', el['format'])
     if el.get('editFormat'):
@@ -4240,7 +4240,7 @@ def emit_group(lines, el, name, eid, indent):
     emit_common_flags(lines, el, inner)
     emit_layout(lines, el, inner)
 
-    # Оформление (цвета/шрифты/граница) — перед компаньоном
+    # Appearance (colors/fonts/border) - before the companion
     emit_appearance(lines, el, inner, 'field')
 
     # Companion: ExtendedTooltip
@@ -4276,15 +4276,15 @@ def emit_column_group(lines, el, name, eid, indent):
 
     if el.get('showTitle') is not None:
         lines.append(f'{inner}<ShowTitle>{"true" if el["showTitle"] else "false"}</ShowTitle>')
-    # showInHeader эмитится общим emit_common_element_props (через emit_layout)
+    # showInHeader is emitted by the common emit_common_element_props (via emit_layout)
 
     emit_common_flags(lines, el, inner)
     emit_layout(lines, el, inner)
 
-    # Картинка заголовка колонки-группы (после ShowInHeader/Layout, перед оформлением — порядок XSD)
+    # Column group header picture (after ShowInHeader/Layout, before appearance - XSD order)
     emit_column_pics(lines, el, inner)
 
-    # Оформление (цвета/шрифты/граница) — перед компаньоном
+    # Appearance (colors/fonts/border) - before the companion
     emit_appearance(lines, el, inner, 'field')
 
     emit_companion(lines, 'ExtendedTooltip', f'{name}РасширеннаяПодсказка', inner, el.get('extendedTooltip'))
@@ -4317,11 +4317,11 @@ def emit_input(lines, el, name, eid, indent):
         lines.append(f'{inner}<MultiLine>{"true" if el["multiLine"] else "false"}</MultiLine>')
     if el.get('passwordMode') is not None:
         lines.append(f'{inner}<PasswordMode>{"true" if el["passwordMode"] else "false"}</PasswordMode>')
-    # ChoiceButton — захват «как есть» (платформа эмитит явное значение; ref-поля выводят сама,
-    # декомпилятор фиксирует факт. значение). Нет ключа → не эмитим (не додумываем по событию).
+    # ChoiceButton - captured "as is" (the platform emits an explicit value; ref fields output it itself,
+    # the decompiler records the actual value). No key → do not emit (we do not infer from the event).
     if el.get('choiceButton') is not None:
         lines.append(f'{inner}<ChoiceButton>{"true" if el["choiceButton"] else "false"}</ChoiceButton>')
-    # Кнопки поля ввода — захват «как есть» (платформа эмитит явное значение, в т.ч. false)
+    # Input field buttons - captured "as is" (the platform emits an explicit value, including false)
     if el.get('clearButton') is not None:
         lines.append(f'{inner}<ClearButton>{"true" if el["clearButton"] else "false"}</ClearButton>')
     if el.get('spinButton') is not None:
@@ -4337,24 +4337,24 @@ def emit_input(lines, el, name, eid, indent):
     emit_column_pics(lines, el, inner)
     if el.get('textEdit') is False:
         lines.append(f'{inner}<TextEdit>false</TextEdit>')
-    # InputField-специфичные скаляры (захват «как есть»: платформа эмитит явное не-дефолтное значение)
+    # InputField-specific scalars (captured "as is": the platform emits an explicit non-default value)
     for key, tag in (('wrap', 'Wrap'), ('openButton', 'OpenButton'), ('listChoiceMode', 'ListChoiceMode'),
                      ('extendedEditMultipleValues', 'ExtendedEditMultipleValues'), ('chooseType', 'ChooseType'),
                      ('quickChoice', 'QuickChoice'), ('autoChoiceIncomplete', 'AutoChoiceIncomplete')):
         if el.get(key) is not None:
             lines.append(f'{inner}<{tag}>{"true" if el[key] else "false"}</{tag}>')
-    # Ограничение доступных типов (поле на составном типе): домен типов + явный набор.
-    # availableTypes — формат типа реквизита (§type); emit_type сам разбирает мультитип "a | b".
+    # Available type restriction (field on a composite type): type domain + explicit set.
+    # availableTypes - attribute type format (§type); emit_type parses the multitype "a | b" itself.
     if el.get('typeDomainEnabled') is not None:
         lines.append(f'{inner}<TypeDomainEnabled>{"true" if el["typeDomainEnabled"] else "false"}</TypeDomainEnabled>')
     if el.get('availableTypes'):
         emit_type(lines, el['availableTypes'], inner, tag='AvailableTypes')
-    # InputField-специфичные value-скаляры
+    # InputField-specific value scalars
     for key, tag in (('choiceForm', 'ChoiceForm'), ('choiceHistoryOnInput', 'ChoiceHistoryOnInput'),
                      ('choiceFoldersAndItems', 'ChoiceFoldersAndItems'), ('footerDataPath', 'FooterDataPath')):
         if el.get(key):
             lines.append(f'{inner}<{tag}>{esc_xml_text(str(el[key]))}</{tag}>')
-    # MinValue/MaxValue — типизированное. JSON-число → xs:decimal, строка → xs:string (тип сохранён декомпилятором).
+    # MinValue/MaxValue - typed. JSON number → xs:decimal, string → xs:string (type preserved by the decompiler).
     for key, tag in (('minValue', 'MinValue'), ('maxValue', 'MaxValue')):
         if el.get(key) is not None:
             mvt = 'xs:string' if isinstance(el[key], str) else 'xs:decimal'
@@ -4371,7 +4371,7 @@ def emit_input(lines, el, name, eid, indent):
     if el.get('footerText') is not None:
         emit_mltext(lines, inner, 'FooterText', el['footerText'])
 
-    # Формат / формат редактирования (LocalStringType — строка или {ru,en})
+    # Format / edit format (LocalStringType - string or {ru,en})
     if el.get('format'):
         emit_mltext(lines, inner, 'Format', el['format'])
     if el.get('editFormat'):
@@ -4379,12 +4379,12 @@ def emit_input(lines, el, name, eid, indent):
 
     emit_choice_list(lines, el, inner)
 
-    # Связи по типу / связи параметров выбора / параметры выбора
+    # Type links / choice parameter links / choice parameters
     emit_type_link(lines, el, inner)
     emit_choice_parameter_links(lines, el, inner)
     emit_choice_parameters(lines, el, inner)
 
-    # Оформление (цвета/шрифты/граница) — перед компаньонами
+    # Appearance (colors/fonts/border) - before the companions
     emit_appearance(lines, el, inner, 'field')
 
     # Companions
@@ -4409,7 +4409,7 @@ def emit_check(lines, el, name, eid, indent):
     if el.get('editMode'):
         lines.append(f'{inner}<EditMode>{el["editMode"]}</EditMode>')
     emit_column_pics(lines, el, inner)
-    # CheckBoxType: нет ключа → умный дефолт Auto; "" → подавить; значение → маппинг
+    # CheckBoxType: no key → smart default Auto; "" → suppress; value → mapping
     _cbt_map = {'auto': 'Auto', 'checkbox': 'CheckBox', 'switcher': 'Switcher', 'tumbler': 'Tumbler'}
     if 'checkBoxType' in el:
         if el.get('checkBoxType'):
@@ -4423,19 +4423,19 @@ def emit_check(lines, el, name, eid, indent):
 
     if el.get('warningOnEdit') is not None:
         emit_mltext(lines, inner, 'WarningOnEdit', el['warningOnEdit'])
-    # FooterDataPath / FooterText — общие cell-свойства колонки (как у input/labelField)
+    # FooterDataPath / FooterText - common cell properties of a column (like input/labelField)
     if el.get('footerDataPath'):
         lines.append(f'{inner}<FooterDataPath>{esc_xml_text(str(el["footerDataPath"]))}</FooterDataPath>')
     if el.get('footerText') is not None:
         emit_mltext(lines, inner, 'FooterText', el['footerText'])
 
-    # Формат / формат редактирования (LocalStringType — строка или {ru,en})
+    # Format / edit format (LocalStringType - string or {ru,en})
     if el.get('format'):
         emit_mltext(lines, inner, 'Format', el['format'])
     if el.get('editFormat'):
         emit_mltext(lines, inner, 'EditFormat', el['editFormat'])
 
-    # Оформление (цвета/шрифты/граница) — перед компаньонами
+    # Appearance (colors/fonts/border) - before the companions
     emit_appearance(lines, el, inner, 'field')
 
     # Companions
@@ -4474,7 +4474,7 @@ def emit_radio_button_field(lines, el, name, eid, indent):
     if el.get('warningOnEdit') is not None:
         emit_mltext(lines, inner, 'WarningOnEdit', el['warningOnEdit'])
 
-    # Оформление (цвета/шрифты/граница) — перед компаньонами
+    # Appearance (colors/fonts/border) - before the companions
     emit_appearance(lines, el, inner, 'field')
 
     emit_companion_panel(lines, 'ContextMenu', f'{name}КонтекстноеМеню', inner, el.get('contextMenu'))
@@ -4485,8 +4485,8 @@ def emit_radio_button_field(lines, el, name, eid, indent):
     lines.append(f'{indent}</RadioButtonField>')
 
 
-# Заголовок декорации (Label/Picture): formatted-aware <Title> через единую ML-text форму
-# (reuse resolve_ml_formatted, как у extendedTooltip). Sibling-ключ formatted — back-compat override.
+# Decoration title (Label/Picture): formatted-aware <Title> via the unified ML-text form
+# (reuse resolve_ml_formatted, like extendedTooltip). Sibling key formatted - back-compat override.
 def emit_decoration_title(lines, el, name, indent, auto=False):
     has_key = 'title' in el
     title_val = el['title'] if has_key else (title_from_name(name) if (auto and name) else None)
@@ -4507,8 +4507,8 @@ def emit_label(lines, el, name, eid, indent):
     lines.append(f'{indent}<LabelDecoration name="{name}" id="{eid}"{di_attr(el)}>')
     inner = f'{indent}\t'
 
-    # Порядок как у платформы: own-content (флаги/hyperlink/layout/оформление) ПЕРЕД Title
-    # (корпус layout-first 16970 vs 44 — заодно убирает шум атрибуции харнесса на многострочном Title).
+    # Order as in the platform: own-content (flags/hyperlink/layout/appearance) BEFORE Title
+    # (corpus layout-first 16970 vs 44 - also removes harness attribution noise on a multiline Title).
     emit_common_flags(lines, el, inner)
     if el.get('hyperlink') is True:
         lines.append(f'{inner}<Hyperlink>true</Hyperlink>')
@@ -4540,14 +4540,14 @@ def emit_label_field(lines, el, name, eid, indent):
         lines.append(f'{inner}<TitleLocation>{map_title_loc(el["titleLocation"])}</TitleLocation>')
     if el.get('editMode'):
         lines.append(f'{inner}<EditMode>{el["editMode"]}</EditMode>')
-    # FooterDataPath — путь данных подвала колонки (общий cell-prop, как у input); после EditMode
+    # FooterDataPath - column footer data path (common cell-prop, like input); after EditMode
     if el.get('footerDataPath'):
         lines.append(f'{inner}<FooterDataPath>{esc_xml_text(str(el["footerDataPath"]))}</FooterDataPath>')
-    # PasswordMode на LabelField — платформа эмитит явный false (редко); факт. значение
+    # PasswordMode on LabelField - the platform emits explicit false (rare); the actual value
     if el.get('passwordMode') is not None:
         lines.append(f'{inner}<PasswordMode>{"true" if el["passwordMode"] else "false"}</PasswordMode>')
     emit_column_pics(lines, el, inner)
-    # ВНИМАНИЕ: у LabelField платформенный тег <Hiperlink> (опечатка 1С), не <Hyperlink>.
+    # WARNING: LabelField has the platform tag <Hiperlink> (a 1C typo), not <Hyperlink>.
     if el.get('hyperlink') is True:
         lines.append(f'{inner}<Hiperlink>true</Hiperlink>')
     emit_layout(lines, el, inner)
@@ -4557,13 +4557,13 @@ def emit_label_field(lines, el, name, eid, indent):
     if el.get('footerText') is not None:
         emit_mltext(lines, inner, 'FooterText', el['footerText'])
 
-    # Формат / формат редактирования (LocalStringType — строка или {ru,en})
+    # Format / edit format (LocalStringType - string or {ru,en})
     if el.get('format'):
         emit_mltext(lines, inner, 'Format', el['format'])
     if el.get('editFormat'):
         emit_mltext(lines, inner, 'EditFormat', el['editFormat'])
 
-    # Оформление (цвета/шрифты/граница + header/footer) — перед компаньонами
+    # Appearance (colors/fonts/border + header/footer) - before the companions
     emit_appearance(lines, el, inner, 'field')
 
     # Companions
@@ -4575,10 +4575,10 @@ def emit_label_field(lines, el, name, eid, indent):
     lines.append(f'{indent}</LabelField>')
 
 
-# Блок свойств таблицы, привязанной к динамическому списку (Group A defaults + B/C).
+# Table property block bound to a dynamic list (Group A defaults + B/C).
 def emit_dynlist_table_block(lines, el, indent):
-    # (useAlternationRowColor — общее свойство таблицы, эмитится в emit_table)
-    # Group A (гарант. блок): дефолт + override
+    # (useAlternationRowColor - common table property, emitted in emit_table)
+    # Group A (guaranteed block): default + override
     ar = 'true' if el.get('autoRefresh') is True else 'false'
     lines.append(f'{indent}<AutoRefresh>{ar}</AutoRefresh>')
     arp = el['autoRefreshPeriod'] if el.get('autoRefreshPeriod') is not None else 60
@@ -4606,7 +4606,7 @@ def emit_dynlist_table_block(lines, el, indent):
 
 
 def emit_table(lines, el, name, eid, indent):
-    _current_table_name['name'] = name   # дефолт source для кастомных дополнений в commandBar
+    _current_table_name['name'] = name   # default source for custom additions in commandBar
     lines.append(f'{indent}<Table name="{name}" id="{eid}"{di_attr(el)}>')
     inner = f'{indent}\t'
 
@@ -4620,18 +4620,18 @@ def emit_table(lines, el, name, eid, indent):
         lines.append(f'{inner}<Representation>{el["representation"]}</Representation>')
     if el.get('titleLocation'):
         lines.append(f'{inner}<TitleLocation>{map_title_loc(el["titleLocation"])}</TitleLocation>')
-    # ChangeRowSet/Order — явное значение (в т.ч. false: платформа пишет его на ValueTable)
+    # ChangeRowSet/Order - explicit value (including false: the platform writes it on ValueTable)
     if 'changeRowSet' in el and el['changeRowSet'] is not None:
         lines.append(f'{inner}<ChangeRowSet>{"true" if el["changeRowSet"] is True else "false"}</ChangeRowSet>')
     if 'changeRowOrder' in el and el['changeRowOrder'] is not None:
         lines.append(f'{inner}<ChangeRowOrder>{"true" if el["changeRowOrder"] is True else "false"}</ChangeRowOrder>')
     if el.get('autoInsertNewRow') is True:
         lines.append(f'{inner}<AutoInsertNewRow>true</AutoInsertNewRow>')
-    # RowFilter — nil-плейсхолдер (ключ присутствует → эмитим)
+    # RowFilter - nil placeholder (key present → emit)
     if 'rowFilter' in el:
         lines.append(f'{inner}<RowFilter xsi:nil="true"/>')
-    # Высота в строках (<HeightInTableRows>) — отдельное свойство от <Height> (высота элемента,
-    # эмитится generic-ом emit_layout ниже). Таблица может нести оба (237 в корпусе).
+    # Height in rows (<HeightInTableRows>) - a separate property from <Height> (element height,
+    # emitted generically by emit_layout below). A table can carry both (237 in the corpus).
     if el.get('heightInTableRows'):
         lines.append(f'{inner}<HeightInTableRows>{el["heightInTableRows"]}</HeightInTableRows>')
     if el.get('header') is False:
@@ -4646,7 +4646,7 @@ def emit_table(lines, el, name, eid, indent):
 
     if el.get('choiceMode') is True:
         lines.append(f'{inner}<ChoiceMode>true</ChoiceMode>')
-    # Скаляры таблицы (захват «как есть»). Autofill — СВОЁ свойство таблицы (≠ AutoCommandBar autofill = tableAutofill).
+    # Table scalars (captured "as is"). Autofill - table's OWN property (≠ AutoCommandBar autofill = tableAutofill).
     if el.get('autofill') is not None:
         lines.append(f'{inner}<Autofill>{"true" if el["autofill"] else "false"}</Autofill>')
     if el.get('multipleChoice') is True:
@@ -4655,7 +4655,7 @@ def emit_table(lines, el, name, eid, indent):
         lines.append(f'{inner}<SearchOnInput>{el["searchOnInput"]}</SearchOnInput>')
     if el.get('markIncomplete') is not None:
         lines.append(f'{inner}<AutoMarkIncomplete>{"true" if el["markIncomplete"] else "false"}</AutoMarkIncomplete>')
-    # Высота шапки/подвала в строках (pass-through; 1С толерантна к порядку детей Table)
+    # Header/footer height in rows (pass-through; 1C is tolerant to Table child order)
     if el.get('headerHeight') is not None:
         lines.append(f'{inner}<HeaderHeight>{el["headerHeight"]}</HeaderHeight>')
     if el.get('footerHeight') is not None:
@@ -4676,15 +4676,15 @@ def emit_table(lines, el, name, eid, indent):
         lines.append(f'{inner}<EnableDrag>{"true" if el["enableDrag"] else "false"}</EnableDrag>')
     if el.get('rowPictureDataPath'):
         lines.append(f'{inner}<RowPictureDataPath>{el["rowPictureDataPath"]}</RowPictureDataPath>')
-    # RowsPicture — та же конвенция, что ValuesPicture (дефолт LoadTransparent=false; abs/TransparentPixel)
+    # RowsPicture - same convention as ValuesPicture (default LoadTransparent=false; abs/TransparentPixel)
     emit_picture_ref(lines, el.get('rowsPicture'), 'RowsPicture', inner)
-    # Использование текущей строки таблицы (pass-through; в корпусе соседствует с блоком дин-списка)
+    # Current table row usage (pass-through; in the corpus adjacent to the dynamic list block)
     if el.get('currentRowUse'):
         lines.append(f'{inner}<CurrentRowUse>{el["currentRowUse"]}</CurrentRowUse>')
-    # Запрос обновления дин-списка (pass-through; в корпусе всегда PullFromTop)
+    # Dynamic list refresh request (pass-through; always PullFromTop in the corpus)
     if el.get('refreshRequest'):
         lines.append(f'{inner}<RefreshRequest>{el["refreshRequest"]}</RefreshRequest>')
-    # Блок свойств дин-список-таблицы (помечена эвристикой)
+    # Dynamic-list table property block (flagged by the heuristic)
     if el.get('_dynList'):
         emit_dynlist_table_block(lines, el, inner)
     if el.get('viewStatusLocation'):
@@ -4693,9 +4693,9 @@ def emit_table(lines, el, name, eid, indent):
         lines.append(f'{inner}<SearchControlLocation>{el["searchControlLocation"]}</SearchControlLocation>')
     emit_layout(lines, el, inner)
 
-    # CommandSet таблицы эмитится через emit_layout (общий механизм поля)
+    # Table CommandSet is emitted via emit_layout (common field mechanism)
 
-    # Оформление (цвета/граница таблицы) — перед компаньонами
+    # Appearance (table colors/border) - before the companions
     emit_appearance(lines, el, inner, 'field')
 
     # Companions
@@ -4738,14 +4738,14 @@ def emit_pages(lines, el, name, eid, indent):
 
     if el.get('pagesRepresentation'):
         lines.append(f'{inner}<PagesRepresentation>{el["pagesRepresentation"]}</PagesRepresentation>')
-    # \u0418\u0441\u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u043d\u0438\u0435 \u0442\u0435\u043a\u0443\u0449\u0435\u0439 \u0441\u0442\u0440\u043e\u043a\u0438 (\u043f\u043e\u0441\u043b\u0435 PagesRepresentation, \u043f\u043e\u0440\u044f\u0434\u043e\u043a XSD)
+    # Current row usage (after PagesRepresentation, XSD order)
     if el.get('currentRowUse'):
         lines.append(f'{inner}<CurrentRowUse>{el["currentRowUse"]}</CurrentRowUse>')
 
     emit_common_flags(lines, el, inner)
     emit_layout(lines, el, inner)
 
-    # \u041e\u0444\u043e\u0440\u043c\u043b\u0435\u043d\u0438\u0435 (\u0446\u0432\u0435\u0442\u0430/\u0448\u0440\u0438\u0444\u0442\u044b/\u0433\u0440\u0430\u043d\u0438\u0446\u0430) \u0437\u0430\u0433\u043e\u043b\u043e\u0432\u043a\u0430 \u0433\u0440\u0443\u043f\u043f\u044b \u0441\u0442\u0440\u0430\u043d\u0438\u0446 \u2014 TitleFont/TitleTextColor/\u2026 (\u043a\u0430\u043a \u0443 Page)
+    # Appearance (colors/fonts/border) of the pages group title - TitleFont/TitleTextColor/\u2026 (like Page)
     emit_appearance(lines, el, inner, 'field')
 
     # Companion
@@ -4770,8 +4770,8 @@ def emit_page(lines, el, name, eid, indent):
     emit_title(lines, el, name, inner, auto=True)
     emit_common_flags(lines, el, inner)
 
-    # Картинка страницы (иконка вкладки): после Title/флагов, перед Group (порядок XSD).
-    # Конвенция как у ValuesPicture (дефолт LoadTransparent=false): скаляр-Ref/'abs:X' или объект.
+    # Page picture (tab icon): after Title/flags, before Group (XSD order).
+    # Convention as for ValuesPicture (default LoadTransparent=false): scalar-Ref/'abs:X' or object.
     emit_picture_ref(lines, el.get('picture'), 'Picture', inner)
 
     if el.get('group'):
@@ -4789,14 +4789,14 @@ def emit_page(lines, el, name, eid, indent):
             _warn_unrecognized('page group orientation', el['group'], ('vertical', 'horizontalIfPossible', 'alwaysHorizontal'), name)
     if el.get('showTitle') is not None:
         lines.append(f'{inner}<ShowTitle>{"true" if el["showTitle"] else "false"}</ShowTitle>')
-    # Формат значения пути к данным заголовка (<Format>; парный к titleDataPath страницы)
+    # Format of the header data path value (<Format>; paired with the page's titleDataPath)
     if el.get('format'):
         emit_mltext(lines, inner, 'Format', el['format'])
     if el.get('editFormat'):
         emit_mltext(lines, inner, 'EditFormat', el['editFormat'])
     emit_layout(lines, el, inner)
 
-    # \u041e\u0444\u043e\u0440\u043c\u043b\u0435\u043d\u0438\u0435 \u0441\u0442\u0440\u0430\u043d\u0438\u0446\u044b (BackColor / TitleTextColor / TitleFont) \u2014 \u043f\u043e\u0441\u043b\u0435 ShowTitle, \u043f\u0435\u0440\u0435\u0434 \u043a\u043e\u043c\u043f\u0430\u043d\u044c\u043e\u043d\u043e\u043c
+    # Page appearance (BackColor / TitleTextColor / TitleFont) - after ShowTitle, before the companion
     emit_appearance(lines, el, inner, 'field')
 
     # Companion
@@ -4815,7 +4815,7 @@ def emit_page(lines, el, name, eid, indent):
 def emit_button(lines, el, name, eid, indent, in_cmd_bar=False):
     lines.append(f'{indent}<Button name="{name}" id="{eid}"{di_attr(el)}>')
     inner = f'{indent}\t'
-    # (общие свойства — через emit_layout ниже; отдельный вызов был бы двойной эмиссией)
+    # (common properties - via emit_layout below; a separate call would be double emission)
 
     # Type — context-aware. Inside command bars (cmdBar/autoCmdBar/popup) only
     # CommandBarButton/CommandBarHyperlink are valid; UsualButton/Hyperlink would be ignored.
@@ -4854,7 +4854,7 @@ def emit_button(lines, el, name, eid, indent, in_cmd_bar=False):
     # CommandName
     if el.get('command'):
         lines.append(f'{inner}<CommandName>Form.Command.{el["command"]}</CommandName>')
-    # commandName — глобальная команда «как есть» (CommonCommand.X, Catalog.X.Command.Y …), без обёртки Form.
+    # commandName - global command "as is" (CommonCommand.X, Catalog.X.Command.Y …), without the Form wrapper.
     if el.get('commandName') and not el.get('command'):
         lines.append(f'{inner}<CommandName>{el["commandName"]}</CommandName>')
     if el.get('stdCommand'):
@@ -4864,8 +4864,8 @@ def emit_button(lines, el, name, eid, indent, in_cmd_bar=False):
             lines.append(f'{inner}<CommandName>Form.Item.{m.group(1)}.StandardCommand.{m.group(2)}</CommandName>')
         else:
             lines.append(f'{inner}<CommandName>Form.StandardCommand.{sc}</CommandName>')
-    # Parameter команды (после CommandName): строка → xr:MDObjectRef (объект метаданных);
-    # объект {type} → v8:TypeDescription (грамматика типа). Forgiving-синоним 'параметр'.
+    # Command parameter (after CommandName): string → xr:MDObjectRef (metadata object);
+    # object {type} → v8:TypeDescription (type grammar). Forgiving synonym 'параметр'.
     btn_param = el.get('parameter')
     if btn_param is None:
         btn_param = el.get('параметр')
@@ -4874,7 +4874,7 @@ def emit_button(lines, el, name, eid, indent, in_cmd_bar=False):
             emit_type(lines, str(btn_param['type']), inner, tag='Parameter', tag_attrs=' xsi:type="v8:TypeDescription"')
         else:
             lines.append(f'{inner}<Parameter xsi:type="xr:MDObjectRef">{esc_xml_text(str(btn_param))}</Parameter>')
-    # DataPath — привязка команды кнопки к контексту (Объект.Ref, Items.X.CurrentData.Поле)
+    # DataPath - binds the button command to the context (Объект.Ref, Items.X.CurrentData.Поле)
     if el.get('path'):
         lines.append(f'{inner}<DataPath>{el["path"]}</DataPath>')
 
@@ -4883,8 +4883,8 @@ def emit_button(lines, el, name, eid, indent, in_cmd_bar=False):
 
     if el.get('defaultButton') is True:
         lines.append(f'{inner}<DefaultButton>true</DefaultButton>')
-    # Check (пометка toggle-кнопки командной панели) — платформа эмитит только true.
-    # Ключ 'checked' (не 'check': 'check' — тип-ключ CheckBoxField, был бы конфликт диспетчера типов)
+    # Check (toggle button marker of the command bar) - the platform emits only true.
+    # Key 'checked' (not 'check': 'check' is the CheckBoxField type key, there would be a type-dispatcher conflict)
     if el.get('checked') is True:
         lines.append(f'{inner}<Check>true</Check>')
 
@@ -4898,7 +4898,7 @@ def emit_button(lines, el, name, eid, indent, in_cmd_bar=False):
         lines.append(f'{inner}<LocationInCommandBar>{el["locationInCommandBar"]}</LocationInCommandBar>')
     emit_layout(lines, el, inner)
 
-    # Оформление (цвета/шрифт/граница) — перед компаньоном (профиль кнопки)
+    # Appearance (colors/font/border) - before the companion (button profile)
     emit_appearance(lines, el, inner, 'button')
 
     # Companion
@@ -4914,13 +4914,13 @@ def emit_picture_decoration(lines, el, name, eid, indent):
     inner = f'{indent}\t'
 
     emit_decoration_title(lines, el, name, inner)
-    # Текст при невыбранной картинке (NonselectedPictureText) — после Title (порядок корпуса)
+    # Text when no picture is selected (NonselectedPictureText) - after Title (corpus order)
     if el.get('nonselectedPictureText') is not None:
         emit_mltext(lines, inner, 'NonselectedPictureText', el['nonselectedPictureText'])
     emit_common_flags(lines, el, inner)
 
-    # Источник картинки — ТОЛЬКО src (ключ 'picture' = тип/имя элемента, не источник).
-    # Префикс "abs:" → встроенная картинка <xr:Abs>; иначе именованная/стилевая <xr:Ref>.
+    # Picture source - ONLY src (the 'picture' key = element type/name, not the source).
+    # "abs:" prefix → built-in picture <xr:Abs>; otherwise named/styled <xr:Ref>.
     if el.get('src'):
         src_str = str(el['src'])
         lt = 'true' if el.get('loadTransparent') is True else 'false'
@@ -4938,11 +4938,11 @@ def emit_picture_decoration(lines, el, name, eid, indent):
     if el.get('hyperlink') is True:
         lines.append(f'{inner}<Hyperlink>true</Hyperlink>')
     emit_layout(lines, el, inner)
-    # EnableDrag — фактическое значение (декорация-картинка перетаскиваема; декомпилятор ловит generic-ом)
+    # EnableDrag - the actual value (a picture decoration is draggable; the decompiler captures it generically)
     if el.get('enableDrag') is not None:
         lines.append(f'{inner}<EnableDrag>{"true" if el["enableDrag"] else "false"}</EnableDrag>')
 
-    # Оформление (цвета/шрифт/граница) — профиль декорации (1С толерантна к порядку appearance)
+    # Appearance (colors/font/border) - decoration profile (1C is tolerant to appearance order)
     emit_appearance(lines, el, inner, 'decoration')
 
     # Companions
@@ -4973,11 +4973,11 @@ def emit_picture_field(lines, el, name, eid, indent):
         lines.append(f'{inner}<Hyperlink>true</Hyperlink>')
 
     emit_layout(lines, el, inner)
-    # EnableDrag — фактическое значение (поле картинки перетаскиваемо; декомпилятор ловит generic-ом)
+    # EnableDrag - the actual value (a picture field is draggable; the decompiler captures it generically)
     if el.get('enableDrag') is not None:
         lines.append(f'{inner}<EnableDrag>{"true" if el["enableDrag"] else "false"}</EnableDrag>')
 
-    # FooterDataPath / FooterText — общие cell-свойства колонки (как у input/labelField)
+    # FooterDataPath / FooterText - common cell properties of a column (like input/labelField)
     if el.get('footerDataPath'):
         lines.append(f'{inner}<FooterDataPath>{esc_xml_text(str(el["footerDataPath"]))}</FooterDataPath>')
     if el.get('footerText') is not None:
@@ -4985,12 +4985,12 @@ def emit_picture_field(lines, el, name, eid, indent):
 
     # ValuesPicture — picture (collection) used to render the field's value.
     # Required for a Boolean-bound PictureField to actually show an icon.
-    # Скаляр (Ref) или объект {src, loadTransparent}; LoadTransparent эмитится всегда.
+    # Scalar (Ref) or object {src, loadTransparent}; LoadTransparent is always emitted.
     emit_picture_ref(lines, el.get('valuesPicture'), 'ValuesPicture', inner)
     if el.get('nonselectedPictureText') is not None:
         emit_mltext(lines, inner, 'NonselectedPictureText', el['nonselectedPictureText'])
 
-    # Оформление (цвета/шрифты/граница) — перед компаньонами
+    # Appearance (colors/fonts/border) - before the companions
     emit_appearance(lines, el, inner, 'field')
 
     # Companions
@@ -5003,9 +5003,9 @@ def emit_picture_field(lines, el, name, eid, indent):
 
 
 def emit_simple_field(lines, el, name, eid, indent, xml_tag, type_key):
-    # Спец-поля "документ/датчик" (SpreadSheet/HTML/Text/Formatted/ProgressBar/TrackBar):
-    # единый скелет поля. Типоспец. enum/bool скаляры — через generic (emit_layout);
-    # числовые скаляры датчиков (min/max/шаги) — без xsi:type; enableDrag — фактическое значение.
+    # Special fields "document/gauge" (SpreadSheet/HTML/Text/Formatted/ProgressBar/TrackBar):
+    # unified field skeleton. Type-specific enum/bool scalars - via generic (emit_layout);
+    # gauge numeric scalars (min/max/steps) - without xsi:type; enableDrag - the actual value.
     lines.append(f'{indent}<{xml_tag} name="{name}" id="{eid}"{di_attr(el)}>')
     inner = f'{indent}\t'
 
@@ -5020,16 +5020,16 @@ def emit_simple_field(lines, el, name, eid, indent, xml_tag, type_key):
 
     emit_layout(lines, el, inner)
 
-    # EnableDrag — фактическое значение (SpreadSheet; платформа эмитит явный false). enableStartDrag — через emit_layout.
+    # EnableDrag - the actual value (SpreadSheet; the platform emits explicit false). enableStartDrag - via emit_layout.
     if el.get('enableDrag') is not None:
         lines.append(f'{inner}<EnableDrag>{"true" if el["enableDrag"] else "false"}</EnableDrag>')
 
-    # Датчики (ProgressBar/TrackBar) — числовые скаляры (без xsi:type)
+    # Gauges (ProgressBar/TrackBar) - numeric scalars (without xsi:type)
     for key, tag in (('minValue', 'MinValue'), ('maxValue', 'MaxValue'), ('largeStep', 'LargeStep'), ('markingStep', 'MarkingStep'), ('step', 'Step')):
         if el.get(key) is not None:
             lines.append(f'{inner}<{tag}>{el[key]}</{tag}>')
 
-    # Оформление (цвета/шрифты/граница) — перед компаньонами
+    # Appearance (colors/fonts/border) - before the companions
     emit_appearance(lines, el, inner, 'field')
 
     # Companions
@@ -5042,7 +5042,7 @@ def emit_simple_field(lines, el, name, eid, indent, xml_tag, type_key):
 
 
 def emit_gantt_chart(lines, el, name, eid, indent):
-    # GanttChartField — скелет поля + вложенная <Table> (полноценная таблица, через emit_element).
+    # GanttChartField - field skeleton + nested <Table> (a full table, via emit_element).
     lines.append(f'{indent}<GanttChartField name="{name}" id="{eid}"{di_attr(el)}>')
     inner = f'{indent}\t'
     if el.get('path'):
@@ -5055,7 +5055,7 @@ def emit_gantt_chart(lines, el, name, eid, indent):
     emit_appearance(lines, el, inner, 'field')
     emit_companion_panel(lines, 'ContextMenu', f'{name}КонтекстноеМеню', inner, el.get('contextMenu'))
     emit_companion(lines, 'ExtendedTooltip', f'{name}РасширеннаяПодсказка', inner, el.get('extendedTooltip'))
-    # Вложенная таблица диаграммы Ганта (стандартный Table — переиспользуем emit_element)
+    # Nested Gantt chart table (a standard Table - reuse emit_element)
     if el.get('ganttTable'):
         emit_element(lines, el['ganttTable'], inner)
     emit_events(lines, el, name, inner, 'ganttChart')
@@ -5079,7 +5079,7 @@ def emit_calendar(lines, el, name, eid, indent):
 
     emit_layout(lines, el, inner)
 
-    # Календарно-специфичные свойства (порядок схемы: после layout, до companions)
+    # Calendar-specific properties (schema order: after layout, before companions)
     if el.get('selectionMode'):
         lines.append(f'{inner}<SelectionMode>{el["selectionMode"]}</SelectionMode>')
     if el.get('showCurrentDate') is not None:
@@ -5091,7 +5091,7 @@ def emit_calendar(lines, el, name, eid, indent):
     if el.get('showMonthsPanel') is not None:
         lines.append(f'{inner}<ShowMonthsPanel>{"true" if el["showMonthsPanel"] else "false"}</ShowMonthsPanel>')
 
-    # Оформление (цвета/шрифты/граница) — перед компаньонами
+    # Appearance (colors/fonts/border) - before the companions
     emit_appearance(lines, el, inner, 'field')
 
     # Companions
@@ -5115,7 +5115,7 @@ def emit_command_bar(lines, el, name, eid, indent):
     if el.get('autofill') is True:
         lines.append(f'{inner}<Autofill>true</Autofill>')
 
-    # CommandBar хранит HorizontalLocation фактически (включая Auto); ≠ дополнениям (Auto=скип)
+    # CommandBar stores HorizontalLocation actually (including Auto); ≠ additions (Auto=skip)
     if el.get('horizontalLocation'):
         _hlv = {'auto': 'Auto', 'left': 'Left', 'right': 'Right', 'center': 'Center'}.get(str(el['horizontalLocation']).lower(), str(el['horizontalLocation']))
         lines.append(f'{inner}<HorizontalLocation>{_hlv}</HorizontalLocation>')
@@ -5141,7 +5141,7 @@ def emit_popup(lines, el, name, eid, indent):
     emit_title(lines, el, name, inner, auto=True)
     emit_common_flags(lines, el, inner)
 
-    # Источник команд попапа (после Title/ToolTip, перед компаньоном) — как у ButtonGroup/CommandBar
+    # Popup command source (after Title/ToolTip, before the companion) - like ButtonGroup/CommandBar
     if el.get('commandSource'):
         lines.append(f'{inner}<CommandSource>{el["commandSource"]}</CommandSource>')
 
@@ -5151,7 +5151,7 @@ def emit_popup(lines, el, name, eid, indent):
         lines.append(f'{inner}<Representation>{el["representation"]}</Representation>')
     emit_layout(lines, el, inner)
 
-    # Оформление попапа (TitleTextColor / TitleFont) — перед компаньоном
+    # Popup appearance (TitleTextColor / TitleFont) - before the companion
     emit_appearance(lines, el, inner, 'field')
 
     emit_companion(lines, 'ExtendedTooltip', f'{name}РасширеннаяПодсказка', inner, el.get('extendedTooltip'))
@@ -5184,7 +5184,7 @@ def emit_button_group(lines, el, name, eid, indent):
     # Companion: ExtendedTooltip
     emit_companion(lines, 'ExtendedTooltip', f'{name}РасширеннаяПодсказка', inner, el.get('extendedTooltip'))
 
-    # Children (кнопки в контексте командной панели)
+    # Children (buttons in the command bar context)
     if el.get('children') and len(el['children']) > 0:
         lines.append(f'{inner}<ChildItems>')
         for child in el['children']:
@@ -5197,8 +5197,8 @@ def emit_button_group(lines, el, name, eid, indent):
 # --- Attribute emitter ---
 
 def emit_functional_options(lines, fo, indent):
-    # <FunctionalOptions><Item>FunctionalOption.X</Item>…> — у Attribute/Command/Column.
-    # Forgiving: "X"/"FunctionalOption.X" → FunctionalOption.X; GUID (расширение) — как есть.
+    # <FunctionalOptions><Item>FunctionalOption.X</Item>…> - on Attribute/Command/Column.
+    # Forgiving: "X"/"FunctionalOption.X" → FunctionalOption.X; GUID (extension) - as is.
     if not fo:
         return
     lines.append(f'{indent}<FunctionalOptions>')
@@ -5215,20 +5215,20 @@ def emit_functional_options(lines, fo, indent):
 
 
 def emit_attr_column(lines, col, indent):
-    # Колонка реквизита (ValueTable/Tree или AdditionalColumns): name/Title/Type/FunctionalOptions.
+    # Attribute column (ValueTable/Tree or AdditionalColumns): name/Title/Type/FunctionalOptions.
     col_id = new_id()
     lines.append(f'{indent}<Column name="{col["name"]}" id="{col_id}">')
     if col.get('title'):
         emit_mltext(lines, f'{indent}\t', 'Title', col['title'])
     emit_type(lines, str(col.get('type', '')), f'{indent}\t')
-    # Проверка заполнения колонки → <FillCheck> (как у реквизита; bool true→ShowError / строка verbatim)
+    # Column fill check → <FillCheck> (like an attribute; bool true→ShowError / string verbatim)
     cfc = col.get('fillCheck') if col.get('fillCheck') is not None else col.get('fillChecking')
     if cfc is not None:
         cfcv = ('ShowError' if cfc else None) if isinstance(cfc, bool) else str(cfc)
         if cfcv:
             lines.append(f'{indent}\t<FillCheck>{cfcv}</FillCheck>')
     emit_functional_options(lines, col.get('functionalOptions'), f'{indent}\t')
-    # Ролевой доступ колонки (View/Edit) — xr-флаг, как у самого реквизита
+    # Column role access (View/Edit) - xr flag, like the attribute itself
     if col.get('view') is not None:
         emit_xr_flag(lines, 'View', col['view'], f'{indent}\t')
     if col.get('edit') is not None:
@@ -5236,16 +5236,16 @@ def emit_attr_column(lines, col, indent):
     lines.append(f'{indent}</Column>')
 
 
-# --- Schema-параметры динамического списка (DataCompositionSchemaParameter) ---
-# Параметры компоновки данных формы. Та же сущность, что параметры СКД, но в
-# форме: обёртка <Parameter> + дети dcssch:. DSL переиспользует грамматику параметров СКД.
-# Контекстные дефолты: useRestriction эмитим ВСЕГДА, дефолт true (в СКД false); title — авто
-# из имени; пустое value — всегда xsi:nil (даже при известном типе). Канон. порядок детей
-# (по корпусу): name, title, valueType, value, useRestriction, expression, availableValue*,
+# --- Dynamic list schema parameters (DataCompositionSchemaParameter) ---
+# Form data composition parameters. The same entity as DCS parameters, but in a
+# form: <Parameter> wrapper + dcssch: children. The DSL reuses the DCS parameter grammar.
+# Context defaults: useRestriction is ALWAYS emitted, default true (false in DCS); title - auto
+# from the name; empty value - always xsi:nil (even with a known type). Canonical child order
+# (by corpus): name, title, valueType, value, useRestriction, expression, availableValue*,
 # valueListAllowed, availableAsField, inputParameters, denyIncompleteValues, use.
 
 def emit_dl_mltext(lines, indent, tag, text):
-    # ML-текст с xsi:type="v8:LocalStringType" (в dcssch:* обязателен; emit_mltext его не ставит).
+    # ML text with xsi:type="v8:LocalStringType" (mandatory in dcssch:*; emit_mltext does not set it).
     lines.append(f'{indent}<{tag} xsi:type="v8:LocalStringType">')
     emit_ml_items(lines, f'{indent}\t', text)
     lines.append(f'{indent}</{tag}>')
@@ -5293,7 +5293,7 @@ def parse_dl_param_shorthand(s):
     if m:
         result['title'] = m.group(1).strip()
         s = re.sub(r'\s*\[[^\]]*\]\s*', ' ', s).strip()
-    # Тип может быть СОСТАВНЫМ (A | B | C — с пробелами); значение — после '=' (тип '=' не содержит).
+    # Type can be COMPOSITE (A | B | C - with spaces); value - after '=' (the type does not contain '=').
     m = re.match(r'^([^:]+):\s*([^=]+?)(\s*=\s*(.*))?$', s)
     if m:
         result['name'] = m.group(1).strip()
@@ -5326,7 +5326,7 @@ def is_dl_empty_value(v):
 
 def emit_dl_value(lines, type_str, val, indent, value_list_allowed=False):
     if is_dl_empty_value(val):
-        # Дин-список: пустое значение платформа ВСЕГДА пишет как xsi:nil (даже при известном типе).
+        # Dynamic list: the platform ALWAYS writes an empty value as xsi:nil (even with a known type).
         if value_list_allowed:
             return
         lines.append(f'{indent}<dcssch:value xsi:nil="true"/>')
@@ -5344,7 +5344,7 @@ def emit_dl_value(lines, type_str, val, indent, value_list_allowed=False):
         ns_attr = _value_type_ns_attr('v8:Type', val_str)
         lines.append(f'{indent}<dcssch:value{ns_attr} xsi:type="v8:Type">{esc_xml_text(val_str)}</dcssch:value>')
     elif re.match(r'^ent:', t):
-        # системное перечисление (ent:X) — value несёт тот же xsi:type
+        # system enum (ent:X) - value carries the same xsi:type
         lines.append(f'{indent}<dcssch:value xsi:type="{t}">{esc_xml_text(val_str)}</dcssch:value>')
     elif re.match(r'^decimal', t):
         lines.append(f'{indent}<dcssch:value xsi:type="xs:decimal">{esc_xml_text(val_str)}</dcssch:value>')
@@ -5427,7 +5427,7 @@ def emit_dl_input_parameters(lines, ip, indent):
                     lines.append(f'{indent}\t\t\t</dcscor:item>')
                 lines.append(f'{indent}\t\t</dcscor:value>')
         elif 'typeLink' in item:
-            # Связь по типу (dcscor:TypeLink) — field + linkItem (структурное значение параметра).
+            # Type link (dcscor:TypeLink) - field + linkItem (structural parameter value).
             tl = item.get('typeLink') or {}
             lines.append(f'{indent}\t\t<dcscor:value xsi:type="dcscor:TypeLink">')
             if tl.get('field') is not None:
@@ -5449,7 +5449,7 @@ def emit_dl_input_parameters(lines, ip, indent):
     lines.append(f'{indent}</dcssch:inputParameters>')
 
 
-# ── dataParameters (значения параметров запроса в настройках компоновки) — порт из skd ──
+# ── dataParameters (query parameter values in composition settings) - port from skd ──
 def _test_empty_value(v):
     if v is None:
         return True
@@ -5537,7 +5537,7 @@ def emit_data_parameters(lines, items, indent, block_view_mode=None):
         vtype = str(dp.get('valueType') or '')
         val = dp.get('value')
         if isinstance(val, list):
-            # Список значений параметра (valueListAllowed) — отдельный <dcscor:value> на каждое.
+            # Parameter value list (valueListAllowed) - a separate <dcscor:value> for each.
             avtype = str(dp.get('valueType', ''))
             for v in val:
                 v_str = ('true' if v else 'false') if isinstance(v, bool) else str(v)
@@ -5552,7 +5552,7 @@ def emit_data_parameters(lines, items, indent, block_view_mode=None):
         elif _test_empty_value(val) and vtype:
             emit_empty_value(lines, vtype, f'{indent}\t\t', tag_prefix='dcscor:', value_list_allowed=False)
         elif _test_empty_value(val):
-            pass  # нет значения → не эмитим value-узел (form дин-список: use=false плейсхолдер)
+            pass  # no value → do not emit the value node (form dynamic list: use=false placeholder)
         elif val is not None:
             if isinstance(val, dict) and val.get('variant'):
                 variant = str(val.get('variant'))
@@ -5608,7 +5608,7 @@ def emit_dl_parameter(lines, p, parsed, indent):
     lines.append(f'{indent}<Parameter>')
     ci = f'{indent}\t'
     lines.append(f'{ci}<dcssch:name>{esc_xml_text(parsed["name"])}</dcssch:name>')
-    # Title: явный override (shorthand [..] / объект title/presentation) или авто из имени.
+    # Title: explicit override (shorthand [..] / object title/presentation) or auto from the name.
     title = None
     if parsed.get('title'):
         title = parsed['title']
@@ -5622,24 +5622,24 @@ def emit_dl_parameter(lines, p, parsed, indent):
     # valueType
     if parsed.get('type'):
         emit_dl_value_type(lines, parsed['type'], ci)
-    # value (дефолт nil; при valueListAllowed пустое — опускаем)
+    # value (default nil; with valueListAllowed an empty one is omitted)
     vla = bool(parsed.get('valueListAllowed'))
     pv = parsed.get('value')
     if isinstance(pv, list):
         for v in pv:
             emit_dl_value(lines, parsed.get('type', ''), v, ci, False)
     elif parsed.get('value_explicit') and pv is not None and str(pv) == '' and (str(parsed.get('type', '')) == '' or re.match(r'^string', str(parsed.get('type', '')))):
-        # Явный пустой СТРОКОВЫЙ параметр (value:"" от декомпилятора) → типизированный пустой
-        # <dcssch:value xsi:type="xs:string"/>, НЕ nil. Решается ФОРМОЙ value (""→typed-empty,
-        # null/отсутствие→nil), независимо от valueListAllowed; декомпилятор различает ""/null.
-        # Корпус: 26 xs:string typed-empty.
+        # Explicit empty STRING parameter (value:"" from the decompiler) → typed empty
+        # <dcssch:value xsi:type="xs:string"/>, NOT nil. Decided by the FORM of value (""→typed-empty,
+        # null/absence→nil), regardless of valueListAllowed; the decompiler distinguishes ""/null.
+        # Corpus: 26 xs:string typed-empty.
         lines.append(f'{ci}<dcssch:value xsi:type="xs:string"/>')
     elif vla and is_dl_empty_value(pv) and parsed.get('value_explicit'):
-        # valueListAllowed + явный пустой (value:null от декомпилятора) → платформа пишет nil
+        # valueListAllowed + explicit empty (value:null from the decompiler) → the platform writes nil
         lines.append(f'{ci}<dcssch:value xsi:nil="true"/>')
     else:
         emit_dl_value(lines, parsed.get('type', ''), pv, ci, vla)
-    # useRestriction — ВСЕГДА; дефолт true; false только при явном useRestriction:false.
+    # useRestriction - ALWAYS; default true; false only with explicit useRestriction:false.
     ur = True
     if is_obj and 'useRestriction' in p:
         ur = bool(p['useRestriction'])
@@ -5655,7 +5655,7 @@ def emit_dl_parameter(lines, p, parsed, indent):
     # valueListAllowed
     if vla:
         lines.append(f'{ci}<dcssch:valueListAllowed>true</dcssch:valueListAllowed>')
-    # availableAsField=false (hidden или явный)
+    # availableAsField=false (hidden or explicit)
     aaf = None
     if parsed.get('hidden') is True:
         aaf = False
@@ -5702,12 +5702,12 @@ def emit_dl_parameters(lines, params, indent):
 
 def emit_attributes(lines, attrs, indent, conditional_appearance=None):
     has_ca = bool(conditional_appearance) and len(conditional_appearance) > 0
-    # Платформа ВСЕГДА эмитит <Attributes> (100% корпуса; 162 формы — пустой <Attributes/>).
+    # The platform ALWAYS emits <Attributes> (100% of the corpus; 162 forms - empty <Attributes/>).
     if (not attrs or len(attrs) == 0) and not has_ca:
         lines.append(f'{indent}<Attributes/>')
         return
     if not attrs or len(attrs) == 0:
-        # Нет реквизитов, но есть условное оформление (последний child <Attributes>)
+        # No attributes, but there is conditional appearance (the last child <Attributes>)
         lines.append(f'{indent}<Attributes>')
         emit_conditional_appearance(lines, conditional_appearance, f'{indent}\t', wrap_tag='ConditionalAppearance')
         lines.append(f'{indent}</Attributes>')
@@ -5723,8 +5723,8 @@ def emit_attributes(lines, attrs, indent, conditional_appearance=None):
         lines.append(f'{indent}\t<Attribute name="{attr_name}" id="{attr_id}">')
         inner = f'{indent}\t\t'
 
-        # Title атрибута (зеркало emit_title): нет ключа → авто-вывод из имени (кроме main);
-        # title "" → подавить; непустой → эмитить как есть.
+        # Attribute Title (mirror of emit_title): no key → auto-derive from the name (except main);
+        # title "" → suppress; non-empty → emit as is.
         if 'title' in attr:
             if attr.get('title'):
                 emit_mltext(lines, inner, 'Title', attr['title'])
@@ -5736,9 +5736,9 @@ def emit_attributes(lines, attrs, indent, conditional_appearance=None):
             emit_type(lines, str(attr['type']), inner)
         else:
             lines.append(f'{inner}<Type/>')
-        # valueType: ОписаниеТипов значений ValueList → <Settings xsi:type="v8:TypeDescription">
-        # (та же грамматика типа, включая составной "A | B"). Forgiving-синонимы.
-        # Три состояния: нет ключа → нет Settings; "" → пустой <Settings…/>; тип → с типом.
+        # valueType: ValueList value type description → <Settings xsi:type="v8:TypeDescription">
+        # (the same type grammar, including composite "A | B"). Forgiving synonyms.
+        # Three states: no key → no Settings; "" → empty <Settings…/>; type → with type.
         vt_spec = None
         has_vt = False
         for k in ('valueType', 'typeDescription', 'описаниеТипов', 'типЗначений'):
@@ -5748,17 +5748,17 @@ def emit_attributes(lines, attrs, indent, conditional_appearance=None):
                 break
         if has_vt:
             emit_type(lines, '' if vt_spec is None else str(vt_spec), inner, tag="Settings", tag_attrs=' xsi:type="v8:TypeDescription"')
-        # Planner design-time <Settings xsi:type="pl:Planner"> (встроенный конфиг планировщика).
+        # Planner design-time <Settings xsi:type="pl:Planner"> (embedded planner config).
         if attr.get('planner') is not None:
             emit_planner_settings(lines, attr['planner'], inner)
-        # Chart/GanttChart design-time <Settings> (тип выводится из типа реквизита).
+        # Chart/GanttChart design-time <Settings> (type derived from the attribute type).
         if attr.get('chart') is not None:
             ctype = 'd4p1:GanttChart' if 'GanttChart' in str(attr.get('type', '')) else 'd4p1:Chart'
             emit_chart_settings(lines, attr['chart'], inner, ctype)
 
         if attr.get('main') is True:
             lines.append(f'{inner}<MainAttribute>true</MainAttribute>')
-        # Доступ по ролям: просмотр/редактирование (порядок схемы: View → Edit, после MainAttribute)
+        # Role access: view/edit (schema order: View → Edit, after MainAttribute)
         if attr.get('view') is not None:
             emit_xr_flag(lines, 'View', attr.get('view'), inner)
         if attr.get('edit') is not None:
@@ -5767,13 +5767,13 @@ def emit_attributes(lines, attrs, indent, conditional_appearance=None):
         if attr.get('main') is True and attr.get('type'):
             t = str(attr['type'])
             main_saved = bool(re.match(r'^(CatalogObject|DocumentObject|ChartOfAccountsObject|ChartOfCalculationTypesObject|ChartOfCharacteristicTypesObject|ExchangePlanObject|BusinessProcessObject|TaskObject)\.', t)) or ('RecordManager.' in t)
-        # Явный ключ savedData побеждает (в т.ч. False → суппресс авто-вывода main_saved); нет ключа → авто.
+        # Explicit savedData key wins (including False → suppress auto-derivation of main_saved); no key → auto.
         emit_saved = (attr['savedData'] is True) if 'savedData' in attr else main_saved
         if emit_saved:
             lines.append(f'{inner}<SavedData>true</SavedData>')
-        # Save: сохранение значения реквизита в пользовательских настройках. true → <Field>имя</Field>;
-        # строка/массив → под-поля с авто-префиксом "имя." (путь с точкой / UUID / =имя — как есть).
-        # Нет ключа или false → не эмитим.
+        # Save: saving the attribute value in user settings. true → <Field>name</Field>;
+        # string/array → subfields with auto prefix "name." (a path with a dot / UUID / =name - as is).
+        # No key or false → do not emit.
         if 'save' in attr and attr['save'] is not None:
             save_fields = []
             sv = attr['save']
@@ -5794,28 +5794,28 @@ def emit_attributes(lines, attrs, indent, conditional_appearance=None):
                 for f in save_fields:
                     lines.append(f'{inner}\t<Field>{esc_xml_text(f)}</Field>')
                 lines.append(f'{inner}</Save>')
-        # Проверка заполнения → <FillCheck> (реальный тег; <FillChecking> в схеме нет).
-        # bool true → ShowError; строка → verbatim. Синоним fillChecking.
+        # Fill check → <FillCheck> (the real tag; there is no <FillChecking> in the schema).
+        # bool true → ShowError; string → verbatim. Synonym fillChecking.
         fc_raw = attr['fillCheck'] if 'fillCheck' in attr else attr.get('fillChecking')
         if fc_raw:
             fcv = 'ShowError' if isinstance(fc_raw, bool) else str(fc_raw)
             lines.append(f'{inner}<FillCheck>{fcv}</FillCheck>')
 
-        # UseAlways: поля, всегда читаемые. Две формы DSL сливаются:
-        #  attr.useAlways[] (короткие имена) + columns с useAlways:true → <Field>ИмяРеквизита.Поле</Field>.
+        # UseAlways: fields always read. Two DSL forms are merged:
+        #  attr.useAlways[] (short names) + columns with useAlways:true → <Field>AttributeName.Field</Field>.
         ua_fields = []
         for e in (attr.get('useAlways') or []):
             fld = str(e)
-            # Префикс "ИмяРеквизита." добавляем к коротким именам. Поля дин-списка с маркером "~"
-            # (query-поля, ~13% корпуса) — префикс ставится ПОСЛЕ "~": ~Остановлен → ~Список.Остановлен.
-            # Полная форма (~Список.Остановлен / Список.Остановлен) — verbatim (forgiving ввод).
+            # Add the "AttributeName." prefix to short names. Dynamic list fields with the "~" marker
+            # (query fields, ~13% of the corpus) - the prefix is placed AFTER "~": ~Остановлен → ~Список.Остановлен.
+            # Full form (~Список.Остановлен / Список.Остановлен) - verbatim (forgiving input).
             if fld.startswith('~'):
                 bare = fld[1:]
                 if not re.match(r'^' + re.escape(attr_name) + r'\.', bare):
                     bare = f'{attr_name}.{bare}'
                 fld = f'~{bare}'
             elif not re.match(r'^' + re.escape(attr_name) + r'\.', fld) and not re.match(r'^\d+/\d+', fld):
-                # UUID-ссылка (1/0:GUID) — НЕ префиксуем (платформа хранит её без "имя.")
+                # UUID reference (1/0:GUID) - do NOT prefix (the platform stores it without "name.")
                 fld = f'{attr_name}.{fld}'
             if fld not in ua_fields:
                 ua_fields.append(fld)
@@ -5832,23 +5832,23 @@ def emit_attributes(lines, attrs, indent, conditional_appearance=None):
 
         emit_functional_options(lines, attr.get('functionalOptions'), inner)
 
-        # Columns: прямые <Column> + <AdditionalColumns table="X"> (доп. колонки табличных частей объекта).
-        # Прямые сначала, затем AdditionalColumns-группы. Для дин-списка (settings) прямые НЕ эмитим.
+        # Columns: direct <Column> + <AdditionalColumns table="X"> (additional columns of object tabular sections).
+        # Direct first, then AdditionalColumns groups. For a dynamic list (settings) do NOT emit direct ones.
         has_direct_cols = bool(attr.get('columns')) and len(attr['columns']) > 0 and not attr.get('settings')
         has_add_cols = bool(attr.get('additionalColumns')) and len(attr['additionalColumns']) > 0
         if has_direct_cols or has_add_cols:
             lines.append(f'{inner}<Columns>')
             if has_direct_cols:
-                seen_cols = set()  # колонки уникальны в пределах своего реквизита
+                seen_cols = set()  # columns are unique within their attribute
                 for col in attr['columns']:
                     _ensure_unique(str(col['name']), seen_cols, f"column of '{attr_name}'")
                     emit_attr_column(lines, col, f'{inner}\t')
             if has_add_cols:
                 for ac in attr['additionalColumns']:
-                    # Пустой список колонок задаётся ЯВНО (`"columns": []`) — это законная форма,
-                    # платформа так пишет таблицу, у которой доп. колонок нет. А вот отсутствие ключа
-                    # — недосказанность автора: «доп. колонки есть», а какие, не указано. Старая реализация на
-                    # этом падал с «Не удается индексировать в массив NULL» (@($null).Count = 1).
+                    # An empty column list is set EXPLICITLY (`"columns": []`) - this is a legal form,
+                    # the platform writes a table with no extra columns this way. But a missing key
+                    # is an author's omission: "there are extra columns", but which ones are not specified. The old implementation
+                    # crashed with "Cannot index into a null array" (@($null).Count = 1).
                     if ac.get('columns') is None:
                         print(f"additionalColumns group for table '{ac['table']}': key 'columns' is missing "
                               "— list the columns, or pass an empty array for a table without extra columns",
@@ -5856,51 +5856,51 @@ def emit_attributes(lines, attrs, indent, conditional_appearance=None):
                         sys.exit(1)
                     ac_cols = ac['columns']
                     if not ac_cols:
-                        # Явно пустая группа → self-closing (как платформа)
+                        # Explicitly empty group → self-closing (like the platform)
                         lines.append(f'{inner}\t<AdditionalColumns table="{ac["table"]}"/>')
                         continue
                     lines.append(f'{inner}\t<AdditionalColumns table="{ac["table"]}">')
-                    seen_ac_cols = set()  # уникальность в пределах группы AdditionalColumns
+                    seen_ac_cols = set()  # uniqueness within the AdditionalColumns group
                     for col in ac_cols:
                         _ensure_unique(str(col['name']), seen_ac_cols, f"column of '{attr_name}'")
                         emit_attr_column(lines, col, f'{inner}\t\t')
                     lines.append(f'{inner}\t</AdditionalColumns>')
             lines.append(f'{inner}</Columns>')
 
-        # Settings (динамический список)
+        # Settings (dynamic list)
         if attr.get('settings'):
             s = attr['settings']
             lines.append(f'{inner}<Settings xsi:type="DynamicList">')
             si = f'{inner}\t'
-            # Порядок платформы: AutoFillAvailableFields, ManualQuery, DynamicDataRead, QueryText, Field*, MainTable, ListSettings
-            # AutoFillAvailableFields — дефолт true; эмитим только при заданном ключе (отклонение).
+            # Platform order: AutoFillAvailableFields, ManualQuery, DynamicDataRead, QueryText, Field*, MainTable, ListSettings
+            # AutoFillAvailableFields - default true; emit only when the key is set (deviation).
             if s.get('autoFillAvailableFields') is not None:
                 lines.append(f'{si}<AutoFillAvailableFields>{"true" if s["autoFillAvailableFields"] else "false"}</AutoFillAvailableFields>')
-            # Порядок платформы: ManualQuery, DynamicDataRead, QueryText, Field*, MainTable, ListSettings
+            # Platform order: ManualQuery, DynamicDataRead, QueryText, Field*, MainTable, ListSettings
             has_query = bool(s.get('query') and str(s['query']).strip())
-            # Явный ключ manualQuery (в т.ч. False) ПОБЕЖДАЕТ эвристику has_query (платформа изредка
-            # хранит QueryText при ManualQuery=false — декомпилятор фиксирует отклонение).
+            # Explicit manualQuery key (including False) WINS over the has_query heuristic (the platform occasionally
+            # stores QueryText with ManualQuery=false - the decompiler records the deviation).
             if s.get('manualQuery') is not None:
                 mq = 'true' if s['manualQuery'] else 'false'
             else:
                 mq = 'true' if has_query else 'false'
             lines.append(f'{si}<ManualQuery>{mq}</ManualQuery>')
-            # DynamicDataRead: дефолт true; false только при явном отключении
+            # DynamicDataRead: default true; false only when explicitly disabled
             ddr = 'false' if s.get('dynamicDataRead') is False else 'true'
             lines.append(f'{si}<DynamicDataRead>{ddr}</DynamicDataRead>')
             if has_query:
                 qtext = resolve_text_from_file(str(s['query']), QUERY_BASE_DIR)
                 lines.append(f'{si}<QueryText>{esc_xml_text(qtext)}</QueryText>')
-            # Явные поля набора (редко): override title/dataPath
+            # Explicit dataset fields (rare): override title/dataPath
             if s.get('fields'):
                 for fld in s['fields']:
-                    # Тип поля набора: DataSetFieldField (дефолт) vs DataSetFieldNestedDataSet
-                    # (поле-вложенный набор = реквизит табличной части; маркер nested).
-                    # folder = папка-группировка полей (DataSetFieldFolder, без <field>); nested = вложенный набор.
+                    # Dataset field type: DataSetFieldField (default) vs DataSetFieldNestedDataSet
+                    # (nested dataset field = tabular section attribute; nested marker).
+                    # folder = field grouping folder (DataSetFieldFolder, without <field>); nested = nested dataset.
                     is_folder = bool(fld.get('folder'))
                     ftype = 'DataSetFieldNestedDataSet' if fld.get('nested') else ('DataSetFieldFolder' if is_folder else 'DataSetFieldField')
                     lines.append(f'{si}<Field xsi:type="dcssch:{ftype}">')
-                    # dataPath: явный (включая "" → self-closing) побеждает; иначе fallback на field.
+                    # dataPath: explicit (including "" → self-closing) wins; otherwise fallback to field.
                     if fld.get('dataPath') is not None:
                         dp = str(fld.get('dataPath'))
                     elif is_folder:
@@ -5917,31 +5917,31 @@ def emit_attributes(lines, attrs, indent, conditional_appearance=None):
                         lines.append(f'{si}\t<dcssch:title xsi:type="v8:LocalStringType">')
                         emit_ml_items(lines, f'{si}\t\t', fld['title'])
                         lines.append(f'{si}\t</dcssch:title>')
-                    # Ограничения использования поля — после title, перед presentationExpression
+                    # Field usage restrictions - after title, before presentationExpression
                     emit_restrict_block(lines, 'useRestriction', fld.get('useRestriction'), f'{si}\t')
                     emit_restrict_block(lines, 'attributeUseRestriction', fld.get('attributeUseRestriction'), f'{si}\t')
-                    # presentationExpression поля — перед valueType (порядок исходника)
+                    # field presentationExpression - before valueType (source order)
                     if fld.get('presentationExpression'):
                         lines.append(f'{si}\t<dcssch:presentationExpression>{esc_xml_text(str(fld["presentationExpression"]))}</dcssch:presentationExpression>')
-                    # valueType поля набора (тип значения; вычисляемые/кастомные поля)
+                    # dataset field valueType (value type; calculated/custom fields)
                     if fld.get('valueType'):
                         emit_dl_value_type(lines, fld['valueType'], f'{si}\t')
-                    # appearance поля (формат/оформление) — после valueType (порядок исходника)
+                    # field appearance (format/appearance) - after valueType (source order)
                     if fld.get('appearance'):
                         lines.append(f'{si}\t<dcssch:appearance>')
                         for ak, av in fld['appearance'].items():
                             emit_appearance_value(lines, ak, av, f'{si}\t\t')
                         lines.append(f'{si}\t</dcssch:appearance>')
-                    # inputParameters поля (связь по параметрам выбора) — в конце
+                    # field inputParameters (choice parameter link) - at the end
                     if fld.get('inputParameters'):
                         emit_dl_input_parameters(lines, fld['inputParameters'], f'{si}\t')
                     lines.append(f'{si}</Field>')
-            # Вычисляемые поля DataSet (<CalculatedField>) — после Field*, до Parameter*.
+            # Calculated DataSet fields (<CalculatedField>) - after Field*, before Parameter*.
             emit_calc_fields(lines, s.get('calculatedFields'), si)
-            # Schema-параметры дин-списка (DataCompositionSchemaParameter) — после Field*, до MainTable.
+            # Dynamic list schema parameters (DataCompositionSchemaParameter) - after Field*, before MainTable.
             emit_dl_parameters(lines, s.get('parameters'), si)
-            # Ключ набора (query-based список без MainTable): KeyType (RowNumber/FieldValue/RowKey)
-            # + KeyField* — после Parameter*, до MainTable. Захват/эмит факт. значений.
+            # Dataset key (query-based list without MainTable): KeyType (RowNumber/FieldValue/RowKey)
+            # + KeyField* - after Parameter*, before MainTable. Capture/emit actual values.
             if s.get('keyType'):
                 lines.append(f'{si}<KeyType>{esc_xml_text(str(s["keyType"]))}</KeyType>')
             if s.get('keyFields'):
@@ -5949,23 +5949,23 @@ def emit_attributes(lines, attrs, indent, conditional_appearance=None):
                     lines.append(f'{si}<KeyField>{esc_xml_text(str(kf))}</KeyField>')
             if s.get('mainTable'):
                 lines.append(f'{si}<MainTable>{normalize_meta_type_ref(str(s["mainTable"]))}</MainTable>')
-            # GetInvisibleFieldPresentations — после MainTable (дефолт true; эмитим только при заданном ключе = отклонении false).
+            # GetInvisibleFieldPresentations - after MainTable (default true; emit only when the key is set = deviation false).
             if s.get('getInvisibleFieldPresentations') is not None:
                 lines.append(f'{si}<GetInvisibleFieldPresentations>{"true" if s["getInvisibleFieldPresentations"] else "false"}</GetInvisibleFieldPresentations>')
-            # AutoSaveUserSettings — после MainTable (дефолт true; эмитим только при заданном ключе = отклонении).
+            # AutoSaveUserSettings - after MainTable (default true; emit only when the key is set = deviation).
             if s.get('autoSaveUserSettings') is not None:
                 lines.append(f'{si}<AutoSaveUserSettings>{"true" if s["autoSaveUserSettings"] else "false"}</AutoSaveUserSettings>')
-            # ListSettings: filter/order/conditionalAppearance (skd-грамматика) + каноничные блок-GUID.
-            # Нет items → контейнеры всё равно эмитятся (blockMeta) = каноничный пустой скелет платформы.
+            # ListSettings: filter/order/conditionalAppearance (skd grammar) + canonical block GUIDs.
+            # No items → containers are still emitted (blockMeta) = the platform's canonical empty skeleton.
             lsi = f'{si}\t'
             lines.append(f'{si}<ListSettings>')
-            ls_open_idx = len(lines) - 1  # для self-closing, если внутри ничего не эмитнётся
+            ls_open_idx = len(lines) - 1  # for self-closing if nothing is emitted inside
             ls_shape = s.get('listSettings')
             if ls_shape is not None:
-                # Частичная/минимальная форма скелета — эмитим ТОЛЬКО указанные части с их блок-метой.
+                # Partial/minimal skeleton shape - emit ONLY the specified parts with their block meta.
                 for tag, pv in ls_shape.items():
-                    # Значение дескриптора: строка-код "vu" ИЛИ объект {meta, presentation}
-                    # (контейнер несёт собственный userSettingPresentation — подпись настройки).
+                    # Descriptor value: code string "vu" OR object {meta, presentation}
+                    # (the container carries its own userSettingPresentation - the setting caption).
                     if isinstance(pv, dict):
                         meta = str(pv.get('meta', '')); bpres = pv.get('presentation')
                     else:
@@ -5991,26 +5991,26 @@ def emit_attributes(lines, attrs, indent, conditional_appearance=None):
                     elif tag == 'structure':
                         emit_list_grouping(lines, get_list_grouping_value(s), lsi)
             else:
-                # Полный каноничный скелет (умолчание, ~93% форм) — без изменений.
+                # Full canonical skeleton (default, ~93% of forms) - unchanged.
                 emit_filter(lines, s.get('filter'), lsi, block_view_mode='Normal', block_user_setting_id=CANON_FILTER_ID)
-                # dataParameters — после filter, до order (XSD-порядок ListSettings)
+                # dataParameters - after filter, before order (ListSettings XSD order)
                 if 'dataParameters' in s:
                     emit_data_parameters(lines, s.get('dataParameters'), lsi)
                 emit_order(lines, s.get('order'), lsi, block_view_mode='Normal', block_user_setting_id=CANON_ORDER_ID)
                 emit_conditional_appearance(lines, s.get('conditionalAppearance'), lsi, block_view_mode='Normal', block_user_setting_id=CANON_CA_ID)
-                # Группировка строк списка (авторинг без round-trip дескриптора) — после CA, до itemsViewMode
+                # List row grouping (authoring without a round-trip of the descriptor) - after CA, before itemsViewMode
                 emit_list_grouping(lines, get_list_grouping_value(s), lsi)
                 lines.append(f'{lsi}<dcsset:itemsViewMode>Normal</dcsset:itemsViewMode>')
                 lines.append(f'{lsi}<dcsset:itemsUserSettingID>{CANON_ITEMS_ID}</dcsset:itemsUserSettingID>')
             if len(lines) - 1 == ls_open_idx:
-                # Пустой дескриптор listSettings:{} (оригинал = <ListSettings/>) → зеркалим self-closing.
+                # Empty listSettings:{} descriptor (original = <ListSettings/>) → mirror self-closing.
                 lines[ls_open_idx] = f'{si}<ListSettings/>'
             else:
                 lines.append(f'{si}</ListSettings>')
             lines.append(f'{inner}</Settings>')
 
         lines.append(f'{indent}\t</Attribute>')
-    # Условное оформление формы — последний child <Attributes> (та же DCS-грамматика, что settings CA)
+    # Form conditional appearance - the last child <Attributes> (the same DCS grammar as settings CA)
     emit_conditional_appearance(lines, conditional_appearance, f'{indent}\t', wrap_tag='ConditionalAppearance')
     lines.append(f'{indent}</Attributes>')
 
@@ -6051,8 +6051,8 @@ def emit_commands(lines, cmds, indent):
         lines.append(f'{indent}\t<Command name="{cmd["name"]}" id="{cmd_id}">')
         inner = f'{indent}\t\t'
 
-        # Заголовок команды (зеркало emit_title): ключ есть+непустой → эмитим; ключ есть+"" → суппресс
-        # (в оригинале <Title> нет — не додумывать); ключ отсутствует → авто-вывод из имени.
+        # Command title (mirror of emit_title): key exists+non-empty → emit; key exists+"" → suppress
+        # (the original has no <Title> - do not invent); key absent → auto-derive from the name.
         if 'title' in cmd:
             if cmd['title']:
                 emit_mltext(lines, inner, 'Title', cmd['title'])
@@ -6064,7 +6064,7 @@ def emit_commands(lines, cmds, indent):
         if cmd.get('tooltip'):
             emit_mltext(lines, inner, 'ToolTip', cmd['tooltip'])
 
-        # Доступность команды по ролям (после ToolTip, до Action)
+        # Command availability by roles (after ToolTip, before Action)
         if cmd.get('use') is not None:
             emit_xr_flag(lines, 'Use', cmd.get('use'), inner)
 
@@ -6079,8 +6079,8 @@ def emit_commands(lines, cmds, indent):
         if cmd.get('currentRowUse'):
             lines.append(f'{inner}<CurrentRowUse>{cmd["currentRowUse"]}</CurrentRowUse>')
 
-        # Используемая таблица — имя элемента-таблицы (xsi:type обязателен).
-        # Forgiving-ключи: table / associatedTableElementId (XML-тег) / ИспользуемаяТаблица (рус., регистр-незав.)
+        # Used table - table element name (xsi:type is mandatory).
+        # Forgiving keys: table / associatedTableElementId (XML tag) / ИспользуемаяТаблица (rus., case-insensitive)
         _cmd_norm = {k.replace(' ', '').lower(): v for k, v in cmd.items()}
         cmd_table = (_cmd_norm.get('table') or _cmd_norm.get('associatedtableelementid')
                      or _cmd_norm.get('используемаятаблица'))
@@ -6099,11 +6099,11 @@ def emit_commands(lines, cmds, indent):
     lines.append(f'{indent}</Commands>')
 
 
-# Командный интерфейс формы (<CommandInterface>): панели CommandBar + NavigationPanel.
-# Элемент: строка (голый command, Type=Auto) или dict. Порядок тегов:
-# Command, Type(деф. Auto), Attribute, CommandGroup, Index, DefaultVisible, Visible(xr-flag).
+# Form command interface (<CommandInterface>): CommandBar + NavigationPanel panels.
+# Element: string (bare command, Type=Auto) or dict. Tag order:
+# Command, Type(def. Auto), Attribute, CommandGroup, Index, DefaultVisible, Visible(xr-flag).
 def _resolve_command_group_key(key, panel_tag):
-    """Ключ-группа древовидной формы → CommandGroup (зависит от панели); иначе verbatim."""
+    """Tree-form group key → CommandGroup (depends on the panel); otherwise verbatim."""
     k = re.sub(r'\s', '', str(key)).lower()
     if panel_tag == 'NavigationPanel':
         m = {'important': 'FormNavigationPanelImportant', 'важное': 'FormNavigationPanelImportant',
@@ -6137,7 +6137,7 @@ def emit_command_interface(lines, ci, indent):
     lines.append(f'{indent}<CommandInterface>')
     for tag, items in present:
         lines.append(f'{inner}<{tag}>')
-        # Нормализация: плоский список пар (элемент, group-из-дерева). dict → древовидная форма.
+        # Normalization: flat list of pairs (element, group-from-tree). dict → tree form.
         flat = []
         if isinstance(items, dict):
             for gkey, gitems in items.items():
@@ -6158,7 +6158,7 @@ def emit_command_interface(lines, ci, indent):
                 idx = get_el_prop(item, ('index', 'индекс'))
                 dv = get_el_prop(item, ('defaultVisible', 'видимость', 'видимостьПоУмолчанию'))
                 vis = get_el_prop(item, ('visible', 'видимостьПоРолям', 'настройкаВидимости'))
-            # group из дерева побеждает (если задан и непустой); явный group элемента — фолбэк
+            # group from the tree wins (if set and non-empty); the element's explicit group - fallback
             if tree_group:
                 grp = tree_group
             lines.append(f'{inner}\t<Item>')
@@ -6217,7 +6217,7 @@ def emit_properties(lines, props, indent):
             # Auto PascalCase
             xml_name = p_name[0].upper() + p_name[1:]
 
-        # Пустая строка = суппресс-маркер (напр. autoTitle:"" — не эмитить и не додумывать)
+        # Empty string = suppress marker (e.g. autoTitle:"" - do not emit and do not invent)
         if isinstance(p_value, str) and p_value == '':
             continue
         # Convert boolean to lowercase
@@ -6231,8 +6231,8 @@ def emit_properties(lines, props, indent):
 
 def detect_format_version(d):
     while d:
-        # Автономная внешняя обработка/отчёт: своего Configuration.xml у неё нет, версию несёт
-        # корень самой обработки. Без этого форма и макет внутри обработки 2.21 писались бы 2.17.
+        # Standalone external data processor/report: it has no Configuration.xml of its own, the version is carried by
+        # the root of the processor itself. Without this, a form and template inside a 2.21 processor would be written as 2.17.
         ext_path = d + ".xml"
         if os.path.isfile(ext_path):
             with open(ext_path, "r", encoding="utf-8-sig") as f:
@@ -6256,7 +6256,7 @@ def detect_format_version(d):
 
 
 def format_rank(ver):
-    """"2.20" → 220, "2.9" → 209. Строковое сравнение неверно ("2.9" > "2.17")."""
+    """"2.20" → 220, "2.9" → 209. String comparison is wrong ("2.9" > "2.17")."""
     m = re.match(r'^(\d+)\.(\d+)$', ver or '')
     return int(m.group(1)) * 100 + int(m.group(2)) if m else 0
 
@@ -6400,8 +6400,8 @@ def main():
     assert_edit_allowed(out_path_resolved, "editable")
     format_version = detect_format_version(os.path.dirname(out_path_resolved))
 
-    # Объявления пространств имён — одной переменной: место эмиссии её только подставляет.
-    # Правки шапки (как xmlns:pal в формате 2.21) делаются здесь, в одном месте.
+    # Namespace declarations - in one variable: the emission site only substitutes it.
+    # Header edits (like xmlns:pal in format 2.21) are made here, in one place.
     form_ns_decl = (
         'xmlns="http://v8.1c.ru/8.3/xcf/logform"'
         ' xmlns:app="http://v8.1c.ru/8.2/managed-application/core"'
@@ -6422,9 +6422,9 @@ def main():
         ' xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"'
     )
 
-    # 2.21 (8.5) добавила в шапку пространство палитры — ради <Color> у значений перечисления.
-    # Вставляем НА МЕСТО (после lf, перед style): платформа держит объявления по алфавиту,
-    # дописать в конец нельзя.
+    # 2.21 (8.5) added the palette namespace to the header - for <Color> on enum values.
+    # Insert IN PLACE (after lf, before style): the platform keeps declarations alphabetically,
+    # appending to the end is not allowed.
     if format_rank(format_version) >= 221:
         form_ns_decl = form_ns_decl.replace(
             ' xmlns:style=',
@@ -6535,16 +6535,16 @@ def main():
     def _normalize_synonyms(el):
         if not isinstance(el, dict):
             return
-        # Companion-панели (объект/массив-значение) → commandBar/contextMenu
+        # Companion panels (object/array value) → commandBar/contextMenu
         normalize_panel_synonyms(el)
-        # Тип-синонимы: commandBar/autoCommandBar → элемент-тип ТОЛЬКО при строковом значении
+        # Type synonyms: commandBar/autoCommandBar → type element ONLY for a string value
         synonyms = {'commandBar': 'cmdBar', 'autoCommandBar': 'autoCmdBar', 'extTooltip': 'extendedTooltip'}
         for src, dst in synonyms.items():
             if src in el and dst not in el:
                 if src in STR_ONLY_TYPE_SYNONYMS and not isinstance(el[src], str):
                     continue
                 el[dst] = el.pop(src)
-        # Рекурсия в детей панелей (commandBar/contextMenu)
+        # Recurse into panel children (commandBar/contextMenu)
         for pk in ('commandBar', 'contextMenu'):
             pv = el.get(pk)
             kids = pv if isinstance(pv, list) else (pv.get('children') if isinstance(pv, dict) else None)
@@ -6577,15 +6577,15 @@ def main():
         if not isinstance(el, dict):
             return
         if el.get('table') is not None and str(el.get('path', '')) == list_name:
-            # Маркер дин-список-таблицы → emit_table эмитит блок свойств
+            # Dynamic-list table marker → emit_table emits the property block
             el['_dynList'] = True
             if 'tableAutofill' not in el:
                 el['tableAutofill'] = False
             if 'commandBarLocation' not in el:
                 el['commandBarLocation'] = 'None'
-            # RowPictureDataPath: умный дефолт <Список>.DefaultPicture, если ключ ОТСУТСТВУЕТ.
-            # Декомпилятор опускает при rpdp == smart-default; реальное отсутствие → ""-маркер (не
-            # перезатирается). Гейт has_main_table снят: дин-список без mainTable тоже несёт RowPictureDataPath.
+            # RowPictureDataPath: smart default <Список>.DefaultPicture if the key is ABSENT.
+            # The decompiler omits it when rpdp == smart-default; real absence → "" marker (not
+            # overwritten). The has_main_table gate is removed: a dynamic list without mainTable also carries RowPictureDataPath.
             if 'rowPictureDataPath' not in el:
                 el['rowPictureDataPath'] = f'{list_name}.DefaultPicture'
         if isinstance(el.get('children'), list):
@@ -6651,7 +6651,7 @@ def main():
                 names = ', '.join(c.get('name', '') for c in candidates)
                 print(f"[WARN] Multiple main-attribute candidates: {names}; specify \"main\": true explicitly")
 
-    # 1b.4: DynamicList → table heuristic (для ВСЕХ DynamicList-реквизитов, не только main)
+    # 1b.4: DynamicList → table heuristic (for ALL DynamicList attributes, not only main)
     if isinstance(defn.get('attributes'), list) and isinstance(defn.get('elements'), list):
         for attr in defn['attributes']:
             if not isinstance(attr, dict) or str(attr.get('type', '')) != 'DynamicList':
@@ -6675,7 +6675,7 @@ def main():
 
     # --- 2. Main compilation ---
     _next_id = 0
-    _seen_element_names.clear()  # пул имён элементов (на случай повторного вызова в одном процессе)
+    _seen_element_names.clear()  # element name pool (in case of a repeated call in one process)
     lines = []
 
     lines.append('<?xml version="1.0" encoding="UTF-8"?>')
@@ -6707,16 +6707,16 @@ def main():
             lines.append(f'\t\t<ExcludedCommand>{cmd}</ExcludedCommand>')
         lines.append('\t</CommandSet>')
 
-    # MobileDeviceCommandBarContent — форменный список имён командных панелей/кнопок
-    # (Presentation пустой, CheckState=0, тип xs:string — константы; варьируется только имя-Value).
-    # 12 форм корпуса несут один пустой item (Value="") — список присутствует, но не пуст по len.
+    # MobileDeviceCommandBarContent - a form-level list of command bar/button names
+    # (Presentation empty, CheckState=0, type xs:string - constants; only the name-Value varies).
+    # 12 corpus forms carry one empty item (Value="") - the list is present but not empty by len.
     if defn.get('mobileCommandBarContent') is not None and len(defn['mobileCommandBarContent']) > 0:
         lines.append('\t<MobileDeviceCommandBarContent>')
         for nm in defn['mobileCommandBarContent']:
             lines.append('\t\t<xr:Item>')
             lines.append('\t\t\t<xr:Presentation/>')
             lines.append('\t\t\t<xr:CheckState>0</xr:CheckState>')
-            # пустое значение → самозакрывающийся тег (зеркало платформы)
+            # empty value → self-closing tag (platform mirror)
             if not str(nm):
                 lines.append('\t\t\t<xr:Value xsi:type="xs:string"/>')
             else:
@@ -6737,7 +6737,7 @@ def main():
         if main_acb_def.get('horizontalAlign'):
             acb_halign = str(main_acb_def['horizontalAlign'])
     has_acb_children = bool(main_acb_def and isinstance(main_acb_def.get('children'), list) and len(main_acb_def['children']) > 0)
-    # DisplayImportance форменной панели (адаптивная важность) — атрибут тега
+    # Form-level panel DisplayImportance (adaptive importance) - tag attribute
     acb_di_attr = di_attr(main_acb_def) if main_acb_def is not None else ''
     has_inner = bool(acb_halign) or (not acb_autofill) or has_acb_children
     if has_inner:
@@ -6781,7 +6781,7 @@ def main():
     # Commands
     emit_commands(lines, defn.get('commands'), '\t')
 
-    # CommandInterface (командный интерфейс формы — последний дочерний Form)
+    # CommandInterface (form command interface - the last child of Form)
     emit_command_interface(lines, defn.get('commandInterface'), '\t')
 
     # Close
@@ -6813,21 +6813,21 @@ def main():
     if forms_leaf == 'Forms':
         object_xml_path = os.path.join(type_plural_dir, f'{object_name}.xml')
         if os.path.exists(object_xml_path):
-            # newline='' => без трансляции переводов строк: иначе CRLF молча
-            # схлопнется в LF при чтении и файл будет переписан в LF (#44/#46/#47).
+            # newline='' => no newline translation: otherwise CRLF would silently
+            # collapse to LF on read and the file would be rewritten as LF (#44/#46/#47).
             with open(object_xml_path, 'r', encoding='utf-8-sig', newline='') as f:
                 raw_text = f.read()
-            # Перевод строки вставки берём из самого файла, а не из канона:
-            # правка существующего файла сохраняет его стиль.
+            # Take the insertion newline from the file itself, not from the canon:
+            # editing an existing file preserves its style.
             eol = '\r\n' if '\r\n' in raw_text else '\n'
 
             # Check if already registered
             if f'<Form>{form_name}</Form>' not in raw_text:
                 # Insert before </ChildObjects>
                 if '</ChildObjects>' in raw_text:
-                    # Отступ вставки берём у закрывающего тега +1 уровень: подстановка
-                    # по голому '</ChildObjects>' удваивала бы уже присутствующий отступ
-                    # строки (получалось 5 табов вместо 3; через DOM — 3).
+                    # Take the insertion indent from the closing tag +1 level: substituting
+                    # by bare '</ChildObjects>' would double the line indent already present
+                    # (resulting in 5 tabs instead of 3; via DOM - 3).
                     raw_text = re.sub(r'([ \t]*)</ChildObjects>',
                                       lambda m: m.group(1) + '\t' + f'<Form>{form_name}</Form>' + eol + m.group(1) + '</ChildObjects>',
                                       raw_text, count=1)

@@ -1,19 +1,19 @@
-# Single-agent режим
+# Single-agent mode
 
-- Вся задача выполняется в этом потоке. **Не вызывай Agent/Task/SendMessage.**
-- Задача — только `tasks/task#<id>/TASK.md`: изменения в `src/cf/**` и артефакт
-  этапа. `.claude/**` — инструменты и чеклисты: только читай, не меняй.
-- `task.json` — список этапов. Для каждого `enabled`-этапа прочитай
-  `.claude/checklists/<subagent>.md` как **чеклист** и пройди его.
-- Для каждого этапа: выполни пункты, запиши артефакт (`DEVELOP.md` и т.п.),
-  обнови статус через `.claude/tools/task_status.py`.
-- Загрузку в ИБ и тесты выполняй сам, если они включены в `task.json`.
-- Навыка `task-orchestration` нет. Работай по правилу `single-agent-workflow`.
-- Все Python-команды — интерпретатором `.venv` проекта; системный `python` и
-  `pip install` не используй: зависимости уже в venv.
-- Создание метаданных: `meta-compile`; подсистема — `subsystem-compile`;
-  роль — `role-compile`. Навыков `meta-add`/`subsystem-add` не существует.
-- Сначала tool call, потом текст. План без действия — ошибка.
-- Маленькие шаги: 1 файл за `Write`, 2–3 инструмента за шаг; подробности — в файлы,
-  в чат — не больше 10 строк.
-- При «Output token limit hit» продолжай с того же места без пересказа.
+- The whole task runs in this thread. **Do not call Agent/Task/SendMessage.**
+- The task is only `tasks/task#<id>/TASK.md`: changes in `src/cf/**` and the stage
+  artifact. `.claude/**` - tools and checklists: read only, do not change.
+- `task.json` - list of stages. For each `enabled` stage read
+  `.claude/checklists/<subagent>.md` as a **checklist** and work through it.
+- For each stage: complete the items, write the artifact (`DEVELOP.md` etc.),
+  update status via `.claude/tools/task_status.py`.
+- Do the infobase load and the tests yourself if they are enabled in `task.json`.
+- There is no `task-orchestration` skill. Follow the `single-agent-workflow` rule.
+- Run all Python commands with the project `.venv` interpreter; do not use system `python` or
+  `pip install`: dependencies are already in the venv.
+- Metadata creation: `meta-compile`; subsystem - `subsystem-compile`;
+  role - `role-compile`. The `meta-add`/`subsystem-add` skills do not exist.
+- Tool call first, text after. A plan without action is an error.
+- Small steps: 1 file per `Write`, 2-3 tools per step; details go to files,
+  no more than 10 lines in chat.
+- On "Output token limit hit" continue from the same place without retelling.

@@ -1,6 +1,6 @@
 ---
 name: epf-bsp-add-command
-description: Определить команду в БСП‑описании обработки (`СведенияОВнешнейОбработке`) — открытие формы, вызов клиентского/серверного метода, заполнение объекта и т.п. Используй когда нужно зарегистрировать команду в дополнительной обработке БСП
+description: Define a command in the BSP data processor description (`СведенияОВнешнейОбработке`) - open a form, call a client/server method, fill an object, etc. Use when you need to register a command in a BSP additional data processor
 argument-hint: <ProcessorName> <Идентификатор> [ТипКоманды] [Представление]
 allowed-tools:
   - Read
@@ -9,11 +9,11 @@ allowed-tools:
   - Grep
 ---
 
-# /epf-bsp-add-command — Добавление команды БСП
+# /epf-bsp-add-command - Adding a BSP command
 
-Добавляет команду в существующую функцию `СведенияОВнешнейОбработке()` и генерирует соответствующий обработчик.
+Adds a command to the existing `СведенияОВнешнейОбработке()` function and generates the corresponding handler.
 
-Предварительно обработка должна быть инициализирована через `/epf-bsp-init`.
+First the data processor must be initialized via `/epf-bsp-init`.
 
 ## Usage
 
@@ -21,31 +21,31 @@ allowed-tools:
 /epf-bsp-add-command <ProcessorName> <Идентификатор> [ТипКоманды] [Представление]
 ```
 
-| Параметр      | Обязательный | По умолчанию          | Описание                                   |
+| Parameter      | Required | Default          | Description                                   |
 |---------------|:------------:|-----------------------|--------------------------------------------|
-| ProcessorName | да           | —                     | Имя обработки                              |
-| Идентификатор | да           | —                     | Внутреннее имя команды (латиница)          |
-| ТипКоманды    | нет          | из вида обработки     | Тип запуска команды (см. маппинг ниже)     |
-| Представление | нет          | = Идентификатор       | Отображаемое имя команды для пользователя  |
-| SrcDir        | нет          | `src`                 | Каталог исходников                         |
+| ProcessorName | yes          | -                     | Data processor name                              |
+| Идентификатор | yes          | -                     | Internal command name (Latin)          |
+| ТипКоманды    | no           | from the data processor kind     | Command launch type (see the mapping below)     |
+| Представление | no           | = Идентификатор       | Command display name for the user  |
+| SrcDir        | no           | `src`                 | Source directory                         |
 
-## Маппинг типов команд
+## Command type mapping
 
-Пользователь может указать тип в свободной форме:
+The user can specify the type in free form:
 
-| Пользователь пишет                    | ТипКоманды                                | Доступен для вида обработки |
+| What the user writes                    | ТипКоманды                                | Available for the data processor kind |
 |---------------------------------------|-------------------------------------------|-----------------------------|
-| открыть форму, форма                  | `ТипКомандыОткрытиеФормы()`               | любого                      |
-| клиентский метод, на клиенте          | `ТипКомандыВызовКлиентскогоМетода()`      | любого                      |
-| серверный метод, на сервере           | `ТипКомандыВызовСерверногоМетода()`       | любого                      |
-| заполнение формы, заполнить форму     | `ТипКомандыЗаполнениеФормы()`             | ЗаполнениеОбъекта           |
-| загрузка из файла, импорт из файла    | `ТипКомандыЗагрузкаДанныхИзФайла()`       | ДополнительнаяОбработка; в конфигурации должна быть подсистема «Загрузка данных из файла» |
+| open form, form                  | `ТипКомандыОткрытиеФормы()`               | any                      |
+| client method, on the client          | `ТипКомандыВызовКлиентскогоМетода()`      | any                      |
+| server method, on the server           | `ТипКомандыВызовСерверногоМетода()`       | any                      |
+| form filling, fill the form     | `ТипКомандыЗаполнениеФормы()`             | ЗаполнениеОбъекта           |
+| loading from file, import from file    | `ТипКомандыЗагрузкаДанныхИзФайла()`       | ДополнительнаяОбработка; the configuration must have the subsystem «Загрузка данных из файла» |
 
-Других типов команд в БСП нет. Если запрошенный тип не подходит ни под одну строку — спроси пользователя, не придумывай метод. Если тип недоступен для вида обработки — сообщи об этом и не добавляй команду.
+BSP has no other command types. If the requested type does not fit any row - ask the user, do not invent a method. If the type is unavailable for the data processor kind - tell about it and do not add the command.
 
-Если пользователь не указал тип — определи по виду обработки из существующего кода `СведенияОВнешнейОбработке()`:
+If the user did not specify the type - determine it by the data processor kind from the existing `СведенияОВнешнейОбработке()` code:
 
-| Вид обработки (из кода)    | ТипКоманды по умолчанию                   |
+| Data processor kind (from the code)    | Default ТипКоманды                   |
 |----------------------------|-------------------------------------------|
 | ДополнительнаяОбработка    | `ТипКомандыОткрытиеФормы()`               |
 | ДополнительныйОтчет       | `ТипКомандыОткрытиеФормы()`               |
@@ -54,9 +54,9 @@ allowed-tools:
 | ПечатнаяФорма              | `ТипКомандыВызовСерверногоМетода()`        |
 | СозданиеСвязанныхОбъектов  | `ТипКомандыВызовСерверногоМетода()`        |
 
-## Шаблон добавления команды
+## Command addition template
 
-Вставляется в `СведенияОВнешнейОбработке()` **перед** строкой `Возврат ПараметрыРегистрации`:
+Inserted into `СведенияОВнешнейОбработке()` **before** the `Возврат ПараметрыРегистрации` line:
 
 ```bsl
 	НоваяКоманда = ПараметрыРегистрации.Команды.Добавить();
@@ -66,42 +66,42 @@ allowed-tools:
 	НоваяКоманда.ПоказыватьОповещение = Ложь;
 ```
 
-Для печатных форм (ВидОбработкиПечатнаяФорма) добавь также:
+For print forms (ВидОбработкиПечатнаяФорма) also add:
 
 ```bsl
 	НоваяКоманда.Модификатор = "ПечатьMXL";
 ```
 
-Для команды ЗагрузкаДанныхИзФайла `Модификатор` обязателен: полное имя справочника, в который загружаются данные. Если пользователь его не назвал — спроси.
+For the ЗагрузкаДанныхИзФайла command `Модификатор` is required: the full name of the catalog into which data is loaded. If the user did not name it - ask.
 
 ```bsl
 	НоваяКоманда.Модификатор = "Справочник.Номенклатура";
 ```
 
-Примечание: в отличие от первой команды (из `/epf-bsp-init`), дополнительные команды используют строковые литералы `НСтр("ru = '...'")` для представления и строку для идентификатора, а не `Метаданные()`.
+Note: unlike the first command (from `/epf-bsp-init`), additional commands use string literals `НСтр("ru = '...'")` for the representation and a string for the identifier, not `Метаданные()`.
 
-## Шаблоны обработчиков
+## Handler templates
 
-Шаблон выбирается по паре «тип команды × вид обработки».
+The template is chosen by the pair "command type x data processor kind".
 
 ### ОткрытиеФормы
 
-Обработчик не нужен: открывается основная форма обработки, идентификатор команды приходит в `Параметры.ИдентификаторКоманды`.
+Handler not needed: the main data processor form opens, the command identifier comes in `Параметры.ИдентификаторКоманды`.
 
-### ВызовСерверногоМетода, ЗаполнениеФормы — если обработчик уже есть
+### ВызовСерверногоМетода, ЗаполнениеФормы - if a handler already exists
 
-Если процедура `ВыполнитьКоманду` уже существует в модуле объекта, добавь ветку перед `КонецЕсли`:
+If the `ВыполнитьКоманду` procedure already exists in the object module, add a branch before `КонецЕсли`:
 
 ```bsl
 	ИначеЕсли ИдентификаторКоманды = "{{Идентификатор}}" Тогда
 		// TODO: Реализация {{Идентификатор}}
 ```
 
-### ВызовСерверногоМетода, ЗаполнениеФормы — если обработчика нет
+### ВызовСерверногоМетода, ЗаполнениеФормы - if there is no handler
 
-Процедура добавляется в модуль объекта. Сигнатура зависит от вида обработки.
+The procedure is added to the object module. The signature depends on the data processor kind.
 
-ДополнительнаяОбработка, ДополнительныйОтчет (без `ОбъектыНазначения`):
+ДополнительнаяОбработка, ДополнительныйОтчет (without `ОбъектыНазначения`):
 
 ```bsl
 Процедура ВыполнитьКоманду(ИдентификаторКоманды, ПараметрыВыполненияКоманды) Экспорт
@@ -125,9 +125,9 @@ allowed-tools:
 КонецПроцедуры
 ```
 
-Для команды типа ЗаполнениеФормы обработчик тот же: `ОбъектыНазначения` = `Неопределено`, заполняемая форма передаётся в `ПараметрыВыполненияКоманды.ЭтаФорма`.
+For a command of the ЗаполнениеФормы type the handler is the same: `ОбъектыНазначения` = `Неопределено`, the form being filled is passed in `ПараметрыВыполненияКоманды.ЭтаФорма`.
 
-СозданиеСвязанныхОбъектов (ссылки созданных объектов добавляются в массив `СозданныеОбъекты`):
+СозданиеСвязанныхОбъектов (references of created objects are added to the `СозданныеОбъекты` array):
 
 ```bsl
 Процедура ВыполнитьКоманду(ИдентификаторКоманды, ОбъектыНазначения, СозданныеОбъекты, ПараметрыВыполненияКоманды) Экспорт
@@ -139,9 +139,9 @@ allowed-tools:
 КонецПроцедуры
 ```
 
-### ПечатнаяФорма — если процедура Печать уже есть
+### ПечатнаяФорма - if the Печать procedure already exists
 
-Добавь блок перед `КонецПроцедуры`:
+Add a block before `КонецПроцедуры`:
 
 ```bsl
 	ПечатнаяФорма = УправлениеПечатью.СведенияОПечатнойФорме(КоллекцияПечатныхФорм, "{{Идентификатор}}");
@@ -151,7 +151,7 @@ allowed-tools:
 	КонецЕсли;
 ```
 
-### ПечатнаяФорма — если процедуры Печать нет
+### ПечатнаяФорма - if there is no Печать procedure
 
 ```bsl
 Процедура Печать(МассивОбъектов, КоллекцияПечатныхФорм, ОбъектыПечати, ПараметрыВывода) Экспорт
@@ -167,7 +167,7 @@ allowed-tools:
 
 ### ВызовКлиентскогоМетода
 
-Добавляется в **модуль основной формы** (`Forms/<FormName>/Ext/Form/Module.bsl`). Имя и сигнатура зависят от вида обработки.
+Added to the **main form module** (`Forms/<FormName>/Ext/Form/Module.bsl`). The name and signature depend on the data processor kind.
 
 ДополнительнаяОбработка, ДополнительныйОтчет:
 
@@ -208,7 +208,7 @@ allowed-tools:
 КонецПроцедуры
 ```
 
-ПечатнаяФорма (процедура называется `Печать`, не `ВыполнитьКоманду`):
+ПечатнаяФорма (the procedure is called `Печать`, not `ВыполнитьКоманду`):
 
 ```bsl
 &НаКлиенте
@@ -221,11 +221,11 @@ allowed-tools:
 КонецПроцедуры
 ```
 
-Если процедура уже есть — добавь ветку `ИначеЕсли`.
+If the procedure already exists - add an `ИначеЕсли` branch.
 
 ### ЗагрузкаДанныхИзФайла
 
-В модуль объекта добавляются три экспортные процедуры. Если какая-то из них уже есть — добавь в неё ветку `ИначеЕсли`.
+Three export procedures are added to the object module. If one of them already exists - add an `ИначеЕсли` branch to it.
 
 ```bsl
 Процедура ОпределитьПараметрыЗагрузкиДанныхИзФайла(ИдентификаторКоманды, ПараметрыЗагрузки) Экспорт
@@ -255,25 +255,25 @@ allowed-tools:
 КонецПроцедуры
 ```
 
-Колонки загружаемых данных берутся из макета обработки `ЗагрузкаДанныхИзФайла` (имя макета можно переопределить через `ПараметрыЗагрузки.ИмяМакетаСШаблоном`). Если макета нет — предложи создать его через `/template-add`.
+Columns of the loaded data are taken from the `ЗагрузкаДанныхИзФайла` data processor template (the template name can be overridden via `ПараметрыЗагрузки.ИмяМакетаСШаблоном`). If there is no template - suggest creating it via `/template-add`.
 
-## Инструкции
+## Instructions
 
-1. Найди и прочитай `ObjectModule.bsl` через Glob: `src/{{ProcessorName}}/Ext/ObjectModule.bsl`
-2. Убедись что `СведенияОВнешнейОбработке()` существует. Если нет — предложи вызвать `/epf-bsp-init`
-3. Определи вид обработки из существующего кода (найди строку с `ВидОбработки...()`)
-4. Вставь блок команды **перед** `Возврат ПараметрыРегистрации`
-5. Добавь обработчик по шаблону для типа команды и вида обработки из шага 3:
-   - Для серверных обработчиков и ЗагрузкаДанныхИзФайла — в `ObjectModule.bsl`, область `ПрограммныйИнтерфейс`
-   - Для клиентских обработчиков — в модуль основной формы (найти через Glob: `src/{{ProcessorName}}/Forms/*/Ext/Form/Module.bsl`)
-6. Если обработчик (`ВыполнитьКоманду` / `Печать` / процедуры загрузки) уже есть — добавь ветку, не создавай дубль процедуры
-7. Используй табы для отступов
+1. Find and read `ObjectModule.bsl` via Glob: `src/{{ProcessorName}}/Ext/ObjectModule.bsl`
+2. Make sure `СведенияОВнешнейОбработке()` exists. If not - suggest calling `/epf-bsp-init`
+3. Determine the data processor kind from the existing code (find the line with `ВидОбработки...()`)
+4. Insert the command block **before** `Возврат ПараметрыРегистрации`
+5. Add a handler using the template for the command type and data processor kind from step 3:
+   - For server handlers and ЗагрузкаДанныхИзФайла - in `ObjectModule.bsl`, region `ПрограммныйИнтерфейс`
+   - For client handlers - in the main form module (find via Glob: `src/{{ProcessorName}}/Forms/*/Ext/Form/Module.bsl`)
+6. If the handler (`ВыполнитьКоманду` / `Печать` / loading procedures) already exists - add a branch, do not create a duplicate procedure
+7. Use tabs for indentation
 
-## Пример
+## Example
 
-Пользователь: `/epf-bsp-add-command МояОбработка ЗаказПокупателя серверный "Заказ покупателя"`
+User: `/epf-bsp-add-command МояОбработка ЗаказПокупателя серверный "Заказ покупателя"`
 
-В `СведенияОВнешнейОбработке()` перед `Возврат` добавится:
+In `СведенияОВнешнейОбработке()` before `Возврат` the following will be added:
 
 ```bsl
 	НоваяКоманда = ПараметрыРегистрации.Команды.Добавить();
@@ -283,4 +283,4 @@ allowed-tools:
 	НоваяКоманда.ПоказыватьОповещение = Ложь;
 ```
 
-И в существующую процедуру `ВыполнитьКоманду` добавится блок обработки.
+And a handling block will be added to the existing `ВыполнитьКоманду` procedure.

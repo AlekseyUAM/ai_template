@@ -34,14 +34,14 @@ def test_select_multiplication_not_flagged():
 def test_many_tables_flagged():
     q = "ВЫБРАТЬ Т0.Код ИЗ Спр.A КАК Т0 " + " ".join(
         f"ЛЕВОЕ СОЕДИНЕНИЕ Спр.T{i} КАК Т{i} ПО Т{i}.Ссылка = Т0.Ссылка" for i in range(1, 7))
-    assert "many-joins" in _codes(q)   # 7 таблиц
+    assert "many-joins" in _codes(q)   # 7 tables
 
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test_six_tables_not_flagged():
     q = "ВЫБРАТЬ Т0.Код ИЗ Спр.A КАК Т0 " + " ".join(
         f"ЛЕВОЕ СОЕДИНЕНИЕ Спр.T{i} КАК Т{i} ПО Т{i}.Ссылка = Т0.Ссылка" for i in range(1, 6))
-    assert "many-joins" not in _codes(q)  # 6 таблиц
+    assert "many-joins" not in _codes(q)  # 6 tables
 
 
 def test_context_line_of():
@@ -67,13 +67,13 @@ def test_statements_ignores_empty_trailing():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test_not_parseable_flagged():
-    # Заведомо битый синтаксис: ВЫБРАТЬ … ИЗ без источника.
+    # Deliberately broken syntax: ВЫБРАТЬ … ИЗ without a source.
     assert "query-not-parseable" in _codes("ВЫБРАТЬ Код ИЗ")
 
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test_bom_stripped_before_parse():
-    """Файлы 1С-выгрузки часто с BOM — он не должен давать query-not-parseable."""
+    """1C export files often have a BOM - it must not cause query-not-parseable."""
     q = "﻿ВЫБРАТЬ Т.Код КАК Код ИЗ Справочник.Товары КАК Т"
     assert "query-not-parseable" not in _codes(q)
 
@@ -93,12 +93,12 @@ def test_not_parseable_severity_warning():
 # ── keyword-lowercase ─────────────────────────────────
 
 def test_keyword_lowercase_flagged():
-    # ключевое слово полностью строчное
+    # keyword is entirely lowercase
     assert "keyword-lowercase" in _codes("выбрать Код из Справочник.Товары")
 
 
 def test_keyword_lowercase_mixed_case_flagged():
-    # ключевое слово в смешанном регистре
+    # keyword in mixed case
     assert "keyword-lowercase" in _codes("Выбрать Код Из Справочник.Товары")
 
 
@@ -122,9 +122,9 @@ def test_keyword_uppercase_join_not_flagged():
 
 
 def test_keyword_as_alias_value_not_flagged():
-    # слово «выбрать» в строковом литерале не должно давать ложное срабатывание
-    # (простой случай: оно не является ключевым словом в SQL-контексте)
-    # Проверяем, что нормальный запрос без строковых литералов не ложно срабатывает
+    # the word «выбрать» in a string literal must not cause a false hit
+    # (simple case: it is not a keyword in SQL context)
+    # Check that a normal query without string literals does not trigger falsely
     assert "keyword-lowercase" not in _codes(
         "ВЫБРАТЬ Ссылка, Наименование ИЗ Справочник.Номенклатура"
     )
@@ -134,11 +134,11 @@ def test_keyword_lowercase_not_flagged_in_dotted_field():
     assert "keyword-lowercase" not in _codes("ВЫБРАТЬ Т.конец ИЗ Регистр.Остатки КАК Т")
 
 
-# ── alias-collides-with-field (ошибки 1 и 3) ─────────
+# ── alias-collides-with-field (errors 1 and 3) ─────────
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test_alias_collides_with_field_flagged():
-    # Псевдоним «Номенклатура» источника совпал с именем поля ТЧ.
+    # The source alias «Номенклатура» matched the name of a tabular section field.
     q = (
         "ВЫБРАТЬ СписокНоменклатуры.Номенклатура КАК Номенклатура "
         "ИЗ Документ.ПриходнаяНакладная.СписокНоменклатуры КАК СписокНоменклатуры "
@@ -150,7 +150,7 @@ def test_alias_collides_with_field_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test_alias_collides_with_field_in_join_key():
-    # Псевдоним «Партия» совпал с полем ВТ в ключе соединения (ошибка 3).
+    # The alias «Партия» matched a VT field in the join key (error 3).
     q = (
         "ВЫБРАТЬ ВТОстаткиСырые.Партия КАК Партия "
         "ПОМЕСТИТЬ ВТОстатки "
@@ -163,7 +163,7 @@ def test_alias_collides_with_field_in_join_key():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test_alias_no_collision_not_flagged():
-    # Непересекающийся псевдоним «СпрНоменклатура» — срабатывать не должно.
+    # Non-overlapping alias «СпрНоменклатура» - must not trigger.
     q = (
         "ВЫБРАТЬ СписокНоменклатуры.Номенклатура КАК Номенклатура "
         "ИЗ Документ.ПриходнаяНакладная.СписокНоменклатуры КАК СписокНоменклатуры "
@@ -173,10 +173,10 @@ def test_alias_no_collision_not_flagged():
     assert "alias-collides-with-field" not in _codes(q)
 
 
-# ── order-after-totals (ошибка 2) ────────────────────
+# ── order-after-totals (error 2) ────────────────────
 
 def test_order_after_totals_flagged():
-    # Текстовое правило — работает и без node.
+    # Text rule - works without node too.
     q = (
         "ВЫБРАТЬ ВТП.Номенклатура КАК Номенклатура "
         "ИЗ ВТПотребности КАК ВТП "
@@ -201,7 +201,7 @@ def test_totals_without_order_not_flagged():
     assert "order-after-totals" not in _codes(q)
 
 
-# ── totals-field-not-aggregated (ошибка 4) ───────────
+# ── totals-field-not-aggregated (error 4) ───────────
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test_totals_field_not_aggregated_flagged():
@@ -225,7 +225,7 @@ def test_totals_field_aggregated_not_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test_totals_grouping_field_not_flagged():
-    # Группировочное поле (Номенклатура) на строках-итогах заполнено — не флагуется.
+    # The grouping field (Номенклатура) is filled on totals rows - not flagged.
     q = (
         "ВЫБРАТЬ Т.Номенклатура КАК Номенклатура "
         "ИЗ РегистрСведений.Цены КАК Т "
@@ -254,8 +254,8 @@ def test_totals_field_not_aggregated_is_error():
 
 
 def test_keyword_case_expression_words_not_flagged_as_alias():
-    # «Конец», «Выбор», «Когда», «Тогда», «Иначе» как псевдоним поля (КАК Конец)
-    # не должны давать ложное срабатывание keyword-lowercase (Fix 2).
+    # «Конец», «Выбор», «Когда», «Тогда», «Иначе» as a field alias (КАК Конец)
+    # must not cause a false keyword-lowercase hit (Fix 2).
     assert "keyword-lowercase" not in _codes("ВЫБРАТЬ Т.Дата КАК Конец ИЗ Спр.Т КАК Т")
 
 
@@ -281,7 +281,7 @@ def test_code_blanks_strings_and_comments_preserving_positions():
 # ── query-one-line ─────────────────────────────────────
 
 def test_query_one_line_flagged():
-    # весь запрос в одну строку (ВЫБРАТЬ и ИЗ на одной строке)
+    # the whole query on one line (ВЫБРАТЬ and ИЗ on the same line)
     assert "query-one-line" in _codes(
         "ВЫБРАТЬ Код, Наименование ИЗ Справочник.Товары"
     )
@@ -294,7 +294,7 @@ def test_query_one_line_with_where_flagged():
 
 
 def test_query_multiline_not_flagged():
-    # правильно оформленный многострочный запрос
+    # a properly formatted multi-line query
     assert "query-one-line" not in _codes(
         "ВЫБРАТЬ\n\tКод,\n\tНаименование\nИЗ\n\tСправочник.Товары"
     )
@@ -332,7 +332,7 @@ def test_alias_single_char_source_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test_alias_single_char_field_not_flagged():
-    # К — псевдоним ПОЛЯ,  его не регулирует
+    # К is a FIELD alias - the rule does not cover it
     assert "alias-single-char" not in _codes("ВЫБРАТЬ Т.Код КАК К ИЗ Справочник.Товары КАК Таб")
 
 
@@ -342,7 +342,7 @@ def test_alias_source_in_join_flagged():
     assert "alias-single-char" in _codes(q)
 
 
-# ── Упорядочивание результатов запроса ────────────────
+# ── Ordering of query results ────────────────
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test_autoorder_not_recommended_flagged():
@@ -412,7 +412,7 @@ def test_union_all_multiline_not_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test_union_without_all_multiple_flagged_once_each():
-    # три члена с двумя ОБЪЕДИНИТЬ без ВСЕ — два срабатывания
+    # three members with two ОБЪЕДИНИТЬ without ВСЕ - two hits
     q = (
         "ВЫБРАТЬ А ИЗ Т1 КАК Т1\n"
         "ОБЪЕДИНИТЬ\n"
@@ -424,7 +424,7 @@ def test_union_without_all_multiple_flagged_once_each():
     assert codes.count("union-without-all") == 2
 
 
-# ── Оператор ПОДОБНО (AST-модель) ──────────────────────
+# ── ПОДОБНО operator (AST model) ──────────────────────
 
 
 def _like(q):
@@ -487,11 +487,11 @@ def test_like_in_comment_not_flagged():
     assert not any(c.startswith(":") for c in _codes('ВЫБРАТЬ Т.Код ИЗ Спр.Т КАК Т // ПОДОБНО "%x"\nГДЕ Т.Код = 1'))
 
 
-# ── Округление результатов арифметических операций ──────
+# ── Rounding of arithmetic operation results ──────
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test_division_without_cast_flagged():
-    """Деление без ВЫРАЗИТЬ — предупреждение ."""
+    """Division without ВЫРАЗИТЬ - warning ."""
     q = (
         "ВЫБРАТЬ\n"
         "    Т.Числитель / Т.Знаменатель КАК Результат\n"
@@ -503,7 +503,7 @@ def test_division_without_cast_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test_division_with_cast_not_flagged():
-    """Деление обёрнуто в ВЫРАЗИТЬ — нет предупреждения ."""
+    """Division is wrapped in ВЫРАЗИТЬ - no warning ."""
     q = (
         "ВЫБРАТЬ\n"
         "    ВЫРАЗИТЬ(Т.Числитель / Т.Знаменатель КАК Число(15,8)) КАК Результат\n"
@@ -515,24 +515,24 @@ def test_division_with_cast_not_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test_division_cast_on_operands_not_flagged():
-    """ВЫРАЗИТЬ на операндах (а не на результате) — деление внутри ВЫРАЗИТЬ-обёртки."""
+    """ВЫРАЗИТЬ on the operands (not on the result) - division inside a ВЫРАЗИТЬ wrapper."""
     q = (
         "ВЫБРАТЬ\n"
         "    ВЫРАЗИТЬ(Т.Множитель * Т.Числитель КАК Число(25,10)) / ВЫРАЗИТЬ(Т.Знаменатель КАК Число(15,10)) КАК Результат\n"
         "ИЗ\n"
         "    Таблица КАК Т"
     )
-    # выражение содержит '/', но начинается с ВЫРАЗИТЬ → flagged: нет,
-    # т.к. результат деления не обёрнут. Стандарт разрешает этот вариант
-    # (ВЫРАЗИТЬ на операндах); автопроверка его не отклоняет — сложно отличить
-    # вариант «касты на операндах» от «нет каста нигде» без семантики.
-    # Осознанно: данный сценарий НЕ флагуется (ложное не-срабатывание приемлемо).
+    # the expression contains '/', but starts with ВЫРАЗИТЬ -> flagged: no,
+    # since the division result is not wrapped. The standard allows this variant
+    # (ВЫРАЗИТЬ on the operands); the auto-check does not reject it - it is hard to distinguish
+    # the "casts on operands" variant from "no cast anywhere" without semantics.
+    # Deliberate: this scenario is NOT flagged (a false negative is acceptable).
     pass
 
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test_avg_without_cast_flagged():
-    """СРЕДНЕЕ без ВЫРАЗИТЬ — предупреждение ."""
+    """СРЕДНЕЕ without ВЫРАЗИТЬ - warning ."""
     q = (
         "ВЫБРАТЬ\n"
         "    СРЕДНЕЕ(Т.Сумма) КАК СредняяСумма\n"
@@ -544,7 +544,7 @@ def test_avg_without_cast_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test_avg_with_cast_not_flagged():
-    """СРЕДНЕЕ обёрнуто в ВЫРАЗИТЬ — нет предупреждения ."""
+    """СРЕДНЕЕ is wrapped in ВЫРАЗИТЬ - no warning ."""
     q = (
         "ВЫБРАТЬ\n"
         "    ВЫРАЗИТЬ(СРЕДНЕЕ(Т.Сумма) КАК Число(15,2)) КАК СредняяСумма\n"
@@ -556,7 +556,7 @@ def test_avg_with_cast_not_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test_division_multiline_flagged():
-    """Деление в многострочном запросе — тоже флагуется."""
+    """Division in a multi-line query - also flagged."""
     q = (
         "ВЫБРАТЬ\n"
         "    Т.КоличествоДней / 365 КАК ДоляГода,\n"
@@ -569,7 +569,7 @@ def test_division_multiline_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test_no_arithmetic_not_flagged():
-    """Обычный запрос без деления и СРЕДНЕЕ — нет срабатываний ."""
+    """A normal query without division and СРЕДНЕЕ - no hits ."""
     q = (
         "ВЫБРАТЬ\n"
         "    Т.Код,\n"
@@ -582,7 +582,7 @@ def test_no_arithmetic_not_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test_avg_is_warning_severity():
-    """СРЕДНЕЕ без ВЫРАЗИТЬ имеет severity=warning."""
+    """СРЕДНЕЕ without ВЫРАЗИТЬ has severity=warning."""
     ctx = rules.QueryContext(
         "ВЫБРАТЬ\n    СРЕДНЕЕ(Т.Цена) КАК СрЦена\nИЗ\n    Документ.Продажа КАК Т"
     )
@@ -593,7 +593,7 @@ def test_avg_is_warning_severity():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test_division_is_warning_severity():
-    """Деление без ВЫРАЗИТЬ имеет severity=warning."""
+    """Division without ВЫРАЗИТЬ has severity=warning."""
     ctx = rules.QueryContext(
         "ВЫБРАТЬ\n    Т.А / Т.Б КАК Частное\nИЗ\n    Документ.Продажа КАК Т"
     )
@@ -606,7 +606,7 @@ def test_division_is_warning_severity():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test_full_join_flagged():
-    """ПОЛНОЕ ВНЕШНЕЕ СОЕДИНЕНИЕ — должно давать предупреждение ."""
+    """ПОЛНОЕ ВНЕШНЕЕ СОЕДИНЕНИЕ - must produce a warning ."""
     q = (
         "ВЫБРАТЬ\n"
         "    ЕСТЬNULL(ПП.Номенклатура, ФП.Номенклатура) КАК Номенклатура\n"
@@ -620,7 +620,7 @@ def test_full_join_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test_left_join_not_flagged():
-    """ЛЕВОЕ СОЕДИНЕНИЕ — не должно давать ."""
+    """ЛЕВОЕ СОЕДИНЕНИЕ - must not produce ."""
     q = (
         "ВЫБРАТЬ\n"
         "    Т.Код\n"
@@ -634,7 +634,7 @@ def test_left_join_not_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test_inner_join_not_flagged():
-    """ВНУТРЕННЕЕ СОЕДИНЕНИЕ — не должно давать ."""
+    """ВНУТРЕННЕЕ СОЕДИНЕНИЕ - must not produce ."""
     q = (
         "ВЫБРАТЬ\n"
         "    Т.Код\n"
@@ -648,7 +648,7 @@ def test_inner_join_not_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test_full_join_is_warning_severity():
-    """ имеет severity=warning (методическая рекомендация, не запрет)."""
+    """ has severity=warning (a methodological recommendation, not a prohibition)."""
     ctx = rules.QueryContext(
         "ВЫБРАТЬ\n"
         "    ЕСТЬNULL(А.Код, Б.Код) КАК Код\n"
@@ -664,7 +664,7 @@ def test_full_join_is_warning_severity():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test_full_join_two_joins_flagged_twice():
-    """Два ПОЛНЫХ СОЕДИНЕНИЯ в одном пакете — два срабатывания на два запроса."""
+    """Two full joins in one package - two hits for two queries."""
     q = (
         "ВЫБРАТЬ ЕСТЬNULL(А.Код, Б.Код) КАК Код ИЗ Спр.А КАК А ПОЛНОЕ СОЕДИНЕНИЕ Спр.Б КАК Б ПО А.Ссылка = Б.Ссылка;\n"
         "ВЫБРАТЬ ЕСТЬNULL(В.Код, Г.Код) КАК Код ИЗ Спр.В КАК В ПОЛНОЕ СОЕДИНЕНИЕ Спр.Г КАК Г ПО В.Ссылка = Г.Ссылка"
@@ -672,11 +672,11 @@ def test_full_join_two_joins_flagged_twice():
     assert _codes(q).count("full-join") == 2
 
 
-# ── Вложенные запросы в условии соединения ────────────
+# ── Nested queries in a join condition ────────────
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test_subquery_in_join_on_flagged():
-    """Вложенный ВЫБРАТЬ в условии ПО — должен давать ошибку ."""
+    """Nested ВЫБРАТЬ in a ПО condition - must produce an error ."""
     q = (
         "ВЫБРАТЬ\n"
         "    Т.Код\n"
@@ -690,7 +690,7 @@ def test_subquery_in_join_on_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test_subquery_in_join_on_standard_example_flagged():
-    """Пример из стандарта  — вложенный запрос в ПО ЛЕВОГО СОЕДИНЕНИЯ."""
+    """Example from the standard  - a nested query in the ПО of a LEFT JOIN."""
     q = (
         "ВЫБРАТЬ\n"
         "    ОстаткиТоваров.Номенклатура КАК Номенклатура,\n"
@@ -712,7 +712,7 @@ def test_subquery_in_join_on_standard_example_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test_plain_join_no_subquery_not_flagged():
-    """Обычное соединение без вложенного запроса — не должно давать ."""
+    """A plain join without a nested query - must not produce ."""
     q = (
         "ВЫБРАТЬ\n"
         "    Т.Код\n"
@@ -726,7 +726,7 @@ def test_plain_join_no_subquery_not_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test_subquery_in_from_not_flagged():
-    """Вложенный запрос в ИЗ (источник данных) — не должен давать ."""
+    """A nested query in ИЗ (data source) - must not produce ."""
     q = (
         "ВЫБРАТЬ\n"
         "    П.Код\n"
@@ -738,7 +738,7 @@ def test_subquery_in_from_not_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test_subquery_in_select_field_not_flagged():
-    """Вложенный запрос в поле ВЫБРАТЬ — не должен давать ."""
+    """A nested query in a ВЫБРАТЬ field - must not produce ."""
     q = (
         "ВЫБРАТЬ\n"
         "    Т.Код,\n"
@@ -751,7 +751,7 @@ def test_subquery_in_select_field_not_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test_subquery_in_join_on_is_warning_severity():
-    """ — вложенный запрос в условии соединения — severity=warning («не следует»)."""
+    """ - a nested query in a join condition - severity=warning ("should not")."""
     ctx = rules.QueryContext(
         "ВЫБРАТЬ\n"
         "    Т.Код\n"
@@ -765,11 +765,11 @@ def test_subquery_in_join_on_is_warning_severity():
     assert subq and subq[0].severity == "warning"
 
 
-# ── Соединения с вложенными запросами и виртуальными таблицами ──
+# ── Joins with nested queries and virtual tables ──
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test_join_to_subquery_flagged():
-    """Соединение с вложенным запросом (источник данных — подзапрос) — должно давать ."""
+    """A join with a nested query (data source is a subquery) - must produce ."""
     q = (
         "ВЫБРАТЬ\n"
         "    Т.Код\n"
@@ -789,7 +789,7 @@ def test_join_to_subquery_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test_join_to_subquery_is_warning_severity():
-    """join-to-subquery — severity=warning («не следует»)."""
+    """join-to-subquery - severity=warning ("should not")."""
     q = (
         "ВЫБРАТЬ\n"
         "    Т.Код\n"
@@ -808,7 +808,7 @@ def test_join_to_subquery_is_warning_severity():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test_plain_join_to_table_not_flagged():
-    """Обычное соединение с таблицей метаданных — не должно давать join-to-subquery."""
+    """A plain join with a metadata table - must not produce join-to-subquery."""
     q = (
         "ВЫБРАТЬ\n"
         "    Т.Код\n"
@@ -822,7 +822,7 @@ def test_plain_join_to_table_not_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test_join_to_virtual_table_not_flagged():
-    """Соединение с виртуальной таблицей — не должно давать join-to-subquery."""
+    """A join with a virtual table - must not produce join-to-subquery."""
     q = (
         "ВЫБРАТЬ\n"
         "    Т.Код\n"
@@ -836,7 +836,7 @@ def test_join_to_virtual_table_not_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test_join_to_subquery_one_finding_per_query():
-    """Два соединения с подзапросами в одном запросе — одно срабатывание."""
+    """Two joins with subqueries in one query - one hit."""
     q = (
         "ВЫБРАТЬ\n"
         "    Т.Код\n"
@@ -850,11 +850,11 @@ def test_join_to_subquery_one_finding_per_query():
     assert _codes(q).count("join-to-subquery") == 1
 
 
-# ── Эффективные условия запросов ─────────────────────
+# ── Efficient query conditions ─────────────────────
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test__podstroka_in_where_flagged():
-    """ПОДСТРОКА применяется к полю в условии ГДЕ — флагуется как function-in-condition."""
+    """ПОДСТРОКА is applied to a field in a ГДЕ condition - flagged as function-in-condition."""
     q = (
         "ВЫБРАТЬ\n"
         "    Т.Код\n"
@@ -868,7 +868,7 @@ def test__podstroka_in_where_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test__month_in_where_flagged():
-    """МЕСЯЦ применяется к полю в условии ГДЕ — флагуется function-in-condition."""
+    """МЕСЯЦ is applied to a field in a ГДЕ condition - flagged by function-in-condition."""
     q = (
         "ВЫБРАТЬ\n"
         "    Т.Код\n"
@@ -882,7 +882,7 @@ def test__month_in_where_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test__year_in_where_flagged():
-    """ГОД применяется к полю в условии ГДЕ — флагуется function-in-condition."""
+    """ГОД is applied to a field in a ГДЕ condition - flagged by function-in-condition."""
     q = (
         "ВЫБРАТЬ\n"
         "    Т.Код\n"
@@ -896,7 +896,7 @@ def test__year_in_where_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test__normal_condition_not_flagged():
-    """Обычное условие Поле = Значение — не флагуется function-in-condition."""
+    """A plain Поле = Значение condition - not flagged by function-in-condition."""
     q = (
         "ВЫБРАТЬ\n"
         "    Т.Код\n"
@@ -910,9 +910,9 @@ def test__normal_condition_not_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test__podstroka_as_secondary_not_flagged():
-    """ПОДСТРОКА в ДОПОЛНИТЕЛЬНОМ условии (при наличии основного индексного
-    `Т.Код = &Код`) НЕ флагуется:  запрещает функции в ОСНОВНОМ условии,
-    а в дополнительных они допустимы (основное условие уже сузило выборку)."""
+    """ПОДСТРОКА in an ADDITIONAL condition (when a main index condition
+    `Т.Код = &Код` is present) is NOT flagged:  the standard prohibits functions in the MAIN condition,
+    while in additional ones they are allowed (the main condition has already narrowed the selection)."""
     q = (
         "ВЫБРАТЬ\n"
         "    Т.Код\n"
@@ -927,7 +927,7 @@ def test__podstroka_as_secondary_not_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test__case_as_sole_condition_flagged():
-    """ВЫБОР как единственное условие ГДЕ — флагуется case-as-sole-condition (п.5)."""
+    """ВЫБОР as the sole ГДЕ condition - flagged by case-as-sole-condition (item 5)."""
     q = (
         "ВЫБРАТЬ\n"
         "    Т.Код\n"
@@ -945,7 +945,7 @@ def test__case_as_sole_condition_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test__case_as_secondary_not_flagged():
-    """ВЫБОР как дополнительное условие (после И с основным индексным условием) — не флагуется (п.5 ПРАВИЛЬНО)."""
+    """ВЫБОР as an additional condition (after И with the main index condition) - not flagged (item 5 RIGHT)."""
     q = (
         "ВЫБРАТЬ\n"
         "    Т.Код\n"
@@ -964,7 +964,7 @@ def test__case_as_secondary_not_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test__function_in_condition_is_warning():
-    """function-in-condition имеет severity=warning."""
+    """function-in-condition has severity=warning."""
     ctx = rules.QueryContext(
         "ВЫБРАТЬ Т.Код ИЗ Справочник.Товары КАК Т\nГДЕ МЕСЯЦ(Т.Дата) = 1"
     )
@@ -975,7 +975,7 @@ def test__function_in_condition_is_warning():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test__case_sole_is_warning():
-    """case-as-sole-condition имеет severity=warning."""
+    """case-as-sole-condition has severity=warning."""
     ctx = rules.QueryContext(
         "ВЫБРАТЬ Т.Код ИЗ Спр.Т КАК Т\n"
         "ГДЕ ВЫБОР КОГДА Т.П = 1 ТОГДА Т.А > 0 ИНАЧЕ Т.Б > 0 КОНЕЦ"
@@ -987,16 +987,16 @@ def test__case_sole_is_warning():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test__no_conditions_no_false_positive():
-    """Запрос без ГДЕ — нет срабатываний ."""
+    """A query without ГДЕ - no hits ."""
     q = "ВЫБРАТЬ Т.Код ИЗ Справочник.Товары КАК Т"
     assert not any(c.startswith(":") for c in _codes(q))
 
 
-# ── Обращения к виртуальным таблицам ─────────────────
+# ── Access to virtual tables ─────────────────
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test__vt_filter_in_where_flagged():
-    """Фильтр на поле виртуальной таблицы вынесен в ГДЕ — должно флагироваться ."""
+    """A virtual table field filter is moved to ГДЕ - must be flagged ."""
     q = (
         "ВЫБРАТЬ\n"
         "    О.Номенклатура\n"
@@ -1010,7 +1010,7 @@ def test__vt_filter_in_where_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test__vt_filter_in_params_not_flagged():
-    """Фильтр передан в параметры виртуальной таблицы — не должно флагироваться ."""
+    """The filter is passed to the virtual table parameters - must not be flagged ."""
     q = (
         "ВЫБРАТЬ\n"
         "    О.Номенклатура\n"
@@ -1022,7 +1022,7 @@ def test__vt_filter_in_params_not_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test__non_virtual_where_not_flagged():
-    """Фильтр в ГДЕ на НЕ-виртуальной таблице — не должно флагироваться ."""
+    """A filter in ГДЕ on a non-virtual table - must not be flagged ."""
     q = (
         "ВЫБРАТЬ\n"
         "    Т.Наименование\n"
@@ -1036,7 +1036,7 @@ def test__non_virtual_where_not_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test__vt_filter_in_where_is_warning():
-    """vt-filter-in-where имеет severity=warning («не рекомендуется»)."""
+    """vt-filter-in-where has severity=warning ("not recommended")."""
     q = (
         "ВЫБРАТЬ\n"
         "    О.Номенклатура\n"
@@ -1051,11 +1051,11 @@ def test__vt_filter_in_where_is_warning():
     assert found and found[0].severity == "warning"
 
 
-# ── Эффективное обращение к ВТ Остатки ───────────────
+# ── Efficient access to the Остатки VT ───────────────
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test__ostatok_with_period_flagged():
-    """ВТ Остатки с явной датой (period) — должна флагироваться ."""
+    """Остатки VT with an explicit date (period) - must be flagged ."""
     q = (
         "ВЫБРАТЬ\n"
         "    О.Номенклатура,\n"
@@ -1068,7 +1068,7 @@ def test__ostatok_with_period_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test__ostatok_without_period_not_flagged():
-    """ВТ Остатки без даты (пустой первый параметр) — не должна флагироваться ."""
+    """Остатки VT without a date (empty first parameter) - must not be flagged ."""
     q = (
         "ВЫБРАТЬ\n"
         "    О.Номенклатура,\n"
@@ -1081,7 +1081,7 @@ def test__ostatok_without_period_not_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test__ostatok_empty_parens_not_flagged():
-    """ВТ Остатки() с пустыми скобками — не должна флагироваться ."""
+    """Остатки() VT with empty parentheses - must not be flagged ."""
     q = (
         "ВЫБРАТЬ\n"
         "    О.Номенклатура\n"
@@ -1093,7 +1093,7 @@ def test__ostatok_empty_parens_not_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test__ostatok_oboroty_not_flagged():
-    """ВТ ОстаткиИОбороты — не должна флагироваться  (другая таблица)."""
+    """ОстаткиИОбороты VT - must not be flagged  (a different table)."""
     q = (
         "ВЫБРАТЬ\n"
         "    О.Номенклатура\n"
@@ -1105,7 +1105,7 @@ def test__ostatok_oboroty_not_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test__non_virtual_not_flagged():
-    """Обычная таблица (не ВТ Остатки) — не должна флагироваться ."""
+    """A regular table (not the Остатки VT) - must not be flagged ."""
     q = (
         "ВЫБРАТЬ\n"
         "    Т.Код\n"
@@ -1117,8 +1117,8 @@ def test__non_virtual_not_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test__ostatok_with_period_is_info():
-    """ostatok-with-period имеет severity=info (остатки на дату — легитимны,
-    намерение по тексту не определить; правило лишь просит проверить)."""
+    """ostatok-with-period has severity=info (balances as of a date are legitimate,
+    the intent cannot be determined from the text; the rule only asks to check)."""
     q = (
         "ВЫБРАТЬ\n"
         "    О.Номенклатура\n"
@@ -1133,7 +1133,7 @@ def test__ostatok_with_period_is_info():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test__buh_ostatok_with_period_flagged():
-    """ВТ Остатки регистра бухгалтерии с датой — должна флагироваться ."""
+    """Остатки VT of an accounting register with a date - must be flagged ."""
     q = (
         "ВЫБРАТЬ\n"
         "    О.Счет\n"
@@ -1143,16 +1143,16 @@ def test__buh_ostatok_with_period_flagged():
     assert "ostatok-with-period" in _codes(q)
 
 
-# ── Число параметров виртуальных таблиц ─────────────────
+# ── Number of virtual table parameters ─────────────────
 
-# Сигнатуры ВТ фиксированы: у РН.Остатки — (Период, Условие), у РН.Обороты — 4,
-# у РН.ОстаткиИОбороты — 5, у РС.СрезПоследних/СрезПервых — 2. Опущенные хвостовые
-# параметры допустимы (значения по умолчанию), лишние — ошибка платформы.
+# VT signatures are fixed: РН.Остатки has (Период, Условие), РН.Обороты has 4,
+# РН.ОстаткиИОбороты has 5, РС.СрезПоследних/СрезПервых has 2. Omitted trailing
+# parameters are allowed (default values), extra ones are a platform error.
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test__vt_ostatki_too_many_params_flagged():
-    """РН.Остатки: фильтр по измерению передан ТРЕТЬИМ аргументом, а сигнатура —
-    (Период, Условие). Платформа такой запрос не скомпилирует."""
+    """РН.Остатки: a dimension filter is passed as the THIRD argument, but the signature is
+    (Период, Условие). The platform will not compile such a query."""
     q = (
         "ВЫБРАТЬ\n"
         "    О.Номенклатура КАК Номенклатура\n"
@@ -1169,7 +1169,7 @@ def test__vt_ostatki_too_many_params_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test__vt_ostatki_condition_in_second_param_not_flagged():
-    """Правильная форма: фильтр по измерению — во ВТОРОМ параметре (Условие)."""
+    """Correct form: the dimension filter is in the SECOND parameter (Условие)."""
     q = (
         "ВЫБРАТЬ\n"
         "    О.Номенклатура КАК Номенклатура\n"
@@ -1181,7 +1181,7 @@ def test__vt_ostatki_condition_in_second_param_not_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test__vt_ostatki_fewer_params_not_flagged():
-    """Опущенные хвостовые параметры ВТ допустимы (берутся значения по умолчанию)."""
+    """Omitted trailing VT parameters are allowed (default values are used)."""
     q = "ВЫБРАТЬ О.Номенклатура ИЗ РегистрНакопления.Товары.Остатки(&Дата) КАК О"
     assert "vt-too-many-params" not in _codes(q)
 
@@ -1224,8 +1224,8 @@ def test__vt_srez_poslednih_three_params_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test__vt_buh_ostatki_too_many_params_flagged():
-    """РБ.Остатки: максимум — 4 параметра (период, условие счёта, виды субконто,
-    условие). 5-й аргумент — ошибка независимо от состава метаданных."""
+    """РБ.Остатки: maximum is 4 parameters (period, account condition, subconto types,
+    condition). The 5th argument is an error regardless of the metadata composition."""
     q = (
         "ВЫБРАТЬ О.Счет ИЗ "
         "РегистрБухгалтерии.Хозрасчетный.Остатки(&Дата, УсловиеСчета, , , Лишний = 1) КАК О"
@@ -1239,11 +1239,11 @@ def test__vt_no_parens_not_flagged():
     assert "vt-too-many-params" not in _codes(q)
 
 
-# ── Использование временных таблиц ──────────────────────
+# ── Use of temporary tables ──────────────────────
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test__join_no_index_flagged():
-    """ВТ без ИНДЕКСИРОВАТЬ ПО участвует в JOIN — должна флагироваться temp-table-join-no-index."""
+    """A VT without ИНДЕКСИРОВАТЬ ПО participates in a JOIN - must be flagged by temp-table-join-no-index."""
     q = (
         "ВЫБРАТЬ\n"
         "    Т.Код\n"
@@ -1264,7 +1264,7 @@ def test__join_no_index_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test__join_with_index_not_flagged():
-    """ВТ с ИНДЕКСИРОВАТЬ ПО участвует в JOIN — не должна флагироваться temp-table-join-no-index."""
+    """A VT with ИНДЕКСИРОВАТЬ ПО participates in a JOIN - must not be flagged by temp-table-join-no-index."""
     q = (
         "ВЫБРАТЬ\n"
         "    Т.Код\n"
@@ -1286,7 +1286,7 @@ def test__join_with_index_not_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test__no_join_not_flagged():
-    """ВТ без ИНДЕКСИРОВАТЬ ПО, но НЕ используемая в JOIN — не должна флагироваться."""
+    """A VT without ИНДЕКСИРОВАТЬ ПО but NOT used in a JOIN - must not be flagged."""
     q = (
         "ВЫБРАТЬ\n"
         "    Т.Код\n"
@@ -1304,7 +1304,7 @@ def test__no_join_not_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test__join_no_index_is_warning():
-    """temp-table-join-no-index имеет severity=warning («следует индексировать»)."""
+    """temp-table-join-no-index has severity=warning ("should be indexed")."""
     q = (
         "ВЫБРАТЬ Т.Код ПОМЕСТИТЬ ВТ_Т ИЗ Справочник.Товары КАК Т;\n"
         "ВЫБРАТЬ ВТ.Код ИЗ ВТ_Т КАК ВТ\n"
@@ -1318,7 +1318,7 @@ def test__join_no_index_is_warning():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test__in_no_index_flagged():
-    """ВТ без ИНДЕКСИРОВАТЬ ПО используется в В (...) — должна флагироваться temp-table-in-no-index."""
+    """A VT without ИНДЕКСИРОВАТЬ ПО is used in В (...) - must be flagged by temp-table-in-no-index."""
     q = (
         "ВЫБРАТЬ\n"
         "    Т.Код\n"
@@ -1338,7 +1338,7 @@ def test__in_no_index_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test__in_with_index_not_flagged():
-    """ВТ с ИНДЕКСИРОВАТЬ ПО в В (...) — не должна флагироваться temp-table-in-no-index."""
+    """A VT with ИНДЕКСИРОВАТЬ ПО in В (...) - must not be flagged by temp-table-in-no-index."""
     q = (
         "ВЫБРАТЬ\n"
         "    Т.Код\n"
@@ -1359,7 +1359,7 @@ def test__in_with_index_not_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test__in_no_index_is_warning():
-    """temp-table-in-no-index имеет severity=warning («следует индексировать»)."""
+    """temp-table-in-no-index has severity=warning ("should be indexed")."""
     q = (
         "ВЫБРАТЬ Т.Код ПОМЕСТИТЬ ВТ_Коды ИЗ Справочник.Товары КАК Т;\n"
         "ВЫБРАТЬ Д.Ссылка ИЗ Документ.Реализация КАК Д\n"
@@ -1373,14 +1373,14 @@ def test__in_no_index_is_warning():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test__single_query_no_false_positive():
-    """Одиночный запрос без ПОМЕСТИТЬ — нет срабатываний ."""
+    """A single query without ПОМЕСТИТЬ - no hits ."""
     q = "ВЫБРАТЬ Т.Код ИЗ Справочник.Товары КАК Т"
     assert not any(c.startswith(":") for c in _codes(q))
 
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test__drop_temp_not_flagged():
-    """УНИЧТОЖИТЬ — не является ПОМЕСТИТЬ, срабатывания  не должно быть."""
+    """УНИЧТОЖИТЬ is not ПОМЕСТИТЬ, there must be no hit."""
     q = (
         "ВЫБРАТЬ Т.Код ПОМЕСТИТЬ ВТ_Т ИЗ Справочник.Товары КАК Т\n"
         "ИНДЕКСИРОВАТЬ ПО Т.Код;\n"
@@ -1389,11 +1389,11 @@ def test__drop_temp_not_flagged():
     assert not any(c.startswith(":") for c in _codes(q))
 
 
-# ── Вычисление количества записей ─────────────────────
+# ── Counting records ─────────────────────
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test__sum_one_flagged():
-    """СУММА(1) вместо КОЛИЧЕСТВО(*) — должно флагироваться sum-one-for-count."""
+    """СУММА(1) instead of КОЛИЧЕСТВО(*) - must be flagged by sum-one-for-count."""
     q = (
         "ВЫБРАТЬ\n"
         "    СУММА(1) КАК Количество\n"
@@ -1405,7 +1405,7 @@ def test__sum_one_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test__isnull_sum_one_flagged():
-    """ЕСТЬNULL(СУММА(1), 0) — должно флагироваться sum-one-for-count."""
+    """ЕСТЬNULL(СУММА(1), 0) - must be flagged by sum-one-for-count."""
     q = (
         "ВЫБРАТЬ\n"
         "    ЕСТЬNULL(СУММА(1), 0) КАК Количество\n"
@@ -1417,7 +1417,7 @@ def test__isnull_sum_one_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test__kolvo_star_not_flagged():
-    """КОЛИЧЕСТВО(*) — правильный паттерн, не должно флагироваться ."""
+    """КОЛИЧЕСТВО(*) - the correct pattern, must not be flagged ."""
     q = (
         "ВЫБРАТЬ\n"
         "    КОЛИЧЕСТВО(*) КАК Количество\n"
@@ -1429,7 +1429,7 @@ def test__kolvo_star_not_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test__kolvo_field_not_flagged():
-    """КОЛИЧЕСТВО(Т.Код) — правильный паттерн, не должно флагироваться ."""
+    """КОЛИЧЕСТВО(Т.Код) - the correct pattern, must not be flagged ."""
     q = (
         "ВЫБРАТЬ\n"
         "    КОЛИЧЕСТВО(Т.Код) КАК Количество\n"
@@ -1441,7 +1441,7 @@ def test__kolvo_field_not_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test__sum_one_is_warning():
-    """sum-one-for-count имеет severity=warning (рекомендация «следует КОЛИЧЕСТВО»)."""
+    """sum-one-for-count has severity=warning (the "one should use КОЛИЧЕСТВО" recommendation)."""
     ctx = rules.QueryContext(
         "ВЫБРАТЬ\n    СУММА(1) КАК К\nИЗ\n    Справочник.Товары КАК Т"
     )
@@ -1452,7 +1452,7 @@ def test__sum_one_is_warning():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test__sum_case_without_cast_flagged():
-    """СУММА(ВЫБОР...ТОГДА 1...) без ВЫРАЗИТЬ — должно флагироваться sum-case-without-cast."""
+    """СУММА(ВЫБОР...ТОГДА 1...) without ВЫРАЗИТЬ - must be flagged by sum-case-without-cast."""
     q = (
         "ВЫБРАТЬ\n"
         "    КОЛИЧЕСТВО(*) КАК Количество,\n"
@@ -1465,7 +1465,7 @@ def test__sum_case_without_cast_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test__sum_case_with_cast_not_flagged():
-    """СУММА(ВЫБОР...ТОГДА ВЫРАЗИТЬ(1 КАК ЧИСЛО(17,0))...) — правильный паттерн, не должно флагироваться."""
+    """СУММА(ВЫБОР...ТОГДА ВЫРАЗИТЬ(1 КАК ЧИСЛО(17,0))...) - the correct pattern, must not be flagged."""
     q = (
         "ВЫБРАТЬ\n"
         "    КОЛИЧЕСТВО(*) КАК Количество,\n"
@@ -1478,7 +1478,7 @@ def test__sum_case_with_cast_not_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test__sum_case_field_not_flagged():
-    """СУММА(ВЫБОР...ТОГДА Т.Сумма...) — не счётчик, не должно флагироваться ."""
+    """СУММА(ВЫБОР...ТОГДА Т.Сумма...) - not a counter, must not be flagged ."""
     q = (
         "ВЫБРАТЬ\n"
         "    СУММА(ВЫБОР КОГДА Т.ЭтоГруппа ТОГДА Т.Сумма ИНАЧЕ 0 КОНЕЦ) КАК СуммаГрупп\n"
@@ -1490,7 +1490,7 @@ def test__sum_case_field_not_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test__sum_case_without_cast_is_warning():
-    """sum-case-without-cast имеет severity=warning («следует» расширить разрядность)."""
+    """sum-case-without-cast has severity=warning (one "should" extend the precision)."""
     ctx = rules.QueryContext(
         "ВЫБРАТЬ\n"
         "    СУММА(ВЫБОР КОГДА Т.Ф ТОГДА 1 ИНАЧЕ 0 КОНЕЦ) КАК Кол\n"
@@ -1504,7 +1504,7 @@ def test__sum_case_without_cast_is_warning():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test__sum_field_not_flagged():
-    """СУММА(Т.Поле) — обычная сумма, не флагируется ."""
+    """СУММА(Т.Поле) - a regular sum, not flagged ."""
     q = (
         "ВЫБРАТЬ\n"
         "    СУММА(Т.Количество) КАК ОбщееКоличество\n"
@@ -1514,11 +1514,11 @@ def test__sum_field_not_flagged():
     assert not any(c.startswith(":") for c in _codes(q))
 
 
-# ── Запросы в динамических списках ────────────────────
+# ── Queries in dynamic lists ────────────────────
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test__last_query_from_temp_only_flagged():
-    """Последний SELECT в пакете выбирает ТОЛЬКО из ВТ — должно флагироваться ."""
+    """The last SELECT in the package selects ONLY from VTs - must be flagged ."""
     q = (
         "ВЫБРАТЬ\n"
         "    Т.Код\n"
@@ -1536,7 +1536,7 @@ def test__last_query_from_temp_only_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test__last_query_with_real_table_not_flagged():
-    """Последний SELECT соединяет ВТ с реальной таблицей — не флагируется ."""
+    """The last SELECT joins a VT with a real table - not flagged ."""
     q = (
         "ВЫБРАТЬ\n"
         "    Т.Код\n"
@@ -1557,7 +1557,7 @@ def test__last_query_with_real_table_not_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test__single_query_no_temp_not_flagged():
-    """Одиночный запрос без ПОМЕСТИТЬ — не флагируется ."""
+    """A single query without ПОМЕСТИТЬ - not flagged ."""
     q = (
         "ВЫБРАТЬ\n"
         "    Т.Код\n"
@@ -1569,7 +1569,7 @@ def test__single_query_no_temp_not_flagged():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test__last_query_from_temp_is_warning():
-    """last-query-from-temp-only имеет severity=warning («следует перепроектировать»)."""
+    """last-query-from-temp-only has severity=warning ("should be redesigned")."""
     q = (
         "ВЫБРАТЬ Т.Код ПОМЕСТИТЬ ВТ_Т ИЗ Справочник.Товары КАК Т;\n"
         "ВЫБРАТЬ ВТ.Код ИЗ ВТ_Т КАК ВТ"
@@ -1582,7 +1582,7 @@ def test__last_query_from_temp_is_warning():
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
 def test__drop_temp_after_real_select_not_flagged():
-    """УНИЧТОЖИТЬ — не SELECT, не влияет на определение «последнего» SELECT."""
+    """УНИЧТОЖИТЬ is not SELECT and does not affect the determination of the "last" SELECT."""
     q = (
         "ВЫБРАТЬ Т.Код ПОМЕСТИТЬ ВТ_Т ИЗ Справочник.Товары КАК Т;\n"
         "ВЫБРАТЬ ВТ.Код ИЗ ВТ_Т КАК ВТ\n"

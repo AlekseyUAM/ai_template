@@ -1,6 +1,6 @@
 ---
 name: form-remove
-description: Удалить форму из объекта 1С (обработка, отчёт, справочник, документ и др.)
+description: Remove a form from a 1C object (data processor, report, catalog, document, etc.)
 argument-hint: <ObjectName> <FormName>
 disable-model-invocation: true
 allowed-tools:
@@ -12,9 +12,9 @@ allowed-tools:
   - Grep
 ---
 
-# /form-remove — Удаление формы
+# /form-remove - Removing a form
 
-Удаляет форму и убирает её регистрацию из корневого XML объекта.
+Deletes the form and removes its registration from the object's root XML.
 
 ## Usage
 
@@ -22,27 +22,27 @@ allowed-tools:
 /form-remove <ObjectName> <FormName>
 ```
 
-| Параметр   | Обязательный | По умолчанию | Описание                            |
+| Parameter  | Required     | Default      | Description                         |
 |------------|:------------:|--------------|-------------------------------------|
-| ObjectName | да           | —            | Имя объекта                         |
-| FormName   | да           | —            | Имя формы для удаления              |
-| SrcDir     | нет          | `src`        | Каталог исходников                  |
-| Force      | нет          | —            | Удалить, даже если на форму ссылаются, и очистить ссылки |
+| ObjectName | yes          | -            | Object name                         |
+| FormName   | yes          | -            | Name of the form to delete          |
+| SrcDir     | no           | `src`        | Source directory                    |
+| Force      | no           | -            | Delete even if the form is referenced, and clear the references |
 
-## Команда
+## Command
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/form-remove.py" -ObjectName "<ObjectName>" -FormName "<FormName>" [-SrcDir "<SrcDir>"] [-Force]
 ```
 
-## Что удаляется
+## What is deleted
 
 ```
 <SrcDir>/<ObjectName>/Forms/<FormName>.xml     # Метаданные формы
 <SrcDir>/<ObjectName>/Forms/<FormName>/         # Каталог формы (рекурсивно)
 ```
 
-## Что модифицируется
+## What is modified
 
-- `<SrcDir>/<ObjectName>.xml` — убирается `<Form>` из `ChildObjects`
-- Свойства объекта, указывавшие на удалённую форму — очищаются
+- `<SrcDir>/<ObjectName>.xml` - `<Form>` is removed from `ChildObjects`
+- Object properties that pointed to the deleted form are cleared

@@ -1,6 +1,6 @@
 ---
 name: interface-edit
-description: Настройка командного интерфейса подсистемы 1С. Используй когда нужно скрыть или показать команды, разместить в группах, настроить порядок
+description: Set up the command interface of a 1C subsystem. Use when you need to hide or show commands, place them in groups, set order
 argument-hint: <CIPath> <Operation> <Value>
 allowed-tools:
   - Bash
@@ -9,22 +9,22 @@ allowed-tools:
   - Glob
 ---
 
-# /interface-edit — редактирование CommandInterface.xml
+# /interface-edit - editing CommandInterface.xml
 
-Точечное редактирование файла командного интерфейса подсистемы 1С.
+Point edits of a 1C subsystem command interface file.
 
-## Параметры
+## Parameters
 
-| Параметр | Обяз. | Описание |
+| Parameter | Req. | Description |
 |----------|:-----:|----------|
-| CIPath | да | Путь к CommandInterface.xml |
-| Operation | нет | Операция: hide, show, place, order, subsystem-order, group-order |
-| Value | нет | Значение для операции |
-| DefinitionFile | нет | JSON-файл с массивом операций (альтернатива Operation) |
-| CreateIfMissing | нет | Создать файл если не существует |
-| NoValidate | нет | Пропустить авто-валидацию |
+| CIPath | yes | Path to CommandInterface.xml |
+| Operation | no | Operation: hide, show, place, order, subsystem-order, group-order |
+| Value | no | Value for the operation |
+| DefinitionFile | no | JSON file with an array of operations (alternative to Operation) |
+| CreateIfMissing | no | Create the file if it does not exist |
+| NoValidate | no | Skip auto-validation |
 
-## Команда
+## Command
 
 ### Inline mode
 
@@ -38,18 +38,18 @@ python "${CLAUDE_SKILL_DIR}/scripts/interface-edit.py" -CIPath '<path>' -Operati
 python "${CLAUDE_SKILL_DIR}/scripts/interface-edit.py" -CIPath '<path>' -DefinitionFile '<json>'
 ```
 
-## Операции
+## Operations
 
-| Операция | Значение | Описание |
+| Operation | Value | Description |
 |----------|----------|----------|
-| hide | Cmd.Name или массив | Скрыть команду (CommandsVisibility, false) |
-| show | Cmd.Name или массив | Показать команду (visibility, true) |
-| place | {"command":"...","group":"CommandGroup.X"} | Разместить команду в группе |
-| order | {"group":"...","commands":[...]} | Задать порядок команд в группе |
-| subsystem-order | ["Subsystem.X.Subsystem.A",...] | Порядок дочерних подсистем |
-| group-order | ["NavigationPanelOrdinary",...] | Порядок групп |
+| hide | Cmd.Name or array | Hide a command (CommandsVisibility, false) |
+| show | Cmd.Name or array | Show a command (visibility, true) |
+| place | {"command":"...","group":"CommandGroup.X"} | Place a command in a group |
+| order | {"group":"...","commands":[...]} | Set command order in a group |
+| subsystem-order | ["Subsystem.X.Subsystem.A",...] | Order of child subsystems |
+| group-order | ["NavigationPanelOrdinary",...] | Order of groups |
 
-## Примеры
+## Examples
 
 ```bash
 # Скрыть команду
@@ -68,7 +68,7 @@ python "${CLAUDE_SKILL_DIR}/scripts/interface-edit.py" -CIPath '<path>' -Definit
 ... -CIPath <new-path> -Operation subsystem-order -Value '[...]' -CreateIfMissing
 ```
 
-## Верификация
+## Verification
 
 ```
 /interface-validate <CIPath>

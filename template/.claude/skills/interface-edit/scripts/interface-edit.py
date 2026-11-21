@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# interface-edit v1.22 — Edit 1C CommandInterface.xml (+русские алиасы типов: формы с ё и без)
+# interface-edit v1.22 - Edit 1C CommandInterface.xml (+Russian type aliases: forms with and without the ё letter)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 
 import argparse
@@ -10,12 +10,12 @@ import subprocess
 import sys
 from lxml import etree
 
-# Регистронезависимый ввод: имена параметров и значения choices принимаются
-# в любом регистре (в argparse по умолчанию совпадение точное).
+# Case-insensitive input: parameter names and choices values are accepted
+# in any case (argparse matches exactly by default).
 class CIDict(dict):
-    # Ключи храним КАК ЕСТЬ: часть из них — имена объектов (табличные части, стандартные
-    # реквизиты), они попадают в XML. Регистронезависим только поиск. Порядок вставки
-    # сохраняется — от него зависит порядок эмиссии.
+    # Keys are stored AS IS: some of them are object names (tabular sections, standard
+    # attributes), they get into the XML. Only lookup is case-insensitive. Insertion order
+    # is preserved - the emission order depends on it.
     def _actual(self, key):
         if not isinstance(key, str) or dict.__contains__(self, key):
             return key
@@ -38,11 +38,11 @@ class CIDict(dict):
         return dict.pop(self, self._actual(key), *default)
 
     def __setitem__(self, key, value):
-        # запись по ключу, отличающемуся регистром, обновляет существующий, а не плодит дубль
+        # writing by a key with a different case updates the existing one instead of creating a duplicate
         dict.__setitem__(self, self._actual(key), value)
 
 def ci_json(obj):
-    """Рекурсивно оборачивает разобранный JSON: словари → CIDict, списки обходятся."""
+    """Recursively wraps parsed JSON: dicts -> CIDict, lists are walked."""
     if isinstance(obj, dict):
         return CIDict((k, ci_json(v)) for k, v in obj.items())
     if isinstance(obj, list):
@@ -50,13 +50,13 @@ def ci_json(obj):
     return obj
 
 def ci_parse_args(parser, argv=None):
-    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
+    """parse_args: parameter names and choices values are accepted in any case."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
         if tok.startswith('-') and tok.lower() in names:
             argv[i] = names[tok.lower()]
-    # choices — зеркало [ValidateSet]; канонизируем ДО разбора, иначе argparse отвергнет регистр
+    # choices - mirror of [ValidateSet]; canonicalize BEFORE parsing, otherwise argparse rejects the case
     choice_map = {}
     for a in parser._actions:
         if a.choices:
@@ -248,8 +248,8 @@ def assert_edit_allowed(target_path, require):
 
 def detect_format_version(d):
     while d:
-        # Автономная внешняя обработка/отчёт: своего Configuration.xml у неё нет, версию несёт
-        # корень самой обработки. Без этого форма и макет внутри обработки 2.21 писались бы 2.17.
+        # Standalone external data processor/report: it has no Configuration.xml of its own; the version is carried by
+        # the root of the processor itself. Without this, a form and a template inside a 2.21 processor would be written as 2.17.
         ext_path = d + ".xml"
         if os.path.isfile(ext_path):
             with open(ext_path, "r", encoding="utf-8-sig") as f:
@@ -349,14 +349,14 @@ def import_ci_fragment(xml_string):
 
 
 def parse_json_input(text, source, expected=None, inline=False):
-    """Разбор пользовательского JSON: одна строка в stderr вместо traceback (issue #80).
+    """Parse user JSON: one line to stderr instead of a traceback (issue #80).
 
-    expected заполняем только для полиморфного входа: у файла подсказка
-    была бы наполнителем — имя файла и текст парсера самодостаточны. inline печатает ещё и то,
-    что доехало: у файла такого вопроса нет, он лежит на диске и его видно целиком.
+    expected is filled only for polymorphic input: for a file the hint would
+    be filler - the file name and the parser text are self-sufficient. inline also prints what
+    arrived: for a file there is no such question, it lies on disk and is visible in full.
 
-    Импорты внутри тела: копия функции живёт в навыках с разными именами модулей
-    (skd-decompile импортирует json локально как _json), а тело обязано быть одинаковым.
+    Imports inside the body: a copy of the function lives in skills with different module names
+    (skd-decompile imports json locally as _json), and the body must be identical.
     """
     import json as _pj
     import sys as _psys
@@ -380,10 +380,10 @@ def parse_json_input(text, source, expected=None, inline=False):
 
 
 def read_json_file(path):
-    """Чтение входного JSON-файла с кодировкой из BOM (issue #80).
+    """Read the input JSON file with the encoding from the BOM (issue #80).
 
-    BOM — объявление самого файла, поэтому ему верим; без BOM ждём строгий UTF-8. Кодовую
-    страницу не подбираем: угаданное имя уехало бы в метаданные молча.
+    The BOM is the file's own declaration, so we trust it; without a BOM we expect strict UTF-8. We do
+    not guess the code page: a guessed name would silently travel into metadata.
     """
     import os as _pos
     import sys as _psys
@@ -418,8 +418,8 @@ def parse_value_list(val, op_name):
 
 
 def _detect_xml_style(path):
-    """Стиль существующего файла для round-trip-сохранения: BOM / EOL / регистр encoding /
-    финальный перенос. None → файл новый (сохранить текущее поведение)."""
+    """Style of the existing file for round-trip saving: BOM / EOL / encoding case /
+    final newline. None -> file is new (keep current behavior)."""
     try:
         raw = open(path, "rb").read()
     except OSError:
@@ -434,21 +434,21 @@ def _detect_xml_style(path):
 
 
 def _finalize_xml_bytes(xml_bytes, style):
-    """Привести байты к стилю оригинала; для НОВОГО файла (style is None) — к канону
-    выгрузки Конфигуратора: encoding="UTF-8", CRLF в разделителях, без перевода в конце."""
+    """Bring bytes to the original style; for a NEW file (style is None) - to the
+    Configurator dump canon: encoding="UTF-8", CRLF in separators, no final newline."""
     enc_decl = style["enc"] if style else "UTF-8"
     xml_bytes = xml_bytes.replace(
         b"<?xml version='1.0' encoding='UTF-8'?>",
         b'<?xml version="1.0" encoding="' + enc_decl.encode("ascii") + b'"?>')
-    # Канонизировать переносы к LF (убирает &#13; от \r в tail'ах)
+    # Canonicalize line breaks to LF (removes &#13; from \r in tails)
     xml_bytes = (xml_bytes.replace(b"&#13;\n", b"\n").replace(b"&#13;", b"")
                  .replace(b"\r\n", b"\n").replace(b"\r", b"\n"))
-    # Финальный перенос — как в оригинале (новый файл → нет, канон #57)
+    # Final newline - as in the original (new file -> none, canon #57)
     want_final_nl = style["final_nl"] if style else False
     xml_bytes = xml_bytes.rstrip(b"\n")
     if want_final_nl:
         xml_bytes += b"\n"
-    # EOL — как в оригинале (новый файл → CRLF, канон #57)
+    # EOL - as in the original (new file -> CRLF, canon #57)
     if (style["crlf"] if style else True):
         xml_bytes = xml_bytes.replace(b"\n", b"\r\n")
     return xml_bytes
@@ -577,10 +577,10 @@ def main():
                 f'\tversion="{format_version}">\n'
                 f'</CommandInterface>'
             )
-            # Файл СОЗДАЁМ — пишем канон выгрузки: CRLF в разделителях. (Правка
-            # существующего файла, наоборот, наследует его стиль — это делает
-            # save_xml_bom через _detect_xml_style.) newline="" обязателен: без него
-            # текстовый режим дал бы CRLF на Windows и LF на macOS.
+            # We CREATE the file - write the dump canon: CRLF in separators. (Editing
+            # an existing file, on the contrary, inherits its style - this is done by
+            # save_xml_bom via _detect_xml_style.) newline="" is required: without it
+            # text mode would give CRLF on Windows and LF on macOS.
             empty_ci = empty_ci.replace("\r\n", "\n").replace("\n", "\r\n").rstrip("\r\n")
             with open(ci_path, "w", encoding="utf-8-sig", newline="") as fh:
                 fh.write(empty_ci)
@@ -838,7 +838,7 @@ def main():
 
     for op in operations:
         op_name = op.get("operation", args.Operation or "")
-        # Имя операции сравниваем регистронезависимо.
+        # Compare the operation name case-insensitively.
         op_key = str(op_name).lower()
         op_value = op.get("value", args.Value or "")
 

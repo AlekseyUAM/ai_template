@@ -1,6 +1,6 @@
 ---
 name: cf-validate
-description: Валидация конфигурации 1С. Используй после создания или модификации конфигурации для проверки корректности
+description: Validation of a 1C configuration. Use after creating or modifying a configuration to check correctness
 argument-hint: <ConfigPath> [-Detailed] [-MaxErrors 30]
 allowed-tools:
   - Bash
@@ -8,20 +8,20 @@ allowed-tools:
   - Glob
 ---
 
-# /cf-validate — валидация конфигурации 1С
+# /cf-validate - 1C configuration validation
 
-Проверяет Configuration.xml на структурные ошибки: XML well-formedness, InternalInfo, свойства, enum-значения, ChildObjects, DefaultLanguage, файлы языков, каталоги объектов.
+Checks Configuration.xml for structural errors: XML well-formedness, InternalInfo, properties, enum values, ChildObjects, DefaultLanguage, language files, object directories.
 
-## Параметры
+## Parameters
 
-| Параметр   | Обяз. | Умолч. | Описание                                      |
+| Parameter   | Req. | Default | Description                                      |
 |------------|:-----:|---------|-------------------------------------------------|
-| ConfigPath | да    | —       | Путь к Configuration.xml или каталогу выгрузки  |
-| Detailed   | нет   | —       | Подробный вывод (все проверки, включая успешные) |
-| MaxErrors  | нет   | 30      | Остановиться после N ошибок                     |
-| OutFile    | нет   | —       | Записать результат в файл (UTF-8 BOM)           |
+| ConfigPath | yes   | -       | Path to Configuration.xml or the export directory  |
+| Detailed   | no    | -       | Detailed output (all checks, including successful ones) |
+| MaxErrors  | no    | 30      | Stop after N errors                     |
+| OutFile    | no    | -       | Write the result to a file (UTF-8 BOM)           |
 
-## Команда
+## Command
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/cf-validate.py" -ConfigPath "upload/cfempty"

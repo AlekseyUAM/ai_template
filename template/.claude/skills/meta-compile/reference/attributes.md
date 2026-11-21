@@ -1,109 +1,109 @@
-# Объектная форма реквизита и табличной части
+# Object form of an attribute and tabular section
 
-Когда реквизиту (в `attributes` / `dimensions` / `resources` / колонках ТЧ) нужны свойства сверх
-shorthand — вместо строки задаётся объект:
+When an attribute (in `attributes` / `dimensions` / `resources` / tabular section columns) needs properties beyond
+shorthand - an object is specified instead of a string:
 
 ```json
 { "name": "Цена", "type": "Number(15,2)", "tooltip": "Цена за единицу", "fillValue": 0 }
 ```
 
-`name` и `type` обязательны (тип можно задать и раздельно: `"type": "Number", "length": 15, "precision": 2`).
-Остальные ключи — ниже, все со значением по умолчанию (не задавать, если устраивает дефолт).
+`name` and `type` are required (the type can also be set separately: `"type": "Number", "length": 15, "precision": 2`).
+The other keys are below, all with a default value (do not set them if the default is fine).
 
-## Свойства реквизита
+## Attribute properties
 
-| Ключ | Умолчание | Значения |
+| Key | Default | Values |
 |------|-----------|----------|
-| `synonym` | из имени | ML (строка или `{ru,en}`) |
-| `tooltip` | пусто | ML |
-| `comment` | пусто | строка |
-| `fillChecking` | `DontCheck` | `DontCheck` / `ShowError` (то же, что флаг `req`) |
+| `synonym` | from name | ML (string or `{ru,en}`) |
+| `tooltip` | empty | ML |
+| `comment` | empty | string |
+| `fillChecking` | `DontCheck` | `DontCheck` / `ShowError` (same as the `req` flag) |
 | `fullTextSearch` | `Use` | `Use` / `DontUse` |
 | `fillFromFillingValue` | `false` | bool |
-| `fillValue` | по типу (см. ниже) | значение заполнения |
+| `fillValue` | by type (see below) | fill value |
 | `createOnInput` | `Auto` | `Auto` / `Use` / `DontUse` |
 | `quickChoice` | `Auto` | `Auto` / `Use` / `DontUse` |
 | `choiceHistoryOnInput` | `Auto` | `Auto` / `DontUse` |
 | `dataHistory` | `Use` | `Use` / `DontUse` |
-| `use` | `ForItem` | `ForItem` / `ForFolder` / `ForFolderAndItem` (реквизит иерархического справочника) |
+| `use` | `ForItem` | `ForItem` / `ForFolder` / `ForFolderAndItem` (attribute of a hierarchical catalog) |
 | `passwordMode` | `false` | bool |
-| `multiLine` | `false` | bool (то же, что флаг `multiline`) |
-| `extendedEdit` | `false` | bool (расширенное редактирование — многострочный ввод) |
-| `mask` | пусто | строка маски ввода |
-| `format` / `editFormat` | пусто | форматная строка 1С (ML) |
-| `markNegatives` | `false` | bool (выделять отрицательные, для Number) |
-| `minValue` / `maxValue` | не задано | граница диапазона (см. ниже) |
-| `choiceParameterLinks` | пусто | связи параметров выбора (см. ниже) |
-| `choiceParameters` | пусто | параметры выбора (см. ниже) |
-| `choiceForm` | пусто | ссылка на форму выбора `Тип.Объект.Form.ИмяФормы` |
-| `choiceFoldersAndItems` | `Items` | `Items` / `Folders` / `FoldersAndItems` (что выбирать в иерарх. справочнике) |
+| `multiLine` | `false` | bool (same as the `multiline` flag) |
+| `extendedEdit` | `false` | bool (extended editing - multiline input) |
+| `mask` | empty | input mask string |
+| `format` / `editFormat` | empty | 1C format string (ML) |
+| `markNegatives` | `false` | bool (highlight negatives, for Number) |
+| `minValue` / `maxValue` | not set | range bound (see below) |
+| `choiceParameterLinks` | empty | choice parameter links (see below) |
+| `choiceParameters` | empty | choice parameters (see below) |
+| `choiceForm` | empty | reference to the choice form `Тип.Объект.Form.ИмяФормы` |
+| `choiceFoldersAndItems` | `Items` | `Items` / `Folders` / `FoldersAndItems` (what to choose in a hierarchical catalog) |
 
-Индексирование задаётся флагом `index` / `indexAdditional` в shorthand, либо в объекте — как и в строковой форме,
-через `"type": "… | index"`.
+Indexing is set by the `index` / `indexAdditional` flag in shorthand, or in the object - as in the string form,
+via `"type": "… | index"`.
 
-### `fillValue` — значение заполнения
+### `fillValue` - fill value
 
-Пустое значение по типу компилятор подставляет сам — ключ **не задают**:
+The compiler substitutes the empty value for the type itself - the key is **not set**:
 
-| Тип реквизита | Пустое значение |
+| Attribute type | Empty value |
 |---------------|-----------------|
-| String | пустая строка |
+| String | empty string |
 | Number | `0` |
-| Boolean, Date, ссылочный, составной | не задано (nil) |
+| Boolean, Date, reference, composite | not set (nil) |
 
-Ключ `fillValue` задают для **конкретного** значения — интерпретируется по типу реквизита:
+The `fillValue` key is set for a **specific** value - it is interpreted by the attribute type:
 
-- **Boolean** — `true` / `false`.
-- **Number** — число (`21`, `1.5`).
-- **String** — строка.
-- **Date** — ISO-строка `"2020-01-01T00:00:00"`.
-- **Ссылочный** — путь: `"Catalog.Валюты.EmptyRef"` (пустая ссылка), `"Enum.Периодичность.EnumValue.Месяц"`
-  (значение перечисления), `"Catalog.СтраныМира.Россия"` (предопределённый элемент).
-- **`null`** — явно «значение не задано» (nil), когда нужно перекрыть непустой дефолт типа.
-- **`{ "emptyRef": true }`** — пустая ссылка для реквизита типа `DefinedType.X` (когда тип из пути не выводится).
+- **Boolean** - `true` / `false`.
+- **Number** - a number (`21`, `1.5`).
+- **String** - a string.
+- **Date** - ISO string `"2020-01-01T00:00:00"`.
+- **Reference** - a path: `"Catalog.Валюты.EmptyRef"` (empty reference), `"Enum.Периодичность.EnumValue.Месяц"`
+  (enum value), `"Catalog.СтраныМира.Россия"` (predefined item).
+- **`null`** - explicitly "value not set" (nil), when you need to override a non-empty type default.
+- **`{ "emptyRef": true }`** - empty reference for an attribute of type `DefinedType.X` (when the type is not derived from the path).
 
-> Пустая ссылка (`EmptyRef`) и `null` — разное: платформа хранит их отдельно.
+> An empty reference (`EmptyRef`) and `null` are different: the platform stores them separately.
 
-### `minValue` / `maxValue` — границы диапазона
+### `minValue` / `maxValue` - range bounds
 
-Число → числовая граница; строка → строковая (напр. год `"2000"`). Без ключа — граница не задана.
+A number -> numeric bound; a string -> string bound (e.g. year `"2000"`). Without the key - the bound is not set.
 
-### `choiceParameterLinks` — связи параметров выбора
+### `choiceParameterLinks` - choice parameter links
 
-Связывают параметр выбора этого реквизита с другим реквизитом объекта. Массив строк или объектов:
+Link the choice parameter of this attribute to another attribute of the object. An array of strings or objects:
 
 ```json
 "choiceParameterLinks": ["Отбор.Организация=Организация", "Отбор.Договор=Договор:DontChange"]
 "choiceParameterLinks": [{ "name": "Отбор.Организация", "dataPath": "Организация", "valueChange": "Clear" }]
 ```
 
-- `dataPath` — реквизит **того же объекта**: имя обычного реквизита (`"Организация"`) или стандартного
-  (`"Владелец"`, `"Ссылка"`).
-- `valueChange` — `Clear` (по умолчанию) / `DontChange`.
+- `dataPath` - an attribute of **the same object**: the name of a regular attribute (`"Организация"`) or a standard
+  one (`"Владелец"`, `"Ссылка"`).
+- `valueChange` - `Clear` (default) / `DontChange`.
 
-### `choiceParameters` — параметры выбора
+### `choiceParameters` - choice parameters
 
-Фиксируют параметр выбора значением. Массив строк или объектов:
+Fix a choice parameter with a value. An array of strings or objects:
 
 ```json
 "choiceParameters": ["Отбор.ЭтоГруппа=false"]
 "choiceParameters": [{ "name": "Отбор.Владелец", "value": "Catalog.Организации.EmptyRef" }]
 ```
 
-- `value` — bool / число / строка / ссылочный путь (несёт тип) ИЛИ массив (список фиксированных значений).
-- Для набора голых имён-значений добавьте `type` (тип поля-фильтра), чтобы они стали ссылками:
+- `value` - bool / number / string / reference path (carries the type) OR an array (list of fixed values).
+- For a set of bare value names, add `type` (the filter field type) so that they become references:
   `{ "name": "Отбор.Тип", "type": "EnumRef.ТипыВЕТИС", "value": ["EmptyRef", "ТТН"] }`.
 
-### Редкие ключи
+### Rare keys
 
-`linkByType` — связь по типу (тип реквизита-Характеристики берётся из другого реквизита):
-`{ "dataPath": "Свойство", "linkItem": 0 }` или строка-путь. Применяется для реквизитов-характеристик.
+`linkByType` - type link (the type of the Characteristic attribute is taken from another attribute):
+`{ "dataPath": "Свойство", "linkItem": 0 }` or a path string. Used for characteristic attributes.
 
 ---
 
-## Табличная часть — объектная форма
+## Tabular section - object form
 
-Значение в `tabularSections` — массив колонок ЛИБО объект со свойствами самой ТЧ:
+The value in `tabularSections` is a column array OR an object with the properties of the tabular section itself:
 
 ```json
 "tabularSections": {
@@ -116,25 +116,25 @@ shorthand — вместо строки задаётся объект:
 }
 ```
 
-| Ключ | Умолчание | Значения |
+| Key | Default | Values |
 |------|-----------|----------|
-| `synonym` | из имени | ML |
-| `tooltip` | пусто | ML |
-| `comment` | пусто | строка |
-| `fillChecking` | `DontCheck` | `DontCheck` / `ShowError` (обязательность заполнения ТЧ) |
-| `use` | `ForItem` | `ForItem` / `ForFolder` / `ForFolderAndItem` (только Catalog / ChartOfCharacteristicTypes) |
-| `attributes` | `[]` | колонки (shorthand или объектная форма реквизита) |
-| `lineNumber` | — | кастомизация стандартного реквизита НомерСтроки (см. ниже) |
-| `lineNumberLength` | по режиму совместимости | `5`…`9` — разрядность номера строки: `5` → до 99 999 строк, `9` → до 999 999 999. Требует формата 2.20 (платформа 8.3.27) |
+| `synonym` | from name | ML |
+| `tooltip` | empty | ML |
+| `comment` | empty | string |
+| `fillChecking` | `DontCheck` | `DontCheck` / `ShowError` (tabular section fill requirement) |
+| `use` | `ForItem` | `ForItem` / `ForFolder` / `ForFolderAndItem` (only Catalog / ChartOfCharacteristicTypes) |
+| `attributes` | `[]` | columns (shorthand or attribute object form) |
+| `lineNumber` | - | customization of the standard LineNumber attribute (see below) |
+| `lineNumberLength` | depends on compatibility mode | `5`...`9` - line number width: `5` -> up to 99 999 lines, `9` -> up to 999 999 999. Requires format 2.20 (platform 8.3.27) |
 
-### `lineNumber` — стандартный реквизит НомерСтроки
+### `lineNumber` - standard LineNumber attribute
 
-У каждой ТЧ есть стандартный реквизит НомерСтроки. По умолчанию все его свойства типовые. Ключ `lineNumber`
-на объектной форме ТЧ их переопределяет:
+Every tabular section has the standard LineNumber attribute. By default all its properties are typical. The `lineNumber`
+key in the tabular section object form overrides them:
 
 ```json
 "Строки": { "lineNumber": { "synonym": "Номер п/п", "fullTextSearch": "DontUse" }, "attributes": [...] }
 ```
 
-Переопределяемые: `synonym`, `comment`, `fullTextSearch` (`Use`/`DontUse`), `tooltip`, `format`, `editFormat`,
+Overridable: `synonym`, `comment`, `fullTextSearch` (`Use`/`DontUse`), `tooltip`, `format`, `editFormat`,
 `choiceHistoryOnInput` (`Auto`/`DontUse`).

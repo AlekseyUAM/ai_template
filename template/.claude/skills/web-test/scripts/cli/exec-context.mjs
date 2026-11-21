@@ -1,4 +1,4 @@
-// web-test cli/exec-context v1.1 — buildContext + executeScript для run/exec/test
+// web-test cli/exec-context v1.1 - buildContext + executeScript for run/exec/test
 // Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import { readFileSync, writeFileSync } from 'fs';
 import { resolve, dirname } from 'path';

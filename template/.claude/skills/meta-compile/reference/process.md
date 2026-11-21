@@ -1,22 +1,22 @@
 # BusinessProcess, Task (Бизнес-процессы и Задачи)
 
-Ссылочные типы. Наследуют слой Catalog (нумерация, формы, `standardAttributes`, `characteristics`, `basedOn`,
-представления — см. `catalog.md` / `attributes.md` / `blocks.md`). Бизнес-процесс всегда связан с задачей.
+Reference types. Inherit the Catalog layer (numbering, forms, `standardAttributes`, `characteristics`, `basedOn`,
+presentations - see `catalog.md` / `attributes.md` / `blocks.md`). A business process is always linked to a task.
 
 ## BusinessProcess (Бизнес-процесс)
 
-| Ключ | Умолчание | Значения |
+| Key | Default | Values |
 |------|-----------|----------|
-| `task` | пусто | ссылка на задачу `Task.X` (обязательна для рабочего БП) |
+| `task` | empty | reference to the task `Task.X` (required for a working BP) |
 | `numberType` | `String` | `String` / `Number` |
-| `numberLength` | `11` | длина номера |
+| `numberLength` | `11` | number length |
 | `checkUnique` | `true` | bool |
 | `autonumbering` | `true` | bool |
 | `createOnInput` | `DontUse` | `Auto` / `Use` / `DontUse` |
 | `dataLockControlMode` | `Managed` | `Automatic` / `Managed` |
-| `attributes` / `tabularSections` | `[]` / `{}` | реквизиты / табличные части |
+| `attributes` / `tabularSections` | `[]` / `{}` | attributes / tabular sections |
 
-Создаётся с картой маршрута (`Ext/Flowchart.xml`) и модулем объекта.
+Created with a route map (`Ext/Flowchart.xml`) and an object module.
 
 ```json
 { "type": "BusinessProcess", "name": "Согласование", "task": "Task.ЗадачаИсполнителя",
@@ -25,24 +25,24 @@
 
 ## Task (Задача)
 
-| Ключ | Умолчание | Значения |
+| Key | Default | Values |
 |------|-----------|----------|
 | `numberType` | `String` | `String` / `Number` |
-| `numberLength` | `14` | длина номера |
+| `numberLength` | `14` | number length |
 | `checkUnique` | `true` | bool |
 | `autonumbering` | `true` | bool |
-| `descriptionLength` | `150` | длина наименования |
+| `descriptionLength` | `150` | description length |
 | `defaultPresentation` | `AsDescription` | `AsDescription` / `AsNumber` |
-| `addressing` | пусто | ссылка на регистр сведений адресации `InformationRegister.X` |
-| `mainAddressingAttribute` | пусто | основной реквизит адресации (имя реквизита адресации) |
-| `currentPerformer` | пусто | реквизит текущего исполнителя |
+| `addressing` | empty | reference to the addressing information register `InformationRegister.X` |
+| `mainAddressingAttribute` | empty | main addressing attribute (addressing attribute name) |
+| `currentPerformer` | empty | current performer attribute |
 | `createOnInput` | `DontUse` | `Auto` / `Use` / `DontUse` |
 | `dataLockControlMode` | `Managed` | `Automatic` / `Managed` |
-| `addressingAttributes` | `[]` | реквизиты адресации (см. ниже) |
-| `attributes` / `tabularSections` | `[]` / `{}` | реквизиты / табличные части |
+| `addressingAttributes` | `[]` | addressing attributes (see below) |
+| `attributes` / `tabularSections` | `[]` / `{}` | attributes / tabular sections |
 
-**Реквизит адресации** — shorthand `"Имя: Тип"` или объект `{ name, type, addressingDimension }`
-(`addressingDimension` — измерение регистра адресации).
+**Addressing attribute** - shorthand `"Имя: Тип"` or an object `{ name, type, addressingDimension }`
+(`addressingDimension` - the addressing register dimension).
 
 ```json
 { "type": "Task", "name": "ЗадачаИсполнителя",

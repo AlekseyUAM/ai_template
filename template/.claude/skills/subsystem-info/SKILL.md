@@ -1,42 +1,42 @@
 ---
 name: subsystem-info
-description: Анализ структуры подсистемы 1С из XML-выгрузки — состав, дочерние подсистемы, командный интерфейс, дерево иерархии. Используй для изучения структуры подсистем и навигации по конфигурации
-argument-hint: <SubsystemPath> [-Mode overview|content|ci|tree|full] [-Name <элемент>]
+description: Analyze 1C subsystem structure from an XML dump - content, child subsystems, command interface, hierarchy tree. Use to study subsystem structure and navigate the configuration
+argument-hint: <SubsystemPath> [-Mode overview|content|ci|tree|full] [-Name <element>]
 allowed-tools:
   - Bash
   - Read
   - Glob
 ---
 
-# /subsystem-info — Структура подсистемы 1С
+# /subsystem-info - 1C subsystem structure
 
-Читает XML подсистемы из выгрузки конфигурации 1С и выводит компактное описание структуры.
+Reads subsystem XML from a 1C configuration dump and prints a compact structure description.
 
-## Параметры и команда
+## Parameters and command
 
-| Параметр | Описание |
+| Parameter | Description |
 |----------|----------|
-| `SubsystemPath` | Путь к XML-файлу подсистемы, каталогу подсистемы или каталогу `Subsystems/` (для tree) |
-| `Mode` | Режим: `overview` (default), `content`, `ci`, `tree`, `full` |
-| `Name` | Drill-down: тип объекта в content, секция в ci, имя подсистемы в tree |
-| `Limit` / `Offset` | Пагинация (по умолчанию 150 строк) |
-| `OutFile` | Записать результат в файл (UTF-8 BOM) |
+| `SubsystemPath` | Path to the subsystem XML file, subsystem directory, or the `Subsystems/` directory (for tree) |
+| `Mode` | Mode: `overview` (default), `content`, `ci`, `tree`, `full` |
+| `Name` | Drill-down: object type in content, section in ci, subsystem name in tree |
+| `Limit` / `Offset` | Pagination (default 150 lines) |
+| `OutFile` | Write the result to a file (UTF-8 BOM) |
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/subsystem-info.py" -SubsystemPath "<путь>"
 ```
 
-## Пять режимов
+## Five modes
 
-| Режим | Что показывает |
+| Mode | What it shows |
 |---|---|
-| `overview` *(default)* | Компактная сводка: свойства, состав (сгруппирован по типам), дочерние подсистемы, наличие CI |
-| `content` | Список Content с группировкой по типу объекта. `-Name Catalog` — только каталоги |
-| `ci` | Разбор CommandInterface.xml: видимость, размещение, порядок команд/подсистем/групп |
-| `tree` | Рекурсивное дерево иерархии подсистем с маркерами [CI], [OneCmd], [Скрыт] |
-| `full` | Полная сводка: overview + content + ci в одном вызове |
+| `overview` *(default)* | Compact summary: properties, content (grouped by type), child subsystems, CI presence |
+| `content` | Content list grouped by object type. `-Name Catalog` - catalogs only |
+| `ci` | CommandInterface.xml parse: visibility, placement, order of commands/subsystems/groups |
+| `tree` | Recursive subsystem hierarchy tree with markers [CI], [OneCmd], [Скрыт] |
+| `full` | Full summary: overview + content + ci in one call |
 
-## Примеры
+## Examples
 
 ```bash
 # Обзор подсистемы

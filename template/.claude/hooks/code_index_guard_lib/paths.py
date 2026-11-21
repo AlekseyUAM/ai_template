@@ -1,10 +1,10 @@
-"""Нормализация и сравнение путей (порт code-index-guard)."""
+"""Path normalization and comparison (port of code-index-guard)."""
 import os
 import sys
 
 
 def default_case_insensitive() -> bool:
-    """Windows и macOS сравнивают пути без учёта регистра, Linux — с учётом."""
+    """Windows and macOS compare paths case-insensitively, Linux case-sensitively."""
     return os.name == "nt" or sys.platform == "darwin"
 
 
@@ -14,17 +14,17 @@ def fold_path(s: str, case_insensitive: bool | None = None) -> str:
 
 
 def norm_prefix(p: str, case_insensitive: bool | None = None) -> str:
-    """Префикс репозитория: прямые слэши, без хвостового, регистр по правилу."""
+    """Repository prefix: forward slashes, no trailing one, case per rule."""
     return fold_path(p.replace("\\", "/").rstrip("/"), case_insensitive)
 
 
 def _ascii_lower(s: str) -> str:
-    """Понижение регистра только для ASCII — как `eq_ignore_ascii_case` в Rust."""
+    """Lowercase ASCII only - like `eq_ignore_ascii_case` in Rust."""
     return "".join(ch.lower() if ch.isascii() else ch for ch in s)
 
 
 def strip_prefix_ci(s: str, prefix: str) -> str | None:
-    """`strip_prefix` без учёта регистра ASCII — для ключей команд (`-Path`, `/D`)."""
+    """`strip_prefix` ignoring ASCII case - for command keys (`-Path`, `/D`)."""
     if len(s) < len(prefix):
         return None
     if _ascii_lower(s[: len(prefix)]) != _ascii_lower(prefix):
@@ -33,10 +33,10 @@ def strip_prefix_ci(s: str, prefix: str) -> str | None:
 
 
 def normalize_dir(path: str) -> str:
-    """Нормализация пути.
+    """Path normalization.
 
-    Сегменты `.` и пустые (кроме корня) выбрасываются, `..` снимает предыдущий
-    сегмент, но не выше корня (`c:` либо ведущего `/`). Хвостового `/` нет.
+    `.` and empty segments (except the root) are dropped, `..` pops the previous
+    segment but not above the root (`c:` or a leading `/`). No trailing `/`.
     """
     if path.startswith("/"):
         root, rest = "/", path[1:]
@@ -66,7 +66,7 @@ def _is_ascii_alnum(ch: str) -> bool:
 
 
 def normalize_msys_drives(s: str) -> str:
-    """`/c/...` → `c:/...` только на границе пути (начало или после не-алфанумерика)."""
+    """`/c/...` -> `c:/...` only at a path boundary (start or after a non-alphanumeric)."""
     out: list[str] = []
     i = 0
     n = len(s)
@@ -93,12 +93,12 @@ def normalize_msys_drives(s: str) -> str:
 def match_indexed(raw: str, paths: list[tuple[str, str]], *,
                   case_insensitive: bool | None = None
                   ) -> tuple[str, str, str] | None:
-    """Если raw попадает в индексированный префикс → (alias, rel, root в исходном регистре)."""
+    """If raw falls under an indexed prefix -> (alias, rel, root in original case)."""
     if not raw:
         return None
     norm = normalize_msys_drives(raw.replace("\\", "/"))
     norm_cmp = fold_path(norm, case_insensitive)
-    # Длинные префиксы первыми: C:/Projects/app/core выигрывает над C:/Projects/app.
+    # Longest prefixes first: C:/Projects/app/core wins over C:/Projects/app.
     sorted_paths = sorted(paths, key=lambda entry: len(entry[0]), reverse=True)
     for prefix, alias in sorted_paths:
         matched = norm_cmp == prefix or norm_cmp.startswith(prefix + "/")
@@ -114,7 +114,7 @@ def match_indexed(raw: str, paths: list[tuple[str, str]], *,
 
 
 def glob_match(pattern: str, text: str) -> bool:
-    """Простейший glob: `*` — любой отрезок, остальное буквально. Для `*_run_*.json`."""
+    """Simplest glob: `*` - any span, everything else literal. For `*_run_*.json`."""
     parts = pattern.split("*")
     if len(parts) == 1:
         return pattern == text

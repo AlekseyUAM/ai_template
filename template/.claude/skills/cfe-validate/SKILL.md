@@ -1,6 +1,6 @@
 ---
 name: cfe-validate
-description: Валидация расширения конфигурации 1С (CFE). Используй после создания или модификации расширения для проверки корректности
+description: Validation of a 1C configuration extension (CFE). Use after creating or modifying an extension to check correctness
 argument-hint: <ExtensionPath> [-ConfigPath <ConfigDir>] [-Detailed] [-MaxErrors 30]
 allowed-tools:
   - Bash
@@ -8,32 +8,32 @@ allowed-tools:
   - Glob
 ---
 
-# /cfe-validate — валидация расширения конфигурации (CFE)
+# /cfe-validate - configuration extension (CFE) validation
 
-Проверяет структурную корректность расширения: XML-формат, свойства, состав, заимствованные объекты, права ролей. Аналог `/cf-validate`, но для расширений.
+Checks the structural correctness of the extension: XML format, properties, composition, borrowed objects, role rights. An analog of `/cf-validate`, but for extensions.
 
-Проверяются исходники. Применимость — уже после загрузки в базу: `/db-cfe-admin check`.
+Sources are checked. Applicability is after loading into the infobase: `/db-cfe-admin check`.
 
-## Параметры
+## Parameters
 
-| Параметр      | Обяз. | Умолч. | Описание                                        |
+| Parameter      | Req. | Default | Description                                        |
 |---------------|:-----:|---------|-------------------------------------------------|
-| ExtensionPath | да    | —       | Путь к каталогу или Configuration.xml расширения |
-| ConfigPath    | нет   | —       | Каталог конфигурации, из которой заимствованы объекты |
-| Detailed      | нет   | —       | Подробный вывод (все проверки, включая успешные)  |
-| MaxErrors     | нет   | 30      | Остановиться после N ошибок                      |
-| OutFile       | нет   | —       | Записать результат в файл                        |
+| ExtensionPath | yes   | -       | Path to the extension directory or Configuration.xml |
+| ConfigPath    | no    | -       | Configuration directory from which objects were borrowed |
+| Detailed      | no    | -       | Detailed output (all checks, including successful ones)  |
+| MaxErrors     | no    | 30      | Stop after N errors                      |
+| OutFile       | no    | -       | Write the result to a file                        |
 
 ### ConfigPath
 
-Указывай всегда, когда конфигурация-источник доступна: без неё часть ошибок заимствованных форм не ловится, и расширение может пройти валидацию, а потом быть отвергнутым платформой при загрузке.
+Always specify it when the source configuration is available: without it some errors of borrowed forms are not caught, and the extension may pass validation and then be rejected by the platform on load.
 
-Если пользователь не указал путь — определи сам:
-1. Прочитай `.v8-project.json` из корня проекта
-2. Разреши целевую базу (по имени, ветке или `default`)
-3. Возьми её поле `configSrc`
+If the user did not specify the path - determine it yourself:
+1. Read `.v8-project.json` from the project root
+2. Resolve the target infobase (by name, branch or `default`)
+3. Take its `configSrc` field
 
-## Команда
+## Command
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/cfe-validate.py" -ExtensionPath "src\cfe\extname"

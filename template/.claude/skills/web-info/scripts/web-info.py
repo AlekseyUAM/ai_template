@@ -3,9 +3,9 @@
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 
 """
-Статус Apache HTTP Server и публикаций 1С.
-Показывает состояние Apache, список опубликованных баз
-и последние ошибки из error.log.
+Apache HTTP Server and 1C publication status.
+Shows the Apache state, the list of published infobases
+and the latest errors from error.log.
 """
 
 import argparse
@@ -16,16 +16,16 @@ import sys
 
 import psutil
 
-# Регистронезависимый ввод: имена параметров и значения choices принимаются
-# в любом регистре (в argparse по умолчанию совпадение точное).
+# Case-insensitive input: parameter names and choices values are accepted
+# in any case (argparse matches exactly by default).
 def ci_parse_args(parser, argv=None):
-    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
+    """parse_args: parameter names and choices values are accepted in any case."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
         if tok.startswith('-') and tok.lower() in names:
             argv[i] = names[tok.lower()]
-    # choices — зеркало [ValidateSet]; канонизируем ДО разбора, иначе argparse отвергнет регистр
+    # choices mirrors [ValidateSet]; canonicalize BEFORE parsing, otherwise argparse rejects the case
     choice_map = {}
     for a in parser._actions:
         if a.choices:
@@ -122,10 +122,10 @@ def main():
         port = m.group(2)
         if m.group(1) and m.group(1) not in ('0.0.0.0', '*', '[::]'):
             listen_host = m.group(1)
-    # Адрес привязки явный — по нему и URL, и проба; иначе все интерфейсы → localhost
+    # The bind address is explicit - it drives both the URL and the probe; otherwise all interfaces -> localhost
     url_host = listen_host if listen_host else 'localhost'
     probe_host = listen_host.strip('[]') if listen_host else '127.0.0.1'
-    # Проверяем именно TCP-порт: запрос к публикации поднял бы сеанс 1С и занял лицензию
+    # Probe the TCP port specifically: a request to the publication would start a 1C session and consume a license
     port_state = ''
     if port != '—':
         try:
@@ -166,7 +166,7 @@ def main():
             # Detect published services
             svc_tags = []
             if vrd_content:
-                # "+ext" — publishExtensionsByDefault: сервисы расширений тоже опубликованы
+                # "+ext" - publishExtensionsByDefault: extension services are published too
                 m_ws = re.search(r'<ws\s[^>]*>', vrd_content)
                 if m_ws:
                     svc_tags.append('WS+ext' if re.search(
@@ -175,7 +175,7 @@ def main():
                 if m_hs:
                     svc_tags.append('HTTP+ext' if re.search(
                         r'publishExtensionsByDefault\s*=\s*"true"', m_hs.group(0)) else 'HTTP')
-                # Актуальная форма — <standardOdata enable="true"/>; enableStandardOdata — до 8.3.9
+                # Current form - <standardOdata enable="true"/>; enableStandardOdata - up to 8.3.9
                 if (re.search(r'<standardOdata\s[^>]*enable\s*=\s*"true"', vrd_content)
                         or re.search(r'enableStandardOdata\s*=\s*"true"', vrd_content)):
                     svc_tags.append('OData')
@@ -188,7 +188,7 @@ def main():
     print('')
     print('=== Последние ошибки ===')
 
-    # Имя файла берём из httpd.conf: сборки Apache расходятся (error.log / error_log)
+    # Take the file name from httpd.conf: Apache builds differ (error.log / error_log)
     error_log = None
     m_log = re.search(r'(?m)^\s*ErrorLog\s+"?([^"\r\n]+)"?', conf_content)
     if m_log:
@@ -205,8 +205,8 @@ def main():
         try:
             with open(error_log, 'r', encoding='utf-8-sig', errors='replace') as f:
                 all_lines = f.readlines()
-            # Только error и выше: warn забит штатным шумом winnt_accept, notice — строки старта.
-            # AH02538 — след нашего же рестарта (родитель убит), пишется как crit при каждой публикации
+            # Only error and above: warn is flooded with routine winnt_accept noise, notice - startup lines.
+            # AH02538 is a trace of our own restart (parent killed), written as crit on every publication
             err_lines = [ln for ln in all_lines
                          if re.search(r'\[[a-z_]+:(error|crit|alert|emerg)\]', ln)
                          and 'AH02538' not in ln]

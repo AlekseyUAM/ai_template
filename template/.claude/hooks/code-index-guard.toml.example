@@ -1,12 +1,12 @@
-# Конфиг хука code-index-guard (Python-порт).
-# В развёрнутом проекте файл генерируется автоматически при создании/обновлении
-# окружения; этот образец — для ручного развёртывания template.
+# code-index-guard hook config (Python port).
+# In a deployed project the file is generated automatically when the environment
+# is created/updated; this sample is for manual deployment of the template.
 #
-# mcp_prefix — как называются инструменты сервера code-index в этой сессии.
-# max_denies — сколько раз подряд можно отклонить один и тот же нативный вызов,
-#   прежде чем разрешить его (защита локальных моделей от зацикливания на deny;
-#   0 — не уступать никогда).
-# [[local]] — индексированные репозитории: path + alias (alias = repo= в вызовах).
+# mcp_prefix - how the code-index server tools are named in this session.
+# max_denies - how many times in a row the same native call may be denied
+#   before it is allowed (protects local models from looping on deny;
+#   0 - never yield).
+# [[local]] - indexed repositories: path + alias (alias = repo= in calls).
 
 mcp_prefix = "mcp__code_index__"
 max_denies = 2
@@ -15,5 +15,5 @@ max_denies = 2
 # path = "C:/proj/src/cf"
 # alias = "proj"
 
-# Вместо [[local]] можно указать daemon.toml индексатора:
+# Instead of [[local]] you can specify the indexer's daemon.toml:
 # daemon_toml = "C:/tools/code-index/daemon.toml"

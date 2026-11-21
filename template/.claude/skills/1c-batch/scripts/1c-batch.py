@@ -1,15 +1,15 @@
 #!/usr/bin/env python
-"""Запуск ЛОКАЛЬНОЙ (проектной) копии 1c-batch из .claude/skills.
+"""Run a LOCAL (project) copy of 1c-batch from .claude/skills.
 
-В отличие от глобальной консольной команды `1c-batch` (editable-install, общий
-для всех проектов), этот wrapper исполняет копию, лежащую рядом с ним. Так в
-каждом проекте работает своя версия инструмента — как у остальных навыков,
-которые зовутся по пути `python .claude/skills/<skill>/scripts/<name>.py`.
+Unlike the global `1c-batch` console command (editable install, shared by all
+projects), this wrapper runs the copy next to it. Thus each project uses its
+own version of the tool - like the other skills, which are invoked by path
+`python .claude/skills/<skill>/scripts/<name>.py`.
 
-Использование:
-    python .claude/skills/1c-batch/scripts/1c-batch.py <команда> [аргументы]
+Usage:
+    python .claude/skills/1c-batch/scripts/1c-batch.py <command> [arguments]
 
-Пример:
+Example:
     python .claude/skills/1c-batch/scripts/1c-batch.py run-enterprise \
         -C "ВыполнитьЗапускЮнитТестов=/abs/configs/test.json"
 """
@@ -22,12 +22,12 @@ SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 def _load_local_package() -> None:
-    """Зарегистрировать каталог скрипта как пакет onec_batch ДО любого импорта.
+    """Register the script directory as the onec_batch package BEFORE any import.
 
-    Пакет регистрируется в sys.modules под именем onec_batch с путём поиска
-    подмодулей = SCRIPTS_DIR, поэтому `from onec_batch.cli import ...` и
-    относительные импорты внутри (`from .config import ...`) резолвятся в
-    локальную копию, а не в глобальный editable-install.
+    The package is registered in sys.modules under the name onec_batch with
+    submodule search path = SCRIPTS_DIR, so `from onec_batch.cli import ...` and
+    relative imports inside (`from .config import ...`) resolve to the local
+    copy, not to the global editable install.
     """
     init_path = os.path.join(SCRIPTS_DIR, "__init__.py")
     spec = importlib.util.spec_from_file_location(
@@ -41,7 +41,7 @@ def _load_local_package() -> None:
 def main() -> None:
     _load_local_package()
     from onec_batch.cli import cli
-    cli()  # standalone-режим: click сам печатает ошибки и выставляет код возврата
+    cli()  # standalone mode: click prints errors itself and sets the exit code
 
 
 if __name__ == "__main__":

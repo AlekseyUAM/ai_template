@@ -1,6 +1,6 @@
-# Параметры выбора и связь по типу
+# Choice parameters and type link
 
-Свойства поля ввода (`input`), управляющие выбором значения: чем ограничен список выбора и каким будет тип значения. Имена параметров — строки 1С как есть (`"Отбор.Х"`).
+Input field (`input`) properties that control value choice: what limits the choice list and what the value type will be. Parameter names are 1C strings as is (`"Отбор.Х"`).
 
 ```json
 { "input": "Контрагент", "path": "Объект.Контрагент",
@@ -16,14 +16,14 @@
 }
 ```
 
-## Параметры выбора (`choiceParameters`)
+## Choice parameters (`choiceParameters`)
 
-Фиксированные значения параметров выбора, отбирающие список значений независимо от данных формы. Массив объектов `{ name, value }`:
+Fixed values of choice parameters that filter the value list independently of form data. An array of objects `{ name, value }`:
 
-- `name` — имя параметра (`"Отбор.Активный"`).
-- `value` — значение. Допустимы: bool, число, строка, ISO-дата (`"2020-01-01T00:00:00"`), ссылка-путь (`Enum.X.Y`, `Catalog.X`). **Массив** значений задаёт фиксированный массив.
+- `name` - parameter name (`"Отбор.Активный"`).
+- `value` - value. Allowed: bool, number, string, ISO date (`"2020-01-01T00:00:00"`), reference path (`Enum.X.Y`, `Catalog.X`). An **array** of values sets a fixed array.
 
-Короткая форма — строки `"name=value"`; значение с запятыми становится массивом, `true`/`false` → bool, число → число, остальное → строка/ссылка:
+Short form - `"name=value"` strings; a value with commas becomes an array, `true`/`false` -> bool, a number -> number, the rest -> string/reference:
 
 ```json
 "choiceParameters": [
@@ -32,13 +32,13 @@
 ]
 ```
 
-## Связи параметров выбора (`choiceParameterLinks`)
+## Choice parameter links (`choiceParameterLinks`)
 
-Параметры выбора, значение которых берётся из **другого поля формы** (а не задано фиксированно). Типовой случай — отбор списка договоров по выбранному контрагенту. Массив объектов `{ name, dataPath, valueChange? }`:
+Choice parameters whose value is taken from **another form field** (rather than fixed). The typical case is filtering the list of contracts by the selected counterparty. An array of objects `{ name, dataPath, valueChange? }`:
 
-- `name` — имя параметра выбора.
-- `dataPath` — путь к полю формы, чьё значение подставляется в параметр.
-- `valueChange` — что делать с уже выбранным значением при смене источника: `Clear` (очистить, необязательно — поведение по умолчанию) / `DontChange` (не менять).
+- `name` - choice parameter name.
+- `dataPath` - path to the form field whose value is substituted into the parameter.
+- `valueChange` - what to do with the already selected value when the source changes: `Clear` (clear; optional - default behavior) / `DontChange` (do not change).
 
 ```json
 { "input": "Договор", "path": "Объект.Договор",
@@ -48,24 +48,24 @@
 }
 ```
 
-Короткая форма — строки `"name=dataPath"`, опциональный хвост `:Clear` / `:DontChange`:
+Short form - `"name=dataPath"` strings, an optional tail `:Clear` / `:DontChange`:
 
 ```json
 "choiceParameterLinks": [ "Отбор.Организация=Объект.Организация", "Отбор.Тип=Объект.Тип:DontChange" ]
 ```
 
-## Связь по типу (`typeLink`)
+## Type link (`typeLink`)
 
-Тип значения поля определяется другим полем формы (напр. поле «Значение» субконто, тип которого задаётся выбранным видом субконто). Объект `{ dataPath, linkItem }`:
+The field value type is determined by another form field (e.g. the "Value" field of a subconto, whose type is set by the selected subconto kind). Object `{ dataPath, linkItem }`:
 
-- `dataPath` — путь к полю, задающему тип.
-- `linkItem` — индекс элемента связи (необязательно, по умолчанию `0`).
+- `dataPath` - path to the field that sets the type.
+- `linkItem` - link item index (optional, default `0`).
 
 ```json
 "typeLink": { "dataPath": "Объект.ВидСубконто", "linkItem": 0 }
 ```
 
-Короткая форма — строка `"dataPath"` либо `"dataPath#linkItem"`:
+Short form - the string `"dataPath"` or `"dataPath#linkItem"`:
 
 ```json
 "typeLink": "Объект.ВидСубконто"

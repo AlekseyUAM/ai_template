@@ -1,6 +1,6 @@
 ---
 name: cf-info
-description: Анализ структуры конфигурации 1С — свойства, состав, счётчики объектов. Используй для обзора конфигурации — какие объекты есть, сколько их, какие настройки
+description: Analysis of the 1C configuration structure - properties, composition, object counters. Use for an overview of the configuration - which objects exist, how many, which settings
 argument-hint: <ConfigPath> [-Mode overview|brief|full] [-Section home-page]
 allowed-tools:
   - Bash
@@ -8,33 +8,33 @@ allowed-tools:
   - Glob
 ---
 
-# /cf-info — Структура конфигурации 1С
+# /cf-info - 1C configuration structure
 
-Читает Configuration.xml из выгрузки конфигурации и выводит компактное описание структуры.
+Reads Configuration.xml from the configuration export and prints a compact description of the structure.
 
-## Параметры и команда
+## Parameters and command
 
-| Параметр | Описание |
+| Parameter | Description |
 |----------|----------|
-| `ConfigPath` | Путь к Configuration.xml или каталогу выгрузки |
-| `Mode` | Режим: `overview` (default), `brief`, `full` |
-| `Section` | Drill-down по разделу (alias: `Name`). Сейчас: `home-page` |
-| `Limit` / `Offset` | Пагинация (по умолчанию 150 строк) |
-| `OutFile` | Записать результат в файл (UTF-8 BOM) |
+| `ConfigPath` | Path to Configuration.xml or the export directory |
+| `Mode` | Mode: `overview` (default), `brief`, `full` |
+| `Section` | Drill-down by section (alias: `Name`). Currently: `home-page` |
+| `Limit` / `Offset` | Paging (150 lines by default) |
+| `OutFile` | Write the result to a file (UTF-8 BOM) |
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/cf-info.py" -ConfigPath "<путь>"
 ```
 
-## Три режима
+## Three modes
 
-| Режим | Что показывает |
+| Mode | What it shows |
 |---|---|
-| `overview` *(default)* | Заголовок + ключевые свойства + таблица счётчиков объектов по типам |
-| `brief` | Одна строка: Имя — "Синоним" vВерсия \| N объектов \| совместимость |
-| `full` | Все свойства по категориям + полный список ChildObjects + DefaultRoles + мобильные функциональности |
+| `overview` *(default)* | Header + key properties + table of object counters by type |
+| `brief` | One line: Name - "Synonym" vVersion \| N objects \| compatibility |
+| `full` | All properties by category + full ChildObjects list + DefaultRoles + mobile features |
 
-## Примеры
+## Examples
 
 ```bash
 # Обзор пустой конфигурации

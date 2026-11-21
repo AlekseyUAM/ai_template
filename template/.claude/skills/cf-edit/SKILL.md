@@ -1,6 +1,6 @@
 ---
 name: cf-edit
-description: Точечное редактирование конфигурации 1С. Используй когда нужно изменить свойства конфигурации, добавить или удалить объект из состава, настроить роли по умолчанию, поменять раскладку панелей, настроить начальную страницу
+description: Pointwise editing of a 1C configuration. Use when you need to change configuration properties, add or remove an object from the composition, set up default roles, change panel layout, set up the home page
 argument-hint: -ConfigPath <path> -Operation <op> -Value <value>
 allowed-tools:
   - Bash
@@ -9,41 +9,41 @@ allowed-tools:
   - Glob
 ---
 
-# /cf-edit — редактирование конфигурации 1С
+# /cf-edit - 1C configuration editing
 
-Точечное редактирование Configuration.xml: свойства, состав ChildObjects, роли по умолчанию.
+Pointwise editing of Configuration.xml: properties, ChildObjects composition, default roles.
 
-## Параметры и команда
+## Parameters and command
 
-| Параметр | Описание |
+| Parameter | Description |
 |----------|----------|
-| `ConfigPath` | Путь к Configuration.xml или каталогу выгрузки |
-| `Operation` | Операция (см. таблицу) |
-| `Value` | Значение для операции (batch через `;;`) |
-| `DefinitionFile` | JSON-файл с массивом операций |
-| `NoValidate` | Пропустить авто-валидацию |
+| `ConfigPath` | Path to Configuration.xml or the export directory |
+| `Operation` | Operation (see the table) |
+| `Value` | Value for the operation (batch via `;;`) |
+| `DefinitionFile` | JSON file with an array of operations |
+| `NoValidate` | Skip auto-validation |
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/cf-edit.py" -ConfigPath '<path>' -Operation modify-property -Value 'Version=1.0.0.1'
 ```
 
-## Операции
+## Operations
 
-| Операция | Формат Value | Описание |
+| Operation | Value format | Description |
 |----------|-------------|----------|
-| `modify-property` | `Ключ=Значение` (batch `;;`) | Изменить свойство |
-| `add-childObject` | `Type.Name` (batch `;;`) | Зарегистрировать уже существующий файл объекта в ChildObjects. Для создания нового объекта используй `/meta-compile`, `/role-compile`, `/subsystem-compile` — они регистрируют автоматически |
-| `remove-childObject` | `Type.Name` (batch `;;`) | Удалить объект из ChildObjects |
-| `sort-childObjects` | вид, напр. `Catalog` (batch `;;`), либо пусто | Упорядочить ChildObjects по имени внутри вида. Без значения — все виды, кроме четырёх (см. reference) |
-| `add-defaultRole` | `Role.Name` или `Name` | Добавить роль по умолчанию |
-| `remove-defaultRole` | `Role.Name` или `Name` | Удалить роль по умолчанию |
-| `set-defaultRoles` | Имена через `;;` | Заменить список ролей по умолчанию |
-| `set-panels` | JSON-объект (см. [reference.md](reference.md)) | Перезаписать `Ext/ClientApplicationInterface.xml` (раскладка панелей) |
-| `set-home-page` | JSON-объект (см. [reference.md](reference.md)) | Перезаписать `Ext/HomePageWorkArea.xml` (начальная страница) |
+| `modify-property` | `Ключ=Значение` (batch `;;`) | Change a property |
+| `add-childObject` | `Type.Name` (batch `;;`) | Register an already existing object file in ChildObjects. To create a new object use `/meta-compile`, `/role-compile`, `/subsystem-compile` - they register automatically |
+| `remove-childObject` | `Type.Name` (batch `;;`) | Remove an object from ChildObjects |
+| `sort-childObjects` | kind, e.g. `Catalog` (batch `;;`), or empty | Sort ChildObjects by name within a kind. Without a value - all kinds except four (see reference) |
+| `add-defaultRole` | `Role.Name` or `Name` | Add a default role |
+| `remove-defaultRole` | `Role.Name` or `Name` | Remove a default role |
+| `set-defaultRoles` | Names via `;;` | Replace the list of default roles |
+| `set-panels` | JSON object (see [reference.md](reference.md)) | Overwrite `Ext/ClientApplicationInterface.xml` (panel layout) |
+| `set-home-page` | JSON object (see [reference.md](reference.md)) | Overwrite `Ext/HomePageWorkArea.xml` (home page) |
 
-Допустимые значения свойств, формат DefinitionFile (JSON), каноничный порядок: [reference.md](reference.md)
+Allowed property values, DefinitionFile (JSON) format, canonical order: [reference.md](reference.md)
 
-## Примеры
+## Examples
 
 ```bash
 # Изменить версию и поставщика

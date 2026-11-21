@@ -1,9 +1,10 @@
-"""Разбор Bash/PowerShell-команд (порт code-index-guard main.rs v1.15.4).
+"""Bash/PowerShell command parsing (port of code-index-guard main.rs v1.15.4).
 
-Только разборщики: тела heredoc/here-string — данные, звенья цепочки обрываются
-на первой одиночной трубе, смена каталога отслеживается по `cd`/`pushd`/
-`Set-Location`. Решения принимают вызывающие модули (bash/powershell/redirect).
+Parsers only: heredoc/here-string bodies are data, chain links are cut
+at the first single pipe, directory change is tracked via `cd`/`pushd`/
+`Set-Location`. Decisions are made by the calling modules (bash/powershell/redirect).
 """
+import ntpath
 import os
 from pathlib import Path
 
@@ -11,8 +12,8 @@ from . import paths
 
 
 def _lines(text: str) -> list[str]:
-    """Как Rust `str::lines`: строки по `\\n`, `\\r\\n` без хвостового `\\r`, без
-    пустой строки после завершающего перевода."""
+    """Like Rust `str::lines`: lines by `\\n`, `\\r\\n` without trailing `\\r`, without
+    an empty line after the final newline."""
     out: list[str] = []
     start = 0
     n = len(text)
@@ -31,10 +32,10 @@ def _lines(text: str) -> list[str]:
 
 
 def strip_heredocs(cmd: str) -> str:
-    """Выбрасывает тела heredoc'ов (`… <<'TAG'` … строка `TAG`): это ДАННЫЕ.
+    """Drops heredoc bodies (`... <<'TAG'` ... line `TAG`): they are DATA.
 
-    Без этого строка сообщения коммита, начинающаяся с `ls ` или `grep `, выглядела
-    поисковым звеном. Строка с `<<'TAG'` остаётся — она настоящая команда.
+    Without this, a commit message line starting with `ls ` or `grep ` would look
+    like a search link. The line with `<<'TAG'` stays - it is the real command.
     """
     out: list[str] = []
     closing: str | None = None
@@ -51,13 +52,13 @@ def strip_heredocs(cmd: str) -> str:
 
 
 def heredoc_tag(line: str) -> str | None:
-    """Тег heredoc из строки (`git commit -F - <<'msg'` → `msg`). None — heredoc'а нет."""
+    """Heredoc tag from the line (`git commit -F - <<'msg'` -> `msg`). None - no heredoc."""
     pos = line.find("<<")
     if pos < 0:
         return None
     after = line[pos + 2:]
     if after.startswith("<"):
-        return None  # `<<<` — here-string, тела у неё нет
+        return None  # `<<<` - here-string, it has no body
     if after.startswith("-"):
         after = after[1:]
     after = after.lstrip()
@@ -77,29 +78,29 @@ def heredoc_tag(line: str) -> str | None:
 
 
 def strip_here_strings(cmd: str) -> str:
-    """Выбрасывает тела here-string'ов PowerShell (`@'` … `'@`, `@"` … `"@`): это ДАННЫЕ."""
+    """Drops PowerShell here-string bodies (`@'` ... `'@`, `@"` ... `"@`): they are DATA."""
     out: list[str] = []
     inside = False
     for line in _lines(cmd):
         t = line.strip()
         if inside:
-            # Закрывающая метка стоит в начале строки: '@ либо "@.
+            # The closing marker is at the start of the line: '@ or "@.
             if t.startswith("'@") or t.startswith('"@'):
                 inside = False
             continue
         if t.endswith("@'") or t.endswith('@"'):
             inside = True
-            out.append(line)  # сама команда с открытием — настоящая
+            out.append(line)  # the command with the opener itself - real
             continue
         out.append(line)
     return "\n".join(out)
 
 
 def split_chain(cmd: str) -> list[str]:
-    """Звенья по `&&`, `||`, `;`, переводу строки; ОБРЫВ на первой одиночной трубе.
+    """Links by `&&`, `||`, `;`, newline; CUT at the first single pipe.
 
-    Всё правее трубы фильтрует чужой вывод, а не ищет по файлам. Кавычки учитываются:
-    `grep -iE '^(PG|POSTGRES)' .env` не должен резаться по трубе внутри образца.
+    Everything right of a pipe filters foreign output rather than searching files. Quotes
+    are respected: `grep -iE '^(PG|POSTGRES)' .env` must not be cut by a pipe inside the pattern.
     """
     out: list[str] = []
     cur: list[str] = []
@@ -140,15 +141,15 @@ def split_chain(cmd: str) -> list[str]:
 
 
 def _trim_matches(s: str, ch: str) -> str:
-    """`str::trim_matches(ch)` — снять символ с обоих концов, сколько есть."""
+    """`str::trim_matches(ch)` - strip the character from both ends, as many as present."""
     return s.strip(ch)
 
 
 def parse_assignment(part: str, ps: bool = False) -> tuple[str, str] | None:
-    """Простое присваивание в начале звена: `root="/c/tmp"` / `$root = "C:/tmp"`.
+    """Simple assignment at the start of a link: `root="/c/tmp"` / `$root = "C:/tmp"`.
 
-    Составное значение (подстановка, конвейер, несколько слов без кавычек) не
-    разбираем — гадать о цели хуже, чем воздержаться.
+    A compound value (substitution, pipeline, several unquoted words) is not
+    parsed - guessing the target is worse than abstaining.
     """
     s = part.strip()
     if ps:
@@ -159,7 +160,7 @@ def parse_assignment(part: str, ps: bool = False) -> tuple[str, str] | None:
     if eq < 0:
         return None
     name_raw, value_raw = s[:eq], s[eq + 1:]
-    # В bash пробел перед `=` означает не присваивание, а команду с аргументами.
+    # In bash a space before `=` means a command with arguments, not an assignment.
     if not ps and name_raw and name_raw[-1].isspace():
         return None
     name = name_raw.strip()
@@ -177,46 +178,46 @@ def parse_assignment(part: str, ps: bool = False) -> tuple[str, str] | None:
     else:
         value = raw
     if "$" in value or "`" in value:
-        return None  # значение собрано из подстановок — цель неизвестна
+        return None  # value built from substitutions - target unknown
     return (name, value)
 
 
 def dir_change(part: str, base: str, home: str | None) -> str | None:
-    """Звено смены каталога → новый базовый каталог.
+    """Directory change link -> new base directory.
 
-    None — звено не смена каталога. `""` — каталог стал неизвестен (popd, cd -,
-    нераскрытая подстановка): дальше воздерживаемся, а не судим по прежнему cwd.
-    Окружение не читается: домашний каталог передаёт вызывающий.
+    None - the link is not a directory change. `""` - the directory became unknown (popd, cd -,
+    unresolved substitution): abstain further instead of judging by the old cwd.
+    The environment is not read: the home directory is passed by the caller.
     """
     base = base.replace("\\", "/")
     trimmed = base.rstrip("/")
-    # Корень `/` не должен схлопнуться в пустую строку: пустая база — «каталог неизвестен».
+    # The root `/` must not collapse into an empty string: an empty base means "directory unknown".
     if not trimmed and base:
         base = "/"
     else:
         base = trimmed
-    # `split_once(char::is_whitespace)`: первый пробельный символ делит команду и аргумент.
+    # `split_once(char::is_whitespace)`: the first whitespace splits command and argument.
     sp = next((i for i, c in enumerate(part) if c.isspace()), -1)
     if sp >= 0:
         cmd, arg = part[:sp], part[sp:].strip()
     else:
         cmd, arg = part, ""
-    # Совпадение по слову целиком: `cdx foo` — не смена каталога.
+    # Whole-word match: `cdx foo` is not a directory change.
     word = cmd.lower()
     if word in ("cd", "pushd"):
         ps_no_arg, is_pop = False, False
     elif word in ("set-location", "sl", "push-location"):
-        # PowerShell без аргумента каталог не меняет: `sl` печатает текущий.
+        # PowerShell without an argument does not change the directory: `sl` prints the current one.
         ps_no_arg, is_pop = True, False
     elif word in ("popd", "pop-location"):
         ps_no_arg, is_pop = False, True
     else:
         return None
     if is_pop:
-        return ""  # куда вернулись — неизвестно
+        return ""  # where it returned to - unknown
     arg = arg.strip()
     arg = _trim_matches(_trim_matches(arg, '"'), "'")
-    # Ведущие ключи: у Set-Location это -Path/-LiteralPath, у cmd-шного cd — /d.
+    # Leading keys: for Set-Location these are -Path/-LiteralPath, for cmd `cd` - /d.
     for key in ("-path ", "-literalpath ", "/d "):
         rest = paths.strip_prefix_ci(arg, key)
         if rest is not None:
@@ -224,16 +225,16 @@ def dir_change(part: str, base: str, home: str | None) -> str | None:
             break
     arg = _trim_matches(_trim_matches(arg.strip(), '"'), "'")
     if not arg:
-        # Голый cd в bash уводит в домашний каталог, в PowerShell — никуда.
+        # Bare cd in bash goes to the home directory, in PowerShell - nowhere.
         if ps_no_arg:
             return base
         return home if home is not None else ""
-    # `cd -` и нераскрытая подстановка: цель неизвестна.
+    # `cd -` and an unresolved substitution: target unknown.
     if arg == "-" or "$" in arg:
         return ""
     if arg == "~" or arg.startswith("~/"):
         if home is None:
-            return ""  # домашнего каталога не знаем
+            return ""  # home directory unknown
         rest = arg.lstrip("~").lstrip("/")
         if not rest:
             abs_path = home
@@ -244,13 +245,13 @@ def dir_change(part: str, base: str, home: str | None) -> str | None:
         abs_path = arg
     else:
         if not base:
-            return ""  # относительный от неизвестного каталога
+            return ""  # relative from an unknown directory
         abs_path = f"{base}/{arg}"
     return paths.normalize_dir(abs_path)
 
 
 def home_dir() -> str | None:
-    """USERPROFILE, иначе HOME; `\\`→`/`, MSYS-диски приведены, регистр по правилу системы."""
+    """USERPROFILE, else HOME; `\\`->`/`, MSYS drives normalized, case per system rule."""
     raw = os.environ.get("USERPROFILE")
     if not raw or not raw.strip():
         raw = os.environ.get("HOME")
@@ -261,9 +262,9 @@ def home_dir() -> str | None:
 
 
 def expand_vars(text: str, vars: dict[str, str]) -> str:
-    """Подставляет `$root` и `${root}`. Длинные имена первыми, иначе `$a` испортит `$abc`.
+    """Substitutes `$root` and `${root}`. Longest names first, otherwise `$a` would corrupt `$abc`.
 
-    Неизвестные подстановки остаются как есть — по ним вызывающий воздерживается.
+    Unknown substitutions stay as is - the caller abstains because of them.
     """
     if not vars or "$" not in text:
         return text
@@ -275,10 +276,10 @@ def expand_vars(text: str, vars: dict[str, str]) -> str:
 
 
 def ls_targets_are_files(link: str, base: str) -> bool:
-    """true → у звена `ls` есть цели и КАЖДАЯ из них — существующий файл.
+    """true -> the `ls` link has targets and EVERY one of them is an existing file.
 
-    Тогда это взгляд на размер и дату файлов, а не обход каталога. Голый `ls`,
-    каталог и маска целями-файлами не считаются.
+    Then it is a look at file size and date, not a directory walk. A bare `ls`,
+    a directory and a mask do not count as file targets.
     """
     base = base.replace("\\", "/").rstrip("/")
     has_target = False
@@ -287,21 +288,22 @@ def ls_targets_are_files(link: str, base: str) -> bool:
             continue
         clean = _trim_matches(_trim_matches(word, '"'), "'")
         if not clean or "*" in clean or "?" in clean:
-            return False  # маска — это список
-        if ":/" in clean or clean.startswith("/"):
+            return False  # mask - this is a listing
+        drive, _ = ntpath.splitdrive(clean)
+        if drive or clean.startswith("/"):
             abs_path = clean
         else:
             abs_path = f"{base}/{clean}"
         if not Path(abs_path).is_file():
-            return False  # каталог или несуществующий путь — список
+            return False  # directory or non-existent path - listing
         has_target = True
     return has_target
 
 
 def has_explicit_path(lower: str) -> bool:
-    """true → команда содержит явный путь: диск (`:/`), home (`~/`) или `/...`-токен.
+    """true -> the command contains an explicit path: drive (`:/`), home (`~/`) or a `/...` token.
 
-    Гейт cwd-fallback: при явном пути нельзя подменять его на индексированный cwd.
+    cwd fallback gate: with an explicit path it must not be replaced by the indexed cwd.
     """
     if ":/" in lower or "~/" in lower:
         return True
@@ -309,8 +311,8 @@ def has_explicit_path(lower: str) -> bool:
 
 
 def cmd_contains_indexed_prefix(lower: str, prefix: str) -> bool:
-    """true → `prefix` встречается на границе пути, а не как часть более длинного
-    имени каталога: 'code-index' не матчит 'code-index-guard'.
+    """true -> `prefix` occurs at a path boundary, not as part of a longer
+    directory name: 'code-index' does not match 'code-index-guard'.
     """
     start = 0
     n = len(lower)
@@ -321,7 +323,7 @@ def cmd_contains_indexed_prefix(lower: str, prefix: str) -> bool:
             return False
         after = pos + plen
         if after >= n:
-            return True  # конец строки
+            return True  # end of string
         b = lower[after]
         if not ((b.isascii() and b.isalnum()) or b == "-" or b == "_"):
             return True

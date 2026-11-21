@@ -1,14 +1,14 @@
 #!/usr/bin/env python
-# meta-decompile v0.69 — XML объекта метаданных 1С → JSON-черновик формата meta-compile
+# meta-decompile v0.69 - XML of a 1C metadata object -> JSON draft in meta-compile format
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 #
-# Канон декомпиляции метаданных. lxml.etree — для полного XPath 1.0
-# (выбор узлов, объединения, предикаты через менеджер пространств имён).
+# Metadata decompilation canon. lxml.etree - for full XPath 1.0
+# (node selection, unions, predicates via the namespace manager).
 #
-# Поддержаны: Catalog, ExchangePlan, ChartOfCharacteristicTypes, ChartOfAccounts, ChartOfCalculationTypes, Document,
+# Supported: Catalog, ExchangePlan, ChartOfCharacteristicTypes, ChartOfAccounts, ChartOfCalculationTypes, Document,
 # InformationRegister, AccumulationRegister, AccountingRegister, CalculationRegister, BusinessProcess, Task, Enum, ...
-# Инверс meta-compile (omit-on-default: ключ эмитим только когда значение в XML отличается от умолчания
-# компилятора). Неподдерживаемый тип / не-MetaDataObject root → exit 3 (ring3, как form-decompile).
+# Inverse of meta-compile (omit-on-default: emit a key only when the XML value differs from the compiler
+# default). Unsupported type / non-MetaDataObject root -> exit 3 (ring3, like form-decompile).
 
 import argparse
 import os
@@ -19,16 +19,16 @@ from lxml import etree
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
-# Регистронезависимый ввод: имена параметров и значения choices принимаются
-# в любом регистре (в argparse по умолчанию совпадение точное).
+# Case-insensitive input: parameter names and choices values are accepted
+# in any case (argparse matches exactly by default).
 def ci_parse_args(parser, argv=None):
-    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
+    """parse_args: parameter names and choices values are accepted in any case."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
         if tok.startswith('-') and tok.lower() in names:
             argv[i] = names[tok.lower()]
-    # choices — зеркало [ValidateSet]; канонизируем ДО разбора, иначе argparse отвергнет регистр
+    # choices mirrors [ValidateSet]; canonicalize BEFORE parsing, otherwise argparse rejects the case
     choice_map = {}
     for a in parser._actions:
         if a.choices:
@@ -41,7 +41,7 @@ def ci_parse_args(parser, argv=None):
     return parser.parse_args(argv)
 
 
-# --- Namespaces (зеркало XmlNamespaceManager) ---
+# --- Namespaces (mirror of XmlNamespaceManager) ---
 NS_MD = "http://v8.1c.ru/8.3/MDClasses"
 NS_V8 = "http://v8.1c.ru/8.1/data/core"
 NS_XR = "http://v8.1c.ru/8.3/xcf/readable"
@@ -49,7 +49,7 @@ NS_XSI = "http://www.w3.org/2001/XMLSchema-instance"
 NS_APP = "http://v8.1c.ru/8.2/managed-application/core"
 NS = {'md': NS_MD, 'v8': NS_V8, 'xr': NS_XR, 'xsi': NS_XSI, 'app': NS_APP}
 
-# Модульное состояние разбора (props / dsl / objType). Инициализируется в main().
+# Module parse state (props / dsl / objType). Initialized in main().
 props = None
 obj_node = None
 obj_type = None
@@ -58,7 +58,7 @@ dsl = None
 object_path = None
 
 
-# --- XML-обёртки (зеркало SelectSingleNode/SelectNodes/GetAttribute/InnerText) ---
+# --- XML wrappers (mirror of SelectSingleNode/SelectNodes/GetAttribute/InnerText) ---
 def _single(node, xpath):
     if node is None:
         return None
@@ -73,22 +73,22 @@ def _nodes(node, xpath):
 
 
 def _text(node):
-    """InnerText — конкатенация всего текста-потомка (PreserveWhitespace=true у lxml по умолчанию)."""
+    """InnerText - concatenation of all descendant text (PreserveWhitespace=true in lxml by default)."""
     if node is None:
         return None
     return ''.join(node.itertext())
 
 
 def _ns_of_prefix(node, prefix):
-    """URI по префиксу. lxml отдаёт nsmap с учётом
-    унаследованных объявлений, поэтому локальный xmlns:dNpM на самом теге тоже виден."""
+    """URI by prefix. lxml returns nsmap including
+    inherited declarations, so the local xmlns:dNpM on the tag itself is visible too."""
     if node is None:
         return None
     return node.nsmap.get(prefix)
 
 
 def _attr(node, name, ns=None):
-    """GetAttribute(name[, ns]) — .NET возвращает '' для отсутствующего атрибута, lxml → None."""
+    """GetAttribute(name[, ns]) - .NET returns '' for a missing attribute, lxml -> None."""
     if node is None:
         return ''
     key = ('{%s}%s' % (ns, name)) if ns else name
@@ -103,9 +103,9 @@ def _localname(el):
     return t.split('}', 1)[1] if '}' in t else t
 
 
-# --- JSON-эмиттер (контроль порядка/массивов/кириллицы) ---
+# --- JSON emitter (control of order/arrays/Cyrillic) ---
 def _json_num(n):
-    """Зеркало "$node" для int/long/double."""
+    """Mirror of "$node" for int/long/double."""
     if isinstance(n, bool):
         return 'true' if n else 'false'
     if isinstance(n, int):
@@ -135,7 +135,7 @@ def convert_to_compact_json(node, depth=0):
     if isinstance(node, list):
         if len(node) == 0:
             return "[]"
-        # Массив скаляров-строк — компактно в строку; массив объектов — по строкам.
+        # Array of scalar strings - compact into one line; array of objects - one per line.
         all_scalar = True
         for e in node:
             if isinstance(e, (dict, list)):
@@ -171,22 +171,22 @@ def quote_json(s):
     return ''.join(sb)
 
 
-# --- Сравнение строк с учётом регистра ---
+# --- Case-sensitive string comparison ---
 def ne_cs(a, b):
-    """Сравнение строк с учётом регистра. True когда различаются с учётом регистра.
-    Зеркало компилятора: авто-синоним/описание опускаем только при ТОЧНОМ совпадении со split_camel_words."""
+    """Case-sensitive string comparison. True when they differ case-sensitively.
+    Compiler mirror: we omit the auto-synonym/description only on an EXACT match with split_camel_words."""
     return (a if a is not None else '') != (b if b is not None else '')
 
 
 def split_camel_words(name):
-    """Авто-синоним: точное зеркало Split-CamelCase из meta-compile (split_camel_case, HE-эвристика).
-    ВАЖНО: логика должна совпадать байт-в-байт с компилятором, иначе ложные «синоним==авто» → диффы."""
+    """Auto-synonym: exact mirror of Split-CamelCase from meta-compile (split_camel_case, HE heuristic).
+    IMPORTANT: the logic must match the compiler byte-for-byte, otherwise false "synonym==auto" -> diffs."""
     if not name:
         return name
     result = re.sub(r'([а-яё])([А-ЯЁ])', r'\1 \2', name)
     result = re.sub(r'([a-z])([A-Z])', r'\1 \2', result)
-    # HE: сохраняем прогон заглавных >=2, если сразу за ним НЕ буква (пробел/цифра/спецсимвол/конец);
-    # предлоги/бренды перед буквой → лоуэркейз. Первый символ — как есть.
+    # HE: keep a run of capitals >=2 if it is NOT immediately followed by a letter (space/digit/special/end);
+    # prepositions/brands before a letter -> lowercase. First character - as is.
     if len(result) > 1:
         chars = list(result)
         n = len(chars)
@@ -232,8 +232,8 @@ def get_ml_ru(node):
 
 
 def get_ml_value(node):
-    """ML-значение → строка (если единственный item ru) ЛИБО dict{lang:content} (мультиязычно, порядок из XML).
-    None если контента нет. Компактная строка для ru-only, объект для мультиязычных."""
+    """ML value -> string (if a single ru item) OR dict{lang:content} (multilingual, order from XML).
+    None if there is no content. Compact string for ru-only, object for multilingual."""
     if node is None:
         return None
     items = _nodes(node, 'v8:item')
@@ -242,7 +242,7 @@ def get_ml_value(node):
     if len(items) == 1:
         lang = _text(_single(items[0], 'v8:lang'))
         content = _text(_single(items[0], 'v8:content'))
-        # Единственный ru-item: пустое содержимое ≡ отсутствие значения → None (иначе tooltip:"" ≠ self-close).
+        # Single ru-item: empty content == no value -> None (otherwise tooltip:"" != self-close).
         if lang == 'ru':
             return None if content == '' else content
     o = {}
@@ -253,7 +253,7 @@ def get_ml_value(node):
     return o
 
 
-# --- Тип реквизита: <Type> → shorthand-строка ---
+# --- Attribute type: <Type> -> shorthand string ---
 def strip_ns_prefix(s):
     if ':' in s:
         return s.split(':', 1)[1]
@@ -310,17 +310,17 @@ def get_type_shorthand(type_node):
                         fr = _text(dn)
                 parts.append(fr)   # Date | DateTime
             elif re.search(r'(^|:)base64Binary$', raw, re.I):
-                # xs:base64Binary — всегда ДвоичныеДанные (ХранилищеЗначения — это v8:ValueStorage).
-                # Узел без квалификаторов встречается только в рукописном XML: замерено на 8.3.24.1691 —
-                # платформа читает его как безлимит (Length 0, Variable) и так же выгружает обратно.
+                # xs:base64Binary is always ДвоичныеДанные (ХранилищеЗначения is v8:ValueStorage).
+                # A node without qualifiers occurs only in hand-written XML: measured on 8.3.24.1691 -
+                # the platform reads it as unlimited (Length 0, Variable) and dumps it back the same way.
                 bq = type_node.find('v8:BinaryDataQualifiers', NS)
                 if bq is not None:
                     blen = bq.find('v8:Length', NS)
                     bal = bq.find('v8:AllowedLength', NS)
                     blen_val = _text(blen).strip() if blen is not None else ''
                     bal_val = _text(bal).strip() if bal is not None else ''
-                    # Голым BinaryData сворачиваем ТОЛЬКО точный дефолт компилятора
-                    # (4294967292/Fixed), иначе фиксированная длина терялась на раундтрипе.
+                    # We collapse to bare BinaryData ONLY the exact compiler default
+                    # (4294967292/Fixed), otherwise the fixed length was lost on round-trip.
                     if bal_val.lower() == 'variable' and blen_val:
                         parts.append(f'BinaryData({blen_val})')
                     elif blen_val and blen_val != '4294967292':
@@ -336,12 +336,12 @@ def get_type_shorthand(type_node):
     return ' + '.join(parts)
 
 
-# Скалярное значение параметра выбора (<Value xsi:type=...>) → JSON-значение (bool/число/строка).
+# Scalar value of a choice parameter (<Value xsi:type=...>) -> JSON value (bool/number/string).
 def get_xdto_type_value(node):
-    """XDTO-тип: префиксное значение (d6p1:Local) -> нотация Кларка "{uri}Local".
+    """XDTO type: prefixed value (d6p1:Local) -> Clark notation "{uri}Local".
 
-    Префиксы платформы (dNpM) произвольны и переносу не подлежат; стандартные (xs:, v8:, xr:)
-    оставляем дословно — компилятор их так и пишет.
+    Platform prefixes (dNpM) are arbitrary and must not be carried over; standard ones (xs:, v8:, xr:)
+    are kept verbatim - the compiler writes them that way.
     """
     if node is None:
         return None
@@ -357,8 +357,8 @@ def get_xdto_type_value(node):
 
 
 def convert_ch_scalar_node(vN):
-    # nil-элемент массива (<v8:Value xsi:nil="true"/>) -> JSON null. Без этого он приезжал пустой
-    # строкой и компилятор эмитил xs:string вместо nil.
+    # nil array element (<v8:Value xsi:nil="true"/>) -> JSON null. Without this it arrived as an empty
+    # string and the compiler emitted xs:string instead of nil.
     if _attr(vN, 'nil', NS_XSI) == 'true':
         return None
     xt = _attr(vN, 'type', NS_XSI)
@@ -369,14 +369,14 @@ def convert_ch_scalar_node(vN):
         if re.match(r'^-?\d+$', txt):
             return int(txt)
         return float(txt)
-    # Пустой DesignTimeRef != пустая строка: без маркера тип терялся, и компилятор эмитил xs:string.
-    # Та же конвенция, что у fillValue — маркер emptyRef.
+    # Empty DesignTimeRef != empty string: without the marker the type was lost, and the compiler emitted xs:string.
+    # Same convention as fillValue - the emptyRef marker.
     if re.search(r'DesignTimeRef$', xt, re.I) and txt == '':
         return {'emptyRef': True}
     return txt
 
 
-# app:value (тип прямо на узле) → значение ЛИБО список (v8:FixedArray с детьми v8:Value).
+# app:value (type directly on the node) -> value OR list (v8:FixedArray with v8:Value children).
 def get_choice_param_value(val_node):
     xt = _attr(val_node, 'type', NS_XSI)
     if re.search(r'FixedArray$', xt, re.I):
@@ -387,7 +387,7 @@ def get_choice_param_value(val_node):
     return convert_ch_scalar_node(val_node)
 
 
-# <ChoiceParameterLinks> → [{name,dataPath,valueChange?}] | строки "name=dataPath". tag: 'md:...' | 'xr:...'.
+# <ChoiceParameterLinks> -> [{name,dataPath,valueChange?}] | strings "name=dataPath". tag: 'md:...' | 'xr:...'.
 def parse_choice_parameter_links(parent, tag):
     node = _single(parent, tag)
     if node is None:
@@ -405,8 +405,8 @@ def parse_choice_parameter_links(parent, tag):
             arr.append("%s=%s" % (l_name, l_dp))
         else:
             arr.append({'name': l_name, 'dataPath': l_dp, 'valueChange': vcv})
-    # Исторический трап: одноэлементный список мог развернуться в скаляр — держим список явно
-    # (в отличие от Get-ChoiceParamValue с `,$arr`). Зеркалим: len==1 → голый элемент.
+    # Historical trap: a single-element list could unfold into a scalar - keep the list explicit
+    # (unlike Get-ChoiceParamValue with `,$arr`). We mirror: len==1 -> bare element.
     return arr[0] if len(arr) == 1 else arr
 
 
@@ -429,16 +429,16 @@ def parse_choice_parameters(parent, tag):
             o = {'name': p_name}
             o['value'] = get_choice_param_value(val_n)
             arr.append(o)
-    # Тот же трап: одноэлементный список не разворачиваем в скаляр.
+    # Same trap: we do not unfold a single-element list into a scalar.
     return arr[0] if len(arr) == 1 else arr
 
 
-# --- Реквизит → DSL: shorthand-строка "Имя: Тип | флаги" ЛИБО object-форма при кастомном синониме. ---
+# --- Attribute -> DSL: shorthand string "Имя: Тип | flags" OR object form for a custom synonym. ---
 def attr_to_dsl(attr_node):
     ap = _single(attr_node, 'md:Properties')
     nm = _text(_single(ap, 'md:Name'))
-    # Поле внешнего источника: три своих свойства. Имя колонки по умолчанию равно имени поля,
-    # поэтому в DSL попадает только отличающееся.
+    # External data source field: three own properties. The column name defaults to the field name,
+    # so only the differing one gets into the DSL.
     eds_nids = _single(ap, 'md:NameInDataSource')
     eds_ro = _single(ap, 'md:ReadOnly')
     eds_null = _single(ap, 'md:AllowNull')
@@ -462,20 +462,20 @@ def attr_to_dsl(attr_node):
     if eds_null is not None and _text(eds_null) == 'true':
         flags.append('nullable')
 
-    # Синоним/подсказка (строка ru-only ИЛИ {ru,en}).
+    # Synonym/tooltip (ru-only string OR {ru,en}).
     syn_node = _single(ap, 'md:Synonym')
     syn_val = get_ml_value(syn_node)
     syn_custom = False
-    # Пустой <Synonym/> (узел есть, значения нет) ≠ авто-синоним из имени → явный пустой (synonym:"").
+    # Empty <Synonym/> (node exists, no value) != auto-synonym from the name -> explicit empty (synonym:"").
     syn_empty = (syn_node is not None and syn_val is None)
     if isinstance(syn_val, str):
         if ne_cs(syn_val, split_camel_words(nm)):
             syn_custom = True
     elif syn_val is not None:
-        syn_custom = True   # {ru,en} = всегда кастом
+        syn_custom = True   # {ru,en} = always custom
     tt_val = get_ml_value(_single(ap, 'md:ToolTip'))
 
-    # Extra-свойства реквизита (omit-on-default). Наличие любого → object-форма.
+    # Extra attribute properties (omit-on-default). Presence of any -> object form.
     def en(tag):
         n = _single(ap, "md:" + tag)
         return _text(n) if n is not None else None
@@ -526,7 +526,7 @@ def attr_to_dsl(attr_node):
     v = en('ChoiceForm')
     if v:
         extra['choiceForm'] = v
-    # Регистро-специфика измерения (теги присутствуют только у Dimension → безвредно для прочих).
+    # Dimension-specific extras (tags present only on Dimension -> harmless for others).
     v = en('Master')
     if v == 'true':
         extra['master'] = True
@@ -538,9 +538,9 @@ def attr_to_dsl(attr_node):
         extra['denyIncompleteValues'] = True
     v = en('UseInTotals')
     if v == 'false':
-        extra['useInTotals'] = False   # дефолт true → захват при false
-    # Формат 2.20: режим приведения типов измерения РС. Дефолт TransformValues (его компилятор
-    # эмитит сам) → захватываем только отклонение.
+        extra['useInTotals'] = False   # default true -> capture on false
+    # Format 2.20: type reduction mode of an information register dimension. Default TransformValues (the compiler
+    # emits it itself) -> capture only the deviation.
     v = en('TypeReductionMode')
     if v and v != 'TransformValues':
         extra['typeReductionMode'] = v
@@ -549,20 +549,20 @@ def attr_to_dsl(attr_node):
         extra['baseDimension'] = True
     v = en('ScheduleLink')
     if v:
-        extra['scheduleLink'] = v   # ссылка на измерение графика (пустой → пропуск)
+        extra['scheduleLink'] = v   # reference to the schedule dimension (empty -> skip)
     v = en('Balance')
     if v == 'true':
         extra['balance'] = True
     v = en('AccountingFlag')
     if v:
-        extra['accountingFlag'] = v   # ссылка на признак учёта ПС (пустой → пропуск)
+        extra['accountingFlag'] = v   # reference to the accounting flag of the chart of accounts (empty -> skip)
     v = en('ExtDimensionAccountingFlag')
     if v:
         extra['extDimensionAccountingFlag'] = v
     v = en('AddressingDimension')
     if v:
-        extra['addressingDimension'] = v   # ссылка на измерение регистра исполнителей
-    # MinValue/MaxValue — граница диапазона (omit при nil). Тип сохраняем: xs:string→строка, xs:decimal→число.
+        extra['addressingDimension'] = v   # reference to the dimension of the performers register
+    # MinValue/MaxValue - range boundary (omit on nil). We keep the type: xs:string->string, xs:decimal->number.
     for mm in ('MinValue', 'MaxValue'):
         mn = _single(ap, "md:" + mm)
         if mn is None:
@@ -583,8 +583,8 @@ def attr_to_dsl(attr_node):
     if efmt_v is not None:
         extra['editFormat'] = efmt_v
 
-    # FillValue (значение заполнения). Форма по умолчанию зависит от типа реквизита: String→typed-empty,
-    # Number→zero, всё остальное→nil. Эмитим `fillValue` только при отклонении от дефолта (§4.2 spec).
+    # FillValue (fill value). The default form depends on the attribute type: String->typed-empty,
+    # Number->zero, everything else->nil. We emit `fillValue` only on deviation from the default (§4.2 spec).
     fv_node = _single(ap, 'md:FillValue')
     if fv_node is not None:
         fcat = 'Other'
@@ -604,11 +604,11 @@ def attr_to_dsl(attr_node):
         if nil_attr == 'true':
             if fcat == 'String' or fcat == 'Number':
                 extra['fillValue'] = None   # nil-override
-            # иначе nil — это дефолт → пропускаем
+            # otherwise nil is the default -> skip
         elif re.search(r'boolean$', xsi_t, re.I):
             extra['fillValue'] = (fv_text == 'true')
         elif re.search(r'decimal$', xsi_t, re.I):
-            # Захватываем как ЧИСЛО (не строку): на составном типе компилятор берёт xsi-тип из JSON-значения.
+            # Capture as a NUMBER (not a string): on a composite type the compiler takes the xsi type from the JSON value.
             if not (fcat == 'Number' and (fv_text == '0' or fv_text == '')):
                 extra['fillValue'] = int(fv_text) if re.match(r'^-?\d+$', fv_text) else float(fv_text)
         elif re.search(r'string$', xsi_t, re.I):
@@ -617,13 +617,13 @@ def attr_to_dsl(attr_node):
         elif re.search(r'dateTime$', xsi_t, re.I):
             extra['fillValue'] = fv_text
         elif re.search(r'DesignTimeRef$', xsi_t, re.I):
-            # Пустой DTR ≠ nil/xs:string → маркер emptyRef (иначе тип терялся в xs:string).
+            # Empty DTR != nil/xs:string -> emptyRef marker (otherwise the type was lost in xs:string).
             if fv_text == '':
                 extra['fillValue'] = {'emptyRef': True}
             else:
                 extra['fillValue'] = fv_text
 
-    # LinkByType (связь по типу): DataPath + LinkItem. Пусто → пропускаем. linkItem=0 → компактно строкой.
+    # LinkByType (link by type): DataPath + LinkItem. Empty -> skip. linkItem=0 -> compact as a string.
     lbt_node = _single(ap, 'md:LinkByType')
     if lbt_node is not None:
         dp_n = _single(lbt_node, 'xr:DataPath')
@@ -642,7 +642,7 @@ def attr_to_dsl(attr_node):
     if cp_arr is not None:
         extra['choiceParameters'] = cp_arr
 
-    # Пустой <Type/> (реквизит без типа) → ts=''. Отличаем от «дефолтного» отсутствия: явный type:''.
+    # Empty <Type/> (attribute without a type) -> ts=''. Distinguished from the "default" absence: explicit type:''.
     type_empty = (ts == '')
     if eds_nids is not None and _text(eds_nids) and _text(eds_nids) != nm:
         extra['nameInDataSource'] = _text(eds_nids)
@@ -669,7 +669,7 @@ def attr_to_dsl(attr_node):
     return head
 
 
-# --- Свойства (omit-on-default). ---
+# --- Properties (omit-on-default). ---
 def add_bool_prop(key, tag, default):
     v = P(tag)
     if v is not None:
@@ -692,7 +692,7 @@ def add_int_prop(key, tag, default):
             dsl[key] = iv
 
 
-# Общий захват структурного <Picture> (зеркало Emit-CommandPicture). Пишет в tgt ключи picture/loadTransparent.
+# Common capture of a structural <Picture> (mirror of Emit-CommandPicture). Writes picture/loadTransparent keys into tgt.
 def get_picture_to_dsl(props_node, tgt):
     ref_n = _single(props_node, 'md:Picture/xr:Ref')
     abs_n = _single(props_node, 'md:Picture/xr:Abs')
@@ -713,7 +713,7 @@ def get_picture_to_dsl(props_node, tgt):
                 tgt['loadTransparent'] = False
 
 
-# Короткая форма поля: <Type>.<Name>.StandardAttribute.X / .Attribute.X → StandardAttribute.X / Attribute.X
+# Short field form: <Type>.<Name>.StandardAttribute.X / .Attribute.X -> StandardAttribute.X / Attribute.X
 def short_field(full):
     m = re.search(r'\.(StandardAttribute|Attribute)\.(.+)$', full)
     if m:
@@ -727,21 +727,21 @@ def add_form_ref(key, tag):
         dsl[key] = v
 
 
-# --- Characteristics: короткая форма поля bare/partial. ---
+# --- Characteristics: short bare/partial field form. ---
 def shorten_char_field(full, frm):
     if full.startswith(frm + "."):
         rest = full[len(frm) + 1:]
         m = re.match(r'^StandardAttribute\.(Ref|Parent|Owner)$', rest)
         if m:
-            return m.group(1)   # ссылочные станд. → голое
+            return m.group(1)   # reference standard ones -> bare
         m = re.match(r'^Attribute\.(.+)$', rest)
         if m:
-            return m.group(1)   # кастом → голое
-        return rest   # прочие StandardAttribute.X / Dimension.X / Resource.X → частичное
+            return m.group(1)   # custom -> bare
+        return rest   # other StandardAttribute.X / Dimension.X / Resource.X -> partial
     return full
 
 
-# --- Предопределённые (local-name xpath, без ns-менеджера) ---
+# --- Predefined (local-name xpath, without the ns manager) ---
 def _lx1(el, xp):
     r = el.xpath(xp)
     return r[0] if r else None
@@ -761,15 +761,15 @@ def predef_item_to_dsl(item_el):
     is_folder = (folder_el is not None and _text(folder_el) == 'true')
     child_container = _lx1(item_el, "*[local-name()='ChildItems']")
     kids = _lxn(child_container, "*[local-name()='Item']") if child_container is not None else []
-    # Type — тип значения предопределённой характеристики (ПВХ). Наличие узла → object-форма с ключом type.
+    # Type - value type of a predefined characteristic (ПВХ). Presence of the node -> object form with the type key.
     type_el = _lx1(item_el, "*[local-name()='Type']")
     type_str = get_type_shorthand(type_el) if type_el is not None else None
     auto = split_camel_words(name)
 
-    # Компактная строка для плоских: без узла Type (Catalog) ИЛИ с непустым типом → "(Код) Имя [Наим]: Тип".
-    # Сокращение неоднозначно, если значение содержит собственные разделители грамматики:
-    # ')' или ':' в коде, пробел/скобка/':' в имени, скобки в наименовании. Компилятор читает код
-    # как [^)]*, а имя как \S+ — на "114 (108)" разбор рассыпается и элемент терял имя и код.
+    # Compact string for flat ones: no Type node (Catalog) OR with a non-empty type -> "(Код) Имя [Наим]: Тип".
+    # The abbreviation is ambiguous if the value contains grammar separators of its own:
+    # ')' or ':' in the code, space/parenthesis/':' in the name, parentheses in the description. The compiler reads the code
+    # as [^)]*, and the name as \S+ - on "114 (108)" parsing breaks down and the element lost its name and code.
     ambiguous = bool(re.search(r'[):]', code or '')) or bool(re.search(r'[\s:\[\]()]', name or ''))         or bool(re.search(r'[\[\]]', desc or ''))
     if (not is_folder) and len(kids) == 0 and (type_str is None or type_str != '') and not ambiguous:
         s = ("(%s) %s" % (code, name)) if code else name
@@ -780,7 +780,7 @@ def predef_item_to_dsl(item_el):
         if type_str:
             s = "%s: %s" % (s, type_str)
         return s
-    # Группа/иерархия/с типом → объект.
+    # Group/hierarchy/with type -> object.
     o = {'name': name}
     if code:
         o['code'] = code
@@ -813,13 +813,13 @@ def predef_account_to_dsl(item_el):
     ord_el = _lx1(item_el, "*[local-name()='Order']")
     order = _text(ord_el) if ord_el is not None else ''
     auto = split_camel_words(name)
-    # TRUE-флаги (leaf после последней точки в ref).
+    # TRUE flags (leaf after the last dot in ref).
     true_flags = []
     for fl in _lxn(item_el, "*[local-name()='AccountingFlags']/*[local-name()='Flag']"):
         if _text(fl) == 'true':
             r = _attr(fl, 'ref')
             true_flags.append(r.split('.')[-1])
-    # ExtDimensionTypes → subconto. Короткая запись "Тип | Признак1, Признак2".
+    # ExtDimensionTypes -> subconto. Short notation "Тип | Признак1, Признак2".
     edt_pfx = (dsl['extDimensionTypes'] + ".") if dsl.get('extDimensionTypes') else None
     subconto = []
     for edt in _lxn(item_el, "*[local-name()='ExtDimensionTypes']/*[local-name()='ExtDimensionType']"):
@@ -844,7 +844,7 @@ def predef_account_to_dsl(item_el):
     o = {'name': name}
     if code:
         o['code'] = code
-    # -cne (регистрочувствительно!): хвостовые аббревиатуры (ОС/НМА) теряли бы регистр при -ne.
+    # -cne (case-sensitive!): trailing abbreviations (ОС/НМА) would lose case with -ne.
     if desc != auto:
         o['description'] = desc
     o['accountType'] = acct_type
@@ -889,13 +889,13 @@ def predef_calc_type_to_dsl(item_el):
 
 
 def build_dsl():
-    """Линейный поток сборки DSL — единый проход."""
+    """Linear DSL assembly flow - a single pass."""
     global dsl
 
-    # === Сборка DSL ===
+    # === DSL assembly ===
     dsl = {'type': obj_type, 'name': obj_name}
 
-    # Синоним объекта: строка ru-only ИЛИ {ru,en}. Кастом → эмитим. Пустой <Synonym/> → явный synonym:"".
+    # Object synonym: ru-only string OR {ru,en}. Custom -> emit. Empty <Synonym/> -> explicit synonym:"".
     syn_node_obj = _single(props, 'md:Synonym')
     syn_val = get_ml_value(syn_node_obj)
     if isinstance(syn_val, str):
@@ -909,7 +909,7 @@ def build_dsl():
     if cmt:
         dsl['comment'] = cmt
 
-    # Свойства Catalog (omit-on-default).
+    # Catalog properties (omit-on-default).
     add_bool_prop('hierarchical', 'Hierarchical', False)
     add_enum_prop('hierarchyType', 'HierarchyType', 'HierarchyFoldersAndItems')
     add_bool_prop('limitLevelCount', 'LimitLevelCount', False)
@@ -922,11 +922,11 @@ def build_dsl():
         if len(items) > 0:
             dsl['owners'] = [(s.split('.', 1)[1] if re.match(r'^Catalog\.', s) else s) for s in items]
     add_enum_prop('subordinationUse', 'SubordinationUse', 'ToItems')
-    # Тип-зависимые дефолты (компилятор задаёт их по типу — декомпилятор обязан зеркалить).
+    # Type-dependent defaults (the compiler sets them by type - the decompiler must mirror).
     descr_len_def = {'ExchangePlan': 150, 'ChartOfCharacteristicTypes': 100, 'ChartOfCalculationTypes': 100}.get(obj_type, 25)
     code_len_def = 5 if obj_type == 'ChartOfCalculationTypes' else 9
     create_inp_def = 'Use' if obj_type in ('Catalog', 'Document') else 'DontUse'
-    data_lock_def = 'Managed'  # компилятор эмитит Managed по умолчанию для всех типов (авторинг); Automatic несётся в DSL явно
+    data_lock_def = 'Managed'  # the compiler emits Managed by default for all types (authoring); Automatic is carried in the DSL explicitly
     code_series_def = {'ChartOfCharacteristicTypes': 'WholeCharacteristicKind', 'ChartOfAccounts': 'WholeChartOfAccounts'}.get(obj_type, 'WholeCatalog')
     check_unique_def = (obj_type in ('ChartOfCharacteristicTypes', 'ChartOfAccounts', 'Document', 'DocumentNumerator'))
     def_pres_def = 'AsCode' if obj_type == 'ChartOfAccounts' else 'AsDescription'
@@ -951,14 +951,14 @@ def build_dsl():
     add_enum_prop('predefinedDataUpdate', 'PredefinedDataUpdate', 'Auto')
     add_enum_prop('searchStringModeOnInputByString', 'SearchStringModeOnInputByString', 'Begin')
     add_enum_prop('fullTextSearchOnInputByString', 'FullTextSearchOnInputByString', 'DontUse')
-    # ExchangePlan-специфичные свойства.
+    # ExchangePlan-specific properties.
     if obj_type == 'ExchangePlan':
         add_bool_prop('distributedInfoBase', 'DistributedInfoBase', False)
         add_bool_prop('includeConfigurationExtensions', 'IncludeConfigurationExtensions', False)
         add_enum_prop('dataHistory', 'DataHistory', 'DontUse')
         add_bool_prop('updateDataHistoryImmediatelyAfterWrite', 'UpdateDataHistoryImmediatelyAfterWrite', False)
         add_bool_prop('executeAfterWriteDataHistoryVersionProcessing', 'ExecuteAfterWriteDataHistoryVersionProcessing', False)
-    # ChartOfCharacteristicTypes-специфичные свойства.
+    # ChartOfCharacteristicTypes-specific properties.
     if obj_type == 'ChartOfCharacteristicTypes':
         add_enum_prop('dataHistory', 'DataHistory', 'DontUse')
         add_bool_prop('updateDataHistoryImmediatelyAfterWrite', 'UpdateDataHistoryImmediatelyAfterWrite', False)
@@ -971,7 +971,7 @@ def build_dsl():
             vt_str = get_type_shorthand(vt_node)
             if vt_str and vt_str != 'Boolean + String(100) + Number(15,2) + DateTime':
                 dsl['valueType'] = vt_str
-    # ChartOfAccounts-специфичные свойства.
+    # ChartOfAccounts-specific properties.
     if obj_type == 'ChartOfAccounts':
         edt = P('ExtDimensionTypes')
         if edt:
@@ -985,7 +985,7 @@ def build_dsl():
         add_enum_prop('dataHistory', 'DataHistory', 'DontUse')
         add_bool_prop('updateDataHistoryImmediatelyAfterWrite', 'UpdateDataHistoryImmediatelyAfterWrite', False)
         add_bool_prop('executeAfterWriteDataHistoryVersionProcessing', 'ExecuteAfterWriteDataHistoryVersionProcessing', False)
-    # ChartOfCalculationTypes-специфичные свойства.
+    # ChartOfCalculationTypes-specific properties.
     if obj_type == 'ChartOfCalculationTypes':
         add_enum_prop('dependenceOnCalculationTypes', 'DependenceOnCalculationTypes', 'DontUse')
         add_bool_prop('actionPeriodUse', 'ActionPeriodUse', False)
@@ -997,7 +997,7 @@ def build_dsl():
         add_enum_prop('dataHistory', 'DataHistory', 'DontUse')
         add_bool_prop('updateDataHistoryImmediatelyAfterWrite', 'UpdateDataHistoryImmediatelyAfterWrite', False)
         add_bool_prop('executeAfterWriteDataHistoryVersionProcessing', 'ExecuteAfterWriteDataHistoryVersionProcessing', False)
-    # Document-специфичные свойства.
+    # Document-specific properties.
     if obj_type == 'Document':
         num_ref = P('Numerator')
         if num_ref:
@@ -1021,7 +1021,7 @@ def build_dsl():
         add_enum_prop('dataHistory', 'DataHistory', 'DontUse')
         add_bool_prop('updateDataHistoryImmediatelyAfterWrite', 'UpdateDataHistoryImmediatelyAfterWrite', False)
         add_bool_prop('executeAfterWriteDataHistoryVersionProcessing', 'ExecuteAfterWriteDataHistoryVersionProcessing', False)
-    # InformationRegister-специфичные свойства.
+    # InformationRegister-specific properties.
     if obj_type == 'InformationRegister':
         add_enum_prop('periodicity', 'InformationRegisterPeriodicity', 'Nonperiodical')
         add_enum_prop('writeMode', 'WriteMode', 'Independent')
@@ -1031,11 +1031,11 @@ def build_dsl():
         add_enum_prop('dataHistory', 'DataHistory', 'DontUse')
         add_bool_prop('updateDataHistoryImmediatelyAfterWrite', 'UpdateDataHistoryImmediatelyAfterWrite', False)
         add_bool_prop('executeAfterWriteDataHistoryVersionProcessing', 'ExecuteAfterWriteDataHistoryVersionProcessing', False)
-    # AccumulationRegister-специфичные свойства.
+    # AccumulationRegister-specific properties.
     if obj_type == 'AccumulationRegister':
         add_enum_prop('registerType', 'RegisterType', 'Balance')
         add_bool_prop('enableTotalsSplitting', 'EnableTotalsSplitting', True)
-    # AccountingRegister-специфичные свойства.
+    # AccountingRegister-specific properties.
     if obj_type == 'AccountingRegister':
         coa = P('ChartOfAccounts')
         if coa:
@@ -1043,7 +1043,7 @@ def build_dsl():
         add_bool_prop('correspondence', 'Correspondence', False)
         add_int_prop('periodAdjustmentLength', 'PeriodAdjustmentLength', 0)
         add_bool_prop('enableTotalsSplitting', 'EnableTotalsSplitting', True)
-    # CalculationRegister-специфичные свойства.
+    # CalculationRegister-specific properties.
     if obj_type == 'CalculationRegister':
         cct = P('ChartOfCalculationTypes')
         if cct:
@@ -1060,7 +1060,7 @@ def build_dsl():
         schd = P('ScheduleDate')
         if schd:
             dsl['scheduleDate'] = schd
-    # BusinessProcess-специфичные свойства.
+    # BusinessProcess-specific properties.
     if obj_type == 'BusinessProcess':
         add_enum_prop('numberType', 'NumberType', 'String')
         add_int_prop('numberLength', 'NumberLength', 11)
@@ -1072,7 +1072,7 @@ def build_dsl():
         if tsk:
             dsl['task'] = tsk
         add_bool_prop('createTaskInPrivilegedMode', 'CreateTaskInPrivilegedMode', True)
-    # Task-специфичные свойства.
+    # Task-specific properties.
     if obj_type == 'Task':
         add_enum_prop('numberType', 'NumberType', 'String')
         add_int_prop('numberLength', 'NumberLength', 14)
@@ -1093,7 +1093,7 @@ def build_dsl():
         if cp:
             dsl['currentPerformer'] = cp
         add_enum_prop('defaultPresentation', 'DefaultPresentation', 'AsDescription')
-    # Report-специфичные свойства.
+    # Report-specific properties.
     if obj_type == 'Report':
         dfm = P('DefaultForm')
         if dfm:
@@ -1122,7 +1122,7 @@ def build_dsl():
         ep = get_ml_value(_single(props, 'md:ExtendedPresentation'))
         if ep is not None:
             dsl['extendedPresentation'] = ep
-    # DataProcessor-специфичные свойства.
+    # DataProcessor-specific properties.
     if obj_type == 'DataProcessor':
         dfm = P('DefaultForm')
         if dfm:
@@ -1133,7 +1133,7 @@ def build_dsl():
         ep = get_ml_value(_single(props, 'md:ExtendedPresentation'))
         if ep is not None:
             dsl['extendedPresentation'] = ep
-    # DefinedType — тип-псевдоним.
+    # DefinedType - type alias.
     if obj_type == 'DefinedType':
         vt = get_type_shorthand(_single(props, 'md:Type'))
         if vt:
@@ -1272,7 +1272,7 @@ def build_dsl():
         get_picture_to_dsl(props, dsl)
         add_enum_prop('category', 'Category', 'NavigationPanel')
     # CommonCommand.
-    # WebService — пространство имён, состав XDTO-пакетов, дескриптор.
+    # WebService - namespace, XDTO package composition, descriptor.
     if obj_type == 'WebService':
         ns_ = P('Namespace')
         if ns_:
@@ -1285,11 +1285,11 @@ def build_dsl():
             dsl['descriptorFileName'] = dfn
         add_enum_prop('reuseSessions', 'ReuseSessions', 'DontUse')
         add_int_prop('sessionMaxAge', 'SessionMaxAge', 20)
-    # HTTPService — корневой URL, повторное использование сеансов, время жизни сеанса.
+    # HTTPService - root URL, session reuse, session lifetime.
     if obj_type == 'HTTPService':
         ru = P('RootURL')
-        # Сравнение регистрочувствительное: реальный RootURL часто отличается от дефолта
-        # только регистром (MobileAppReceiptScanner).
+        # Case-sensitive comparison: the real RootURL often differs from the default
+        # only in case (MobileAppReceiptScanner).
         if ru and ru != obj_name.lower():
             dsl['rootURL'] = ru
         add_enum_prop('reuseSessions', 'ReuseSessions', 'DontUse')
@@ -1337,7 +1337,7 @@ def build_dsl():
                 else:
                     dsl[mm[1]] = _text(mn)
         add_bool_prop('fillFromFillingValue', 'FillFromFillingValue', False)
-        # FillValue: тип-зависимый дефолт (String→typed-empty, Number→0, прочее→nil).
+        # FillValue: type-dependent default (String->typed-empty, Number->0, other->nil).
         cat_vt = vt if vt else 'String(0)'
         fv_n = _single(props, 'md:FillValue')
         if fv_n is not None:
@@ -1421,7 +1421,7 @@ def build_dsl():
         add_bool_prop('predefined', 'Predefined', False)
         add_int_prop('restartCountOnFailure', 'RestartCountOnFailure', 3)
         add_int_prop('restartIntervalOnFailure', 'RestartIntervalOnFailure', 10)
-    # Constant — богатый одиночный реквизит.
+    # Constant - a rich single attribute.
     if obj_type == 'Constant':
         vt = get_type_shorthand(_single(props, 'md:Type'))
         if vt:
@@ -1481,7 +1481,7 @@ def build_dsl():
         add_bool_prop('updateDataHistoryImmediatelyAfterWrite', 'UpdateDataHistoryImmediatelyAfterWrite', False)
         add_bool_prop('executeAfterWriteDataHistoryVersionProcessing', 'ExecuteAfterWriteDataHistoryVersionProcessing', False)
 
-    # InputByString — эмитим только при отличии от выведенного дефолта.
+    # InputByString - emit only when it differs from the derived default.
     ib_node = _single(props, 'md:InputByString')
     if ib_node is not None:
         ib_actual = [_text(x) for x in _nodes(ib_node, 'xr:Field')]
@@ -1518,7 +1518,7 @@ def build_dsl():
         if len(dlf_fields) > 0:
             dsl['dataLockFields'] = list(dlf_fields)
 
-    # Формы по умолчанию (omit-on-empty).
+    # Default forms (omit-on-empty).
     add_form_ref('defaultObjectForm', 'DefaultObjectForm')
     add_form_ref('defaultFolderForm', 'DefaultFolderForm')
     add_form_ref('defaultListForm', 'DefaultListForm')
@@ -1532,7 +1532,7 @@ def build_dsl():
     add_form_ref('defaultRecordForm', 'DefaultRecordForm')
     add_form_ref('auxiliaryRecordForm', 'AuxiliaryRecordForm')
 
-    # Презентации (ML, omit-on-empty).
+    # Presentations (ML, omit-on-empty).
     for pp in (('ObjectPresentation', 'objectPresentation'), ('ExtendedObjectPresentation', 'extendedObjectPresentation'),
                ('RecordPresentation', 'recordPresentation'), ('ExtendedRecordPresentation', 'extendedRecordPresentation'),
                ('ListPresentation', 'listPresentation'), ('ExtendedListPresentation', 'extendedListPresentation'),
@@ -1541,7 +1541,7 @@ def build_dsl():
         if pv is not None:
             dsl[pp[1]] = pv
 
-    # --- Characteristics (привязка ПВХ). ---
+    # --- Characteristics (ПВХ binding). ---
     chars_node = _single(props, 'md:Characteristics')
     if chars_node is not None:
         ch_list = _nodes(chars_node, 'xr:Characteristic')
@@ -1569,8 +1569,8 @@ def build_dsl():
                     'filterField': shorten_char_field(gt('TypesFilterField', ct), t_from),
                     'filterValue': None if tfv_nil == 'true' else convert_ch_scalar_node(tfv_node),
                 }
-                # DataPathField полиморфно: обычно -1, но встречается ПУТЬ к полю (8 случаев на
-                # корпус). Жёсткое int() на нём роняло декомпиляцию всего объекта.
+                # DataPathField is polymorphic: usually -1, but a PATH to a field occurs (8 cases per
+                # corpus). A hard int() on it crashed decompilation of the whole object.
                 dpf_node = _lx1(ct, "*[local-name()='DataPathField']")
                 dpf_txt = _text(dpf_node) if dpf_node is not None else ''
                 if dpf_txt != '' and dpf_txt != '-1':
@@ -1594,7 +1594,7 @@ def build_dsl():
                 ch_arr.append({'types': types, 'values': values})
             dsl['characteristics'] = ch_arr
 
-    # --- StandardAttributes: захватываем ОТКЛОНЕНИЯ от профиля материализованного блока. ---
+    # --- StandardAttributes: capture DEVIATIONS from the materialized block profile. ---
     std_profile_by_type = {
         'Catalog': {
             'Owner': {'fillChecking': 'ShowError', 'fillFromFillingValue': True},
@@ -1641,40 +1641,40 @@ def build_dsl():
             an = _attr(sa, 'name')
             prof = cat_std_profile.get(an, {})
             ov = {}
-            # FillChecking (профиль или DontCheck)
+            # FillChecking (profile or DontCheck)
             fc_n = _single(sa, 'xr:FillChecking')
             fc = _text(fc_n) if fc_n is not None else 'DontCheck'
             prof_fc = prof.get('fillChecking', 'DontCheck')
             if fc != prof_fc:
                 ov['fillChecking'] = fc
-            # FillFromFillingValue (профиль или false)
+            # FillFromFillingValue (profile or false)
             ffv_n = _single(sa, 'xr:FillFromFillingValue')
             ffv = (ffv_n is not None and _text(ffv_n) == 'true')
             prof_ffv = (prof.get('fillFromFillingValue') is True)
             if ffv != prof_ffv:
                 ov['fillFromFillingValue'] = ffv
-            # Synonym / ToolTip (профиль пуст)
+            # Synonym / ToolTip (profile is empty)
             syn = get_ml_value(_single(sa, 'xr:Synonym'))
             if syn is not None:
                 ov['synonym'] = syn
             tt = get_ml_value(_single(sa, 'xr:ToolTip'))
             if tt is not None:
                 ov['tooltip'] = tt
-            # FullTextSearch / DataHistory (профиль = Use)
+            # FullTextSearch / DataHistory (profile = Use)
             fts_n = _single(sa, 'xr:FullTextSearch')
             if fts_n is not None and _text(fts_n) != 'Use':
                 ov['fullTextSearch'] = _text(fts_n)
             dh_n = _single(sa, 'xr:DataHistory')
             if dh_n is not None and _text(dh_n) != 'Use':
                 ov['dataHistory'] = _text(dh_n)
-            # FillValue (дефолт nil). Comment/Mask/ChoiceForm (дефолт пусто).
+            # FillValue (default nil). Comment/Mask/ChoiceForm (default empty).
             fv_n = _single(sa, 'xr:FillValue')
             if fv_n is not None and _attr(fv_n, 'nil', NS_XSI) != 'true':
                 fv_xt = _attr(fv_n, 'type', NS_XSI)
                 if re.search(r'DesignTimeRef$', fv_xt, re.I) and _text(fv_n) == '':
                     ov['fillValue'] = {'emptyRef': True}
                 elif re.search(r'TypeDescription$', fv_xt, re.I) and _text(fv_n) == '':
-                    ov['fillValue'] = {'typeDescription': True}   # пустое типизированное (реквизит ValueType ПВХ) ≠ xs:string
+                    ov['fillValue'] = {'typeDescription': True}   # empty typed value (ValueType attribute of a ПВХ) != xs:string
                 else:
                     ov['fillValue'] = convert_ch_scalar_node(fv_n)
             sa_cmt = _single(sa, 'xr:Comment')
@@ -1698,7 +1698,7 @@ def build_dsl():
             sa_cp = parse_choice_parameters(sa, 'xr:ChoiceParameters')
             if sa_cp is not None:
                 ov['choiceParameters'] = sa_cp
-            # LinkByType стандартного реквизита (ExtDimensionN→Account у регистра бухгалтерии).
+            # LinkByType of a standard attribute (ExtDimensionN->Account for an accounting register).
             sa_lbt = _single(sa, 'xr:LinkByType')
             if sa_lbt is not None:
                 sa_lbt_dp = _single(sa_lbt, 'xr:DataPath')
@@ -1706,9 +1706,9 @@ def build_dsl():
                     sa_lbt_li = _single(sa_lbt, 'xr:LinkItem')
                     li = int(_text(sa_lbt_li)) if (sa_lbt_li is not None and _text(sa_lbt_li)) else 0
                     ov['linkByType'] = {'dataPath': _text(sa_lbt_dp), 'linkItem': li}
-            # Доп./опциональный реквизит (не в фикс-списке) — эмитим по присутствию даже без отклонений.
-            # Формат 2.20: режим приведения типов. Компилятор выводит его сам (TransformValues,
-            # у Owner — Deny), поэтому захватываем только отклонение от этого правила.
+            # Additional/optional attribute (not in the fixed list) - emit by presence even without deviations.
+            # Format 2.20: type reduction mode. The compiler derives it itself (TransformValues,
+            # for Owner - Deny), so we capture only a deviation from this rule.
             sa_trm_n = _single(sa, 'xr:TypeReductionMode')
             if sa_trm_n is not None and (sa_trm_n.text or '').strip():
                 sa_trm_def = 'Deny' if an == 'Owner' else 'TransformValues'
@@ -1719,13 +1719,13 @@ def build_dsl():
         if len(sa_map) > 0 or (obj_type in std_conditional_types):
             dsl['standardAttributes'] = sa_map
     elif obj_type in ('InformationRegister', 'AccumulationRegister', 'AccountingRegister', 'CalculationRegister', 'BusinessProcess', 'Task', 'Enum', 'DocumentJournal'):
-        # Регистр/БП/Задача опускают all-default блок → opt-out `standardAttributes:""`.
+        # Register/BP/Task omit the all-default block -> opt-out `standardAttributes:""`.
         dsl['standardAttributes'] = ''
 
     # --- ChildObjects: Attributes + TabularSections ---
     child_objs = _single(obj_node, 'md:ChildObjects')
     if child_objs is not None:
-        # WebService: операции с параметрами. Строчное сокращение — только тип возврата.
+        # WebService: operations with parameters. The string shorthand - return type only.
         op_nodes = _nodes(child_objs, 'md:Operation')
         if len(op_nodes) > 0:
             ops = {}
@@ -1777,7 +1777,7 @@ def build_dsl():
                     o['parameters'] = pars
                 ops[op_name] = o['returnType'] if list(o.keys()) == ['returnType'] else o
             dsl['operations'] = ops
-        # HTTPService: шаблоны URL и их методы.
+        # HTTPService: URL templates and their methods.
         tmpl_nodes = _nodes(child_objs, 'md:URLTemplate')
         if len(tmpl_nodes) > 0:
             tmpls = {}
@@ -1825,7 +1825,7 @@ def build_dsl():
             for a in attrs:
                 arr.append(attr_to_dsl(a))
             dsl['attributes'] = arr
-        # Enum: значения перечисления.
+        # Enum: enum values.
         ev_nodes = _nodes(child_objs, 'md:EnumValue')
         if len(ev_nodes) > 0:
             ev_arr = []
@@ -1854,7 +1854,7 @@ def build_dsl():
                 else:
                     ev_arr.append(ev_name)
             dsl['values'] = ev_arr
-        # DocumentJournal: колонки.
+        # DocumentJournal: columns.
         col_nodes = _nodes(child_objs, 'md:Column')
         if len(col_nodes) > 0:
             col_arr = []
@@ -1870,7 +1870,7 @@ def build_dsl():
                 elif c_syn is not None:
                     o['synonym'] = c_syn
                 elif c_syn_node is not None:
-                    o['synonym'] = ''   # пустой <Synonym/> ≠ авто-синоним → явный ''
+                    o['synonym'] = ''   # empty <Synonym/> != auto-synonym -> explicit ''
                 c_cmt_n = _single(cp, 'md:Comment')
                 if c_cmt_n is not None and _text(c_cmt_n):
                     o['comment'] = _text(c_cmt_n)
@@ -1885,7 +1885,7 @@ def build_dsl():
                 o['references'] = refs
                 col_arr.append(o)
             dsl['columns'] = col_arr
-        # ChartOfAccounts: признаки учёта.
+        # ChartOfAccounts: accounting flags.
         acct_flag_nodes = _nodes(child_objs, 'md:AccountingFlag')
         if len(acct_flag_nodes) > 0:
             arr = []
@@ -1898,7 +1898,7 @@ def build_dsl():
             for a in ext_dim_flag_nodes:
                 arr.append(attr_to_dsl(a))
             dsl['extDimensionAccountingFlags'] = arr
-        # Sequence: измерения несут DocumentMap/RegisterRecordsMap.
+        # Sequence: dimensions carry DocumentMap/RegisterRecordsMap.
         dim_nodes = _nodes(child_objs, 'md:Dimension')
         if len(dim_nodes) > 0 and obj_type == 'Sequence':
             arr = []
@@ -1937,7 +1937,7 @@ def build_dsl():
             for a in res_nodes:
                 arr.append(attr_to_dsl(a))
             dsl['resources'] = arr
-        # Задача: реквизиты адресации.
+        # Task: addressing attributes.
         addr_nodes = _nodes(child_objs, 'md:AddressingAttribute')
         if len(addr_nodes) > 0:
             arr = []
@@ -1955,7 +1955,7 @@ def build_dsl():
                 if tco is not None:
                     for ca in _nodes(tco, 'md:Attribute'):
                         cols.append(attr_to_dsl(ca))
-                # Синоним/подсказка/комментарий ТЧ.
+                # Tabular section synonym/tooltip/comment.
                 ts_syn = get_ml_value(_single(tsp, 'md:Synonym'))
                 ts_syn_custom = False
                 if isinstance(ts_syn, str):
@@ -1968,10 +1968,10 @@ def build_dsl():
                 ts_cmt = _text(ts_cmt_n) if ts_cmt_n is not None else ''
                 ts_fc_n = _single(tsp, 'md:FillChecking')
                 ts_fc = _text(ts_fc_n) if (ts_fc_n is not None and _text(ts_fc_n) != 'DontCheck') else ''
-                # Use ТЧ (иерархические Catalog/ПВХ: ForItem/ForFolder/ForFolderAndItem; omit при дефолте ForItem).
+                # Tabular section Use (hierarchical Catalog/ПВХ: ForItem/ForFolder/ForFolderAndItem; omit on the ForItem default).
                 ts_use_n = _single(tsp, 'md:Use')
                 ts_use = _text(ts_use_n) if (ts_use_n is not None and _text(ts_use_n) != 'ForItem') else ''
-                # TS-блок стандартных реквизитов (LineNumber).
+                # TS block of standard attributes (LineNumber).
                 ln_obj = {}
                 sa_ts_node = _single(tsp, 'md:StandardAttributes')
                 has_block = (sa_ts_node is not None and len(_nodes(sa_ts_node, 'xr:StandardAttribute')) > 0)
@@ -2003,10 +2003,10 @@ def build_dsl():
                         ln_fv_t = _attr(ln_fv_n, 'type', NS_XSI)
                         if re.search(r'decimal$', ln_fv_t, re.I):
                             ln_obj['fillValue'] = int(_text(ln_fv_n)) if re.match(r'^-?\d+$', _text(ln_fv_n)) else float(_text(ln_fv_n))
-                # Формат 2.20: длина номера строки ТЧ. Захватываем ВСЕГДА при наличии тега, а не
-                # omit-on-default: дефолт зависит от режима совместимости конфигурации (<=8_3_26 → 5,
-                # >=8_3_27 → 9) и фиксируется платформой при создании ТЧ, так что вывести его здесь
-                # значило бы продублировать логику компилятора с риском разойтись. Явный захват точен.
+                # Format 2.20: tabular section line number length. We capture it ALWAYS when the tag is present, not
+                # omit-on-default: the default depends on the configuration compatibility mode (<=8_3_26 -> 5,
+                # >=8_3_27 -> 9) and is fixed by the platform when the tabular section is created, so deriving it here
+                # would duplicate the compiler logic with a risk of divergence. Explicit capture is exact.
                 ts_lnl_n = _single(tsp, 'md:LineNumberLength')
                 ts_lnl = int(ts_lnl_n.text) if ts_lnl_n is not None and (ts_lnl_n.text or '').strip() else None
                 if ts_syn_custom or (ts_tt is not None) or ts_cmt or ts_fc or ts_use or len(ln_obj) > 0 or (not has_block) or (ts_lnl is not None):
@@ -2032,7 +2032,7 @@ def build_dsl():
                 else:
                     ts_map[ts_name] = cols
             dsl['tabularSections'] = ts_map
-        # --- Commands (полноблочные <Command> в ChildObjects) → DSL commands. ---
+        # --- Commands (full <Command> blocks in ChildObjects) -> DSL commands. ---
         cmd_nodes = _nodes(child_objs, 'md:Command')
         if len(cmd_nodes) > 0:
             cmd_map = {}
@@ -2067,7 +2067,7 @@ def build_dsl():
                 ctt = get_ml_value(_single(cp, 'md:ToolTip'))
                 if ctt is not None:
                     o['tooltip'] = ctt
-                # <Picture> — структурный блок.
+                # <Picture> - a structural block.
                 ref_n = _single(cp, 'md:Picture/xr:Ref')
                 abs_n = _single(cp, 'md:Picture/xr:Abs')
                 if ref_n is not None or abs_n is not None:
@@ -2094,7 +2094,7 @@ def build_dsl():
                 cmd_map[cn] = o
             dsl['commands'] = cmd_map
 
-    # --- Предопределённые (соседний Ext/Predefined.xml) → DSL predefined. ---
+    # --- Predefined (adjacent Ext/Predefined.xml) -> DSL predefined. ---
     obj_dir = os.path.dirname(os.path.abspath(object_path))
     predef_path = os.path.join(obj_dir, obj_name, 'Ext', 'Predefined.xml')
     if os.path.isfile(predef_path):
@@ -2112,7 +2112,7 @@ def build_dsl():
         if len(root_items) > 0:
             dsl['predefined'] = root_items
 
-    # --- Состав плана обмена (соседний Ext/Content.xml) → DSL content (ExchangePlan). ---
+    # --- Exchange plan composition (adjacent Ext/Content.xml) -> DSL content (ExchangePlan). ---
     if obj_type == 'ExchangePlan':
         content_path = os.path.join(obj_dir, obj_name, 'Ext', 'Content.xml')
         if os.path.isfile(content_path):
@@ -2157,13 +2157,13 @@ def main():
         sys.stderr.write("meta-decompile: файл не найден: %s\n" % object_path)
         sys.exit(2)
 
-    # --- XML загрузка ---
+    # --- XML loading ---
     doc = etree.parse(object_path)
     root_el = doc.getroot()
     if _localname(root_el) != 'MetaDataObject':
         sys.stderr.write("meta-decompile: ожидался root <MetaDataObject>, получен <%s>\n" % _localname(root_el))
         sys.exit(3)
-    # Первый элемент-потомок MetaDataObject = объект; его LocalName = тип.
+    # First child element of MetaDataObject = the object; its LocalName = the type.
     obj_node = None
     for c in root_el:
         if isinstance(c.tag, str):
@@ -2183,14 +2183,14 @@ def main():
 
     build_dsl()
 
-    # --- Внешний источник данных: таблицы (отдельные файлы) и функции (узлы внутри файла) ---
+    # --- External data source: tables (separate files) and functions (nodes inside the file) ---
     if obj_type == 'ExternalDataSource':
         dlcm_val = P('DataLockControlMode')
         if dlcm_val and dlcm_val != 'Automatic':
             dsl['dataLockControlMode'] = dlcm_val
 
         def short_field_ref(ref):
-            """Короткое имя из полного пути ExternalDataSource.И.Table.Т.Field.П"""
+            """Short name from the full path ExternalDataSource.И.Table.Т.Field.П"""
             return ref.split('.')[-1] if ref else None
 
         def field_ref_list(parent, tag):
@@ -2223,7 +2223,7 @@ def main():
                 elif t_syn is not None:
                     tbl['synonym'] = t_syn
                 elif t_syn_node is not None:
-                    # Пустой <Synonym/> != авто-синоним из имени: без явного '' компилятор до-генерит его.
+                    # Empty <Synonym/> != auto-synonym from the name: without an explicit '' the compiler generates it.
                     tbl['synonym'] = ''
                 t_cmt = TP('Comment')
                 if t_cmt:
@@ -2249,7 +2249,7 @@ def main():
                     if v:
                         tbl[key] = v
                 ibs = field_ref_list(tp, 'InputByString')
-                # Ввод по строке компилятор выводит из поля представления: совпадающий список не пишем.
+                # The compiler derives input by string from the presentation field: do not write a matching list.
                 ibs_auto = [tbl['presentationField']] if tbl.get('presentationField') else []
                 if ibs != ibs_auto:
                     tbl['inputByString'] = ibs
@@ -2271,8 +2271,8 @@ def main():
                 t_et = TP('EditType')
                 if t_et and t_et != 'InDialog':
                     tbl['editType'] = t_et
-                # Слоты форм — такая же часть свойств таблицы, как у прочих объектов (сами формы
-                # вне скоупа раундтрипа: это отдельные файлы, их делает навык form-add).
+                # Form slots are as much a part of table properties as for other objects (the forms themselves
+                # are out of round-trip scope: separate files, made by the form-add skill).
                 for xml_tag, dsl_key in (('DefaultObjectForm', 'defaultObjectForm'),
                                          ('DefaultRecordForm', 'defaultRecordForm'),
                                          ('DefaultListForm', 'defaultListForm'),
@@ -2289,7 +2289,7 @@ def main():
                 if t_child is not None:
                     for f in t_child.findall('md:Field', NS):
                         fields_arr.append(attr_to_dsl(f))
-                # Таблица без собственных свойств — короткая форма: просто массив полей.
+                # A table without own properties - short form: just an array of fields.
                 if not tbl:
                     tables_map[tbl_name] = fields_arr
                 else:
@@ -2314,12 +2314,12 @@ def main():
                     syn_custom_fn = fn_syn != split_camel_words(fn_name) and fn_syn != ''
                 else:
                     syn_custom_fn = fn_syn is not None
-                # Умолчание `returns` компилятора — String, а он даёт String(10): с ним и сверяем,
-                # иначе короткая форма (одна строка выражения) не срабатывала бы никогда.
+                # The compiler default for `returns` is String, and it produces String(10): compare with that,
+                # otherwise the short form (one expression line) would never trigger.
                 if not fn_no_value and not fn_cmt and not syn_custom_fn and fn_returns != 'String(10)':
                     fn_map[fn_name] = {'expression': fn_expr, 'returns': fn_returns}
                 elif not fn_no_value and not fn_cmt and not syn_custom_fn:
-                    # Тип по умолчанию String — короткая форма: одна строка выражения.
+                    # Default type String - short form: one expression line.
                     fn_map[fn_name] = fn_expr
                 else:
                     fo = {'expression': fn_expr}
@@ -2336,7 +2336,7 @@ def main():
                 dsl['functions'] = fn_map
 
 
-    # === Вывод ===
+    # === Output ===
     json_str = convert_to_compact_json(dsl, 0)
     if args.OutputPath:
         with open(args.OutputPath, 'w', encoding='utf-8', newline='') as f:

@@ -1,66 +1,64 @@
-> **Чеклист этапа.** Это не отдельный агент: все пункты выполняешь ты сам
-> в главном потоке.
+> **Stage checklist.** This is not a separate agent: you perform every item yourself
+> in the main thread.
 
-# Аналитик
+# Analyst
 
-Ты — аналитик 1С. Твоя задача — понять требования и зафиксировать их спецификацией.
+You are a 1C analyst. Your task is to understand the requirements and record them in a specification.
 
-## Когда применяется
-Этап «анализ»: в начале задачи, до архитектора и разработчика.
+## When applied
+Stage "analysis": at the start of the task, before the architect and developer.
 
-## Вход
-Описание задачи (цель, план, ограничения) из `TASK.md` в каталоге задачи.
+## Input
+Task description (goal, plan, constraints) from `TASK.md` in the task directory.
 
-## Порядок действий
-1. Уточняю цель и границы задачи.
-   **Обработка проведения** — если требуется изменение обработки проведения,
-   дополнительно анализирую (метаданные беру из `code_index`):
-   - методику контроля остатков — [правило](../skills/bsl-coding-standards/reference/balance-control-methodology.md);
-   - блокировки — [правило](../skills/bsl-coding-standards/reference/locks.md);
-   - границу и момент времени — [правило](../skills/bsl-coding-standards/reference/boundary-and-moment.md);
-   - удаление движений — [правило](../skills/bsl-coding-standards/reference/movements-deletion.md);
-   - регистры накопления и проведение — [справка](../skills/bsl-coding-standards/reference/accumulation-registers.md).
-   **Отчёты на СКД** — если задача про отчёт, прочитай целиком
-   [особенности СКД](../skills/bsl-coding-standards/reference/skd-specifics.md) и справки
-   [регистры накопления](../skills/bsl-coding-standards/reference/accumulation-registers.md),
-   [регистры сведений](../skills/bsl-coding-standards/reference/information-registers.md).
-   В спецификации зафиксируй состав колонок строго по ТЗ; всё, что требует служебных
-   полей/соединений сверх ТЗ, вынеси в открытые вопросы.
-2. **Поиск существующих метаданных (обязательно)** — прежде чем предлагать новые объекты
-   метаданных, ищу существующие аналоги через `code_index`, чтобы не создавать дублирующие;
-   переиспользую или расширяю существующее, где это уместно.
-3. **Поиск существующих функций и процедур (обязательно)** — прежде чем закладывать новую
-   логику, ищу через `code_index` существующие процедуры и функции с нужным поведением
-   (в общих модулях, модулях объектов и менеджеров), чтобы не изобретать дублирующие;
-   переиспользую существующее, где это уместно.
-4. Формулирую требования (что система должна делать) в терминах RFC 2119 (ДОЛЖНА/СЛЕДУЕТ/МОЖЕТ).
-5. Фиксирую ограничения и критерии приёмки.
-6. Отмечаю открытые вопросы и риски.
+## Steps
+1. Clarify the goal and boundaries of the task.
+   **Posting logic** - if posting logic must be changed, additionally analyze
+   (metadata comes from `code_index`):
+   - balance control methodology - [rule](../skills/bsl-coding-standards/reference/balance-control-methodology.md);
+   - locks - [rule](../skills/bsl-coding-standards/reference/locks.md);
+   - boundary and point in time - [rule](../skills/bsl-coding-standards/reference/boundary-and-moment.md);
+   - movement deletion - [rule](../skills/bsl-coding-standards/reference/movements-deletion.md);
+   - accumulation registers and posting - [reference](../skills/bsl-coding-standards/reference/accumulation-registers.md).
+   **DCS reports** - if the task is about a report, read in full
+   [DCS specifics](../skills/bsl-coding-standards/reference/skd-specifics.md) and the references
+   [accumulation registers](../skills/bsl-coding-standards/reference/accumulation-registers.md),
+   [information registers](../skills/bsl-coding-standards/reference/information-registers.md).
+   In the specification, record the column composition strictly per the technical specification (TS);
+   put anything requiring service fields/joins beyond the TS into open questions.
+2. **Search for existing metadata (mandatory)** - before proposing new metadata
+   objects, search for existing analogues via `code_index` to avoid creating duplicates;
+   reuse or extend what exists where appropriate.
+3. **Search for existing functions and procedures (mandatory)** - before introducing new
+   logic, search `code_index` for existing procedures and functions with the required behavior
+   (in common modules, object and manager modules) to avoid inventing duplicates;
+   reuse what exists where appropriate.
+4. Formulate requirements (what the system must do) in RFC 2119 terms (MUST/SHOULD/MAY).
+5. Record constraints and acceptance criteria.
+6. Note open questions and risks.
 
-## Принцип fail-fast
-Если корректная работа требует обязательных данных или выполнения предусловия
-(заполнена учётная политика, найдена настройка/метод, непуста табличная часть
-и т.п.), а их может не оказаться — в требованиях закладывай **явную сигнализацию
-ошибки** (fail fast), а не молчаливую подмену значением по умолчанию. Молчаливый
-дефолт маскирует ошибку данных и даёт неверный учёт незаметно.
-- В обработке проведения документа «сигнал ошибки» — это `Отказ = Истина` + сообщение
-  пользователю (НЕ `ВызватьИсключение` — см. `code-analyze: raise-in-cancel-event`).
-- В остальных случаях — исключение.
-- Значение по умолчанию допустимо, только если это осознанное бизнес-решение;
-  тогда фиксируй его в открытых вопросах с обоснованием, а не подразумевай.
+## fail-fast principle
+If correct operation requires mandatory data or a precondition
+(accounting policy filled in, a setting/method found, a tabular section non-empty,
+etc.) and they may be missing - build **explicit error signaling** (fail fast) into the requirements, not a silent substitution with a default value. A silent default masks a data error and produces incorrect accounting unnoticed.
+- In document posting, an "error signal" is `Отказ = Истина` + a message
+  to the user (NOT `ВызватьИсключение` - see `code-analyze: raise-in-cancel-event`).
+- In other cases - an exception.
+- A default value is acceptable only if it is a deliberate business decision;
+  then record it in open questions with justification, do not assume it.
 
-## Выход
-Файл `ANALYZE.md` в каталоге задачи: цель, требования, ограничения, критерии приёмки, риски.
+## Output
+`ANALYZE.md` file in the task directory: goal, requirements, constraints, acceptance criteria, risks.
 
-## Возможности окружения
+## Environment capabilities
 
-Навыки из `.claude/skills` доступны через инструмент `Skill` — полный актуальный список с описаниями виден при его вызове; выбирай нужный по описанию. Руководства: `mcp-usage`, `bsl-coding-standards`, `sdd-tdd-workflow`. Операционные навыки 1С (создание/правка/анализ/валидация метаданных, форм, ролей, СКД, макетов, XDTO, конфигураций и расширений, подсистем), пакетные операции (`1c-batch`), веб-публикации и работа с БД — ищи по описанию в этом списке.
+Skills from `.claude/skills` are available through the `Skill` tool - the full current list with descriptions is visible when it is invoked; choose the needed one by description. Guides: `mcp-usage`, `bsl-coding-standards`, `sdd-tdd-workflow`. 1C operational skills (create/edit/analyze/validate metadata, forms, roles, DCS, templates, XDTO, configurations and extensions, subsystems), batch operations (`1c-batch`), web publications and database work - look them up by description in this list.
 
-**Метаданные:** вся информация о составе и структуре метаданных конфигурации доступна через `code_index` (инструмент `mcp__code_index__*`) — состав объектов, реквизиты, измерения/ресурсы регистров, режим управления блокировкой данных, режим удаления движений документов и т.п. Опирайся на него для поиска существующих объектов (чтобы не плодить дубли) и для предметного анализа (блокировки, контроль остатков, граница/момент времени, удаление движений).
+**Metadata:** all information about the composition and structure of configuration metadata is available via `code_index` (tool `mcp__code_index__*`) - object composition, attributes, register dimensions/resources, data lock control mode, document movement deletion mode, etc. Rely on it to find existing objects (to avoid duplicates) and for substantive analysis (locks, balance control, boundary/point in time, movement deletion).
 
-**Обязательный первый шаг перед работой:** вызови навык `mcp-usage` (инструмент Skill) и следуй ему — какой MCP под какую задачу, когда искать существующее, когда прогонять статанализ. Единый источник правды по MCP.
+**Mandatory first step before work:** invoke the `mcp-usage` skill (Skill tool) and follow it - which MCP for which task, when to search for existing things, when to run static analysis. The single source of truth on MCP.
 
-**Граница индекса:** `src/cf/**` индексирован — только `mcp__code_index__*`, без `Read`/`Grep`/`cat`/`sed`; `src/cfe/**`, `tasks/**`, `logs/**`, `tmp/**`, `configs/**`, `docs/**` не индексированы — обычные `Read`/`Grep`/`Glob`/`cat`/`grep` разрешены.
+**Index boundary:** `src/cf/**` is indexed - only `mcp__code_index__*`, no `Read`/`Grep`/`cat`/`sed`; `src/cfe/**`, `tasks/**`, `logs/**`, `tmp/**`, `configs/**`, `docs/**` are not indexed - regular `Read`/`Grep`/`Glob`/`cat`/`grep` are allowed.
 
-## Границы
-Только анализ. Не проектирую архитектуру и не пишу код.
+## Boundaries
+Analysis only. I do not design architecture and do not write code.

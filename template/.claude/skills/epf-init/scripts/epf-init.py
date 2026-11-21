@@ -1,19 +1,19 @@
 #!/usr/bin/env python
-# epf-init v1.8 — Init 1C external data processor scaffold (+write_xml_file/write_utf8_bom: общий эталон записи)
+# epf-init v1.8 - Init 1C external data processor scaffold (+write_xml_file/write_utf8_bom: shared writing reference)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 """Generates minimal XML source files for a 1C external data processor."""
 import sys, os, re, argparse, uuid
 
-# Регистронезависимый ввод: имена параметров и значения choices принимаются
-# в любом регистре (в argparse по умолчанию совпадение точное).
+# Case-insensitive input: parameter names and choices values are accepted
+# in any case (in argparse exact match is the default).
 def ci_parse_args(parser, argv=None):
-    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
+    """parse_args: parameter names and choices values are accepted in any case."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
         if tok.startswith('-') and tok.lower() in names:
             argv[i] = names[tok.lower()]
-    # choices — зеркало [ValidateSet]; канонизируем ДО разбора, иначе argparse отвергнет регистр
+    # choices - a mirror of [ValidateSet]; we canonicalize BEFORE parsing, otherwise argparse rejects the case
     choice_map = {}
     for a in parser._actions:
         if a.choices:
@@ -27,31 +27,31 @@ def ci_parse_args(parser, argv=None):
 
 
 def esc_xml_text(s):
-    # Эскейп ТЕКСТА элемента: только & < > — кавычку и апостроф платформа держит сырыми.
+    # Element TEXT escape: only & < > - the platform keeps quotes and apostrophes raw.
     return s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
 
 def new_uuid():
     return str(uuid.uuid4())
 
 def write_utf8_bom(path, content):
-    # newline='' — без трансляции: иначе текстовый режим Python дал бы CRLF на Windows
-    # и LF на macOS, то есть вывод навыка зависел бы от ОС.
+    # newline='' - no translation: otherwise Python text mode would produce CRLF on Windows
+    # and LF on macOS, that is, the skill output would depend on the OS.
     with open(path, 'w', encoding='utf-8-sig', newline='') as f:
         f.write(content)
 
 
 def write_xml_file(path, content):
-    """XML в каноне выгрузки Конфигуратора: CRLF в разделителях, без перевода в конце.
+    """XML in the Configurator export canon: CRLF in separators, no trailing newline translation.
 
-    Копия этой функции есть в каждом навыке-эмиттере (навыки автономны). Держать
-    копии одинаковыми — сознательно: разошедшиеся копии сводят на нет весь смысл.
+    A copy of this function exists in every emitter skill (skills are autonomous). Keeping
+    copies identical is deliberate: diverged copies negate the whole point.
     """
     text = content.replace('\r\n', '\n').replace('\n', '\r\n').rstrip('\r\n')
     write_utf8_bom(path, text)
 
 
 def format_rank(ver):
-    """"2.20" → 220, "2.9" → 209. Строковое сравнение неверно ("2.9" > "2.17")."""
+    """"2.20" -> 220, "2.9" -> 209. String comparison is wrong ("2.9" > "2.17")."""
     m = re.match(r'^(\d+)\.(\d+)$', ver or '')
     return int(m.group(1)) * 100 + int(m.group(2)) if m else 0
 
@@ -67,16 +67,16 @@ def main():
     parser.add_argument('-Name', dest='Name', required=True)
     parser.add_argument('-Synonym', dest='Synonym', default=None)
     parser.add_argument('-SrcDir', dest='SrcDir', default='src')
-    # Версия формата выгрузки. Своей конфигурации у автономного объекта нет, наследовать
-    # версию неоткуда — поэтому её задают явно. Формы, макеты и справку внутри объекта
-    # навыки берут уже отсюда: их детектор читает version из корня этого файла.
+    # Export format version. An autonomous object has no configuration of its own, there is nowhere to inherit
+    # the version from - so it is set explicitly. Forms, templates and help inside the object
+    # are taken by skills from here: their detector reads version from the root of this file.
     parser.add_argument('-FormatVersion', dest='FormatVersion', default='2.17')
     args = ci_parse_args(parser)
 
-    # Проверенный диапазон: 2.17 (8.3.24) … 2.21 (8.5). Полная лестница —
-    # docs/1c-configuration-spec.md, «Лестница версий». Версии ниже 2.17 (платформы 8.3.23 и
-    # старше) реальны, поэтому запретом их не закрываем: за пределами диапазона —
-    # ПРЕДУПРЕЖДЕНИЕ, скаффолд всё равно выпускается. Ошибка — только на нечисловое значение.
+    # Verified range: 2.17 (8.3.24) ... 2.21 (8.5). The full ladder is in
+    # docs/1c-configuration-spec.md, "Version ladder". Versions below 2.17 (platforms 8.3.23 and
+    # older) are real, so we do not block them: outside the range -
+    # a WARNING, the scaffold is still produced. An error only on a non-numeric value.
     format_rank_value = format_rank(args.FormatVersion)
     if format_rank_value == 0:
         print(f"Malformed -FormatVersion '{args.FormatVersion}' (expected N.N, e.g. 2.17)", file=sys.stderr)
@@ -95,7 +95,7 @@ def main():
     uuid3 = new_uuid()
     uuid4 = new_uuid()
 
-    # Объявления пространств имён — одной переменной: места эмиссии её только подставляют.
+    # Namespace declarations - as one variable: emission sites only substitute it.
     xmlns_decl = (
         'xmlns="http://v8.1c.ru/8.3/MDClasses"'
         ' xmlns:app="http://v8.1c.ru/8.2/managed-application/core"'
@@ -116,8 +116,8 @@ def main():
         ' xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"'
     )
     format_version = args.FormatVersion
-    # 2.21 (8.5) добавила в шапку пространство палитры. Вставляем НА МЕСТО (после lf, перед
-    # style): платформа держит объявления по алфавиту, дописать в конец нельзя.
+    # 2.21 (8.5) added the palette namespace to the header. We insert IN PLACE (after lf, before
+    # style): the platform keeps declarations alphabetically, appending at the end is not possible.
     if format_rank(format_version) >= 221:
         xmlns_decl = xmlns_decl.replace(
             ' xmlns:style=',
@@ -165,7 +165,7 @@ def main():
 
     write_xml_file(os.path.join(os.path.abspath(src_dir), f"{name}.xml"), xml)
 
-    # --- Модуль объекта ---
+    # --- Object module ---
     module_bsl = """\
 #Область ОписаниеПеременных
 
@@ -180,9 +180,9 @@ def main():
 #КонецОбласти"""
 
     module_path = os.path.join(ext_dir, "ObjectModule.bsl")
-    # Модуль пишем в каноне платформы: CRLF в разделителях строк (корпус: 2643 CRLF,
-    # чисто-LF 0 из 3001). Хвостовой перевод НЕ навязываем — у платформы он
-    # неканоничен (1235 модулей с ним, 766 без).
+    # We write the module in the platform canon: CRLF in line separators (corpus: 2643 CRLF,
+    # pure LF 0 out of 3001). We do NOT impose a trailing newline - the platform treats it
+    # as non-canonical (1235 modules with it, 766 without).
     write_utf8_bom(module_path, module_bsl.replace('\r\n', '\n').replace('\n', '\r\n'))
 
     print(f"[OK] Создана обработка: {root_file}")

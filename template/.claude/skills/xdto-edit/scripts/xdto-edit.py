@@ -1,4 +1,4 @@
-# xdto-edit v1.7 — Point edits of a 1C XDTO package (Python port) (+support-guard: общая реализация вместо урезанной)
+# xdto-edit v1.7 - Point edits of a 1C XDTO package (Python port) (+support-guard: common implementation instead of a trimmed one)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import json
@@ -15,16 +15,16 @@ from lxml import etree
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
-# Регистронезависимый ввод: имена параметров и значения choices принимаются
-# в любом регистре (в argparse по умолчанию совпадение точное).
+# Case-insensitive input: parameter names and choices values are accepted
+# in any case (argparse matches exactly by default).
 def ci_parse_args(parser, argv=None):
-    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
+    """parse_args: parameter names and choices values are accepted in any case."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
         if tok.startswith('-') and tok.lower() in names:
             argv[i] = names[tok.lower()]
-    # choices — зеркало [ValidateSet]; канонизируем ДО разбора, иначе argparse отвергнет регистр
+    # choices - mirror of [ValidateSet]; canonicalize BEFORE parsing, otherwise argparse rejects the case
     choice_map = {}
     for a in parser._actions:
         if a.choices:
@@ -64,10 +64,10 @@ def local(el):
 
 
 def _parse_xml(source, from_string=False):
-    """Разбор с узким отступлением для не-URI пространств имён.
+    """Parsing with a narrow fallback for non-URI namespaces.
 
-    Платформа допускает в targetNamespace произвольную строку, .NET такое принимает,
-    а libxml2 отвергает. Откатываемся на восстанавливающий разбор ТОЛЬКО на этой ошибке.
+    The platform allows an arbitrary string in targetNamespace, .NET accepts this,
+    while libxml2 rejects it. We fall back to recovering parsing ONLY on this error.
     """
     try:
         return (etree.fromstring(source) if from_string else etree.parse(source))
@@ -278,9 +278,9 @@ bin_file = os.path.join(pkg_dir, "Ext", "Package.bin")
 md_file = os.path.join(xdto_root, pkg_name + ".xml")
 config_xml = os.path.join(config_root, "Configuration.xml")
 
-# -Value "@путь" — содержимое берётся из файла. Передавать XSD-фрагмент инлайном
-# ненадёжно: вложенные кавычки схлопываются на границе процессов, и вместо понятной
-# ошибки получается сырой сбой разбора XML.
+# -Value "@path" - the content is taken from a file. Passing an XSD fragment inline is
+# unreliable: nested quotes collapse at process boundaries, and instead of a clear
+# error you get a raw XML parse failure.
 if args.Value.startswith("@"):
     value_file = args.Value[1:]
     if not os.path.isabs(value_file):
@@ -298,11 +298,11 @@ COMPILE = os.path.join(SKILLS, "xdto-compile", "scripts", "xdto-compile.py")
 VALIDATE = os.path.join(SKILLS, "xdto-validate", "scripts", "xdto-validate.py")
 
 
-# Исключение из автономности навыков, сделанное осознанно: конвертер XSD <-> модель
-# нельзя скопировать буквально (xdto-compile — скрипт со сквозным потоком, не библиотека),
-# а вторая его реализация разошлась бы с первой. Обещание «правка не меняет ни байта
-# в нетронутом» держится именно на том, что код тот же самый.
-# Проверяем комплектность заранее, чтобы не падать на середине правки.
+# An intentional exception from skill autonomy: the XSD <-> model converter
+# cannot be copied literally (xdto-compile is an end-to-end script, not a library),
+# and a second implementation would diverge from the first. The promise "an edit changes not a byte
+# in the untouched part" rests exactly on the code being the same.
+# Check completeness in advance so as not to fail in the middle of an edit.
 def assert_siblings_present(operation):
     needed = {}
     if operation not in ("rename", "set-synonym", "set-comment"):
@@ -327,13 +327,13 @@ def invoke_sibling(script, argv, what):
 
 def save_xml(doc, path):
     raw = etree.tostring(doc, xml_declaration=True, encoding="UTF-8")
-    # lxml пишет декларацию в ОДИНАРНЫХ кавычках, платформа — в двойных.
+    # lxml writes the declaration in SINGLE quotes, the platform - in double.
     raw = raw.replace(b"<?xml version='1.0' encoding='UTF-8'?>",
                       b'<?xml version="1.0" encoding="UTF-8"?>')
-    # Парсер XML по спецификации схлопывает CRLF в LF, поэтому tostring отдаёт
-    # LF-документ. Возвращаем EOL файла-назначения: правка существующего файла
-    # сохраняет его стиль (#44/#46/#47), новый получает канон CRLF. Правило то же,
-    # что у _detect_xml_style: есть CRLF → CRLF.
+    # The XML parser per specification collapses CRLF to LF, so tostring returns
+    # an LF document. We restore the EOL of the target file: editing an existing file
+    # preserves its style (#44/#46/#47), a new one gets the CRLF canon. The rule is the same
+    # as in _detect_xml_style: CRLF present -> CRLF.
     src_eol = b"\r\n"
     try:
         with open(path, "rb") as f:
@@ -383,7 +383,7 @@ def edit_metadata(field, new_value):
 
 def rename_package(new_name):
     global pkg_name, pkg_dir
-    # \w с re.UNICODE уже покрывает кириллицу; явные диапазоны только плодят ошибки
+    # \w with re.UNICODE already covers Cyrillic; explicit ranges only breed errors
     if not re.match(r"^\w+$", new_name, re.UNICODE) or re.match(r"^\d", new_name):
         die(f'"{new_name}" не является допустимым идентификатором 1С')
     new_md = os.path.join(xdto_root, new_name + ".xml")
@@ -454,7 +454,7 @@ def find_declaration(body, prop_name):
 
 
 def resolve_path(schema, path):
-    # Точка безопасна: имена в модели XDTO — идентификаторы 1С
+    # The dot is safe: names in the XDTO model are 1C identifiers
     segments = path.split(".")
     type_el = find_type_element(schema, segments[0])
     if len(segments) == 1:
@@ -509,8 +509,8 @@ def apply_model_operation(schema):
             if kind == "attribute":
                 body.append(frag)
             elif kind == "element":
-                # Явные is not None: пустой <xs:sequence/> в lxml ложен,
-                # и через "or" мы бы создали вторую частицу
+                # Explicit is not None: an empty <xs:sequence/> is falsy in lxml,
+                # and via "or" we would create a second particle
                 particle = xs_first(body, "sequence")
                 if particle is None:
                     particle = xs_first(body, "choice")
@@ -597,11 +597,11 @@ def apply_model_operation(schema):
             die("set-namespace требует -Value <URI>")
         old = schema.get("targetNamespace")
         if old == args.Value:
-            # Установка того же значения не отбрасывается: пакет пересобирается вхолостую
+            # Setting the same value is not discarded: the package is rebuilt idle
             print(f"  = namespace уже {args.Value}, пакет пересобран без изменений")
         else:
             print(f"  ~ namespace: {old} → {args.Value}")
-        # Меняем и targetNamespace, и объявление префикса, который на него указывал
+        # Change both targetNamespace and the declaration of the prefix that pointed to it
         new_nsmap = {px: (args.Value if uri == old else uri) for px, uri in schema.nsmap.items()}
         rebuilt = etree.Element(schema.tag, nsmap=new_nsmap)
         for k, v in schema.attrib.items():
@@ -651,8 +651,8 @@ else:
 
         if args.Operation == "set-namespace":
             edit_metadata("Namespace", args.Value)
-            # Зависящие пакеты не трогаем: при версионировании они обязаны продолжать
-            # смотреть на прежний namespace. Но молчать о них нельзя.
+            # Do not touch dependent packages: when versioning, they must keep
+            # pointing to the former namespace. But staying silent about them is not allowed.
             dependents = []
             for d in sorted(os.listdir(xdto_root)):
                 if d == pkg_name or not os.path.isdir(os.path.join(xdto_root, d)):

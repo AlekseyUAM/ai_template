@@ -1,46 +1,46 @@
 ---
 name: xdto-compile
-description: Создание пакета XDTO 1С из XML-схемы (XSD). Используй когда нужно добавить в конфигурацию пакет XDTO — под обмен, интеграцию, веб-сервис или внешний XML-формат
-argument-hint: -XsdPath <файл.xsd>|-Xsd <схема> -OutputDir <каталог-исходников> [-Name <имя>] [-Synonym <синоним>] [-Comment <текст>] [-Force]
+description: Create a 1C XDTO package from an XML schema (XSD). Use when you need to add an XDTO package to the configuration - for exchange, integration, a web service or an external XML format
+argument-hint: -XsdPath <file.xsd>|-Xsd <schema> -OutputDir <source-dir> [-Name <name>] [-Synonym <synonym>] [-Comment <text>] [-Force]
 allowed-tools:
   - Bash
   - Read
   - Glob
 ---
 
-# /xdto-compile — Создание пакета XDTO из XML-схемы
+# /xdto-compile - Create an XDTO package from an XML schema
 
-Собирает пакет XDTO по XML-схеме: `XDTOPackages/<Имя>.xml`,
-`XDTOPackages/<Имя>/Ext/Package.bin` и регистрацию в `Configuration.xml`.
+Builds an XDTO package from an XML schema: `XDTOPackages/<Имя>.xml`,
+`XDTOPackages/<Имя>/Ext/Package.bin` and registration in `Configuration.xml`.
 
-Вход — обычная XML-схема, писать её нужно так же, как для любого другого инструмента.
+Input is a regular XML schema; write it the same way as for any other tool.
 
-## Параметры
+## Parameters
 
-| Параметр | Обязательный | Описание |
+| Parameter | Required | Description |
 |----------|--------------|----------|
-| `XsdPath` | один из двух | Путь к файлу XML-схемы. Псевдоним — `-Path` |
-| `Xsd` | один из двух | Схема строкой, вместо `-XsdPath` |
-| `OutputDir` | да | Каталог исходников конфигурации или расширения — там, где лежит `Configuration.xml` |
-| `Name` | нет | Имя объекта метаданных. По умолчанию — из `xs:appinfo`, иначе имя файла XSD, санированное под идентификатор 1С |
-| `Synonym` | нет | Синоним (строка). По умолчанию — из `xs:appinfo`, иначе имя пакета. Для нескольких языков задавай синоним в схеме, блоком `xs:appinfo` |
-| `Comment` | нет | Комментарий. По умолчанию — из `xs:appinfo` |
-| `Force` | нет | Перезаписать существующий пакет. Без него навык откажется затирать уже собранный пакет |
+| `XsdPath` | one of two | Path to the XML schema file. Alias - `-Path` |
+| `Xsd` | one of two | Schema as a string, instead of `-XsdPath` |
+| `OutputDir` | yes | Configuration or extension source directory - where `Configuration.xml` is |
+| `Name` | no | Metadata object name. By default - from `xs:appinfo`, otherwise the XSD file name sanitized for a 1C identifier |
+| `Synonym` | no | Synonym (string). By default - from `xs:appinfo`, otherwise the package name. For several languages, set the synonym in the schema with an `xs:appinfo` block |
+| `Comment` | no | Comment. By default - from `xs:appinfo` |
+| `Force` | no | Overwrite an existing package. Without it the skill refuses to overwrite an already built package |
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/xdto-compile.py" -XsdPath "<схема.xsd>" -OutputDir "<каталог-исходников>"
 ```
 
-Примеры:
+Examples:
 ```bash
 ... -XsdPath bank.xsd -OutputDir src -Name ОбменСБанком -Synonym "Обмен с банком"
 ... -XsdPath fss.xsd  -OutputDir src -Force
 ```
 
-## Читай предупреждения
+## Read the warnings
 
-XSD выразительнее модели XDTO. Всё, что не переносится один в один, навык переносит
-приближённо и **пишет об этом**:
+XSD is more expressive than the XDTO model. Everything that does not map one-to-one, the skill maps
+approximately and **writes about it**:
 
 ```
 Предупреждения (2) — конструкции XSD без точного соответствия в модели XDTO:
@@ -48,47 +48,47 @@ XSD выразительнее модели XDTO. Всё, что не перен
   ! Документ : кратность на вложенной частице (<xs:sequence minOccurs/maxOccurs>) не выражается в модели XDTO
 ```
 
-Такое сообщение означает, что пакет собран, но схема упрощена. Если упрощение
-недопустимо — меняй схему (например, разноси варианты `xs:choice` по разным типам),
-а не игнорируй.
+Such a message means the package was built but the schema was simplified. If the simplification is
+unacceptable - change the schema (for example, split `xs:choice` variants into different types),
+do not ignore it.
 
-Что переносится приближённо: вложенные `xs:sequence`/`xs:choice` (уплощаются в плоский
-список свойств), `xs:all` (становится последовательностью), кратность на частице,
+What maps approximately: nested `xs:sequence`/`xs:choice` (flattened into a flat property
+list), `xs:all` (becomes a sequence), multiplicity on a particle,
 `substitutionGroup`, `xs:key`/`keyref`/`unique`, `xs:redefine`.
 
-`xs:group` и `xs:attributeGroup` раскрываются по ссылке — их содержимое попадает в тип.
-`xs:include` игнорируется: зависимости в XDTO разрешаются только по namespace,
-поэтому включаемую схему нужно собрать отдельным пакетом и заменить `include` на `import`.
+`xs:group` and `xs:attributeGroup` are expanded by reference - their content lands in the type.
+`xs:include` is ignored: dependencies in XDTO resolve by namespace only,
+so an included schema must be built as a separate package and `include` replaced with `import`.
 
-## Посмотреть, что получилось
+## See what was produced
 
-Модель пакета лежит в `Ext/Package.bin`. Несмотря на расширение, это текстовый XML,
-но читать его напрямую обычно незачем: состав собранного пакета показывает
-`/xdto-info`, а полную схему — `/xdto-decompile`.
+The package model is in `Ext/Package.bin`. Despite the extension, it is textual XML,
+but there is usually no need to read it directly: `/xdto-info` shows the built package content,
+and `/xdto-decompile` shows the full schema.
 
-## Зависимости между пакетами
+## Dependencies between packages
 
-`<xs:import namespace="…"/>` разрешается по namespace среди пакетов конфигурации
-или расширения. Если пакета с таким пространством имён нет, платформа при загрузке
-молча подменит тип на `xs:anyType` — без ошибки. Собирай сначала зависимости, потом
-зависящий пакет, и проверяй результат через `/xdto-validate`.
+`<xs:import namespace="…"/>` resolves by namespace among configuration
+or extension packages. If there is no package with such a namespace, the platform silently
+substitutes the type with `xs:anyType` on load - without an error. Build dependencies first, then
+the dependent package, and verify the result via `/xdto-validate`.
 
-Какие пакеты уже собраны, видно в `ChildObjects` файла `Configuration.xml`.
+Which packages are already built is visible in `ChildObjects` of `Configuration.xml`.
 
-## Что XSD выразить не может
+## What XSD cannot express
 
-Две вещи модель XDTO умеет, а XML Schema — нет: `nillable` у атрибута и `qualified`
-у отдельного свойства. Они пишутся атрибутами из пространства имён модели:
+Two things the XDTO model can do but XML Schema cannot: `nillable` on an attribute and `qualified`
+on an individual property. They are written as attributes from the model namespace:
 
 ```xml
 <xs:attribute name="Представление" type="xs:string"
               xmlns:xdto="http://v8.1c.ru/8.1/xdto" xdto:nillable="true"/>
 ```
 
-Схема остаётся валидной — валидаторы такие атрибуты игнорируют. Полный список
-и таблица соответствий XSD ↔ XDTO — в [xsd-reference.md](xsd-reference.md).
+The schema remains valid - validators ignore such attributes. The full list
+and the XSD <-> XDTO mapping table are in [xsd-reference.md](xsd-reference.md).
 
-Свойства объекта метаданных можно задать прямо в схеме:
+Metadata object properties can be set directly in the schema:
 
 ```xml
 <xs:annotation>
@@ -101,12 +101,12 @@ XSD выразительнее модели XDTO. Всё, что не перен
 </xs:annotation>
 ```
 
-## Типичный workflow
+## Typical workflow
 
-1. Получить XSD от контрагента (или выгрузить схему существующего пакета: `/xdto-decompile`)
-2. `/xdto-compile -XsdPath <файл> -OutputDir <каталог-исходников>` — прочитать предупреждения
-3. `/xdto-validate <каталог-исходников>/XDTOPackages/<Имя>` — убедиться, что типы разрешились
+1. Get an XSD from the counterparty (or dump the schema of an existing package: `/xdto-decompile`)
+2. `/xdto-compile -XsdPath <файл> -OutputDir <каталог-исходников>` - read the warnings
+3. `/xdto-validate <каталог-исходников>/XDTOPackages/<Имя>` - make sure the types resolved
 4. `/db-load-xml` + `/db-update`
 
-Правка существующего пакета: точечно — `/xdto-edit`; переработать схему целиком —
-`/xdto-decompile` → правка XSD → `/xdto-compile -Force`.
+Editing an existing package: pointwise - `/xdto-edit`; to rework the schema entirely -
+`/xdto-decompile` → edit XSD → `/xdto-compile -Force`.

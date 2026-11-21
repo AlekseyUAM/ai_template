@@ -10,16 +10,16 @@ import sys
 
 from lxml import etree
 
-# Регистронезависимый ввод: имена параметров и значения choices принимаются
-# в любом регистре (в argparse по умолчанию совпадение точное).
+# Case-insensitive input: option names and choices values are accepted
+# in any case (argparse matching is exact by default).
 def ci_parse_args(parser, argv=None):
-    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
+    """parse_args: option names and choices values are accepted in any case."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
         if tok.startswith('-') and tok.lower() in names:
             argv[i] = names[tok.lower()]
-    # choices — зеркало [ValidateSet]; канонизируем ДО разбора, иначе argparse отвергнет регистр
+    # choices - mirror of [ValidateSet]; canonicalize BEFORE parsing, otherwise argparse rejects the case
     choice_map = {}
     for a in parser._actions:
         if a.choices:
@@ -36,8 +36,8 @@ NSMAP = {"md": "http://v8.1c.ru/8.3/MDClasses"}
 
 
 def _detect_xml_style(path):
-    """Стиль существующего файла для round-trip-сохранения: BOM / EOL / регистр encoding /
-    финальный перенос. None → файл новый (сохранить текущее поведение)."""
+    """Style of the existing file for round-trip saving: BOM / EOL / encoding case /
+    final newline. None → new file (keep current behavior)."""
     try:
         raw = open(path, "rb").read()
     except OSError:
@@ -52,21 +52,21 @@ def _detect_xml_style(path):
 
 
 def _finalize_xml_bytes(xml_bytes, style):
-    """Привести байты к стилю оригинала; для НОВОГО файла (style is None) — к канону
-    выгрузки Конфигуратора: encoding="UTF-8", CRLF в разделителях, без перевода в конце."""
+    """Bring bytes to the original's style; for a NEW file (style is None) - to the
+    Configurator dump canon: encoding="UTF-8", CRLF in separators, no trailing newline."""
     enc_decl = style["enc"] if style else "UTF-8"
     xml_bytes = xml_bytes.replace(
         b"<?xml version='1.0' encoding='UTF-8'?>",
         b'<?xml version="1.0" encoding="' + enc_decl.encode("ascii") + b'"?>')
-    # Канонизировать переносы к LF (убирает &#13; от \r в tail'ах)
+    # Canonicalize line endings to LF (removes &#13; from \r in tails)
     xml_bytes = (xml_bytes.replace(b"&#13;\n", b"\n").replace(b"&#13;", b"")
                  .replace(b"\r\n", b"\n").replace(b"\r", b"\n"))
-    # Финальный перенос — как в оригинале (новый файл → нет, канон #57)
+    # Final newline - as in the original (new file → none, canon #57)
     want_final_nl = style["final_nl"] if style else False
     xml_bytes = xml_bytes.rstrip(b"\n")
     if want_final_nl:
         xml_bytes += b"\n"
-    # EOL — как в оригинале (новый файл → CRLF, канон #57)
+    # EOL - as in the original (new file → CRLF, canon #57)
     if (style["crlf"] if style else True):
         xml_bytes = xml_bytes.replace(b"\n", b"\r\n")
     return xml_bytes
@@ -84,39 +84,39 @@ def save_xml_with_bom(tree, path):
 
 
 def long_path(path):
-    """Полный путь в длинной форме: короткое имя 8.3 (NSHIRO~1) разворачиваем в длинное,
-    иначе сравнение путей молча не совпадало."""
+    """Full path in long form: expand the 8.3 short name (NSHIRO~1) to the long one,
+    otherwise path comparison silently failed to match."""
     if not os.path.exists(path):
         return ""
     return os.path.realpath(path)
 
 
 def remove_node_with_indent(node):
-    """Удалить элемент вместе с предшествующим whitespace; опустевший контейнер сделать
-    самозакрывающимся. Удаляет узел вместе с его отступом."""
+    """Remove an element together with the preceding whitespace; make an emptied container
+    self-closing. Removes the node together with its indent."""
     parent = node.getparent()
     if parent is None:
         return
-    # В DOM whitespace — отдельные узлы: удаляются предшествующий и сам элемент, а
-    # whitespace ПОСЛЕ элемента остаётся. В lxml он лежит в node.tail и ушёл бы вместе с
-    # узлом, поэтому его надо передать предшественнику — иначе `</Attributes></Form>`.
+    # In the DOM whitespace consists of separate nodes: the preceding one and the element itself are removed,
+    # while the whitespace AFTER the element stays. In lxml it lives in node.tail and would go away with
+    # the node, so it must be passed to the predecessor - otherwise `</Attributes></Form>`.
     prev = node.getprevious()
     if prev is not None:
         prev.tail = node.tail
     else:
         parent.text = node.tail
     parent.remove(node)
-    # Опустевший контейнер: text="" сериализуется парой <ChildObjects></ChildObjects>,
-    # а нужен <ChildObjects/> — через DOM получается именно он.
+    # Emptied container: text="" serializes as the pair <ChildObjects></ChildObjects>,
+    # but <ChildObjects/> is needed - through the DOM that is exactly what is produced.
     if len(parent) == 0 and not (parent.text or "").strip():
         parent.text = None
 
 
 def clear_form_refs(tree, ref):
-    """Очистить ссылки на форму. Каноничное «не задано» зависит от файла: в корневом XML
-    объекта и в Configuration.xml пустой слот штатен (164 508 пустых на корпус), а внутри
-    Ext/Form.xml пустых <ChoiceForm/> и <SettingsStorage/> нет ни одного — там свойство
-    просто отсутствует. Чистит ссылки на формы."""
+    """Clear references to the form. The canonical "not set" depends on the file: in the object's
+    root XML and in Configuration.xml an empty slot is standard (164 508 empty ones in the corpus), while inside
+    Ext/Form.xml there is not a single empty <ChoiceForm/> or <SettingsStorage/> - there the property
+    is simply absent. Clears references to forms."""
     root = tree.getroot()
     is_form_file = etree.QName(root).localname == "Form"
     touched = []
@@ -124,9 +124,9 @@ def clear_form_refs(tree, ref):
     for el in list(root.iter()):
         if not isinstance(el.tag, str):
             continue
-        if len(el) > 0:                                    # только листья
+        if len(el) > 0:                                    # leaves only
             continue
-        # Сравнение регистронезависимое — как у платформы.
+        # Case-insensitive comparison - like the platform's.
         if (el.text or "").strip().lower() != ref_lc:
             continue
 
@@ -139,8 +139,8 @@ def clear_form_refs(tree, ref):
             touched.append(ln)
             remove_node_with_indent(el)
         else:
-            # text=None, а не "": пустая строка сериализуется парой <Tag></Tag>, а
-            # Конфигуратор пустых пар не пишет (0 на 476 942 XML корпуса) — нужен <Tag/>.
+            # text=None, not "": an empty string serializes as the pair <Tag></Tag>, while
+            # the Configurator does not write empty pairs (0 out of 476 942 corpus XML files) - <Tag/> is needed.
             touched.append(ln)
             el.text = None
     return touched
@@ -198,8 +198,8 @@ def main():
     if not obj_meta_name:
         obj_meta_name = os.path.splitext(os.path.basename(root_xml_path))[0]
 
-    # Полная ссылка на форму. Матч по ней целиком, а не по хвосту "Form.<Имя>": иначе при
-    # удалении своей ФормаСписка обнулялась бы и ссылка на DocumentJournal.Ж.Form.ФормаСписка.
+    # Full form reference. Match on it entirely, not on the "Form.<Имя>" tail: otherwise
+    # deleting one's own ФормаСписка would also reset the reference to DocumentJournal.Ж.Form.ФормаСписка.
     form_ref = f"{md_type}.{obj_meta_name}.Form.{form_name}"
 
     # --- Find references across the configuration ---
@@ -229,7 +229,7 @@ def main():
                     continue
                 fp = os.path.join(dirpath, fn)
                 if fp == root_xml_full or fp == form_meta_full:
-                    continue                                  # свой файл и файлы удаляемой формы
+                    continue                                  # own file and files of the form being deleted
                 if form_dir_full and fp.startswith(form_dir_full):
                     continue
                 try:
@@ -279,7 +279,7 @@ def main():
             remove_node_with_indent(node)
             break
 
-    # Очистить слоты своего объекта: Default*/Auxiliary*Form и ChoiceForm у реквизитов.
+    # Clear the object's own slots: Default*/Auxiliary*Form and ChoiceForm on attributes.
     clear_form_refs(tree, form_ref)
 
     # Save with BOM

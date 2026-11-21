@@ -1,45 +1,45 @@
-# Особенности СКД (система компоновки данных)
+# DCS specifics (data composition system)
 
-Требования, специфичные для запросов и настроек СКД, которые нельзя заскриптовать
-(нужна семантика задачи). Severity как в остальных справках: `[критичная]` = error,
-`[важная]` = warning, `[минорная]` = info (см. reviewer «Шкала severity и вердикт»).
-**Каждое правило-находка ниже помечено тегом severity** — находка наследует severity
-своего пункта.
+Requirements specific to DCS queries and settings that cannot be scripted
+(task semantics is needed). Severity as in the other references: `[critical]` = error,
+`[important]` = warning, `[minor]` = info (see reviewer "Severity scale and verdict").
+**Each rule finding below is tagged with its severity** - a finding inherits the severity
+of its item.
 
-Список пополняется по мере разбора задач; ниже — период отчёта (стандартный период
-и дата), пользовательские параметры, необязательные фрагменты, состав полей отчёта и
-форма отчёта.
+The list grows as tasks are analyzed; below - report period (standard period
+and date), user parameters, optional fragments, report field composition and
+report form.
 
-## Период отчёта: стандартный период и дата
+## Report period: standard period and date
 
-- [критичная] **Форма периода задаётся постановкой: «за период» — один параметр типа
-  `СтандартныйПериод`; «на дату» — один параметр-дата.** Не заводи для пользователя
-  две независимые даты «начало/конец» — это лишний ввод и риск полузаданного периода.
+- [critical] **The period form is set by the specification: "for a period" - one parameter of type
+  `СтандартныйПериод`; "on a date" - one date parameter.** Do not create two independent
+  "start/end" dates for the user - this is extra input and a risk of a half-set period.
 
-### Отчёт «за период» — `СтандартныйПериод`
+### "For a period" report - `СтандартныйПериод`
 
-- [критичная] **Пустые параметры периода виртуальной таблицы СКД заполняет
-  одноимёнными параметрами компоновки `НачалоПериода` и `КонецПериода`.** В тексте
-  запроса оставляй первые два параметра `Обороты` пустыми:
+- [critical] **DCS fills empty period parameters of a virtual table with the composition
+  parameters `НачалоПериода` and `КонецПериода` of the same name.** In query text
+  leave the first two `Обороты` parameters empty:
 
   ```
   ИЗ РегистрНакопления.ОборотныйРегистрНакопления.Обороты(, , Авто, Организация = &Организация) КАК ОборотыРегистра
   ```
 
-  СКД трактует это как `Обороты({&НачалоПериода}, {&КонецПериода}, Авто, …)`. Если
-  параметров `НачалоПериода`/`КонецПериода` в схеме нет, СКД создаст их пустыми, и
-  отчёт вернёт данные за всю историю — поэтому объяви их явно.
+  DCS treats this as `Обороты({&НачалоПериода}, {&КонецПериода}, Авто, …)`. If the
+  `НачалоПериода`/`КонецПериода` parameters are absent in the schema, DCS creates them empty, and
+  the report returns data for the whole history - so declare them explicitly.
 
-- [критичная] **Параметр `Период` — типа `СтандартныйПериод` (`v8:StandardPeriod`).**
-  В схеме — пустое значение `Custom`; значение по умолчанию задаётся в `dataParameters`
-  варианта настроек — `ThisMonth` (без `startDate`/`endDate`; они нужны только для
-  `Custom`). У параметра — `denyIncompleteValues=true`, `use=Always`.
+- [critical] **The `Период` parameter is of type `СтандартныйПериод` (`v8:StandardPeriod`).**
+  In the schema - the empty value `Custom`; the default value is set in `dataParameters`
+  of the settings variant - `ThisMonth` (without `startDate`/`endDate`; they are needed only for
+  `Custom`). The parameter has `denyIncompleteValues=true`, `use=Always`.
 
-- [критичная] **Служебные параметры `НачалоПериода`/`КонецПериода` — скрытые
-  (`useRestriction=true`), с выражениями `&Период.ДатаНачала` и
-  `&Период.ДатаОкончания`.** Тип — `xs:dateTime` с **`DateFractions=DateTime`**, не
-  `Date`: иначе `&Период.ДатаОкончания` (`23:59:59`) усечётся до `00:00:00` и данные
-  последнего дня периода пропадут.
+- [critical] **The service parameters `НачалоПериода`/`КонецПериода` are hidden
+  (`useRestriction=true`), with expressions `&Период.ДатаНачала` and
+  `&Период.ДатаОкончания`.** Type - `xs:dateTime` with **`DateFractions=DateTime`**, not
+  `Date`: otherwise `&Период.ДатаОкончания` (`23:59:59`) is truncated to `00:00:00` and data
+  of the last day of the period is lost.
 
 ```xml
 <parameter>
@@ -73,16 +73,16 @@
 </parameter>
 ```
 
-- [важная] **`КОНЕЦПЕРИОДА` и «+1 секунда» для стандартного периода не нужны.** Его
-  `ДатаОкончания` уже `23:59:59`, а ВТ `Обороты` включает обе границы. Дополнительная
-  обработка границы нужна только для параметра-даты (см. ниже).
+- [important] **`КОНЕЦПЕРИОДА` and "+1 second" are not needed for a standard period.** Its
+  `ДатаОкончания` is already `23:59:59`, and the `Обороты` VT includes both boundaries. Additional
+  boundary handling is needed only for a date parameter (see below).
 
-### Отчёт «на дату» — один параметр `Период`
+### "On a date" report - one `Период` parameter
 
-- [критичная] **Параметр `Период` — дата/время (`DateFractions=DateTime`), видимый
-  (`useRestriction=false`), `denyIncompleteValues=true`.** В `dataParameters` варианта
-  задай значение по умолчанию `v8:StandardBeginningDate` с вариантом
-  `BeginningOfThisDay` и `userSettingID` — пользователь получит стандартный выбор даты.
+- [critical] **The `Период` parameter is date/time (`DateFractions=DateTime`), visible
+  (`useRestriction=false`), `denyIncompleteValues=true`.** In `dataParameters` of the variant
+  set the default value `v8:StandardBeginningDate` with the variant
+  `BeginningOfThisDay` and `userSettingID` - the user gets the standard date picker.
 
 ```xml
 <parameter>
@@ -108,8 +108,8 @@
 </dcscor:item>
 ```
 
-- [критичная] **В ВТ `Остатки` период — момент времени, граница строгая.** Остатки на
-  конец дня получаются верхней границей в тексте запроса:
+- [critical] **In the `Остатки` VT the period is a point in time, the boundary is strict.** End-of-day
+  balances are obtained with an upper boundary in the query text:
 
   ```
   ИЗ РегистрНакопления.ОстаточныйРегистрНакопления.Остатки(
@@ -117,157 +117,156 @@
           Организация = &Организация) КАК ОстаткиРегистра
   ```
 
-  У `Остатки` **два** параметра — `<Период>, <Условие>`; лишняя пустая позиция
-  (`Остатки(дата, , условие)`) — ошибка запроса, а не «пропуск параметра».
-  `КОНЕЦПЕРИОДА(&Период, ДЕНЬ)` даёт `23:59:59`, `+1 СЕКУНДА` сдвигает на начало
-  следующего дня; передача «голой» даты без `КОНЕЦПЕРИОДА` отсекает данные последнего
-  дня (см. также [граница и момент времени](boundary-and-moment.md)).
+  `Остатки` has **two** parameters - `<Период>, <Условие>`; an extra empty position
+  (`Остатки(дата, , условие)`) is a query error, not a "parameter skip".
+  `КОНЕЦПЕРИОДА(&Период, ДЕНЬ)` gives `23:59:59`, `+1 СЕКУНДА` shifts to the start of
+  the next day; passing a "bare" date without `КОНЕЦПЕРИОДА` cuts off the last day's data
+  (see also [boundary and point in time](boundary-and-moment.md)).
 
-- [важная] **`Граница`/`МоментВремени` можно передать в СКД только программно.**
-  В самой схеме компоновки нельзя объявить параметр такого типа, поэтому в СКД
-  границу формируют в тексте запроса (`КОНЕЦПЕРИОДА(...)` + 1 секунда) или
-  стандартным периодом. Если отчёт компонуется программно и параметр заполняется из
-  кода, объект `Граница`/`МоментВремени` допустим.
+- [important] **`Граница`/`МоментВремени` can be passed to DCS only programmatically.**
+  The composition schema itself cannot declare a parameter of such a type, so in DCS
+  the boundary is formed in query text (`КОНЕЦПЕРИОДА(...)` + 1 second) or by a
+  standard period. If the report is composed programmatically and the parameter is filled from
+  code, the `Граница`/`МоментВремени` object is allowed.
 
-## Пользовательские параметры
+## User parameters
 
-- [критичная] **Параметры, которые заполняет пользователь (`Период`, `Организация`),
-  должны быть видимыми — `useRestriction=false`.** Не «скрывай» их флагом
-  `availableAsField=false`: этот флаг запрещает использовать параметр как поле, но не
-  управляет его видимостью в списке параметров. Скрытыми (`useRestriction=true`)
-  должны быть только служебные параметры, вычисляемые из других
-  (`НачалоПериода`, `КонецПериода`).
+- [critical] **Parameters filled by the user (`Период`, `Организация`) must be visible -
+  `useRestriction=false`.** Do not "hide" them with the `availableAsField=false` flag: this flag
+  forbids using the parameter as a field but does not control its visibility in the parameter list.
+  Only service parameters computed from others (`НачалоПериода`, `КонецПериода`) must be
+  hidden (`useRestriction=true`).
 
-- [важная] **У каждого пользовательского параметра задай `title`** («Период»,
-  «Организация», «Начало периода», «Конец периода») — иначе пользователь увидит
-  техническое имя.
+- [important] **Set a `title` for every user parameter** ("Period",
+  "Organization", "Period start", "Period end") - otherwise the user sees the
+  technical name.
 
-- [важная] **Обязательные пользовательские параметры — `denyIncompleteValues=true`;
-  если параметр должен всегда участвовать в компоновке — `use=Always`.** Иначе СКД
-  может использовать автогенерируемый параметр вместо объявленного.
+- [important] **Mandatory user parameters - `denyIncompleteValues=true`;
+  if the parameter must always participate in composition - `use=Always`.** Otherwise DCS
+  may use an auto-generated parameter instead of the declared one.
 
-- [важная] **Значение по умолчанию задавай в варианте настроек (`dataParameters`), а
-  не в `<value>` параметра схемы.** Для стандартного периода — `ThisMonth`; для
-  даты — `StandardBeginningDate`/`BeginningOfThisDay`.
+- [important] **Set the default value in the settings variant (`dataParameters`), not
+  in the schema parameter's `<value>`.** For a standard period - `ThisMonth`; for a
+  date - `StandardBeginningDate`/`BeginningOfThisDay`.
 
-- [важная] **Каждому пользовательскому параметру в `dataParameters` задавай
-  `userSettingID`.** Без него параметр не попадёт в пользовательские настройки и его
-  нельзя будет изменить. Служебным `НачалоПериода`/`КонецПериода` `userSettingID` не
-  нужен — они вычисляются из `Период`.
+- [important] **Set `userSettingID` for every user parameter in `dataParameters`.**
+  Without it the parameter does not get into user settings and
+  cannot be changed. Service `НачалоПериода`/`КонецПериода` do not need `userSettingID` -
+  they are computed from `Период`.
 
-- [важная] **Пользовательский параметр отбора не становится полем отчёта.** Если
-  `Организация` участвует только в условии ВТ (`Организация = &Организация`), не
-  добавляй её в `ВЫБРАТЬ` и в выборку варианта, пока она не колонка ТЗ.
+- [important] **A user filter parameter does not become a report field.** If
+  `Организация` participates only in the VT condition (`Организация = &Организация`), do not
+  add it to `ВЫБРАТЬ` or to the variant selection while it is not a specification column.
 
-## Необязательные параметры и фрагменты — фигурные скобки
+## Optional parameters and fragments - curly braces
 
-- **Необязательные параметры/условия оборачивай в `{ }`, а не склеивай текст запроса
-  конкатенацией/`СтрЗаменить`** [важная]. Ручная сборка допустима только по общему
-  правилу `query-review`: если доступен `validate_query` и каждая часть / осевой текст
-  проходят проверку; иначе — находка [важная].
+- **Wrap optional parameters/conditions in `{ }`, and do not glue query text with
+  concatenation/`СтрЗаменить`** [important]. Manual assembly is allowed only per the general
+  `query-review` rule: if `validate_query` is available and every part / the axial text
+  passes validation; otherwise - a finding [important].
 
-Фрагмент запроса СКД, обёрнутый в `{ }`, включается в запрос, **только если** связанный
-параметр заполнен (или поле выбрано пользователем). Это штатный способ сделать отбор
-необязательным — без ручного склеивания текста запроса и без лишних условий, когда
-параметр пуст:
+A DCS query fragment wrapped in `{ }` is included in the query **only if** the related
+parameter is filled (or the field is selected by the user). This is the standard way to make a filter
+optional - without manual query text gluing and without extra conditions when the
+parameter is empty:
 
 ```
 {&ПодразделениеОрганизации}
 ```
 
-Так же оборачиваются необязательные условия и поля целиком, например
-`{ГДЕ Подразделение = &Подразделение}`. `{ }` — штатный способ: не подставляй
-необязательные параметры конкатенацией/`СтрЗаменить`, если для задачи достаточно
-`{ }`. Ручная сборка — только по общему правилу `query-review` о `validate_query`;
-иначе это находка [важная].
+Optional conditions and whole fields are wrapped the same way, e.g.,
+`{ГДЕ Подразделение = &Подразделение}`. `{ }` is the standard way: do not substitute
+optional parameters with concatenation/`СтрЗаменить` if `{ }` is enough for the task.
+Manual assembly - only per the general `query-review` rule about `validate_query`;
+otherwise it is a finding [important].
 
-## Состав полей отчёта — строго по ТЗ
+## Report field composition - strictly per the specification
 
-- [критичная] **В отчёте ровно те колонки, которые перечислены в ТЗ.** Не добавляй
-  «на всякий случай» поля в запрос, набор данных, вычисляемые поля или выборку.
-  Лишняя колонка — такая же ошибка, как пропущенная: пользователь видит не тот отчёт,
-  а поддержка получает неоговорённую модель данных.
-- [важная] **Не расширяй запрос соединениями ради косметики.** Например, чтобы скрыть
-  себестоимость услуги, не добавляй в запрос признак `Услуга`, которого нет в ТЗ.
-  Если без служебного признака требование не выполнить — это открытый вопрос к
-  постановщику, а не повод самовольно менять состав запроса.
-- [важная] **Имя поля в наборе данных, вычисляемого поля и выборки совпадает с именем
-  колонки ТЗ.** Если ресурс регистра называется иначе, переименуй его псевдонимом в
-  запросе (`СтоимостьОборот КАК Себестоимость`) и используй этот псевдоним везде — в
-  наборе, формулах и выборке. Не заводи второе вычисляемое поле с другим именем и
-  заголовком, равным имени колонки ТЗ: в выборке появится «чужое» поле, а итоги/формат
-  могут ссылаться на другое.
+- [critical] **The report has exactly the columns listed in the specification.** Do not add
+  fields "just in case" to the query, data set, calculated fields or selection.
+  An extra column is the same error as a missing one: the user sees the wrong report,
+  and support gets an unspecified data model.
+- [important] **Do not extend the query with joins for cosmetic reasons.** For example, to hide
+  the cost of a service, do not add the `Услуга` flag to the query if it is not in the specification.
+  If the requirement cannot be met without a service flag - this is an open question to
+  the spec author, not a reason to change the query composition on your own.
+- [important] **The field name in the data set, calculated field and selection matches the
+  specification column name.** If a register resource has a different name, rename it with an alias in the
+  query (`СтоимостьОборот КАК Себестоимость`) and use this alias everywhere - in the
+  set, formulas and selection. Do not create a second calculated field with a different name and a
+  title equal to the specification column name: a "foreign" field appears in the selection, and totals/format
+  may reference the other one.
 
-  Плохо: поле набора `Себестоимость`, вычисляемое поле `СебестоимостьУслуги` с
-  заголовком «Себестоимость», в выборке — `СебестоимостьУслуги`. Хорошо: в запросе
-  `... КАК Себестоимость`, в выборке — `Себестоимость`; если для услуги нужно пустое
-  значение, это отдельное требование, и его способ согласуется с постановщиком.
+  Bad: a set field `Себестоимость`, a calculated field `СебестоимостьУслуги` with the
+  title "Cost", the selection contains `СебестоимостьУслуги`. Good: the query has
+  `... КАК Себестоимость`, the selection contains `Себестоимость`; if an empty
+  value is needed for a service, that is a separate requirement, and its approach is agreed with the spec author.
 
-- [важная] **Колонки отчёта — это поля выборки + поля группировок.** При элементе
-  «Авто» поле группировки выводится автоматически; если по макету в детальных строках
-  его колонка должна быть пустой, не дублируй поле в выборке. Пример — отчёт по
-  остаточному регистру: структура `Номенклатура > детальные записи`, выборка
-  `Партия, Количество, Стоимость`; `Номенклатура` задана только в структуре. Если же
-  повтор значения в детальных строках нужен по макету, поле можно включить в выборку.
+- [important] **Report columns are selection fields + grouping fields.** With the "Auto"
+  item the grouping field is output automatically; if by the template its column must be empty
+  in detail rows, do not duplicate the field in the selection. Example - a report over a
+  balances register: structure `Номенклатура > детальные записи`, selection
+  `Партия, Количество, Стоимость`; `Номенклатура` is set only in the structure. If a repeated value
+  in detail rows is required by the template, the field can be included in the selection.
 
-  `skd-validate -ExpectedFields` проверяет только выборку и на таком поле может выдать
-  `missing from selection`; сверяй колонки по `skd-info -Mode variant` (выборка +
-  группировки), а не только по списку выборки.
+  `skd-validate -ExpectedFields` checks only the selection and may report
+  `missing from selection` for such a field; verify columns with `skd-info -Mode variant` (selection +
+  groupings), not only by the selection list.
 
-## Форма отчёта
+## Report form
 
-- [важная] **Не создавай собственную `ФормаОтчета` (и не назначай `defaultForm`), если
-  этого нет в ТЗ.** Платформа автоматически строит форму отчёта по СКД; автоформа
-  надёжнее и не требует файлов формы. Собственная форма — только по явному требованию
-  (например, нестандартный интерфейс), и тогда её нужно отдельно проверять.
+- [important] **Do not create a custom `ФормаОтчета` (and do not assign `defaultForm`) unless
+  the specification requires it.** The platform builds the report form from the DCS automatically; the auto form
+  is more reliable and requires no form files. A custom form - only on an explicit requirement
+  (e.g., a non-standard interface), and then it must be validated separately.
 
-## Запрос СКД и виртуальные таблицы регистров
+## DCS query and register virtual tables
 
-- [критичная] **Соблюдай сигнатуру виртуальной таблицы — лишние пустые позиции не
-  «пропускают» параметр, а сдвигают его.** `Остатки(<Период>, <Условие>)` — два
-  параметра; `Обороты(<НачалоПериода>, <КонецПериода>, <Периодичность>, <Условие>)` —
-  четыре; `ОстаткиИОбороты(<НачалоПериода>, <КонецПериода>, <Периодичность>,
-  <МетодДополненияПериодами>, <Условие>)` — пять. Не копируй «пустую запятую» из
-  другой ВТ.
-- [важная] **Периодичность ВТ указывай по ТЗ; `Авто` — только если другая
-  периодичность не требуется.** `Обороты(, , Авто, Организация = &Организация)` —
-  когда периодичность не важна. Если по ТЗ или смыслу нужна `День`, `Месяц`,
-  `Регистратор` и т.п., задай её явно. Пустые границы заполняются параметрами
-  `НачалоПериода`/`КонецПериода` (см. раздел «Период отчёта»).
-- [важная] **Периодичность `Авто` не делает поле `Период` колонкой отчёта.** Если
-  периодичность не выводится, не добавляй `Период` в `ВЫБРАТЬ` — выбирай только поля
-  из ТЗ.
-- [важная] **Не добавляй `СГРУППИРОВАТЬ ПО` к выборке из виртуальной таблицы
-  «Обороты»/«Остатки».** ВТ уже группирует результат по измерениям (и периоду).
-  Подробнее — [регистры накопления](accumulation-registers.md).
-- [важная] **Отборы по измерениям — в параметрах ВТ**, а не в `ГДЕ` после неё; верхняя
-  граница периода — по правилам выбранной ВТ (см. раздел выше).
-- [важная] **Поля запроса — только нужные отчёту.** Служебные поля для вычислений
-  допустимы, только если они действительно участвуют в формуле, и не выводятся в
-  выборку; их наличие фиксируется в `DEVELOP.md` с обоснованием.
+- [critical] **Respect the virtual table signature - extra empty positions do not
+  "skip" a parameter but shift it.** `Остатки(<Период>, <Условие>)` - two
+  parameters; `Обороты(<НачалоПериода>, <КонецПериода>, <Периодичность>, <Условие>)` -
+  four; `ОстаткиИОбороты(<НачалоПериода>, <КонецПериода>, <Периодичность>,
+  <МетодДополненияПериодами>, <Условие>)` - five. Do not copy an "empty comma" from
+  another VT.
+- [important] **Set the VT periodicity per the specification; `Авто` - only if another
+  periodicity is not required.** `Обороты(, , Авто, Организация = &Организация)` -
+  when periodicity does not matter. If the specification or meaning requires `День`, `Месяц`,
+  `Регистратор` etc., set it explicitly. Empty boundaries are filled by the
+  `НачалоПериода`/`КонецПериода` parameters (see the "Report period" section).
+- [important] **`Авто` periodicity does not make the `Период` field a report column.** If
+  periodicity is not output, do not add `Период` to `ВЫБРАТЬ` - select only fields
+  from the specification.
+- [important] **Do not add `СГРУППИРОВАТЬ ПО` to a selection from the "Turnovers"/"Balances"
+  virtual table.** The VT already groups the result by dimensions (and period).
+  More - [accumulation registers](accumulation-registers.md).
+- [important] **Dimension filters - in the VT parameters**, not in `ГДЕ` after it; the upper
+  period boundary - per the rules of the selected VT (see the section above).
+- [important] **Query fields - only those needed by the report.** Service fields for calculations
+  are allowed only if they really participate in a formula, and are not output to the
+  selection; their presence is recorded in `DEVELOP.md` with justification.
 
-## Проверка перед сдачей
+## Check before submission
 
-- [ ] Период оформлен по типу отчёта: «за период» — `Период` типа `СтандартныйПериод`
-  + скрытые `НачалоПериода`/`КонецПериода` (`DateTime`, выражения
-  `&Период.ДатаНачала`/`&Период.ДатаОкончания`); «на дату» — один `Период`
+- [ ] The period is arranged per report type: "for a period" - `Период` of type `СтандартныйПериод`
+  + hidden `НачалоПериода`/`КонецПериода` (`DateTime`, expressions
+  `&Период.ДатаНачала`/`&Период.ДатаОкончания`); "on a date" - one `Период`
   (`DateTime`, `StandardBeginningDate`/`BeginningOfThisDay`).
-- [ ] В запросе к `Обороты` первые две границы пусты, третья — периодичность по ТЗ
-  (`Авто`, если другая не требуется); в схеме есть параметры
-  `НачалоПериода`/`КонецПериода` с выражениями из `Период`. В запросе к
-  `Остатки` ровно два параметра (`<Период>, <Условие>`), конец дня — `КОНЕЦПЕРИОДА` +
-  1 секунда, лишних пустых позиций нет.
-- [ ] `Период` и `Организация` видимы (`useRestriction=false`), имеют `title` и
-  `denyIncompleteValues=true`; значения по умолчанию — в `dataParameters` варианта;
-  у пользовательских параметров есть `userSettingID`.
-- [ ] Служебные `НачалоПериода`/`КонецПериода` скрыты (`useRestriction=true`), тип
-  `DateTime` (не `Date`).
-- [ ] Сверь колонки варианта с ТЗ: `skd-info <tpl> -Mode variant -Name <вариант>` —
-  поля выборки + поля группировок; поле группировки не дублируется в выборке, если
-  по макету выводится только строкой группировки.
-- [ ] Запусти `skd-validate <tpl> -ExpectedFields "<колонки ТЗ через запятую>"` —
-  проверка поймает лишние/недостающие поля и подмену поля вычисляемым с тем же
-  заголовком. `missing from selection` для поля группировки — известное ограничение
-  валидатора, сверься со структурой варианта.
-- [ ] В запросе нет `СГРУППИРОВАТЬ ПО` по ВТ без обоснования (валидатор предупреждает).
-- [ ] Собственная форма отчёта не создавалась, если её нет в ТЗ.
+- [ ] In the query to `Обороты` the first two boundaries are empty, the third is the periodicity per the specification
+  (`Авто` if another is not required); the schema has the parameters
+  `НачалоПериода`/`КонецПериода` with expressions from `Период`. In the query to
+  `Остатки` there are exactly two parameters (`<Период>, <Условие>`), end of day - `КОНЕЦПЕРИОДА` +
+  1 second, no extra empty positions.
+- [ ] `Период` and `Организация` are visible (`useRestriction=false`), have `title` and
+  `denyIncompleteValues=true`; default values - in the variant's `dataParameters`;
+  user parameters have `userSettingID`.
+- [ ] Service `НачалоПериода`/`КонецПериода` are hidden (`useRestriction=true`), type
+  `DateTime` (not `Date`).
+- [ ] Verify the variant columns against the specification: `skd-info <tpl> -Mode variant -Name <вариант>` -
+  selection fields + grouping fields; a grouping field is not duplicated in the selection if
+  by the template it is output only as a grouping row.
+- [ ] Run `skd-validate <tpl> -ExpectedFields "<колонки ТЗ через запятую>"` -
+  the check catches extra/missing fields and a field replaced by a calculated one with the same
+  title. `missing from selection` for a grouping field is a known validator limitation, verify
+  against the variant structure.
+- [ ] The query has no `СГРУППИРОВАТЬ ПО` over a VT without justification (the validator warns).
+- [ ] A custom report form was not created if the specification does not require it.

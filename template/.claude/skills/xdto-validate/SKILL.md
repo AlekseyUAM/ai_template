@@ -1,44 +1,44 @@
 ---
 name: xdto-validate
-description: Валидация пакета XDTO 1С. Используй после создания или модификации пакета XDTO для проверки корректности
-argument-hint: <PackagePath> [-ConfigDir <каталог>] [-Detailed] [-MaxErrors N] [-OutFile <файл>]
+description: Validate a 1C XDTO package. Use after creating or modifying an XDTO package to verify correctness
+argument-hint: <PackagePath> [-ConfigDir <dir>] [-Detailed] [-MaxErrors N] [-OutFile <file>]
 allowed-tools:
   - Bash
   - Read
   - Glob
 ---
 
-# /xdto-validate — Валидация пакета XDTO
+# /xdto-validate - XDTO package validation
 
-Проверяет модель пакета, объект метаданных и его связь с конфигурацией.
-Каждая находка выводится отдельной строкой с объяснением. Exit code `1` при ошибках.
+Checks the package model, the metadata object and its link to the configuration.
+Each finding is printed on a separate line with an explanation. Exit code `1` on errors.
 
-## Параметры
+## Parameters
 
-| Параметр | Обязательный | Описание |
+| Parameter | Required | Description |
 |----------|--------------|----------|
-| `PackagePath` | да | Каталог пакета, `Ext/Package.bin` или `<Имя>.xml` объекта метаданных. Псевдоним — `-Path` |
-| `ConfigDir` | нет | Корень исходников. По умолчанию определяется по расположению пакета |
-| `Detailed` | нет | Показывать успешные проверки, а не только проблемы |
-| `MaxErrors` | нет | Остановиться после N ошибок. По умолчанию 20 |
-| `OutFile` | нет | Записать отчёт в файл |
+| `PackagePath` | yes | Package directory, `Ext/Package.bin` or metadata object `<Имя>.xml`. Alias - `-Path` |
+| `ConfigDir` | no | Source root. By default determined by the package location |
+| `Detailed` | no | Show successful checks, not only problems |
+| `MaxErrors` | no | Stop after N errors. Default 20 |
+| `OutFile` | no | Write the report to a file |
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/xdto-validate.py" -PackagePath "<путь>"
 ```
 
-`[ERROR]` — платформа такой пакет не примет либо примет неправильно.
-`[WARN]` — пакет рабочий, но есть риск, о котором стоит знать.
+`[ERROR]` - the platform will not accept such a package or will accept it incorrectly.
+`[WARN]` - the package works, but there is a risk worth knowing.
 
-## Зачем запускать, если пакет и так грузится
+## Why run it if the package loads anyway
 
-Часть дефектов платформа не диагностирует: неразрешённый тип из чужого пространства
-имён она молча подменяет на `xs:anyType`, и пакет выглядит загруженным, пока
-`ФабрикаXDTO` не отдаст в рантайме бесструктурное значение. Такие вещи видно только
-статически — до загрузки в базу.
+The platform does not diagnose some defects: it silently substitutes an unresolved type from a foreign
+namespace with `xs:anyType`, and the package looks loaded until
+`ФабрикаXDTO` returns a structureless value at runtime. Such things are visible only
+statically - before loading into the infobase.
 
-## Типичный workflow
+## Typical workflow
 
-1. `/xdto-compile`, `/xdto-edit` или переработка через `/xdto-decompile` → `/xdto-compile -Force`
-2. `/xdto-validate <путь>` — до загрузки в базу
+1. `/xdto-compile`, `/xdto-edit` or rework via `/xdto-decompile` → `/xdto-compile -Force`
+2. `/xdto-validate <путь>` - before loading into the infobase
 3. `/db-load-xml` + `/db-update`

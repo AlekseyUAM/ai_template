@@ -507,6 +507,8 @@ def test_key_path_is_tilde_expanded(monkeypatch):
 
     monkeypatch.setitem(__import__("sys").modules, "paramiko", FakeParamiko)
     monkeypatch.setenv("HOME", "/home/tester")
+    # Windows expanduser reads USERPROFILE, not HOME.
+    monkeypatch.setenv("USERPROFILE", "/home/tester")
     ssh_module._real_connect({"host": "srv", "key_path": "~/.ssh/id_ed25519"})
     assert captured["key_filename"] == "/home/tester/.ssh/id_ed25519"
 

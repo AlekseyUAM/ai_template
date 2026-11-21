@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
-"""Собрать system_enums.json из разбора справки платформы 1С (.hbk).
+"""Build system_enums.json from parsing the 1C platform help (.hbk).
 
-Источник — корпус и построчный разбор `bsl-ctx` (тот же разбор справки, что
-используют MCP-серверы платформенного контекста). Данные нужны правилам
-code-analyze: `system-enum-value` и `reserved-system-name`.
+Source - the `bsl-ctx` corpus and line-by-line parse (the same help parse
+used by platform context MCP servers). The data is needed by code-analyze
+rules: `system-enum-value` and `reserved-system-name`.
 
-Как получить входные файлы (пример для установленной платформы):
+How to get the input files (example for an installed platform):
 
     bsl-ctx capture "C:\\Program Files (x86)\\1cv8\\8.3.27.2170\\bin" -o corpus.sqlite
     bsl-ctx parse --all --db corpus.sqlite --out parsed.jsonl
 
-Затем:
+Then:
 
     python tools/update_system_names.py \
         --corpus corpus.sqlite --parsed parsed.jsonl \
         --out system_enums.json --platform 8.3.27.2170
 
-Скрипт использует только стандартную библиотеку Python.
+The script uses only the Python standard library.
 """
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ _VALUE_RE = re.compile(r"^(.*?)\s*\(([^()]*)\)\s*$")
 
 
 def descendants(conn: sqlite3.Connection, pid: int) -> set[int]:
-    """Все потомки категории TOC (включая вложенные подразделы)."""
+    """All descendants of the TOC category (including nested subsections)."""
     ids: set[int] = set()
     stack = [pid]
     while stack:
@@ -87,7 +87,7 @@ def load_records(parsed: Path, wanted: set[tuple[str, str]]) -> list[dict]:
                 if not value_ru:
                     continue
                 if "<" in value_ru or ">" in value_ru or "<" in value_en or ">" in value_en:
-                    # «<Имя картинки>» — набор открыт, проверять члены нельзя.
+                    # "<Имя картинки>" - the set is open, members cannot be checked.
                     open_set = True
                     continue
                 pairs.append([value_ru, value_en])
@@ -98,8 +98,8 @@ def load_records(parsed: Path, wanted: set[tuple[str, str]]) -> list[dict]:
 
 def build(corpus: Path, parsed: Path, platform: str) -> dict:
     conn = sqlite3.connect(corpus)
-    enum_pages = page_paths(conn, descendants(conn, 6))      # Системные перечисления
-    value_pages = page_paths(conn, descendants(conn, 5))     # Системные наборы значений
+    enum_pages = page_paths(conn, descendants(conn, 6))      # System enums
+    value_pages = page_paths(conn, descendants(conn, 5))     # System value sets
     enums = load_records(parsed, enum_pages)
     value_sets = load_records(parsed, value_pages)
     return {

@@ -1,46 +1,46 @@
-# Свойства объекта и свойства-списки
+# Object properties and list properties
 
-Справочник операций для обычных свойств объекта и свойств-списков (Owners, RegisterRecords, BasedOn, InputByString).
+Operation reference for regular object properties and list properties (Owners, RegisterRecords, BasedOn, InputByString).
 
 ## modify-property
 
-Изменение свойств объекта по имени свойства 1С (PascalCase, как в конфигураторе). Формат: `Ключ=Значение`
-(batch через `;;`):
+Changing object properties by the 1C property name (PascalCase, as in the Configurator). Format: `Ключ=Значение`
+(batch via `;;`):
 ```bash
 -Operation modify-property -Value "CodeLength=11 ;; DescriptionLength=150"
 -Operation modify-property -Value "Hierarchical=true"
 ```
 
-Свойство можно задать, даже если оно ещё не выставлено у объекта (например `FullTextSearch`, `DataHistory`).
-Допустимы имена свойств соответствующего типа объекта.
+A property can be set even if it is not yet set on the object (e.g. `FullTextSearch`, `DataHistory`).
+Property names of the corresponding object type are allowed.
 
-### Type — тип значения (Константа, ПВХ)
+### Type - value type (Constant, chart of characteristic types)
 
-`Type=...` перестраивает дескриптор типа значения. Значение — тип 1С в том же синтаксисе,
-что у реквизитов: составной через `+`, с квалификаторами и ссылочными типами:
+`Type=...` rebuilds the value type descriptor. The value is a 1C type in the same syntax
+as for attributes: composite via `+`, with qualifiers and reference types:
 ```bash
 -Operation modify-property -Value "Type=String(100) + Number(15,2) + CatalogRef.Номенклатура"
 ```
-Структурные свойства (со вложенными узлами) через `Ключ=Значение` не задаются — исключение только `Type`.
+Structural properties (with nested nodes) are not set via `Ключ=Значение` - the only exception is `Type`.
 
-## Свойства-списки
+## List properties
 
-Свойства, значение которых — список ссылок. Управляются через inline `add-*` / `remove-*` / `set-*` и через JSON `modify.properties`.
+Properties whose value is a list of references. Managed via inline `add-*` / `remove-*` / `set-*` and via JSON `modify.properties`.
 
-| Свойство | Объекты | Inline-значение |
+| Property | Objects | Inline value |
 |----------|---------|-----------------|
 | Owners | Catalog | `Catalog.XXX` |
 | RegisterRecords | Document, Sequence | `AccumulationRegister.XXX` |
-| BasedOn | ссылочные* | `Document.XXX` |
-| InputByString | ссылочные* | `StandardAttribute.Description` |
-| DataLockFields | ссылочные* | `Организация` (короткое имя реквизита → полный путь) |
+| BasedOn | reference* | `Document.XXX` |
+| InputByString | reference* | `StandardAttribute.Description` |
+| DataLockFields | reference* | `Организация` (short attribute name -> full path) |
 | RegisteredDocuments | DocumentJournal | `Document.XXX` |
 
 \* Catalog, Document, ChartOfCharacteristicTypes, ChartOfAccounts, ChartOfCalculationTypes, ExchangePlan, BusinessProcess, Task.
 
 ### add-owner / add-registerRecord / add-basedOn / add-registeredDocument
 
-Полное имя метаданных `MetaType.Name`:
+Full metadata name `MetaType.Name`:
 ```bash
 -Operation add-owner -Value "Catalog.Контрагенты ;; Catalog.Организации"
 -Operation add-registerRecord -Value "AccumulationRegister.ОстаткиТоваров"
@@ -50,7 +50,7 @@
 
 ### add-inputByString / add-dataLockField
 
-Пути полей (короткое имя реквизита разворачивается в полный путь автоматически):
+Field paths (a short attribute name is expanded to the full path automatically):
 ```bash
 -Operation add-inputByString -Value "StandardAttribute.Description ;; StandardAttribute.Code"
 -Operation add-dataLockField -Value "Организация ;; Контрагент"
@@ -66,7 +66,7 @@
 
 ### set-owners / set-registerRecords / set-basedOn / set-inputByString / set-dataLockFields / set-registeredDocuments
 
-Заменяют **весь список** (в отличие от add/remove):
+Replace the **whole list** (unlike add/remove):
 ```bash
 -Operation set-owners -Value "Catalog.Организации ;; Catalog.Контрагенты"
 -Operation set-registerRecords -Value "AccumulationRegister.Продажи ;; AccumulationRegister.ОстаткиТоваров"

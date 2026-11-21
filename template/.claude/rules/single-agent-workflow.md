@@ -1,124 +1,124 @@
 ---
 name: single-agent-workflow
-description: Single-agent выполнение задачи по task.json — этапы как чеклисты, без субагентов.
+description: Single-agent task execution according to task.json - stages as checklists, without subagents.
 ---
 
 # Single-agent workflow
 
-## Источник
-`tasks/task#<id>/task.json`: `stages` — список этапов. Этап с `enabled: true` — это
-чеклист; `subagent` — имя файла в `.claude/checklists/`, `artifact` — файл результата.
-Порядок: `analyze → plan → tests → develop → testing → review → docs`.
+## Source
+`tasks/task#<id>/task.json`: `stages` - list of stages. A stage with `enabled: true` is a
+checklist; `subagent` - the file name in `.claude/checklists/`, `artifact` - the result file.
+Order: `analyze → plan → tests → develop → testing → review → docs`.
 
-## Stage-scoped процесс
-Если в окружении задан `TASK_STAGE` (каждый этап запущен отдельным процессом),
-выполняй **только этот этап**. Прочитай `TASK.md` и нужные артефакты, пройди
-чеклист этапа, запиши artifact и обнови статус `done`, затем остановись.
-Следующие этапы не начинай — их запустит раннер в новом процессе с чистым
-контекстом.
+## Stage-scoped process
+If `TASK_STAGE` is set in the environment (each stage is started as a separate process),
+perform **only this stage**. Read `TASK.md` and the required artifacts, work through
+the stage checklist, write the artifact and update the status to `done`, then stop.
+Do not start the next stages - the runner will start them in a new process with a clean
+context.
 
-Этап `tests` (написание тестов) — не больше 30 минут. `Information`-диагностики
-`bsl_ls` не блокируют; при сбое вызова `validate_query` (транспорт/сервер) считай
-запрос валидным и не зацикливайся.
+The `tests` stage (writing tests) - no more than 30 minutes. `Information` diagnostics of
+`bsl_ls` are not blocking; if the `validate_query` call fails (transport/server) consider the
+query valid and do not loop.
 
-## Этап
-1. Прочитай `.claude/checklists/<subagent>.md` как **чеклист**.
-2. Пройди «Порядок действий» чеклиста. Всё, что там сказано про оркестратора или
-   субагента, выполняешь ты сам в этом же потоке.
-3. Запиши `artifact` в каталог задачи.
-4. Обнови статус:
+## Stage
+1. Read `.claude/checklists/<subagent>.md` as a **checklist**.
+2. Work through the checklist's "Steps". Everything it says about the orchestrator or
+   subagent, you perform yourself in this same thread.
+3. Write the `artifact` to the task directory.
+4. Update the status:
    `python .claude/tools/task_status.py tasks/task#<id> <этап> running`
-   и после завершения — `... <этап> done --files <файлы>`.
+   and after completion - `... <этап> done --files <файлы>`.
 
-## Окружение
-- `.claude/**` — инструменты и чеклисты: только читай, не меняй.
-- Все Python-команды — интерпретатором `.venv` проекта (в развёрнутом окружении
-  вызовы `python` уже заменены на абсолютный путь); системный `python` и
-  `pip install` не используй — зависимости уже в venv.
-- Создание объектов: `meta-compile`; подсистема: `subsystem-compile`; роль:
-  `role-compile`. Навыков `meta-add`/`subsystem-add` нет.
-- Задача — `TASK.md` и `src/cf/**`; артефакты — в каталоге задачи.
-- `src/cf/**` индексирован: для чтения и поиска используй `code_index`
-  (инструмент подгружай через `ToolSearch`, если он не в списке); `Read` —
-  только нужный диапазон (`offset`/`limit`). `src/cfe/**`, `tasks/**`, `logs/**`,
-  `tmp/**`, `configs/**`, `docs/**` не индексированы — там обычные
-  `Read`/`Grep`/`Glob`.
+## Environment
+- `.claude/**` - tools and checklists: read only, do not change.
+- Run all Python commands with the project `.venv` interpreter (in the deployed environment
+  `python` calls are already replaced with the absolute path); do not use system `python` or
+  `pip install` - dependencies are already in the venv.
+- Object creation: `meta-compile`; subsystem: `subsystem-compile`; role:
+  `role-compile`. There are no `meta-add`/`subsystem-add` skills.
+- The task is `TASK.md` and `src/cf/**`; artifacts go to the task directory.
+- `src/cf/**` is indexed: for reading and search use `code_index`
+  (load the tool via `ToolSearch` if it is not in the list); `Read` -
+  only the required range (`offset`/`limit`). `src/cfe/**`, `tasks/**`, `logs/**`,
+  `tmp/**`, `configs/**`, `docs/**` are not indexed - use ordinary
+  `Read`/`Grep`/`Glob` there.
 
 ## Git
-1. До первого этапа — baseline-коммит: `git add -A && git commit -m "baseline before task#<id>"`.
-2. Во время задачи коммитов не делай.
-3. После успешного завершения всех enabled-этапов — один финальный коммит.
+1. Before the first stage - a baseline commit: `git add -A && git commit -m "baseline before task#<id>"`.
+2. Do not make commits during the task.
+3. After successful completion of all enabled stages - one final commit.
 
-## Загрузка в ИБ (`update_db: true`)
-После правок `develop` (до `done`):
+## Infobase load (`update_db: true`)
+After `develop` edits (before `done`):
 1. `python .claude/tools/task_status.py tasks/task#<id> db-update start`
 2. `mkdir -p "logs/task#<id>"`
 3. `python .claude/tools/load-config-optimized.py --state "logs/task#<id>/load-state.json" > "logs/task#<id>/load-config.log" 2>&1`
-4. Если ошибка — прочитай `logs/task#<id>/load-config.log` и `logs/load-config_*.log`,
-   исправь исходники и повтори. `develop` остаётся `running`, пока загрузка не успешна.
+4. If there is an error - read `logs/task#<id>/load-config.log` and `logs/load-config_*.log`,
+   fix the sources and retry. `develop` stays `running` until the load succeeds.
 5. `... task_status.py tasks/task#<id> db-update done`
 6. `... task_status.py tasks/task#<id> develop done --files <файлы>`
 
-## Долгие операции и процессы 1С
-Загрузка конфигурации в ИБ и полный прогон тестов — долгие операции. Запускай их
-**синхронно** обычным Bash (без `run_in_background`) с перенаправлением всего вывода
-в лог в `logs/task#<id>/` и явным `timeout` до 600000 мс (у `run-tests.py` — до
-2 000 000 мс: у него три бюджета по 600 c). В неинтерактивном `claude -p` ход
-завершается по `end_turn`, и харнесс убивает фоновый процесс — операция потеряется.
-Пока команда выполняется, токены не расходуются; после возврата прочитай лог и код
-возврата. `Monitor` — только для ожидания, не для запуска.
+## Long operations and 1C processes
+Configuration load into the IB and a full test run are long operations. Start them
+**synchronously** with ordinary Bash (without `run_in_background`) with all output
+redirected to a log in `logs/task#<id>/` and an explicit `timeout` up to 600000 ms (for `run-tests.py` - up to
+2 000 000 ms: it has three budgets of 600 s). In non-interactive `claude -p` the turn
+ends on `end_turn`, and the harness kills the background process - the operation is lost.
+While the command runs, no tokens are spent; after it returns read the log and the
+return code. `Monitor` is only for waiting, not for launching.
 
-- **Не убивай процессы по широкой подстроке.** `pkill -f "1cv8 ENTERPRISE"` матчит
-  собственную командную строку и убивает свой shell. Linux/macOS: `pkill -f '[1]cv8'`
-  или `pgrep -f '[1]cv8'` + точечный `kill <pid>`. Windows: `Get-Process`/
-  `Stop-Process -Id` (PowerShell) или `taskkill /PID <pid>`; не `taskkill /IM 1cv8.exe`.
-- Предпочитай `run-tests.py`/`1c-batch`: они убивают только своё дерево процессов
-  по таймауту.
-- `sleep` заблокирован хуком. Жди через `Monitor`.
+- **Do not kill processes by a broad substring.** `pkill -f "1cv8 ENTERPRISE"` matches
+  its own command line and kills its own shell. Linux/macOS: `pkill -f '[1]cv8'`
+  or `pgrep -f '[1]cv8'` + targeted `kill <pid>`. Windows: `Get-Process`/
+  `Stop-Process -Id` (PowerShell) or `taskkill /PID <pid>`; not `taskkill /IM 1cv8.exe`.
+- Prefer `run-tests.py`/`1c-batch`: they kill only their own process tree
+  on timeout.
+- `sleep` is blocked by a hook. Wait via `Monitor`.
 
-## Компактный чеклист develop (после компакта)
-`developer.md` целиком не перечитывай; для этапа достаточно:
-1. Вход: `TASK.md`, `ANALYZE.md`, `ARCHITECT.md`, тесты; существующий код — через `code_index`.
-2. Метаданные — `meta-compile`/`subsystem-compile`/`role-compile`, правки — `meta-edit`; файлы — по реальным путям `src/cf/**`.
-3. Регистры накопления: проверь регистраторы (документы с `RegisterRecords`, `<Registrars>` регистра) до загрузки в ИБ.
-4. Проверки компиляции: **обязательно** `check-modules --thin-client --server` (не в фоне, `timeout: 600000` — 10 мин); ошибки клиентского контекста исправляй кодом или снятием флага «Клиент» у общего модуля.
-5. Имена метаданных: `check_metadata_names.py --changed` — зарезервированные системные имена исправляй до загрузки в ИБ.
-6. Тесты: каркас → по одному сценарию; `Write`/`Edit` ≤150 строк; проверка после каждого; полный `check-modules` один раз в конце.
-7. Загрузка в ИБ — по разделу выше; после успеха `db-update done`.
-8. Проверки после загрузки: `check` с sha256, `code-analyze`, `validate_query`
-   по статическому тексту запроса (один вызов); для новых объектов проверка
-   откладывается. `validate_query: valid` — текст принят; `valid: false` —
-   дефект текста, исправляй и проверяй заново; отсутствие поля `valid`
-   (транспорт/сервер) — одна повторная попытка и фиксация в `DEVELOP.md`.
-   `Information`-диагностики `bsl_ls` не блокируют.
-9. Прогон тестов: `.claude/tools/run-tests.py configs/task#<id>/test.json`;
-   красные сценарии исправляй в прикладном коде; цель — все сценарии зелёные
-   в рамках лимита этапа. Результат прогона и `validate_query: valid` — в `DEVELOP.md`.
-10. `DEVELOP.md`: изменения, проверки, waivers, отложенные проверки; затем
+## Compact develop checklist (after compaction)
+Do not reread `developer.md` in full; for the stage it is enough:
+1. Input: `TASK.md`, `ANALYZE.md`, `ARCHITECT.md`, tests; existing code - via `code_index`.
+2. Metadata - `meta-compile`/`subsystem-compile`/`role-compile`, edits - `meta-edit`; files - by real `src/cf/**` paths.
+3. Accumulation registers: check the registrars (documents with `RegisterRecords`, the register's `<Registrars>`) before the infobase load.
+4. Compilation checks: **mandatory** `check-modules --thin-client --server` (not in the background, `timeout: 600000` - 10 min); fix client-context errors in code or by clearing the «Клиент» flag on the common module.
+5. Metadata names: `check_metadata_names.py --changed` - fix reserved system names before the infobase load.
+6. Tests: skeleton -> one scenario at a time; `Write`/`Edit` <=150 lines; check after each; full `check-modules` once at the end.
+7. Infobase load - per the section above; after success `db-update done`.
+8. Checks after the load: `check` with sha256, `code-analyze`, `validate_query`
+   on the static query text (one call); for new objects the check
+   is postponed. `validate_query: valid` - the text is accepted; `valid: false` -
+   a defect in the text, fix it and check again; absence of the `valid` field
+   (transport/server) - one retry and record it in `DEVELOP.md`.
+   `Information` diagnostics of `bsl_ls` are not blocking.
+9. Test run: `.claude/tools/run-tests.py configs/task#<id>/test.json`;
+   fix red scenarios in the application code; the goal is all scenarios green
+   within the stage limit. The run result and `validate_query: valid` go to `DEVELOP.md`.
+10. `DEVELOP.md`: changes, checks, waivers, postponed checks; then
     `develop done --files <файлы>`.
-11. `Configuration.xml` и `ConfigDumpInfo.xml` целиком не читай — только нужный диапазон или `meta-info`/`cf-info`.
+11. Do not read `Configuration.xml` and `ConfigDumpInfo.xml` in full - only the required range or `meta-info`/`cf-info`.
 
-## Тесты (`testing: true`)
-Запусти `.claude/tools/run-tests.py` (см. правило `run-unit-tests`), лог — в
-`logs/task#<id>/`. При падении определи виновника по `result.json` и журналу
-регистрации: код или тест. Запиши вердикт и лог в `TESTING.md`; код и тесты в
-этом этапе остаются без изменений — исправления выполняет соответствующий этап.
-Этап завершается вызовом `testing done`; статус `develop` в этом этапе не меняй.
-Ориентир этапа — 10 минут.
+## Tests (`testing: true`)
+Run `.claude/tools/run-tests.py` (see the `run-unit-tests` rule), log in
+`logs/task#<id>/`. On failure determine the culprit from `result.json` and the registration
+log: code or test. Record the verdict and the log in `TESTING.md`; code and tests are
+left unchanged in this stage - fixes are done by the corresponding stage.
+The stage ends with the `testing done` call; do not change the `develop` status in this stage.
+Stage guideline - 10 minutes.
 
-## Ревью (`review: true`)
-Пройди `.claude/checklists/reviewer.md` как чеклист по diff и артефактам; findings — в
-`REVIEW.md`. Критичные и важные findings блокируют приёмку: исправляй и повторяй.
-В single-agent ревьюер — это ты; опирайся на ТЗ, автоматические проверки и цитаты.
+## Review (`review: true`)
+Work through `.claude/checklists/reviewer.md` as a checklist over the diff and artifacts; findings go to
+`REVIEW.md`. Critical and important findings block acceptance: fix and repeat.
+In single-agent mode the reviewer is you; rely on the spec, automatic checks and quotes.
 
-## Циклы
-При возврате на доработку не перечитывай всю задачу: возьми текущий артефакт,
-вердикт, лог и изменённый модуль. Правь в этом же потоке; новые субагенты не нужны.
+## Cycles
+When returning for rework do not reread the whole task: take the current artifact,
+verdict, log and the changed module. Fix in the same thread; new subagents are not needed.
 
-## Границы
-- Не вызывай Agent/Task/SendMessage. Навыка `task-orchestration` больше нет —
-  его роль выполняет это правило.
-- Для `src/cf/**` используй `code_index`; `Read` — только нужный диапазон
-  (`offset`/`limit`). PreToolUse-хук может перенаправить нативный вызов в
-  `code_index`; после исчерпания лимита отказов хук разрешает нативный вызов,
-  чтобы не зациклиться.
+## Boundaries
+- Do not call Agent/Task/SendMessage. The `task-orchestration` skill no longer exists -
+  this rule performs its role.
+- For `src/cf/**` use `code_index`; `Read` - only the required range
+  (`offset`/`limit`). A PreToolUse hook may redirect a native call to
+  `code_index`; after the denial limit is exhausted the hook allows the native call
+  so it does not loop.

@@ -1,4 +1,4 @@
-# Тесты проверки имён метаданных на зарезервированные системные имена.
+# Tests for checking metadata names against reserved system names.
 import os
 import sys
 

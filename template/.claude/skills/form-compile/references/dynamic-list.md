@@ -1,25 +1,25 @@
-# Динамический список
+# Dynamic list
 
-Реквизит с `type: "DynamicList"` (обычно `main: true`) — основа формы списка. Объект `settings` описывает источник данных и настройки списка. Минимум — указать источник:
+An attribute with `type: "DynamicList"` (usually `main: true`) is the base of a list form. The `settings` object describes the data source and list settings. The minimum is to specify the source:
 
 ```json
 { "name": "Список", "type": "DynamicList", "main": true,
   "settings": { "mainTable": "Catalog.Контрагенты" } }
 ```
 
-К списку привязывается таблица-элемент (`table`), ссылающаяся на реквизит через `path` — см. основную инструкцию.
+A table element (`table`) is bound to the list, referencing the attribute via `path` - see the main instruction.
 
-## Источник данных
+## Data source
 
-Два взаимоисключающих режима:
+Two mutually exclusive modes:
 
-**Таблично-ориентированный** — основная таблица метаданных:
+**Table-oriented** - the main metadata table:
 
 ```json
 "settings": { "mainTable": "Catalog.Контрагенты" }
 ```
 
-**Запросный** — произвольный запрос:
+**Query-based** - an arbitrary query:
 
 ```json
 "settings": {
@@ -28,20 +28,20 @@
 }
 ```
 
-| Ключ | Тип | Назначение |
+| Key | Type | Purpose |
 |------|-----|-----------|
-| `mainTable` | string | Основная таблица (`Catalog.X` / `Document.X` / …). Можно вместе с `query` |
-| `query` | string | Текст запроса. Поддерживает `@file.sql` (путь к файлу запроса рядом с JSON) |
-| `keyType` | string | Запросный список без `mainTable`: тип ключа набора — `FieldValue` / `RowKey` / `RowNumber` |
-| `keyFields` | array | Поля ключа набора (для `keyType` без `mainTable`) |
+| `mainTable` | string | Main table (`Catalog.X` / `Document.X` / …). Can be used together with `query` |
+| `query` | string | Query text. Supports `@file.sql` (path to a query file next to the JSON) |
+| `keyType` | string | Query list without `mainTable`: set key type - `FieldValue` / `RowKey` / `RowNumber` |
+| `keyFields` | array | Set key fields (for `keyType` without `mainTable`) |
 
-Параметры запроса (`&Имя`) задаются в `parameters` (ниже).
+Query parameters (`&Имя`) are set in `parameters` (below).
 
-`"dynamicDataRead": false` отключает динамическое считывание (список читается обычным запросом, без фонового обновления) — нужно для тяжёлых/агрегатных запросов.
+`"dynamicDataRead": false` disables dynamic reading (the list is read by a regular query, without background refresh) - needed for heavy/aggregate queries.
 
-## Параметры запроса (`parameters`)
+## Query parameters (`parameters`)
 
-Значения для `&параметров` текста запроса. Shorthand `"Имя [Заголовок]: тип = Значение"` (всё кроме имени необязательно) либо объект:
+Values for the query text's `&параметров`. Shorthand `"Имя [Заголовок]: тип = Значение"` (everything except the name is optional) or an object:
 
 ```json
 "settings": {
@@ -55,19 +55,19 @@
 }
 ```
 
-Ключи объекта: `name`, `title`, `type` (грамматика типов — см. основную инструкцию), `value`, `valueListAllowed` (разрешить список значений), `availableValues` (`[{ value, presentation }]`), `expression`, `use`.
+Object keys: `name`, `title`, `type` (type grammar - see the main instruction), `value`, `valueListAllowed` (allow a value list), `availableValues` (`[{ value, presentation }]`), `expression`, `use`.
 
-## Значения параметров в настройках (`dataParameters`)
+## Parameter values in settings (`dataParameters`)
 
-Предустановленные значения параметров на уровне настроек списка. Shorthand `"Имя = Значение"` или объект `{ parameter, value?, use?, viewMode? }`:
+Preset parameter values at the list settings level. Shorthand `"Имя = Значение"` or an object `{ parameter, value?, use?, viewMode? }`:
 
 ```json
 "dataParameters": [ "Организация = _", "ВидЦен" ]
 ```
 
-## Поля набора (`fields`)
+## Set fields (`fields`)
 
-Обычно поля выводятся из источника сами — `fields` нужен **только чтобы переопределить** свойства отдельного поля:
+Usually fields are derived from the source automatically - `fields` is needed **only to override** the properties of an individual field:
 
 ```json
 "fields": [
@@ -76,11 +76,11 @@
 ]
 ```
 
-Ключи поля: `field`, `dataPath`, `title`, `valueType`, `appearance` (как в условном оформлении), `presentationExpression`, `inputParameters` (связь по параметрам выбора), `typeLink` (`{ field, linkItem }` — связь по типу, напр. субконто).
+Field keys: `field`, `dataPath`, `title`, `valueType`, `appearance` (as in conditional appearance), `presentationExpression`, `inputParameters` (link by choice parameters), `typeLink` (`{ field, linkItem }` - type link, e.g. subconto).
 
-## Вычисляемые поля (`calculatedFields`)
+## Calculated fields (`calculatedFields`)
 
-Поля, считаемые выражением. Shorthand `"Имя [Заголовок]: тип = Выражение"`:
+Fields computed by an expression. Shorthand `"Имя [Заголовок]: тип = Выражение"`:
 
 ```json
 "calculatedFields": [
@@ -89,16 +89,16 @@
 ]
 ```
 
-Объектная форма — для `presentationExpression` / `orderExpression`:
+Object form - for `presentationExpression` / `orderExpression`:
 
 ```json
 { "dataPath": "Сорт", "expression": "Code", "title": "Сорт",
   "valueType": "string(10)", "presentationExpression": "Code" }
 ```
 
-## Отбор (`filter`)
+## Filter (`filter`)
 
-Shorthand `"Поле оператор значение @флаги"` или объект:
+Shorthand `"Поле оператор значение @флаги"` or an object:
 
 ```json
 "filter": [
@@ -109,31 +109,31 @@ Shorthand `"Поле оператор значение @флаги"` или об
 ]
 ```
 
-- **Операторы:** `=` `<>` `>` `>=` `<` `<=`, `in` / `notIn`, `inHierarchy`, `contains` / `notContains`, `beginsWith` / `notBeginsWith`, `like` / `notLike` (`%`-шаблон), `filled` / `notFilled`.
-- **Флаги:** `@off` (отключён), `@user` (в пользовательских настройках), `@quickAccess`; `_` = пустое значение.
-- **Группа:** `{ group: "And"|"Or"|"Not", items: [...] }`.
-- **Дата-значение:** ISO-дата `"2024-01-01T00:00:00"` — фиксированная дата. Именованный относительный период — строкой с типом: `{ "value": "BeginningOfThisWeek", "valueType": "v8:StandardBeginningDate" }` (варианты `BeginningOfThisDay`/`BeginningOfThisWeek`/`BeginningOfThisMonth`/`BeginningOfThisYear`/…).
+- **Operators:** `=` `<>` `>` `>=` `<` `<=`, `in` / `notIn`, `inHierarchy`, `contains` / `notContains`, `beginsWith` / `notBeginsWith`, `like` / `notLike` (`%` pattern), `filled` / `notFilled`.
+- **Flags:** `@off` (disabled), `@user` (in custom settings), `@quickAccess`; `_` = empty value.
+- **Group:** `{ group: "And"|"Or"|"Not", items: [...] }`.
+- **Date value:** ISO date `"2024-01-01T00:00:00"` - a fixed date. A named relative period - by a string with a type: `{ "value": "BeginningOfThisWeek", "valueType": "v8:StandardBeginningDate" }` (options `BeginningOfThisDay`/`BeginningOfThisWeek`/`BeginningOfThisMonth`/`BeginningOfThisYear`/…).
 
-## Сортировка (`order`)
+## Sorting (`order`)
 
-Строка `"Поле"` (по возр.) / `"Поле desc"`, либо объект `{ field, direction? }`. `"Auto"` — автосортировка:
+The string `"Поле"` (ascending) / `"Поле desc"`, or an object `{ field, direction? }`. `"Auto"` - auto sorting:
 
 ```json
 "order": [ "Дата desc", "Наименование", "Auto" ]
 ```
 
-## Группировка строк (`grouping`)
+## Row grouping (`grouping`)
 
-Линейная цепочка уровней (внешний → внутренний). Шорткат `>` или массив:
+A linear chain of levels (outer -> inner). Shortcut `>` or an array:
 
 ```json
 "grouping": "Контрагент > Договор"
 "grouping": [ "Контрагент", { "field": "Дата", "groupType": "Hierarchy" } ]
 ```
 
-Ключи уровня-объекта: `field`, `groupType` (`Items` / `Hierarchy`).
+Level object keys: `field`, `groupType` (`Items` / `Hierarchy`).
 
-## Условное оформление (`conditionalAppearance`)
+## Conditional appearance (`conditionalAppearance`)
 
 ```json
 "conditionalAppearance": [
@@ -141,4 +141,4 @@ Shorthand `"Поле оператор значение @флаги"` или об
 ]
 ```
 
-`filter` — та же грамматика, что выше. `appearance` — словарь «параметр платформы: значение» (`ЦветТекста`, `ЦветФона`, `Шрифт`, `Текст`, `Формат`, …). Значение `Текст`/`Заголовок`/`Формат`: голая строка — нелокализованный литерал; `{ru,en}` — локализуемая строка; `{ field: "путь" }` — ссылка на поле. Подробнее об оформлении — `references/appearance.md`.
+`filter` - the same grammar as above. `appearance` - a "platform parameter: value" dictionary (`ЦветТекста`, `ЦветФона`, `Шрифт`, `Текст`, `Формат`, …). The value of `Текст`/`Заголовок`/`Формат`: a bare string - a non-localized literal; `{ru,en}` - a localizable string; `{ field: "путь" }` - a field reference. More about appearance - `references/appearance.md`.

@@ -1,4 +1,4 @@
-// web-test table/row-fill v1.25 — fillTableRow — заполнение строки табличной части/списка через Tab-навигацию и попутный выбор значений.
+// web-test table/row-fill v1.25 - fillTableRow - filling a tabular section/list row via Tab navigation and incidental value selection.
 // Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 
 import {
@@ -36,7 +36,7 @@ import { pasteText } from '../core/clipboard.mjs';
  *
  * Two kinds of cell carry the same choice button and are INDISTINGUISHABLE in the DOM
  * (both `editInput`, readOnly:false):
- *   (a) editable value cell (Произвольный/примитив, РедактированиеТекста=Истина) — typed text sticks;
+ *   (a) editable value cell (Произвольный/primitive, РедактированиеТекста=Истина) — typed text sticks;
  *   (b) pick-from-list cell (НачалоВыбора / РедактированиеТекста=Ложь) — typed text is rejected.
  * The only reliable discriminator is behavioral: paste and watch the input value.
  *   stuck  → editable cell → leave value in the INPUT (caller's Tab/commit persists it), method 'direct';
@@ -238,7 +238,7 @@ export async function fillTableRow(fields, { tab, add, row, table, scroll } = {}
 
     // Checkbox cell? Detect BEFORE any click. Clicking the cell center toggles the
     // checkbox, so an unconditional click here would flip an already-correct value
-    // (visible flicker + redundant write — снимаем→ставим). findCheckboxAtPoint reads
+    // (visible flicker + redundant write - uncheck→check). findCheckboxAtPoint reads
     // the state straight from the DOM (no edit mode needed), so we branch first and
     // click the icon only when the current state differs from the desired one.
     if (firstVal0 !== '') {
@@ -520,11 +520,11 @@ export async function fillTableRow(fields, { tab, add, row, table, scroll } = {}
   let firstCellId = null;
 
   for (let iter = 0; iter < MAX_ITER; iter++) {
-    // All requested fields filled → stop. Без этого цикл табает дальше до wrap-around
-    // (обходит остаток строки впустую): ветки заполнения по составному типу/примитиву
-    // не выходили сами, что особенно заметно на широких строках (субконто/проводки).
-    // Значение последнего поля к этому моменту уже зафиксировано (commit-Tab примитива,
-    // выбор из формы, либо end-of-row commit для choice-ячейки).
+    // All requested fields filled → stop. Without this the loop tabs on to wrap-around
+    // (wastes the rest of the row): fill branches for composite type/primitive did not
+    // exit on their own, which is especially noticeable on wide rows (subconto/entries).
+    // The last field's value is already committed by this point (primitive commit-Tab,
+    // selection from a form, or end-of-row commit for a choice cell).
     if ([...pending.values()].every(p => p.filled)) break;
     // Read focused element (INPUT or TEXTAREA inside grid = editable cell)
     const cell = await page.evaluate(readActiveGridCellScript());

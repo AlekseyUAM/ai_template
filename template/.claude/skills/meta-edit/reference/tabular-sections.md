@@ -1,11 +1,11 @@
-# Табличные части
+# Tabular sections
 
-Операции над табличной частью и её реквизитами. Общие правила shorthand-формата, флагов, batch и
-позиционной вставки — в `attributes.md`.
+Operations on a tabular section and its attributes. General rules of the shorthand format, flags, batch and
+positional insert - in `attributes.md`.
 
 ## add-ts
 
-Формат: `ИмяТЧ: Реквизит1: Тип1, Реквизит2: Тип2, ...`
+Format: `ИмяТЧ: Реквизит1: Тип1, Реквизит2: Тип2, ...`
 
 ```bash
 -Operation add-ts -Value "Товары: Ном: CatalogRef.Ном | req, Кол: Число(15,3), Цена: Число(15,2), Сумма: Число(15,2)"
@@ -13,7 +13,7 @@
 
 ## add-ts-attribute / remove-ts-attribute / modify-ts-attribute
 
-Операции над реквизитами **внутри существующей ТЧ**. Формат: `ИмяТЧ.ОпределениеРеквизита` (dot-нотация).
+Operations on attributes **inside an existing tabular section**. Format: `ИмяТЧ.ОпределениеРеквизита` (dot notation).
 
 ```bash
 # Добавить реквизит в ТЧ
@@ -31,23 +31,23 @@
 -Operation modify-ts-attribute -Value "Товары.СтароеИмя: name=НовоеИмя, type=Строка(500)"
 ```
 
-Batch через `;;` — можно указать разные ТЧ: `"Товары.А: Строка(50) ;; Услуги.Б: Число(10)"`.
+Batch via `;;` - different tabular sections can be specified: `"Товары.А: Строка(50) ;; Услуги.Б: Число(10)"`.
 
-Составной тип реквизита ТЧ:
+Composite type of a tabular section attribute:
 ```bash
 -Operation modify-ts-attribute -Value "Данные.Значение: type=Строка + Число(15,2) + Дата"
 ```
 
 ## modify-ts
 
-Изменение свойств **самой табличной части** (Synonym, FillChecking, Use и др.):
+Changing the properties of **the tabular section itself** (Synonym, FillChecking, Use, etc.):
 
 ```bash
 -Operation modify-ts -Value "Товары: synonym=Товарный состав"
 -Operation modify-ts -Value "Товары: fillChecking=ShowError"
 ```
 
-Формат аналогичен `modify-attribute`: `ИмяТЧ: ключ=значение, ключ=значение`.
+The format is similar to `modify-attribute`: `ИмяТЧ: ключ=значение, ключ=значение`.
 
 ## remove-ts
 

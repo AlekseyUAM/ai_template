@@ -1,6 +1,6 @@
 ---
 name: form-validate
-description: Валидация управляемой формы 1С. Используй после создания или модификации формы для проверки корректности. При наличии BaseForm автоматически проверяет callType и ID расширений
+description: Validate a 1C managed form. Use after creating or modifying a form to check correctness. If a BaseForm is present, automatically checks callType and extension IDs
 argument-hint: <FormPath> [-Detailed] [-MaxErrors 30]
 allowed-tools:
   - Bash
@@ -8,19 +8,19 @@ allowed-tools:
   - Glob
 ---
 
-# /form-validate — валидация управляемой формы 1С
+# /form-validate - validating a 1C managed form
 
-Проверяет Form.xml на структурные ошибки: уникальность ID, наличие companion-элементов, корректность ссылок DataPath и команд.
+Checks Form.xml for structural errors: ID uniqueness, presence of companion elements, correctness of DataPath and command references.
 
-## Параметры
+## Parameters
 
-| Параметр  | Обяз. | Умолч. | Описание                                |
+| Parameter | Req.  | Def.    | Description                             |
 |-----------|:-----:|---------|-----------------------------------------|
-| FormPath  | да    | —       | Путь к файлу Form.xml                   |
-| Detailed  | нет   | —       | Подробный вывод (все проверки, включая успешные) |
-| MaxErrors | нет   | 30      | Остановиться после N ошибок              |
+| FormPath  | yes   | -       | Path to the Form.xml file               |
+| Detailed  | no    | -       | Detailed output (all checks, including successful ones) |
+| MaxErrors | no    | 30      | Stop after N errors                     |
 
-## Команда
+## Command
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/form-validate.py" -FormPath "Catalogs/Номенклатура/Forms/ФормаЭлемента"

@@ -1,136 +1,136 @@
 ---
 name: optimized-config-loading
-description: Частичная загрузка в ИБ только изменённых файлов конфигурации; лог процесса в logs/, синхронный запуск с таймаутом.
+description: Partial infobase load of only changed configuration files; process log in logs/, synchronous run with timeout.
 ---
 
-# Загрузка конфигурации (частичная)
+# Configuration load (partial)
 
-Скрипт `.claude/tools/load-config-optimized.py` загружает в ИБ **только изменённые
-файлы** конфигурации (`1c-batch load-config src/cf --list-file …`). Частичная
-загрузка — единственный режим: она корректно отрабатывает все четыре операции —
-добавление и удаление реквизита, добавление и удаление объекта — с тем же
-результатом, что и полная перезагрузка, но быстрее (полный режим `--full` убран за
-ненадобностью). Кроссплатформенно; требует Python 3.6+, git и локальную копию
+The `.claude/tools/load-config-optimized.py` script loads into the IB **only the changed
+configuration files** (`1c-batch load-config src/cf --list-file …`). Partial
+load is the only mode: it correctly handles all four operations -
+adding and removing an attribute, adding and removing an object - with the same
+result as a full reload, but faster (the full `--full` mode was removed as
+unnecessary). Cross-platform; requires Python 3.6+, git and a local copy of
 `1c-batch` (wrapper `.claude/skills/1c-batch/scripts/1c-batch.py`).
 
-Скрипт берёт изменённые файлы из `git diff` относительно `HEAD` по `src/cf` (плюс
-новые untracked-файлы) и формирует список для `-listFile`: корневой файл каждого
-изменённого объекта, сам изменённый подфайл (формы/макеты/модули) и — для не-XML
-или `Ext`-файлов — все файлы каталога `Ext` объекта. Одного корня недостаточно:
-по нему платформа не грузит содержимое дочерних объектов, а для **нового** объекта
-без перечисленных файлов форм/макетов падает с «Неизвестный объект метаданных».
-Если изменённых файлов нет — загрузка пропускается.
+The script takes changed files from `git diff` against `HEAD` over `src/cf` (plus
+new untracked files) and builds the list for `-listFile`: the root file of each
+changed object, the changed subfile itself (forms/templates/modules) and - for non-XML
+or `Ext` files - all files of the object's `Ext` directory. The root alone is not enough:
+with it the platform does not load the content of child objects, and for a **new** object
+without the listed form/template files it fails with "Неизвестный объект метаданных".
+If there are no changed files, the load is skipped.
 
-## Инкрементальная загрузка (`--state`)
+## Incremental load (`--state`)
 
-Оркестратор передаёт `--state logs/task#<id>/load-state.json` — манифест «что уже
-успешно загружено» (`путь → sha256`). Из diff грузятся только файлы, изменившиеся
-с момента последней успешной загрузки. Неизменные метаданные и `Configuration.xml`
-не попадают в список — иначе каждая итерация задачи после добавления объекта
-превращалась бы в полную перезагрузку (наличие `Configuration.xml` в `-listFile`
-заставляет платформу грузить конфигурацию полностью).
+The orchestrator passes `--state logs/task#<id>/load-state.json` - a manifest of "what has
+already been loaded successfully" (`путь → sha256`). Only files changed since the last
+successful load are loaded from the diff. Unchanged metadata and `Configuration.xml`
+do not get into the list - otherwise every task iteration after adding an object
+would turn into a full reload (having `Configuration.xml` in `-listFile`
+forces the platform to load the configuration in full).
 
-- state пишется только при успехе — код возврата `0` или «грузить нечего»; при
-  ошибке загрузки **и при предупреждениях платформы без `--allow-warnings`**
-  (код `2`, см. ниже) state не меняется, и повторный запуск возьмёт те же файлы;
-- снимок хешей снимается до запуска загрузки: правки «во время загрузки» попадут
-  в следующий запуск;
-- файла состояния нет, JSON битый или версия чужая — грузится весь diff vs `HEAD`
-  (в логе предупреждение);
-- без `--state` — прежнее поведение (весь diff vs `HEAD`);
-- удалённые части объектов (модули, `Ext/`) частичная загрузка не удаляет — как и
-  раньше; ранее загруженные, но исчезнувшие файлы просто забываются из состояния.
+- state is written only on success - return code `0` or "nothing to load"; on a
+  load error **and on platform warnings without `--allow-warnings`**
+  (code `2`, see below) the state is not changed, and the next run will take the same files;
+- the hash snapshot is taken before the load starts: edits "during the load" go
+  into the next run;
+- no state file, broken JSON or a foreign version - the whole diff vs `HEAD`
+  is loaded (a warning in the log);
+- without `--state` - the previous behavior (whole diff vs `HEAD`);
+- deleted parts of objects (modules, `Ext/`) are not deleted by a partial load - as
+  before; previously loaded but vanished files are simply forgotten from the state.
 
-## Транзиентная блокировка ИБ
+## Transient infobase lock
 
-Общая база (например, `t_ssl2`) может быть заблокирована фоновым заданием или
-чужим сеансом: платформа отвечает «Ошибка исключительной блокировки
-информационной базы». Скрипт распознаёт этот маркер и **сам повторяет загрузку**
-через 30 и 60 секунд (до трёх попыток), не требуя правок исходников. Если после
-ретраев блокировка осталась — это среда, а не дефект кода: сообщите о проблеме,
-не возвращайте задачу в `develop`.
+A shared database (for example, `t_ssl2`) may be locked by a background job or
+a foreign session: the platform responds "Ошибка исключительной блокировки
+информационной базы". The script recognizes this marker and **retries the load itself**
+after 30 and 60 seconds (up to three attempts), without requiring source edits. If the lock
+remains after the retries - it is the environment, not a code defect: report the problem,
+do not return the task to `develop`.
 
-## Предупреждения платформы: проигнорированные свойства
+## Platform warnings: ignored properties
 
-Платформа при неверных исходниках (например, свойства измерения регистра
-сведений скопированы в регистр накопления) **молча игнорирует** часть
-метаданных и завершает загрузку кодом `0`. Скрипт захватывает stdout+stderr
-`1c-batch load-config` (UTF-8, `errors="replace"`), печатает их в лог и
-разбирает вывод функцией `platform_warnings(text)` → `PlatformWarnings`
-(`count`, `groups`, `other`). Распознаются маркеры:
+With incorrect sources (for example, information register dimension properties
+copied into an accumulation register) the platform **silently ignores** part of the
+metadata and finishes the load with code `0`. The script captures stdout+stderr of
+`1c-batch load-config` (UTF-8, `errors="replace"`), prints them to the log and
+parses the output with the `platform_warnings(text)` function -> `PlatformWarnings`
+(`count`, `groups`, `other`). These markers are recognized:
 
-- `Неверное свойство объекта метаданных` — группируется по
-  `(вид объекта, свойство)` из «Свойство X не входит в состав объекта
-  метаданных <Вид>»;
-- `facet` — только слово `facet` с платформенным оборотом
+- `Неверное свойство объекта метаданных` - grouped by
+  `(вид объекта, свойство)` from "Свойство X не входит в состав объекта
+  метаданных <Вид>";
+- `facet` - only the word `facet` in platform phrasing
   (`facet фиксации …`, `facet перечисления …`, `facet движений …`);
-  пути вроде `FacetGroups.xml` предупреждением не считаются;
+  paths like `FacetGroups.xml` are not counted as a warning;
 - `Исключение XDTO`;
 - `Неверное значение перечисления`.
 
-Строка, распознанная как маркер свойства, в «прочие» повторно не засчитывается.
-Скрипт печатает две сводки с раздельными счётчиками: `⚠️ Платформа
-проигнорировала N свойств (загрузка применена):` с разбивкой по группам
-(`- Dimension FillValue: 5` и т.п.) и, если есть прочие маркеры,
-`⚠️ Прочие предупреждения платформы (M):` с разбивкой по маркерам.
+A line recognized as a property marker is not counted again in "other".
+The script prints two summaries with separate counters: `⚠️ Платформа
+проигнорировала N свойств (загрузка применена):` broken down by groups
+(`- Dimension FillValue: 5` etc.) and, if there are other markers,
+`⚠️ Прочие предупреждения платформы (M):` broken down by markers.
 
-| Ситуация | Код | Строка успеха | state |
+| Situation | Code | Success line | state |
 |---|---|---|---|
-| Предупреждения, **без** `--allow-warnings` | `2` | **нет** | **не сохраняется** |
-| Предупреждения, с `--allow-warnings` | `0` | `✅ … (с предупреждениями, --allow-warnings)` | сохраняется |
-| Чистая загрузка | `0` | `✅ Оптимизированная загрузка завершена` | сохраняется |
-| Дочерний процесс вернул ненулевой код | код дочернего | нет | не сохраняется |
+| Warnings, **without** `--allow-warnings` | `2` | **no** | **not saved** |
+| Warnings, with `--allow-warnings` | `0` | `✅ … (с предупреждениями, --allow-warnings)` | saved |
+| Clean load | `0` | `✅ Оптимизированная загрузка завершена` | saved |
+| Child process returned a non-zero code | child code | no | not saved |
 
-Код `2` означает «загрузка применена, но исходники некорректны»: платформа
-уже вкатила всё остальное, однако перечисленные свойства потеряны. Для
-исполнителя это **ошибка этапа** (как ненулевой код), а не успех:
-`db-update done` и `develop done` не вызываются, задача возвращается в
-`develop` на исправление. **Критерий успеха — отсутствие предупреждений.**
-`--allow-warnings` — осознанный выбор только когда потеря этих свойств
-известна и допустима (например, свойство намеренно не имеет смысла в объекте
-данного вида).
+Code `2` means "load applied, but the sources are incorrect": the platform
+has already applied everything else, however the listed properties are lost. For the
+executor this is a **stage error** (like a non-zero code), not success:
+`db-update done` and `develop done` are not called, the task returns to
+`develop` for fixing. **The success criterion is the absence of warnings.**
+`--allow-warnings` is a deliberate choice only when the loss of these properties is
+known and acceptable (for example, the property intentionally makes no sense in an object
+of this kind).
 
-## Кто и когда запускает
+## Who runs it and when
 
-Загрузку ведёт **исполнитель** (в single-agent — ты сам) на этапе `develop`, только
-если в `task.json` включён флаг `update_db` (см. правило `single-agent-workflow`).
-Всё выполняется в главном потоке.
+The load is run by the **executor** (in single-agent mode - you yourself) at the `develop` stage, only
+if the `update_db` flag is on in `task.json` (see the `single-agent-workflow` rule).
+Everything runs in the main thread.
 
-## Синхронный запуск и лог процесса
+## Synchronous run and process log
 
-Исполнитель запускает загрузку **синхронно** (обычный Bash без
-`run_in_background`, `timeout` инструмента до 600000 мс) с перенаправлением всего
-вывода в лог. Пока команда выполняется, токены не расходуются; после её возврата
-исполнитель читает лог и код возврата.
+The executor starts the load **synchronously** (ordinary Bash without
+`run_in_background`, tool `timeout` up to 600000 ms) with all output
+redirected to the log. While the command runs, no tokens are spent; after it returns
+the executor reads the log and the return code.
 
-Фоновая задача здесь недопустима: в неинтерактивном режиме `claude -p` (AgentMon,
-benchmark) ход завершается (`end_turn`), и харнесс убивает фоновый процесс — загрузка
-обрывается без результата.
+A background task is not acceptable here: in non-interactive mode `claude -p` (AgentMon,
+benchmark) the turn ends (`end_turn`) and the harness kills the background process - the load
+breaks off without a result.
 
 ```bash
 # <id> — идентификатор задачи; каталог logs/task#<id> создать заранее
 python .claude/tools/load-config-optimized.py --state logs/task#<id>/load-state.json > logs/task#<id>/load-config.log 2>&1
 ```
 
-- **Где лог:** `logs/task#<id>/load-config.log` (stdout+stderr скрипта).
-- **Как анализировать:** после возврата команды проверь код возврата и
-  содержимое лога:
-  - код возврата `0` и строка `✅ Оптимизированная загрузка завершена` — успех
-    (с `--allow-warnings` — суффикс `(с предупреждениями, --allow-warnings)`);
-  - строка `✅ Нет изменённых файлов конфигурации — загрузка не требуется` — грузить
-    было нечего (тоже успех).
-    **Только после успеха** исполнитель закрывает загрузку и этап:
-    `task_status.py ... db-update done`, затем `... develop done --files ...`.
-  - код возврата `2` и сводка `⚠️ Платформа проигнорировала N свойств` или
-    `⚠️ Прочие предупреждения платформы` без строки
-    успеха — исходники некорректны, загрузка применена лишь частично: **ошибка**,
-    задача возвращается в `develop` (починить свойства или осознанно повторить
-    с `--allow-warnings`).
-  - строка `❌ Ошибка при загрузке конфигурации` или прочий ненулевой код возврата —
-    ошибка.
-    Загрузка в «грязную» базу недопустима, поэтому `db-update done` и `develop done`
-    **не вызываются**: исполнитель **возвращает задачу на этап `develop`** (как при
-    падении тестов — цикл `cyclic-review-workflow`): разработчик читает этот лог и
-    чинит исходники/метаданные. `task_status.py` при `update_db` откажется закрыть
-    `develop` без завершённой загрузки. Лимит 10 итераций; при его исчерпании
-    `develop` помечается `failed`.
+- **Where the log is:** `logs/task#<id>/load-config.log` (stdout+stderr of the script).
+- **How to analyze:** after the command returns check the return code and
+  the log content:
+  - return code `0` and the line `✅ Оптимизированная загрузка завершена` - success
+    (with `--allow-warnings` - suffix `(с предупреждениями, --allow-warnings)`);
+  - the line `✅ Нет изменённых файлов конфигурации — загрузка не требуется` - there was
+    nothing to load (also success).
+    **Only after success** the executor closes the load and the stage:
+    `task_status.py ... db-update done`, then `... develop done --files ...`.
+  - return code `2` and the summary `⚠️ Платформа проигнорировала N свойств` or
+    `⚠️ Прочие предупреждения платформы` without a success
+    line - the sources are incorrect, the load was applied only partially: **error**,
+    the task returns to `develop` (fix the properties or deliberately retry
+    with `--allow-warnings`).
+  - the line `❌ Ошибка при загрузке конфигурации` or any other non-zero return code -
+    error.
+    Loading into a "dirty" database is not allowed, so `db-update done` and `develop done`
+    **are not called**: the executor **returns the task to the `develop` stage** (as when
+    tests fail - the `cyclic-review-workflow` cycle): the developer reads this log and
+    fixes the sources/metadata. With `update_db`, `task_status.py` will refuse to close
+    `develop` without a completed load. The limit is 10 iterations; when it is exhausted
+    `develop` is marked `failed`.

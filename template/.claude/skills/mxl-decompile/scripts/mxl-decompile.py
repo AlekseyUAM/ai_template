@@ -8,16 +8,16 @@ import sys
 from collections import OrderedDict
 from lxml import etree
 
-# Регистронезависимый ввод: имена параметров и значения choices принимаются
-# в любом регистре (в argparse по умолчанию совпадение точное).
+# Case-insensitive input: parameter names and choices values are accepted
+# in any case (argparse matches exactly by default).
 def ci_parse_args(parser, argv=None):
-    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
+    """parse_args: parameter names and choices values are accepted in any case."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
         if tok.startswith('-') and tok.lower() in names:
             argv[i] = names[tok.lower()]
-    # choices — зеркало [ValidateSet]; канонизируем ДО разбора, иначе argparse отвергнет регистр
+    # choices mirrors [ValidateSet]; canonicalize BEFORE parsing, otherwise argparse rejects the case
     choice_map = {}
     for a in parser._actions:
         if a.choices:
@@ -57,8 +57,8 @@ def text_of(node):
 
 
 def to_font_size(raw):
-    """Размер шрифта бывает дробным (8.3, 11.3 — в корпусе ERP это треть макетов).
-    int() на таком падал — дробный размер округляем. Целое держим целым, иначе "10" → "10.0"."""
+    """Font size may be fractional (8.3, 11.3 - in the ERP corpus this is a third of templates).
+    int() failed on such a value - round the fractional size. Keep integers integer, otherwise "10" -> "10.0"."""
     s = str(raw).strip() if raw is not None else ''
     if not s:
         return 0
@@ -70,11 +70,11 @@ def to_font_size(raw):
 
 
 def format_tag_kind():
-    """Тип значения каждого тега — выведен из корпуса, а не выписан на глаз.
-    line — ссылка в палитру <line>; color — #RRGGBB / style: / web: / win:
-    ml — многоязычная строка; enum — замкнутый список (см. format_enum_values).
-    containsValue / valueType / controlType сюда НЕ входят: это свойства конкретной ячейки,
-    а стиль — сущность общая, один на многие ячейки."""
+    """Value type of each tag - derived from the corpus, not written by eye.
+    line - reference to the <line> palette; color - #RRGGBB / style: / web: / win:
+    ml - multilingual string; enum - closed list (see format_enum_values).
+    containsValue / valueType / controlType are NOT included here: these are properties of a specific cell,
+    while style is a shared entity, one for many cells."""
     return {
         'autoIndent': 'int', 'autoMarkIncomplete': 'bool', 'autoWidthCalculation': 'bool',
         'backColor': 'color', 'border': 'line', 'borderColor': 'color',
@@ -98,14 +98,14 @@ RU_NAME = 'Русский'
 
 
 def format_ml_tags():
-    """Теги, значение которых — многоязычная строка (<v8:item> на язык), а не скаляр."""
+    """Tags whose value is a multilingual string (<v8:item> per language), not a scalar."""
     return {'format': True, 'editFormat': True, 'mask': True}
 
 
 def color_to_dsl(node, val):
-    """Цвет платформа хранит значением с префиксом пространства имён. style: объявлен в корне
-    документа и читается как есть; web/win объявлены прямо на узле сгенерированным префиксом
-    (d3p1), поэтому его надо разрешить в URI и вернуть привычное web:/win:."""
+    """The platform stores color as a value with a namespace prefix. style: is declared at the document
+    root and is read as is; web/win are declared directly on the node with a generated prefix
+    (d3p1), so it must be resolved into a URI and the usual web:/win: returned."""
     if ':' not in val or val.startswith('style:'):
         return val
     prefix, name = val.split(':', 1)
@@ -119,7 +119,7 @@ def color_to_dsl(node, val):
 
 CFG_NS = 'http://v8.1c.ru/8.1/data/enterprise/current-config'
 
-# Элемент управления ячейки: в выгрузке это GUID, имён у платформы в XML нет.
+# Cell control element: in the export this is a GUID, the platform has no names in XML.
 VALUE_CONTROL_NAMES = {
     '381ed624-9217-4e63-85db-c4c3cb87daae': 'input',
     '35af3d93-d7c7-4a2e-a8eb-bac87a1a3f26': 'checkbox',
@@ -127,12 +127,12 @@ VALUE_CONTROL_NAMES = {
 
 
 def value_type_to_dsl(node):
-    """Обратная функция к эмиттеру типа компилятора: <valueType> → строка DSL в КРАТЧАЙШЕЙ
-    форме (Boolean, String, String(10,fixed), Number(15,3,nonneg), DateTime, CatalogRef.X,
-    AnyRef), из которой компилятор восстановит тот же XML. Пустой тег → пустая строка:
-    «содержит значение» без указания типа — самостоятельное состояние.
-    Префикс ссылочного типа разрешаем по URI, а не по имени: локальное объявление платформа
-    называет сгенерированным dNpM. Чужое пространство имён оставляем как есть."""
+    """Inverse of the compiler's type emitter: <valueType> -> DSL string in the SHORTEST
+    form (Boolean, String, String(10,fixed), Number(15,3,nonneg), DateTime, CatalogRef.X,
+    AnyRef), from which the compiler will restore the same XML. Empty tag -> empty string:
+    "contains value" without a type specified is a standalone state.
+    Resolve the prefix of a reference type by URI, not by name: the platform names a local
+    declaration with a generated dNpM. Leave a foreign namespace as is."""
     types = []
     quals = {}
     for child in node:
@@ -188,10 +188,10 @@ def value_type_to_dsl(node):
 
 
 def value_to_dsl(xsi_type, text):
-    """Значение ячейки-поля ввода → литерал DSL. Тип значения выражается самим литералом:
-    число → числом, булево → true/false, строка и дата → строкой. Пустое значение пишем
-    как есть (0, false, пустая дата), а не схлопываем: так оно собирается обратно тем же
-    типом независимо от того, какой тип объявлен у ячейки."""
+    """Input field cell value -> DSL literal. The value type is expressed by the literal itself:
+    number -> number, boolean -> true/false, string and date -> string. Write an empty value
+    as is (0, false, empty date) rather than collapsing it: that way it is rebuilt by the same
+    type regardless of the type declared for the cell."""
     text = text or ''
     if xsi_type == 'xs:boolean':
         return text.strip() == 'true'
@@ -210,11 +210,11 @@ def int_of(node, default=0):
     return default
 
 
-# Custom JSON serializer — компактный, 2-пробельный indent, массивы примитивов inline.
-# В отличие от ConvertTo-Json (PS5.1):
-#   - не выравнивает ключи объекта по самому длинному
-#   - не разворачивает массивы примитивов на отдельные строки
-#   - кириллица в UTF-8 (без \uXXXX-escapes)
+# Custom JSON serializer - compact, 2-space indent, primitive arrays inline.
+# Unlike ConvertTo-Json (PS5.1):
+#   - does not align object keys to the longest one
+#   - does not unfold primitive arrays onto separate lines
+#   - Cyrillic in UTF-8 (without \uXXXX escapes)
 def convert_string_to_json_literal(s):
     if s is None:
         return 'null'
@@ -252,7 +252,7 @@ def _fmt_number(v):
         # Invariant culture: '.' decimal sep
         if v == int(v):
             # Preserve float-ness: 5.0 → "5"
-            # Строковое представление по инвариантной культуре: 5.0 → "5"
+            # String representation under invariant culture: 5.0 -> "5"
             return str(int(v))
         return repr(v)
     return str(v)
@@ -303,7 +303,7 @@ def convert_to_compact_json(obj, depth=0, indent_unit='  ', line_limit=400):
     if isinstance(obj, (int, float)):
         return _fmt_number(obj)
 
-    # Try inline для объектов и массивов с объектами — если помещается в lineLimit с учётом текущего indent.
+    # Try inline for objects and arrays with objects - if it fits in lineLimit given the current indent.
     is_container = isinstance(obj, (dict, list, tuple))
     if is_container:
         inline_attempt = try_inline_json(obj)
@@ -354,8 +354,8 @@ def main():
     raw_fonts = []
     for f_node in findall(root, "d:font"):
         raw_fonts.append({
-            # Шрифт бывает ссылкой на элемент стиля (style:) или системный шрифт (sys:) —
-            # тогда своих атрибутов у него нет, и без этого он превращался в пустую запись.
+            # A font may be a reference to a style element (style:) or a system font (sys:) -
+            # then it has no attributes of its own, and without this it turned into an empty entry.
             "Ref": f_node.get("ref", ""),
             "Face": f_node.get("faceName", ""),
             "Size": to_font_size(f_node.get("height", "0")),
@@ -378,15 +378,15 @@ def main():
 
     # --- 4. Extract format palette ---
 
-    # Формат читаем целиком — «тег → значение», а не выборочные девять полей. Тип значения
-    # берём из общей таблицы, она же у компилятора.
+    # Read the format in full - "tag -> value", not a selection of nine fields. Take the value
+    # type from the shared table, the same one the compiler uses.
     kinds = format_tag_kind()
     ml_tags = format_ml_tags()
 
     raw_formats = []
     for fmt_node in findall(root, "d:format"):
-        # Совместимость с прежними полями: ими пользуются ширина колонки, высота строки и
-        # признак заполнения — они не часть стиля.
+        # Compatibility with the previous fields: they are used by column width, row height and
+        # the fill flag - they are not part of the style.
         fmt = {
             "FontIdx": -1, "Width": 0, "Height": 0, "FillType": "", "Props": OrderedDict(),
         }
@@ -398,14 +398,14 @@ def main():
                 if val:
                     fmt["Props"][tag] = val
                 continue
-            # Тип значения ячейки — единственный тег со СВОЕЙ структурой: разбираем его до
-            # обеих отсечек ниже. Пустой <valueType/> тоже значим — это «содержит значение»
-            # без указания типа.
+            # Cell value type is the only tag with its OWN structure: parse it before
+            # both cutoffs below. An empty <valueType/> is also meaningful - it is "contains value"
+            # with no type specified.
             if tag == "valueType":
                 fmt["Props"][tag] = value_type_to_dsl(child)
                 continue
-            # Вложенный элемент скаляром не является: .text дал бы пустоту, поэтому собираем
-            # весь текст поддерева (склейку), иначе потеряли бы содержимое.
+            # A nested element is not a scalar: .text would give emptiness, so collect
+            # the whole text of the subtree (concatenation), otherwise the content would be lost.
             if len(child):
                 continue
             val = (child.text or "").strip()
@@ -431,9 +431,9 @@ def main():
             return None
         return raw_formats[idx - 1]
 
-    # --- 4-bis. Палитра картинок и рисунки ---
-    # Картинка хранится ссылкой на библиотеку либо данными base64; ссылки на палитру (у рисунка
-    # pictureIndex, у ячейки picIndex) — 1-based, сам <index> — 0-based.
+    # --- 4-bis. Picture palette and drawings ---
+    # A picture is stored as a library reference or as base64 data; references to the palette (a drawing's
+    # pictureIndex, a cell's picIndex) are 1-based, while <index> itself is 0-based.
     pictures_out = OrderedDict()
     picture_key = {}
     for pic_i, pic_node in enumerate(findall(root, "d:picture"), start=1):
@@ -446,8 +446,8 @@ def main():
             entry["ref"] = inner.get("ref")
         elif (inner.text or "").strip():
             entry["data"] = (inner.text or "").strip()
-        # Прозрачность живёт и у ссылочной картинки (в БП 8.3.27 таких записей 67), поэтому
-        # читаем её вне ветвления. Пиксель прозрачного цвета — координата внутри картинки.
+        # Transparency also exists on a referenced picture (in Accounting 8.3.27 there are 67 such entries), so
+        # read it outside the branching. The transparent color pixel is a coordinate inside the picture.
         if entry and inner.get("t") is not None:
             entry["transparent"] = inner.get("t") == "true"
         if entry and inner.get("tx") is not None:
@@ -485,8 +485,8 @@ def main():
             for it in findall(t_el, "v8:item"):
                 by_lang[text_of(find(it, "v8:lang")) or ''] = text_of(find(it, "v8:content")) or ''
             item["text"] = by_lang
-        # Оформление разбирается позже: линию нужно развернуть в описание, а помощник для
-        # этого появляется вместе с палитрой стилей.
+        # Formatting is parsed later: the line must be expanded into a description, and the helper
+        # for that appears together with the style palette.
         fmt_idx = int_of(find(dr, "d:formatIndex"))
 
         def anchor(prefix, off_row, off_col):
@@ -502,10 +502,10 @@ def main():
         item["_fmt"] = fmt_idx
         drawings_out.append(item)
 
-    # --- 4a. Колонтитулы и параметры печати ---
-    # Слот колонтитула устроен как ячейка: ссылка на формат плюс текст. Признак вывода и стартовую
-    # страницу читаем только у записи, где есть <height>: палитра дедуплицирована, и колонтитул без
-    # своих настроек ссылается на чужую запись, где <width> — ширина колонки, а не номер страницы.
+    # --- 4a. Headers/footers and print settings ---
+    # A header/footer slot is arranged like a cell: a format reference plus text. Read the output flag and the start
+    # page only from the entry that has <height>: the palette is deduplicated, and a header/footer without
+    # its own settings references another entry where <width> is the column width, not the page number.
     def read_header_part(suffix):
         slots = OrderedDict()
         fmt_idx = None
@@ -563,9 +563,9 @@ def main():
                 except ValueError:
                     print_settings[name] = v
 
-    # --- 4b. Группировки строк и колонок ---
-    # Платформа хранит их плоским списком диапазонов, родитель раньше детей. Число уровней
-    # (<vgLevels>) не читаем: оно выводится из вложенности — совпало на всех 1797 макетах.
+    # --- 4b. Row and column groupings ---
+    # The platform stores them as a flat list of ranges, parent before children. Do not read the level count
+    # (<vgLevels>): it is derived from nesting - it matched in all 1797 templates.
     def read_groups(tag, axis):
         out = []
         for g in findall(root, "d:" + tag):
@@ -595,11 +595,11 @@ def main():
 
     # --- 5. Extract columns and default width ---
 
-    # Колоночная раскладка («индивидуальная ширина колонок» для группы строк) — элемент <columns>.
-    # Их бывает несколько: раскладка БЕЗ <id> — умолчание (ровно одна в каждом макете корпуса),
-    # остальные адресуются GUID из <id>, на который ссылаются строки (<row><columnsID>) и
-    # области (<area><columnsID>). Раньше читался только первый <columns> — отсюда терялись
-    # ширины и вылезал columns: 0.
+    # Column layout ("individual column width" for a row group) is the <columns> element.
+    # There may be several of them: the layout WITHOUT <id> is the default (exactly one in every template of the corpus),
+    # the rest are addressed by the GUID from <id>, which rows (<row><columnsID>) and
+    # areas (<area><columnsID>) reference. Previously only the first <columns> was read - hence widths
+    # were lost and columns: 0 appeared.
 
     default_fmt_idx = 0
     n = find(root, "d:defaultFormatIndex")
@@ -616,7 +616,7 @@ def main():
         by_idx = {}
         for ci in findall(node, "d:columnsItem"):
             by_idx[int_of(find(ci, "d:index"))] = int_of(find(ci, "d:column/d:formatIndex"))
-        # Карта ширин (1-based колонка → ширина), только отличные от умолчания.
+        # Width map (1-based column -> width), only those different from the default.
         widths = OrderedDict()
         for col0 in sorted(by_idx.keys()):
             fmt = get_format(by_idx[col0])
@@ -628,8 +628,8 @@ def main():
             "Id": (text_of(id_node) or None) if id_node is not None else None,
             "Size": int_of(size_node) if size_node is not None else 0,
             "Widths": widths,
-            # Формат колонки несёт не только ширину — имя стиля подставим ниже, когда стили
-            # будут поименованы.
+            # A column format carries more than width - the style name is substituted below, once styles
+            # are named.
             "FmtIdx": {str(c0 + 1): by_idx[c0] for c0 in sorted(by_idx.keys())},
         }
 
@@ -654,8 +654,8 @@ def main():
 
     # --- 7. Extract named items ---
 
-    # Захватываем области ВСЕХ типов. Раньше здесь стоял `if area_type != "Rows": continue`,
-    # из-за чего терялись Rectangle и Columns — а они есть у 61% макетов корпуса.
+    # Capture areas of ALL types. Previously there was `if area_type != "Rows": continue`,
+    # which lost Rectangle and Columns - and they exist in 61% of the corpus templates.
     named_areas = []
     for ni_node in findall(root, "d:namedItem"):
         xsi_type = ni_node.get(f"{{{XSI_NS}}}type", "")
@@ -671,8 +671,8 @@ def main():
             return int_of(n) if n is not None else -1
 
         named_areas.append({
-            # Порядок в исходнике — явный ключ сортировки: sorted тут стабилен, а
-            # Сортируем явно, иначе порядок был бы нестабильным.
+            # Order in the source is an explicit sort key: sorted is stable here, and
+            # sort explicitly, otherwise the order would be unstable.
             "Ord": len(named_areas),
             "Name": text_of(find(ni_node, "d:name")) or "",
             "Type": text_of(find(area_node, "d:type")) or "",
@@ -680,15 +680,15 @@ def main():
             "EndRow": coord("endRow"),
             "BeginCol": coord("beginColumn"),
             "EndCol": coord("endColumn"),
-            # Привязка области к колоночной раскладке: у 913 483 прямоугольных областей корпуса
-            # она есть, и из накрытых строк выводится не всегда.
+            # Binding of the area to the column layout: 913 483 rectangular areas of the corpus
+            # have it, and it is not always derived from the covered rows.
             "ColumnsId": text_of(find(area_node, "d:columnsID")) or "",
         })
 
     # --- 8. Extract rows ---
 
     row_data = {}
-    # Языки, на которых в макете вообще есть текст. Порядок — первого появления.
+    # Languages in which the template has any text at all. Order - first appearance.
     doc_langs = OrderedDict()
     for ri_node in findall(root, "d:rowsItem"):
         row_idx = int_of(find(ri_node, "d:index"))
@@ -738,22 +738,22 @@ def main():
                 if d_node is not None and d_node.text:
                     detail = d_node.text
 
-                # Имя параметра, которым подставляют картинку. Сама картинка сидит в
-                # оформлении (picIndex), поэтому этот тег живёт отдельно от неё.
+                # The parameter name used to substitute a picture. The picture itself sits in
+                # the formatting (picIndex), so this tag lives separately from it.
                 pic_param = None
                 pp_node = find(c_content, "d:pictureParameter")
                 if pp_node is not None and pp_node.text:
                     pic_param = pp_node.text
 
-                # Значение ячейки-поля ввода. Тип значения свой, из объявленного не выводится,
-                # поэтому читаем и его: пустое значение сворачивается в "", остальные едут как есть.
+                # Input field cell value. The value type is its own and is not derived from the declared one,
+                # so read it too: an empty value collapses to "", the rest travel as is.
                 value = None
                 v_node = find(c_content, "d:v")
                 if v_node is not None:
                     value = (v_node.get(f'{{{XSI_NS}}}type') or '', (v_node.text or ''))
 
-                # Примечание к ячейке. Якоря не читаем как данные: конец — координаты самой
-                # ячейки, начало — 1/1 у 1085 примечаний корпуса из 1087; остальное авторское.
+                # Cell note. Do not read anchors as data: the end is the coordinates of the cell
+                # itself, the beginning is 1/1 in 1085 notes of the 1087 in the corpus; the rest is authored.
                 note = None
                 note_node = find(c_content, "d:note")
                 if note_node is not None:
@@ -781,23 +781,23 @@ def main():
                         "AnchorCol": int(_txt('beginColumn', '1') or 1),
                     }
 
-                # Настройки элемента управления — сериализованный base64 у самой ячейки.
-                # Структуру не разбираем, возим дословно.
+                # Control settings - serialized base64 at the cell itself.
+                # Do not parse the structure, carry it verbatim.
                 control = None
                 ctl_node = find(c_content, "d:control")
                 if ctl_node is not None and ctl_node.text:
-                    # Переводы строк внутри блоба приводим к LF: XML-парсеры нормализуют их
-                    # по-разному, и без этого порты давали разный JSON на одном файле.
+                    # Normalize line breaks inside the blob to LF: XML parsers normalize them
+                    # differently, and without this ports produced different JSON on the same file.
                     control = ctl_node.text.replace('\r\n', '\n')
 
-                # Текст ячейки платформа хранит по элементу на язык. Раньше брался ПЕРВЫЙ, и всё
-                # остальное терялось — в корпусе ERP 98% макетов держат текст и под ru, и под en.
-                # Здесь собираем «язык → текст» как есть; свернётся в строку позже, когда станет
-                # известен набор языков всего макета (get_dsl_text).
+                # The platform stores cell text as one element per language. Previously the FIRST was taken, and everything
+                # else was lost - in the ERP corpus 98% of templates hold text both under ru and under en.
+                # Here "language -> text" is collected as is; it will collapse into a string later, once
+                # the language set of the whole template is known (get_dsl_text).
                 text = None
                 has_text = False
-                # Пустой <tl/> — отдельное состояние: тег текста есть, языков в нём нет. Без
-                # этого ветвления такая ячейка теряла текст вовсе (1 из 15 ячеек с тегом текста).
+                # An empty <tl/> is a separate state: the text tag exists, but has no languages. Without
+                # this branch such a cell lost text altogether (1 of 15 cells with a text tag).
                 tl_node = find(c_content, "d:tl")
                 items = findall(c_content, "d:tl/v8:item")
                 if tl_node is not None and not items:
@@ -812,8 +812,8 @@ def main():
                         by_lang[lang] = (text_of(content_node) or '') if content_node is not None else ''
                         doc_langs[lang] = True
                     text = by_lang
-                    # Единственный пустой русский текст содержимым не считается — такая ячейка
-                    # уходит в заполнители строки.
+                    # A single empty Russian text is not considered content - such a cell
+                    # goes into the row fillers.
                     has_text = not (len(by_lang) == 1 and by_lang.get('ru') == '')
 
                 cells.append({
@@ -829,7 +829,7 @@ def main():
                     "HasText": has_text,
                 })
 
-        # Ссылка строки на колоночную раскладку; пусто = раскладка по умолчанию.
+        # Row reference to the column layout; empty = default layout.
         cid_node = find(row_node, "d:columnsID")
         row_columns_id = text_of(cid_node) if cid_node is not None else None
 
@@ -841,17 +841,17 @@ def main():
                 "ColumnsId": row_columns_id,
             }
 
-    # Языки текстов макета и языки, объявленные в конфигурации, — разные вещи: у типовых они
-    # не совпадают. Строкой пишем текст, одинаковый на ВСЁМ наборе языков макета; остальное —
-    # объектом.
+    # Template text languages and languages declared in the configuration are different things: in standard ones they
+    # do not match. Write text as a string when it is the same across the WHOLE language set of the template; otherwise
+    # as an object.
     text_languages = list(doc_langs.keys())
 
     def get_dsl_text(by_lang):
         if not isinstance(by_lang, dict):
             return by_lang
-        # Пустой текст (<tl/>) записывается в DSL пустой строкой — той же формой, что
-        # авторская. Без этой ветки макет, где ДРУГОГО текста нет вовсе, отдавал null,
-        # и ячейка с пустым текстом теряла содержимое.
+        # Empty text (<tl/>) is written to DSL as an empty string - the same form as
+        # the authored one. Without this branch a template where there is NO OTHER text at all returned null,
+        # and a cell with empty text lost its content.
         if not by_lang:
             return ''
         if len(by_lang) != len(text_languages):
@@ -868,22 +868,22 @@ def main():
 
     # --- 9. Build style key (ignoring fillType) ---
 
-    # Свойства формата, которые стилем НЕ являются: ширина принадлежит колонке, высота —
-    # строке, вид заполнения выводится из того, чем задано содержимое ячейки.
-    # containsValue/valueType/controlType — свойства ЗНАЧЕНИЯ ячейки, а не оформления: стиль
-    # общий на многие ячейки, а они индивидуальны. Компилятор таких ключей не знает, так что
-    # в DSL они были чистым шумом.
+    # Format properties that are NOT style: width belongs to the column, height to
+    # the row, the fill type is derived from what the cell content is set by.
+    # containsValue/valueType/controlType are properties of the cell VALUE, not of formatting: style is
+    # shared by many cells, while they are individual. The compiler does not know such keys, so
+    # in DSL they were pure noise.
     NON_STYLE_TAGS = ("width", "height", "fillType", "font",
                       "containsValue", "valueType", "controlType",
-                      # Линия рисунка и её стороны — свойства рисунка, а не общего оформления:
-                      # на корпусе все 2 135 записей с ними принадлежат только рисункам.
+                      # Drawing line and its sides are properties of the drawing, not of shared formatting:
+                      # in the corpus all 2 135 entries with them belong only to drawings.
                       "drawingBorder", "drawingHaveLeftBorder", "drawingHaveTopBorder",
                       "drawingHaveRightBorder", "drawingHaveBottomBorder")
     BORDER_TAGS = ("border", "leftBorder", "topBorder", "rightBorder", "bottomBorder")
 
     def line_to_dsl(idx):
-        """Ссылку в палитру разворачиваем в описание линии. Ширина 1 подразумевается,
-        поэтому обычная линия пишется просто именем стиля."""
+        """Expand a palette reference into a line description. Width 1 is implied,
+        so an ordinary line is written simply as the style name."""
         i = int(idx)
         if i < 0 or i >= len(raw_lines):
             return "Solid"
@@ -899,7 +899,7 @@ def main():
         return out
 
     def style_props(fmt):
-        """Свойства формата, попадающие в стиль, — в каноническом порядке тегов."""
+        """Format properties that go into the style - in canonical tag order."""
         if not fmt:
             return OrderedDict()
         out = OrderedDict()
@@ -919,8 +919,8 @@ def main():
     def get_style_key(fmt):
         if not fmt:
             return "empty"
-        # «шрифта нет» и «шрифт с индексом 0» — разные форматы: нулевой шрифт вовсе не
-        # обязан быть обычным, в макете он бывает курсивным или жирным.
+        # "no font" and "font with index 0" are different formats: font zero is not at all
+        # obliged to be regular, in a template it may be italic or bold.
         parts = ["f=" + (str(fmt["FontIdx"]) if fmt["FontIdx"] >= 0 else "none")]
         for tag, val in style_props(fmt).items():
             parts.append(f"{tag}={val}")
@@ -936,8 +936,8 @@ def main():
         font_defs["default"] = raw_fonts[0]
 
     def get_font_key(f):
-        # Ссылку различаем по ней самой: своих атрибутов у такого шрифта нет, и без этого
-        # две РАЗНЫЕ ссылки схлопывались в одну как «пустые».
+        # Distinguish a reference by the reference itself: such a font has no attributes of its own,
+        # and without this two DIFFERENT references collapsed into one as "empty".
         if f.get("Ref"):
             return "ref=" + f["Ref"]
         return f"{f['Face']}|{f['Size']}|{f['Bold']}|{f['Italic']}|{f['Underline']}|{f['Strikeout']}"
@@ -959,7 +959,7 @@ def main():
         name = None
 
         if f.get("Ref"):
-            # Имя из ссылки: читаемее самой ссылки ничего не придумать.
+            # A name from the reference: nothing more readable than the reference itself can be devised.
             name = f["Ref"].split(":", 1)[1].lower()
         elif f["Face"] == df["Face"] and f["Size"] == df["Size"]:
             if f["Bold"] and not df["Bold"] and not f["Italic"] and not f["Underline"] and not f["Strikeout"]:
@@ -1012,8 +1012,8 @@ def main():
             if key not in style_keys:
                 style_keys[key] = fmt
             format_to_style_key[cell["FormatIdx"]] = key
-            # Формат примечания живёт в той же палитре и тоже заслуживает имени: иначе
-            # оформление подсказки терялось бы при обратной сборке.
+            # The note format lives in the same palette and also deserves a name: otherwise
+            # the tooltip formatting would be lost on rebuild.
             if cell.get("Note"):
                 nfmt = get_format(cell["Note"]["FormatIdx"])
                 if nfmt:
@@ -1022,8 +1022,8 @@ def main():
                         style_keys[nkey] = nfmt
                     format_to_style_key[cell["Note"]["FormatIdx"]] = nkey
 
-    # Формат рисунка — ещё один владелец записи палитры, наравне с ячейкой, строкой, колонкой
-    # и примечанием: без этого оформление рисунка теряло имя и вырезалось как неиспользуемое.
+    # The drawing format is another owner of a palette entry, along with a cell, row, column
+    # and note: without this the drawing formatting lost its name and was cut as unused.
     for _item in drawings_out:
         _fi = _item.get("_fmt") or 0
         if not _fi:
@@ -1036,14 +1036,14 @@ def main():
             format_to_style_key[_fi] = _key
 
     def row_style_fmt(fmt):
-        """Оформление строки без её собственных свойств: скрытие уезжает инлайном к height,
-        поэтому в именованный стиль попадать не должно."""
+        """Row formatting without its own properties: hiding goes inline to height,
+        so it must not get into a named style."""
         if not fmt:
             return None
         props = style_props(fmt)
         props.pop("hidden", None)
-        # Шрифт в style_props не входит (он адресуется именем), поэтому формат строки,
-        # несущий ТОЛЬКО шрифт, здесь выглядел пустым и терялся.
+        # Font is not included in style_props (it is addressed by name), so a row format
+        # carrying ONLY a font looked empty here and was lost.
         if not props and fmt["FontIdx"] < 0:
             return None
         reduced = OrderedDict()
@@ -1053,7 +1053,7 @@ def main():
         return {"FontIdx": fmt["FontIdx"], "Width": 0, "Height": 0,
                 "FillType": "", "Props": reduced}
 
-    # Строка — тоже владелец формата: её оформление становится именованным стилем.
+    # A row is also a format owner: its formatting becomes a named style.
     for rd in row_data.values():
         rf = row_style_fmt(get_format(rd["FormatIdx"])) if rd["FormatIdx"] > 0 else None
         if not rf:
@@ -1062,7 +1062,7 @@ def main():
         if key not in style_keys:
             style_keys[key] = rf
 
-    # Колонка — третий владелец формата, её оформление тоже становится именованным стилем.
+    # A column is the third format owner; its formatting also becomes a named style.
     for cs in column_sets:
         for fi in cs["FmtIdx"].values():
             fmt = get_format(fi)
@@ -1074,8 +1074,8 @@ def main():
             format_to_style_key[fi] = key
 
     def name_style(fmt):
-        """Имя стиля — читаемая метка по самым заметным свойствам. Полнота тут не нужна:
-        различает стили ключ, имя лишь помогает автору ориентироваться."""
+        """Style name - a readable label from the most noticeable properties. Completeness is not needed here:
+        the key distinguishes styles, the name only helps the author navigate."""
         if not fmt:
             return "default"
         parts = []
@@ -1111,10 +1111,10 @@ def main():
             parts.append("fmt")
 
         if len(parts) == 0:
-            # Имя "default" зарезервировано за стилем БЕЗ свойств: под ним компилятор
-            # понимает отсутствие оформления, и ячейка такой стиль не записывает. Набор
-            # из одних неприметных свойств (отступ, защита) или из одного шрифта обязан
-            # получить своё имя, иначе он потеряется.
+            # The name "default" is reserved for the style WITHOUT properties: under it the compiler
+            # understands the absence of formatting, and a cell does not write such a style. A set
+            # of only inconspicuous properties (indent, protection) or of a single font must
+            # get its own name, otherwise it will be lost.
             has_content = bool(props) or fmt["FontIdx"] >= 0
             return "style" if has_content else "default"
         return "-".join(parts)
@@ -1148,12 +1148,12 @@ def main():
         return "default"
 
     def column_styles_of(cs):
-        """Колонки раскладки, у которых формат несёт не только ширину, — «колонка → стиль»."""
+        """Layout columns whose format carries more than width - "column -> style"."""
         out = OrderedDict()
         for col, fi in cs["FmtIdx"].items():
             if fi == 0:
-                # Колонка перечислена, формата у неё нет. Для авторинга бесполезно, но без
-                # этого раундтрип теряет элемент целиком.
+                # The column is listed but has no format. Useless for authoring, but without
+                # this the roundtrip loses the element entirely.
                 out[col] = None
                 continue
             fmt = get_format(fi)
@@ -1162,12 +1162,12 @@ def main():
         return out
 
     def to_positional_cells(cells):
-        """Позиционная запись списка ячеек: позиция берётся из порядка, `col` не пишется.
-        Ячейка, у которой кроме текста или параметра ничего нет, пишется значением; span
-        раскрывается маркерами ">"; прочее — объектным элементом без col. Пропуск колонки —
-        null. Выбираем ту запись, которая КОРОЧЕ: раньше позиционная форма отбрасывалась,
-        как только первая ячейка стояла не в первой колонке, хотя один-два null впереди
-        обычно короче объектной записи с `col`."""
+        """Positional record of the cell list: position is taken from the order, `col` is not written.
+        A cell that has nothing besides text or a parameter is written as a value; span
+        is expanded by ">" markers; the rest - by an object element without col. A skipped column is
+        null. Choose the record that is SHORTER: previously the positional form was discarded
+        as soon as the first cell was not in the first column, although one or two leading nulls
+        are usually shorter than an object record with `col`."""
         if not cells:
             return cells
         out = []
@@ -1175,14 +1175,14 @@ def main():
         for c in cells:
             col = int(c.get("col", 0))
             if col < expected:
-                return cells   # перекрытие — позиционно не выразить
+                return cells   # overlap - cannot be expressed positionally
             while expected < col:
                 out.append(None)
                 expected += 1
             span = int(c.get("span", 1) or 1)
             keys = [k for k in c if k not in ("col", "span")]
-            # Текст — единственное содержимое: пишем значением. Оно бывает строкой либо
-            # объектом «язык → текст», и в позиционной записи элемент И ЕСТЬ это значение.
+            # Text is the only content: write it as a value. It is either a string or
+            # an object "language -> text", and in a positional record the element IS that value.
             plain_text = len(keys) == 1 and keys[0] == "text"
             plain_param = len(keys) == 1 and keys[0] == "param"
             if plain_text:
@@ -1192,11 +1192,11 @@ def main():
             else:
                 obj = OrderedDict((k, v) for k, v in c.items() if k != "col")
                 out.append(obj)
-            # span раскрываем маркерами — кроме объектного элемента, он несёт span сам.
+            # expand span with markers - except for an object element, it carries span itself.
             if (plain_text or plain_param) and span > 1:
                 out.extend([">"] * (span - 1))
             expected = col + span
-        # Позиционная форма ценна компактностью: если она длиннее объектной, смысла в ней нет.
+        # The positional form is valuable for its compactness: if it is longer than the object one, there is no point in it.
         a, b = try_inline_json(out), try_inline_json(cells)
         if a is not None and b is not None and len(a) > len(b):
             return cells
@@ -1204,11 +1204,11 @@ def main():
 
     # --- 12. Build areas ---
 
-    # Сетка нарезается на блоки: непересекающиеся области типа Rows задают границы, строки вне
-    # них становятся БЕЗЫМЯННЫМИ блоками. Раньше строки вне областей просто терялись — в корпусе
-    # такие дыры у 34% макетов, а макетов вовсе без Rows-областей 21%.
-    # Всё, что блоком не выражается (области не-Rows и пересекающиеся Rows), уходит в namedAreas
-    # координатами. Правило детерминированное — иначе раундтрип поехал бы.
+    # The grid is cut into blocks: non-overlapping Rows areas define boundaries, rows outside
+    # them become UNNAMED blocks. Previously rows outside areas were simply lost - in the corpus
+    # such holes exist in 34% of templates, and 21% of templates have no Rows areas at all.
+    # Everything that is not expressible as a block (non-Rows areas and overlapping Rows) goes to namedAreas
+    # by coordinates. The rule is deterministic - otherwise the roundtrip would break.
 
     max_row_idx = max(row_data.keys()) if row_data else -1
 
@@ -1217,8 +1217,8 @@ def main():
         return rd["ColumnsId"] if rd else None
 
     def uniform_column_set(frm, to):
-        """Область годится в качестве области-диапазона, только если у всех её строк ОДНА
-        раскладка: иначе её пришлось бы резать, а имя резать нельзя."""
+        """An area is suitable as a range area only if all its rows have ONE
+        layout: otherwise it would have to be cut, and a name must not be cut."""
         first = row_columns_id(frm)
         return all(row_columns_id(r) == first for r in range(frm + 1, to + 1))
 
@@ -1235,9 +1235,9 @@ def main():
         if fits:
             fits = uniform_column_set(a["BeginRow"], a["EndRow"])
         if fits:
-            # Блок задаёт раскладку строкам, и область наследует её же. Когда область несёт
-            # ДРУГУЮ привязку, блоком её не выразить — уводим в namedAreas, где привязка пишется
-            # явным ключом.
+            # The block sets the layout for rows, and the area inherits the same one. When the area carries
+            # a DIFFERENT binding, it cannot be expressed as a block - send it to namedAreas, where the binding is written
+            # as an explicit key.
             fits = a["ColumnsId"] == (row_columns_id(a["BeginRow"]) or "")
         if fits:
             claimed.update(range(a["BeginRow"], a["EndRow"] + 1))
@@ -1246,8 +1246,8 @@ def main():
             overlay_areas.append(a)
 
     def split_gap_by_column_set(frm, to):
-        """Безымянный промежуток режем на куски с одной раскладкой: границы наборов не
-        совпадают с границами именованных областей."""
+        """Cut an unnamed gap into pieces with a single layout: the boundaries of the sets do not
+        coincide with the boundaries of named areas."""
         out = []
         if to < frm:
             return out
@@ -1261,7 +1261,7 @@ def main():
         out.append({"Name": None, "BeginRow": run_start, "EndRow": to, "ColumnsId": run_id})
         return out
 
-    # Области в порядке строк + безымянные заполнители дыр.
+    # Areas in row order + unnamed gap fillers.
     blocks = []
     cursor = 0
     for a in sorted(block_areas, key=lambda x: x["BeginRow"]):
@@ -1287,8 +1287,8 @@ def main():
 
             dsl_row = OrderedDict()
 
-            # Формат самой строки: высота и скрытие — её собственные свойства (у ячейки
-            # таких нет), остальное — оформление, оно же может лежать и на ячейках.
+            # Format of the row itself: height and hiding are its own properties (a cell has no
+            # such ones), the rest is formatting, which may also sit on cells.
             row_fmt = get_format(rd["FormatIdx"]) if rd["FormatIdx"] > 0 else None
             row_own = style_props(row_fmt) if row_fmt else OrderedDict()
             row_hidden = row_own.pop("hidden", False)
@@ -1302,12 +1302,12 @@ def main():
             gap_cells = []
 
             for cell in rd["Cells"]:
-                # Ячейка-поле ввода — содержательная, даже когда ни текста, ни параметра в ней
-                # нет: значение задаёт её формат. Без этого такая строка уходила бы в пустые.
+                # An input field cell is substantive even when it has neither text nor parameter:
+                # its format sets the value. Without this such a row would go to the empty ones.
                 cf = get_format(cell["FormatIdx"])
                 has_value = bool(cf and cf["Props"].get("containsValue") == "true")
-                # Расшифровка сама по себе делает ячейку содержательной: в корпусе 12 653 ячейки
-                # несут только её. Без этого такая ячейка уходила в заполнители и терялась.
+                # The detail itself makes a cell substantive: in the corpus 12 653 cells
+                # carry only it. Without this such a cell went into fillers and was lost.
                 has_content = (cell["Param"] or cell["HasText"] or has_value
                                or cell["Detail"] or cell["Note"] or cell["PictureParam"])
                 has_merge = f"{global_row},{cell['Col']}" in merge_map
@@ -1332,8 +1332,8 @@ def main():
                     if row_style_key in style_names:
                         row_style_name = style_names[row_style_key]
 
-            # Стиль строки и стиль ячеек — независимые вещи: платформа их часто, но не всегда
-            # пишет одинаковыми. Один ключ с модификатором apply покрывает все три случая.
+            # Row style and cell style are independent things: the platform often, but not always,
+            # writes them the same. One key with the apply modifier covers all three cases.
             own_fmt = row_style_fmt(row_fmt)
             own_key = get_style_key(own_fmt) if own_fmt else None
             own_name = style_names.get(own_key) if own_key else None
@@ -1346,8 +1346,8 @@ def main():
             elif cells_name and not own_name:
                 dsl_row["rowStyle"] = OrderedDict([("style", cells_name), ("apply", "cells")])
             elif own_name and cells_name:
-                # Стили разные — строке своё, ячейкам своё; ячейкам стиль раздаётся ниже
-                # поячеечно, поэтому здесь пишем только строку.
+                # Styles are different - the row gets its own, cells get theirs; the cell style is distributed below
+                # per cell, so here only the row is written.
                 dsl_row["rowStyle"] = OrderedDict([("style", own_name), ("apply", "row")])
                 row_style_name = None
                 row_style_key = None
@@ -1376,31 +1376,31 @@ def main():
                 if row_style_key and cell_style_key == row_style_key:
                     pass  # Inherits rowStyle
                 else:
-                    # Стиль пишем, только когда он отличается от того, что подставит компилятор:
-                    # без стиля у ячеек умолчание и есть "default", поэтому такой ключ — шум
-                    # (56% ячеек). А когда стиль ячейкам раздаётся, "default" писать ОБЯЗАТЕЛЬНО:
-                    # иначе ячейка при обратной сборке унаследовала бы его.
-                    # Сверяемся с cells_name — стилем, который РЕАЛЬНО раздаётся ячейкам. Раньше
-                    # здесь стоял row_style_name, а он бывает равен "default": строка такой стиль
-                    # не пишет, а ячейка получала бессмысленный ключ на несуществующий стиль.
+                    # Write the style only when it differs from what the compiler will substitute:
+                    # without a style cells have "default" anyway, so such a key is noise
+                    # (56% of cells). And when the style is distributed to cells, "default" MUST be written:
+                    # otherwise the cell would inherit it on rebuild.
+                    # Compare against cells_name - the style that is REALLY distributed to cells. Previously
+                    # row_style_name stood here, and it may equal "default": the row does not write such a style,
+                    # while the cell received a meaningless key to a non-existent style.
                     sn = get_style_name(cell["FormatIdx"])
                     if sn != "default" or cells_name:
                         dsl_cell["style"] = sn
 
-                # Значение (ячейка-поле ввода). Свойство живёт в формате, но принадлежит
-                # ячейке: на корпусе на такие записи ссылаются только <f>.
+                # Value (input field cell). The property lives in the format but belongs to
+                # the cell: in the corpus only <f> references such entries.
                 if cell_fmt and cell_fmt["Props"].get("containsValue") == "true":
                     dsl_cell["valueType"] = cell_fmt["Props"].get("valueType", "")
                     ctl = cell_fmt["Props"].get("controlType")
                     if ctl is None:
-                        # Формат без <controlType> вовсе — так пишут машинно-сгенерированные
-                        # макеты регламентированной отчётности; компилятор такое повторит
-                        # только по явному указанию.
+                        # A format without <controlType> at all - this is how machine-generated
+                        # templates of regulated reporting are written; the compiler will repeat that
+                        # only on an explicit instruction.
                         dsl_cell["controlType"] = "none"
                     else:
                         name = VALUE_CONTROL_NAMES.get(ctl.lower(), ctl)
-                        # input — умолчание компилятора, писать его значит шуметь на 63 629
-                        # форматах корпуса.
+                        # input is the compiler default; writing it means noise on 63 629
+                        # formats of the corpus.
                         if name != "input":
                             dsl_cell["controlType"] = name
                     if cell["Value"] is not None:
@@ -1417,9 +1417,9 @@ def main():
                     dsl_cell["template"] = get_dsl_text(cell["Text"])
                 elif cell["HasText"]:
                     dsl_cell["text"] = get_dsl_text(cell["Text"])
-                # Расшифровка живёт отдельно от параметра заполнения: на корпусе 20 404 ячейки
-                # несут её без параметра против 8 582 с ним. Пока она читалась только вместе
-                # с параметром, две трети расшифровок терялись молча.
+                # The detail lives separately from the fill parameter: in the corpus 20 404 cells
+                # carry it without a parameter versus 8 582 with one. While it was read only together
+                # with the parameter, two thirds of the details were lost silently.
                 if cell["Detail"]:
                     dsl_cell["detail"] = cell["Detail"]
                 if cell["PictureParam"]:
@@ -1443,11 +1443,11 @@ def main():
 
             if len(dsl_cells) > 0:
                 dsl_row["cells"] = to_positional_cells(dsl_cells)
-            # Самая короткая из применимых форм: если у строки нет своих свойств, а список ячеек
-            # позиционный — строка пишется просто массивом, без ключа cells.
-            # Список позиционный, если позиция в нём НЕ записана: ни у одного элемента нет col.
-            # Прежняя проверка искала элемент-строку, поэтому строка из одних многоязычных
-            # текстов позиционной не признавалась и оставалась объектной.
+            # The shortest of the applicable forms: if a row has no properties of its own and the cell list
+            # is positional - the row is written simply as an array, without the cells key.
+            # The list is positional if the position is NOT recorded in it: no element has col.
+            # The previous check looked for an element-row, so a row of only multilingual
+            # texts was not recognized as positional and remained an object.
             if (len(dsl_row) == 1 and "cells" in dsl_row
                     and not any(isinstance(el, dict) and "col" in el for el in dsl_row["cells"])):
                 area_rows.append(dsl_row["cells"])
@@ -1475,11 +1475,11 @@ def main():
                 compressed_rows.append(OrderedDict([("empty", empty_run)]))
 
         dsl_block = OrderedDict()
-        # Область без имени — просто кусок сетки, ключ name у неё не пишем.
+        # An area without a name is just a piece of the grid; the name key is not written for it.
         if area["Name"]:
             dsl_block["name"] = area["Name"]
-        # Ссылка на колоночную раскладку по имени из columnSets — как style у ячейки на styles.
-        # Умолчание (раскладка без id) не пишем.
+        # Reference to the column layout by the name from columnSets - like a cell's style to styles.
+        # Do not write the default (layout without id).
         if area.get("ColumnsId"):
             dsl_block["columnSet"] = area["ColumnsId"]
         dsl_block["rows"] = compressed_rows
@@ -1551,13 +1551,13 @@ def main():
         default_col_styles = column_styles_of(default_set)
         if default_col_styles:
             result["columnStyles"] = default_col_styles
-    # Набор языков объявляем, только если он отличается от умолчания компилятора (один ru).
+    # Declare the language set only if it differs from the compiler default (a single ru).
     if text_languages and text_languages != ['ru']:
         result["textLanguages"] = text_languages
 
-    # Объявление языков МАКЕТА — не то же, что языки текста: почти во всех макетах ERP
-    # объявлен один ru, а текст лежит и под ru, и под en. Пишем, только если отличается
-    # от умолчания компилятора.
+    # Declaring the TEMPLATE languages is not the same as text languages: in almost all ERP templates
+    # a single ru is declared, while text lies under both ru and en. Write only if it differs
+    # from the compiler default.
     ls_node = find(root, "d:languageSettings")
     if ls_node is not None:
         langs = []
@@ -1586,8 +1586,8 @@ def main():
     used_styles = set()
     for a in dsl_areas:
         for r in a["rows"]:
-            # Строка может быть массивом (короткая форма) — у неё нет ключа cells, и без этой
-            # ветки стиль, использованный только внутри такой строки, вырезался как «неиспользуемый».
+            # A row may be an array (short form) - it has no cells key, and without this
+            # branch a style used only inside such a row was cut as "unused".
             if isinstance(r, list):
                 cell_list = r
             else:
@@ -1595,26 +1595,26 @@ def main():
                     rs = r["rowStyle"]
                     used_styles.add(rs["style"] if isinstance(rs, dict) else rs)
                 cell_list = r.get("cells") or []
-            # Список ячеек может быть позиционным: строки, None и маркеры стиля не несут,
-            # стиль бывает только у объектного элемента.
+            # The cell list may be positional: strings, None and markers carry no style,
+            # a style exists only on an object element.
             for c in cell_list:
                 if isinstance(c, dict) and "style" in c:
                     used_styles.add(c["style"])
-                # Четвёртый владелец формата — примечание: его стиль тоже держит ссылку,
-                # иначе он вырезается как неиспользуемый и ссылка остаётся висячей.
+                # The fourth format owner is the note: its style also holds a reference,
+                # otherwise it is cut as unused and the reference remains dangling.
                 if isinstance(c, dict) and isinstance(c.get("note"), dict) and "style" in c["note"]:
                     used_styles.add(c["note"]["style"])
-    # Стиль бывает не только у ячейки и строки: колонка — третий владелец формата. Берём
-    # стили ИЗ САМИХ РАСКЛАДОК, а не из result: columnSets попадает в результат ПОЗЖЕ этой
-    # проверки, поэтому стиль, на который ссылается только дополнительная раскладка,
-    # отсекался, а ссылка на него оставалась висячей (5 макетов пилота из 40).
+    # A style exists not only on a cell and a row: a column is the third format owner. Take
+    # styles FROM THE LAYOUTS THEMSELVES, not from result: columnSets gets into the result LATER than this
+    # check, so a style referenced only by an additional layout
+    # was cut off, while the reference to it remained dangling (5 templates of the 40 in the pilot).
     for cs in column_sets:
         for name in column_styles_of(cs).values():
             if name:
                 used_styles.add(name)
-    # Рисунок — пятый владелец формата. Имя ему присваивается позже, при сборке результата,
-    # поэтому здесь считаем его из ссылки на палитру: иначе стиль рисунка вырежется как
-    # неиспользуемый, а ссылка на него останется висячей.
+    # A drawing is the fifth format owner. Its name is assigned later, when the result is assembled,
+    # so here count it from the palette reference: otherwise the drawing style would be cut as
+    # unused, and the reference to it would remain dangling.
     for _item in drawings_out:
         _fi = _item.get("_fmt") or 0
         if _fi:
@@ -1628,9 +1628,9 @@ def main():
     result["fonts"] = fonts_out
     result["styles"] = style_defs
 
-    # Колоночные раскладки помимо умолчания: ключ — идентификатор из макета, на него ссылаются
-    # области. Содержимое раскладку не опознаёт (в корпусе полно наборов с одинаковым
-    # содержимым и разными id), поэтому склейки по содержимому нет.
+    # Column layouts other than the default: the key is the identifier from the template, areas reference
+    # it. Content does not identify a layout (the corpus is full of sets with identical
+    # content and different ids), so there is no merging by content.
     extra_sets = [c for c in column_sets if c["Id"]]
     if extra_sets:
         sets_out = OrderedDict()
@@ -1644,7 +1644,7 @@ def main():
             sets_out[cs["Id"]] = entry
         result["columnSets"] = sets_out
 
-    # Имя группировки — та же мультиязычная строка, что текст ячейки, и сворачивается так же.
+    # The group name is the same multilingual string as cell text, and collapses the same way.
     for _g in row_groups + col_groups:
         if "name" in _g:
             _g["name"] = get_dsl_text(_g["name"])
@@ -1653,8 +1653,8 @@ def main():
     if col_groups:
         result["columnGroups"] = col_groups
 
-    # Читаем здесь, а не в разделе 4a: тексту колонтитула нужен свод языков макета, который
-    # становится известен только после разбора строк.
+    # Read here, not in section 4a: the header/footer text needs the template language set, which
+    # becomes known only after rows are parsed.
     header_part = read_header_part('Header')
     footer_part = read_header_part('Footer')
     if header_part:
@@ -1664,8 +1664,8 @@ def main():
     if print_settings:
         result["printSettings"] = print_settings
 
-    # Оформление рисунка: линия и её стороны — его собственные ключи, общее — именованный стиль.
-    # Порядок ключей задаём здесь же, чтобы он не зависел от того, что разбиралось раньше.
+    # Drawing formatting: the line and its sides are its own keys, the common part is a named style.
+    # Set the key order here too, so that it does not depend on what was parsed earlier.
     ordered = []
     for item in drawings_out:
         fmt_idx = item.pop("_fmt", 0)
@@ -1703,8 +1703,8 @@ def main():
 
     result["areas"] = dsl_areas
 
-    # Именованные области, не выразимые блоком, — координатами. Тип не пишем: он выводится
-    # из указанных осей (как в ТабличныйДокумент.Область()). DSL 1-based, XML 0-based.
+    # Named areas not expressible as a block - by coordinates. Do not write the type: it is derived
+    # from the specified axes (as in ТабличныйДокумент.Область()). DSL is 1-based, XML is 0-based.
     if overlay_areas:
         na_out = []
         for a in overlay_areas:
@@ -1715,7 +1715,7 @@ def main():
             if a["BeginCol"] >= 0:
                 entry["cols"] = (f'{a["BeginCol"] + 1}-{a["EndCol"] + 1}'
                                  if a["EndCol"] > a["BeginCol"] else a["BeginCol"] + 1)
-            # Привязку пишем, только когда она не выводится из накрытых строк.
+            # Write the binding only when it is not derived from the covered rows.
             derived = ""
             if a["BeginRow"] >= 0:
                 covered = {row_columns_id(r) or "" for r in range(a["BeginRow"], a["EndRow"] + 1)}

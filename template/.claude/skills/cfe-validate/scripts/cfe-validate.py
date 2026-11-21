@@ -5,16 +5,16 @@
 import sys, os, argparse, re
 from lxml import etree
 
-# Регистронезависимый ввод: имена параметров и значения choices принимаются
-# в любом регистре (в argparse по умолчанию совпадение точное).
+# Case-insensitive input: parameter names and choices values are accepted
+# in any case (in argparse exact match is the default).
 def ci_parse_args(parser, argv=None):
-    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
+    """parse_args: parameter names and choices values are accepted in any case."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
         if tok.startswith('-') and tok.lower() in names:
             argv[i] = names[tok.lower()]
-    # choices — зеркало [ValidateSet]; канонизируем ДО разбора, иначе argparse отвергнет регистр
+    # choices - a mirror of [ValidateSet]; we canonicalize BEFORE parsing, otherwise argparse rejects the case
     choice_map = {}
     for a in parser._actions:
         if a.choices:
@@ -107,8 +107,8 @@ CHILD_OBJECT_TYPES = [
     'BusinessProcess', 'Task', 'ExternalDataSource', 'IntegrationService',
 ]
 
-# Модули заимствованных объектов: тип → виды модулей. Имя свойства в <xr:PropertyState>
-# совпадает с базовым именем файла модуля. Копия таблицы есть в cfe-borrow (навыки автономны).
+# Modules of borrowed objects: type -> module kinds. The property name in <xr:PropertyState>
+# matches the base name of the module file. A copy of the table exists in cfe-borrow (skills are autonomous).
 MODULE_KINDS_BY_TYPE = {
     "CommonModule": ["Module"], "HTTPService": ["Module"], "WebService": ["Module"],
     "Catalog": ["ObjectModule", "ManagerModule"], "Document": ["ObjectModule", "ManagerModule"],
@@ -154,10 +154,10 @@ CHILD_TYPE_DIR_MAP = {
     'IntegrationService': 'IntegrationServices',
 }
 
-# Наборы GeneratedType по типу объекта (эталон — таблица §2.5 спецификации конфигурации).
-# Неполный набор в заимствованной оболочке платформа отвергает при загрузке: «отсутствует один
-# или более типов объекта <Тип>». Типы, у которых GeneratedType нет вовсе (общие модули,
-# подписки, регламентные задания и т.п.), в карте отсутствуют — для них проверка не выполняется.
+# GeneratedType sets by object type (reference - table §2.5 of the configuration specification).
+# The platform rejects an incomplete set in a borrowed wrapper on load: «отсутствует один
+# или более типов объекта <Тип>». Types that have no GeneratedType at all (common modules,
+# subscriptions, scheduled jobs, etc.) are absent from the map - the check is not performed for them.
 GENERATED_TYPE_CATEGORIES = {
     'Catalog':                    ['Object', 'Ref', 'Selection', 'List', 'Manager'],
     'Document':                   ['Object', 'Ref', 'Selection', 'List', 'Manager'],
@@ -185,9 +185,9 @@ GENERATED_TYPE_CATEGORIES = {
     'DefinedType':                ['DefinedType'],
 }
 
-# Стандартные реквизиты объектов: в ChildObjects их нет, но пути Объект.<Стандартный> законны.
-# Имена зависят от варианта встроенного языка, поэтому держим оба написания.
-# Основной реквизит формы: <Attribute name="X"> с <MainAttribute>true</MainAttribute> внутри
+# Standard object attributes: they are absent in ChildObjects, but paths Объект.<Стандартный> are legal.
+# Names depend on the built-in language variant, so we keep both spellings.
+# The main form attribute: <Attribute name="X"> with <MainAttribute>true</MainAttribute> inside
 MAIN_ATTR_RE = re.compile(
     r'<Attribute name=\"([^\"]+)\"[^>]*>(?:(?!</Attribute>).)*?<MainAttribute>true</MainAttribute>', re.DOTALL)
 
@@ -221,22 +221,22 @@ VALID_ENUM_VALUES = {
 EXPECTED_NS = 'http://v8.1c.ru/8.3/MDClasses'
 
 # ── Format version ───────────────────────────────────────────
-# Проверенный диапазон версий формата выгрузки: 2.17 (8.3.24) … 2.21 (8.5). Полная лестница —
-# docs/1c-configuration-spec.md, «Лестница версий». Версию задаёт платформа ВЫГРУЗКИ, а не режим
-# совместимости конфигурации. Версии ниже 2.17 (платформы 8.3.23 и старше) существуют, но навыки
-# на них не проверялись — это предупреждение о непокрытии, а не о некорректности файла.
+# Verified range of export format versions: 2.17 (8.3.24) ... 2.21 (8.5). The full ladder is in
+# docs/1c-configuration-spec.md, "Version ladder". The version is set by the EXPORT platform, not by the configuration
+# compatibility mode. Versions below 2.17 (platforms 8.3.23 and older) exist, but the skills
+# have not been verified on them - this is a warning about non-coverage, not about file incorrectness.
 FORMAT_VERIFIED_MIN = "2.17"
 FORMAT_VERIFIED_MAX = "2.21"
 
 
 def format_rank(ver):
-    """"2.20" → 220, "2.9" → 209. Строковое сравнение неверно ("2.9" > "2.17")."""
+    """"2.20" -> 220, "2.9" -> 209. String comparison is wrong ("2.9" > "2.17")."""
     m = re.match(r'^(\d+)\.(\d+)$', ver or '')
     return int(m.group(1)) * 100 + int(m.group(2)) if m else 0
 
 
-# Штамп версии формата — атрибут version КОРНЕВОГО элемента файла. Копия общего эталона (семья
-# root_version, авторитет — meta-validate). Корневого: в Form.xml расширения ниже стоит <BaseForm version=…>.
+# The format version stamp - the version attribute of the file ROOT element. A copy of the common reference (family
+# root_version, authority - meta-validate). Of the root: in the extension's Form.xml, <BaseForm version=…> stands below.
 def root_version(xml_path):
     if not os.path.isfile(xml_path):
         return None
@@ -310,8 +310,8 @@ def main():
     parser.add_argument('-Detailed', action='store_true')
     parser.add_argument('-MaxErrors', dest='MaxErrors', type=int, default=30)
     parser.add_argument('-OutFile', dest='OutFile', default='')
-    # Конфигурация-источник. Без неё проверки, требующие сравнения с основной конфигурацией,
-    # пропускаются (о чём сказано в отчёте), остальные работают как раньше.
+    # The source configuration. Without it, checks that require comparison with the main configuration
+    # are skipped (which is stated in the report), the rest work as before.
     parser.add_argument('-ConfigPath', dest='ConfigPath', default='')
     args = ci_parse_args(parser)
 
@@ -803,7 +803,7 @@ def main():
                 else:
                     borrowed_ok_count += 1
 
-                # Полнота набора GeneratedType: платформа отвергает оболочку с неполным набором
+                # Completeness of the GeneratedType set: the platform rejects a wrapper with an incomplete set
                 # («отсутствует один или более типов объекта ChartOfCharacteristicTypes»)
                 expected_cats = GENERATED_TYPE_CATEGORIES.get(type_name)
                 if expected_cats:
@@ -847,7 +847,7 @@ def main():
                             ts_info = sub_item.find(f'{{{MD}}}InternalInfo')
                             ts_name_el = sub_item.find(f'{{{MD}}}Properties/{{{MD}}}Name')
                             ts_label = (ts_name_el.text or '?') if ts_name_el is not None else '?'
-                            # Индекс заимствованных ТЧ — по нему Check 12 сверяет <AdditionalColumns table="Объект.X">
+                            # Index of borrowed tabular sections - Check 12 uses it to compare <AdditionalColumns table="Объект.X">
                             if ts_name_el is not None and ts_name_el.text:
                                 borrowed_ts_index.setdefault(f'{type_name}.{child_name}', {})[ts_name_el.text.strip()] = True
                             if ts_info is None:
@@ -1042,15 +1042,15 @@ def main():
             elif entry['Enum'] not in enum_values_index or entry['Value'] not in enum_values_index.get(entry['Enum'], {}):
                 missing_items.append(f"Enum.{entry['Enum']}.EnumValue.{entry['Value']}")
 
-        # <AdditionalColumns table="Объект.X"> — доп. колонки табличной части, объявленные в самой форме.
-        # Колонки есть, а самой ТЧ в расширении нет → платформа отвергает загрузку: «Неверный путь к
-        # данным» плюс «Колонки не могут быть добавлены к реквизиту».
-        # Соседние проверки этого блока эвристичны (имя стиля добывается регуляркой), поэтому там
-        # предупреждение. Здесь сигнал точный — имя ТЧ берётся из атрибута, — а последствие жёсткое,
-        # поэтому ошибка.
-        # Корень путей формы — имя её основного реквизита: «Объект» только у формы объекта, у формы
-        # списка «Список», у формы записи регистра «Запись». С зашитым «Объект» обе проверки на
-        # таких формах молча не срабатывали. Ищем сначала в <Attributes> формы, потом в <BaseForm>.
+        # <AdditionalColumns table="Объект.X"> - extra tabular section columns declared in the form itself.
+        # The columns exist, but the tabular section itself is absent from the extension -> the platform rejects loading: «Неверный путь к
+        # данным» plus «Колонки не могут быть добавлены к реквизиту».
+        # Neighboring checks of this block are heuristic (the style name is obtained by a regex), so there
+        # a warning. Here the signal is exact - the tabular section name is taken from the attribute - and the consequence is hard,
+        # so an error.
+        # The root of form paths is the name of its main attribute: «Объект» only for an object form, for a list form
+        # «Список», for a register record form «Запись». With a hardcoded «Объект» both checks on
+        # such forms silently did not fire. We look first in the form <Attributes>, then in <BaseForm>.
         root_match = MAIN_ATTR_RE.search(raw)
         root_name = root_match.group(1) if root_match else ""
         ac_tables = set()
@@ -1096,11 +1096,11 @@ def main():
     elif check13_ok:
         r.ok('13. TypeLink: clean')
 
-    # --- Check 14: пути Объект.* заимствованных форм против конфигурации-источника ---
-    # Требует -ConfigPath: отличить живой путь от висячего можно только по исходному объекту.
-    # «Объект.Партнер» валиден и без заимствования реквизита (наследуется от базы), а «Объект.Товары.Артикул»
-    # не разрешится нигде, если Артикул — не колонка ТЧ и не колонка из <Columns> самой формы.
-    # Такой путь платформа отвергает на загрузке: «Неверный путь к данным».
+    # --- Check 14: paths Объект.* of borrowed forms against the source configuration ---
+    # Requires -ConfigPath: a live path can be distinguished from a dangling one only by the source object.
+    # «Объект.Партнер» is valid even without borrowing the attribute (it is inherited from the base), and «Объект.Товары.Артикул»
+    # will not resolve anywhere if Артикул is not a tabular section column and not a column from the form's own <Columns>.
+    # The platform rejects such a path on load: «Неверный путь к данным».
     if not r.stopped and borrowed_forms_with_tree:
         if not config_path_arg:
             r.out('[INFO]  14. Пути Объект.* против конфигурации-источника не проверялись: не задан -ConfigPath')
@@ -1120,16 +1120,16 @@ def main():
                 for bf in borrowed_forms_with_tree:
                     raw = bf['RawText']
                     ctx = bf['Context']
-                    # Корень путей — имя основного реквизита формы (см. проверку 12). Нет его ни в
-                    # <Attributes> формы, ни в <BaseForm> — путей с корнем не бывает, проверять нечего.
+                    # The root of paths is the name of the form's main attribute (see check 12). If it is absent neither in
+                    # the form <Attributes> nor in <BaseForm> - paths with a root do not exist, there is nothing to check.
                     root_match14 = MAIN_ATTR_RE.search(raw)
                     if root_match14 is None:
                         continue
                     root_name14 = root_match14.group(1)
-                    # У динамического списка набор полей — результат его запроса, а не состав объекта:
-                    # туда входят и стандартные поля списка (Ref, Date, DefaultPicture), и псевдонимы
-                    # запроса. Сверять такие пути с ChildObjects объекта нельзя — будут ложные ошибки
-                    # (корпусная проверка: 3383 таких сегмента на 1094 формах списка УТ).
+                    # For a dynamic list the field set is the result of its query, not the object composition:
+                    # it includes both standard list fields (Ref, Date, DefaultPicture) and query
+                    # aliases. Such paths cannot be compared with the object's ChildObjects - there would be false errors
+                    # (corpus check: 3383 such segments on 1094 list forms of UT).
                     if '>cfg:DynamicList<' in root_match14.group(0):
                         continue
                     owner_key = ctx.split('.Form.')[0]
@@ -1145,9 +1145,9 @@ def main():
                         r.warn(f'14. {ctx}: объект-источник не найден в конфигурации ({owner_dir}/{owner_name}.xml)')
                         continue
 
-                    # Имена, доступные первым сегментом пути: реквизиты и ТЧ объекта-источника.
-                    # Плюс для каждой ТЧ — её колонки: второй сегмент проверяем по ним (именно там
-                    # и жил дефект — Объект.Товары.Артикул при живой ТЧ Товары).
+                    # Names available as the first path segment: attributes and tabular sections of the source object.
+                    # Plus, for each tabular section, its columns: we check the second segment against them (that is exactly where
+                    # the defect lived - Объект.Товары.Артикул with a live Товары tabular section).
                     src_names = set()
                     src_ts_columns = {}
                     src_tree = etree.parse(src_obj_file, etree.XMLParser(remove_blank_text=True))
@@ -1162,8 +1162,8 @@ def main():
                             if not isinstance(sub.tag, str):
                                 continue
                             sub_ln = etree.QName(sub.tag).localname
-                            # У регистра дочерние объекты — Dimension/Resource, а не Attribute: без них
-                            # замена корня превратила бы тихий пропуск в ложные ошибки на форме записи.
+                            # For a register, child objects are Dimension/Resource, not Attribute: without them
+                            # replacing the root would turn a silent skip into false errors on the record form.
                             if sub_ln not in ('Attribute', 'Dimension', 'Resource', 'TabularSection'):
                                 continue
                             name_el = sub.find(f'{{{MD}}}Properties/{{{MD}}}Name')
@@ -1178,7 +1178,7 @@ def main():
                                 if col_name.text:
                                     cols.add(col_name.text.strip())
                             src_ts_columns[sub_name] = cols
-                    # Плюс колонки, объявленные в самой форме через <Columns>/<AdditionalColumns table="Объект.X">
+                    # Plus columns declared in the form itself via <Columns>/<AdditionalColumns table="Объект.X">
                     root_pat14 = re.escape(root_name14)
                     for acm in re.finditer(r'<AdditionalColumns table="' + root_pat14 + r'\.(\w+)">(.*?)</AdditionalColumns>', raw, re.DOTALL):
                         tbl = acm.group(1)
@@ -1196,14 +1196,14 @@ def main():
                         if seg0 not in src_names:
                             bad_paths[f'{root_name14}.{seg0}'] = f'у {owner_key} нет такого реквизита или табличной части'
                             continue
-                        # Второй сегмент проверяем только для табличных частей: у ссылочного реквизита
-                        # он ведёт в чужой объект, и это уже другая проверка.
+                        # We check the second segment only for tabular sections: for a reference attribute
+                        # it leads into another object, and that is a different check.
                         if len(segments) < 2 or seg0 not in src_ts_columns:
                             continue
                         seg1 = segments[1]
                         if seg1 in STANDARD_OBJECT_FIELDS:
                             continue
-                        # Итог колонки — псевдополе платформы: Total<Колонка> при живой колонке законен
+                        # The column total is a platform pseudo-field: Total<Колонка> is legal when the column is live
                         if seg1.startswith('Total') and seg1[5:] in src_ts_columns[seg0]:
                             continue
                         if seg1 not in src_ts_columns[seg0]:
@@ -1216,10 +1216,10 @@ def main():
                 if check14_ok:
                     r.ok(f'14. Object paths vs source config: {path_check_count} checked')
 
-    # --- Check 15: основные роли расширения не дают прав на заимствованные объекты ---
-    # Платформа: «Назначение прав доступа на заимствованные объекты основными ролями в
-    # расширениях недопустимо». Роль вне <DefaultRoles> так делать вправе — проверяем только
-    # основные. Ловится статически, а по симптому (отказ загрузки) причина не читается.
+    # --- Check 15: extension main roles do not grant rights on borrowed objects ---
+    # Platform: «Назначение прав доступа на заимствованные объекты основными ролями в
+    # расширениях недопустимо». A role outside <DefaultRoles> is allowed to do so - we check only
+    # the main ones. It is caught statically, and the cause cannot be read from the symptom (load failure).
     default_role_nodes = cfg_node.findall('md:Properties/md:DefaultRoles/xr:Item', NS)
     if default_role_nodes:
         adopted_cache = {}
@@ -1260,7 +1260,7 @@ def main():
             for name_node in rights_root.findall('r:object/r:name', roles_ns):
                 full_name = name_node.text or ''
                 segs = full_name.split('.')
-                # Configuration.* — права самого расширения, не объект; заимствования там нет.
+                # Configuration.* - rights of the extension itself, not an object; there is no borrowing there.
                 if len(segs) < 2 or segs[0] == 'Configuration':
                     continue
                 check15_count += 1
@@ -1276,11 +1276,11 @@ def main():
         r.finalize(out_file)
         sys.exit(1)
 
-    # --- Check 16: модуль заимствованного объекта и пометка расширенного свойства ---
-    # Свойство <xr:PropertyState> появилось в формате 2.19 (8.3.26); ниже платформа его молча
-    # выбрасывает, поэтому там проверять нечего. С 2.19 состояние обязано соответствовать факту:
-    # есть файл модуля — есть пометка, и наоборот. Перекос платформа принимает (проверено на
-    # стенде), но выгрузка Конфигуратора так не выглядит — отсюда предупреждение, а не ошибка.
+    # --- Check 16: module of a borrowed object and extended property marker ---
+    # The <xr:PropertyState> property appeared in format 2.19 (8.3.26); below that the platform silently
+    # drops it, so there is nothing to check there. Since 2.19 the state must match the fact:
+    # there is a module file - there is a marker, and vice versa. The platform accepts a mismatch (verified on
+    # a stand), but a Configurator export does not look like that - hence a warning, not an error.
     if version_rank >= 219 and child_obj_node is not None:
         state_issues = []
         state_checked = 0
@@ -1318,12 +1318,12 @@ def main():
                 for issue in state_issues:
                     r.warn(f'16. {issue}')
 
-    # --- Check 17: версия формата согласована внутри объектов расширения; сверка с Configuration.xml ---
-    # Дескриптор объекта и его штампованные тела X/Ext/*.xml, дескриптор формы/макета и его тело (и
-    # Configuration.xml с его Ext/*.xml) платформа загружает только в одной версии формата: «Версия формата
-    # загружаемого файла … отличается от версии формата ранее загруженных файлов». Объект целиком в другой
-    # версии, чем расширение, загружается — это лишь неоднородность выгрузки (типично после мержа веток,
-    # выгруженных разными платформами), поэтому такое расхождение только предупреждение.
+    # --- Check 17: format version consistent inside extension objects; comparison with Configuration.xml ---
+    # The object descriptor and its stamped bodies X/Ext/*.xml, the form/template descriptor and its body (and
+    # Configuration.xml with its Ext/*.xml) are loaded by the platform only in one format version: «Версия формата
+    # загружаемого файла … отличается от версии формата ранее загруженных файлов». An object entirely in a different
+    # version than the extension loads - this is only export heterogeneity (typically after merging branches
+    # exported by different platforms), so such a mismatch is only a warning.
     if version:
         ver_descriptors = [resolved_path]
         if child_obj_node is not None:
@@ -1365,7 +1365,7 @@ def main():
                 continue
             if not is_root and desc_ver != version:
                 ver_off.append(f'{ver_rel(desc)} {desc_ver}')
-            # Тела Configuration.xml лежат в <корень>/Ext, тела объекта X.xml — в X/Ext.
+            # Configuration.xml bodies lie in <root>/Ext, object X.xml bodies - in X/Ext.
             if is_root:
                 ext_dir = os.path.join(config_dir, 'Ext')
             else:
@@ -1379,8 +1379,8 @@ def main():
                 body_ver = root_version(body)
                 if not body_ver:
                     continue
-                # У заимствованной формы второй штамп — <BaseForm version=…> внутри тела; платформа сверяет
-                # с дескриптором и его.
+                # For a borrowed form the second stamp is <BaseForm version=…> inside the body; the platform compares
+                # the descriptor with it as well.
                 if bn == 'Form.xml':
                     with open(body, 'r', encoding='utf-8-sig') as f:
                         body_text = f.read()

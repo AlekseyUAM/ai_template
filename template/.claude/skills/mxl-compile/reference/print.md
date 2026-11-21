@@ -1,10 +1,10 @@
-# Печать: колонтитулы и параметры страницы
+# Printing: headers/footers and page parameters
 
-Читать, когда макет готовят к печати: повторяющиеся надписи сверху и снизу, ориентация, поля, масштаб.
+Read when a template is prepared for printing: repeating captions at the top and bottom, orientation, margins, scale.
 
-## Колонтитулы
+## Headers and footers
 
-У верхнего и нижнего колонтитула по три слота — `left`, `center`, `right` — и общие настройки:
+The top and bottom headers/footers each have three slots - `left`, `center`, `right` - and common settings:
 
 ```json
 "header": {
@@ -21,21 +21,21 @@
 }
 ```
 
-| Поле | По умолч. | Описание |
+| Field | Default | Description |
 |------|-----------|----------|
-| `left`, `center`, `right` | — | Текст слота: строка, объект «язык → текст» или `{ "formatted": … }` |
-| `font` | — | Имя шрифта из `fonts` — на весь колонтитул |
-| `verticalAlignment` | — | Положение текста по вертикали: `Top`, `Center`, `Bottom` |
-| `show` | `true` | Выводить ли колонтитул |
-| `startPage` | `1` | Страница, с которой колонтитул печатается |
+| `left`, `center`, `right` | - | Slot text: a string, a "language -> text" object or `{ "formatted": … }` |
+| `font` | - | Font name from `fonts` - for the whole header/footer |
+| `verticalAlignment` | - | Vertical text position: `Top`, `Center`, `Bottom` |
+| `show` | `true` | Whether to output the header/footer |
+| `startPage` | `1` | Page from which the header/footer is printed |
 
-Текст может быть многострочным (`\n`) и содержать поля `[&НомерСтраницы]`, `[&СтраницВсего]`,
-`[&Дата]`, `[&Время]` — платформа подставляет их при печати. `{ "formatted": … }` — форматированная
-строка: разметка живёт прямо в тексте (`<b>жирный</>`, `<fontsize 12>`, `<colorstyle -16>`).
+The text can be multiline (`\n`) and contain fields `[&НомерСтраницы]`, `[&СтраницВсего]`,
+`[&Дата]`, `[&Время]` - the platform substitutes them when printing. `{ "formatted": … }` is a formatted
+string: the markup lives right in the text (`<b>жирный</>`, `<fontsize 12>`, `<colorstyle -16>`).
 
-## Параметры печати
+## Print parameters
 
-Плоский объект; имя ключа совпадает с именем свойства в выгрузке:
+A flat object; the key name matches the property name in the export:
 
 ```json
 "printSettings": {
@@ -46,14 +46,14 @@
 }
 ```
 
-Допустимые ключи: `pageOrientation`, `scale`, `collate`, `copies`, `perPage`, `topMargin`,
+Allowed keys: `pageOrientation`, `scale`, `collate`, `copies`, `perPage`, `topMargin`,
 `leftMargin`, `bottomMargin`, `rightMargin`, `headerSize`, `footerSize`, `fitToPage`,
 `blackAndWhite`, `printerName`, `paper`, `paperSource`, `pageWidth`, `pageHeight`, `duplexType`,
-`pagePlacementAlternation`, `firstPageNumber`. Незнакомый ключ — ошибка. Порядок в объекте не
-важен: компилятор пишет свойства в том порядке, что и платформа.
+`pagePlacementAlternation`, `firstPageNumber`. An unknown key is an error. Order in the object does not
+matter: the compiler writes properties in the same order as the platform.
 
-## Чего в DSL нет
+## What the DSL does not have
 
-Область печати и повторение области при печати (шапка на каждой странице) не описываются:
-эти настройки задаются в Конфигураторе и при пересборке чужого макета теряются. Если задача
-требует именно их — правьте макет в Конфигураторе, а не через DSL.
+The print area and area repetition when printing (header on every page) are not described:
+these settings are set in Configurator and are lost when rebuilding someone else's template. If a task
+requires exactly them - edit the template in Configurator, not via the DSL.

@@ -1,78 +1,78 @@
 ---
 name: xdto-info
-description: Анализ структуры пакета XDTO 1С — типы, свойства, точки входа. Используй как подготовительный шаг при написании кода, создающего и заполняющего объект XDTO, при разборе входящего XML, а также чтобы узнать, какие пакеты есть в конфигурации
-argument-hint: <PackagePath> [-Namespace <URI>|-Package <имя>] [-Name <Тип>] [-Depth N] [-RequiredOnly] [-Mode used-by] [-Limit N] [-Offset N] [-OutFile <файл>]
+description: Analyze 1C XDTO package structure - types, properties, entry points. Use as a preparation step when writing code that creates and fills an XDTO object, when parsing incoming XML, and to find out which packages exist in the configuration
+argument-hint: <PackagePath> [-Namespace <URI>|-Package <name>] [-Name <Type>] [-Depth N] [-RequiredOnly] [-Mode used-by] [-Limit N] [-Offset N] [-OutFile <file>]
 allowed-tools:
   - Bash
   - Read
   - Glob
 ---
 
-# /xdto-info — Анализ структуры пакета XDTO
+# /xdto-info - Analyze XDTO package structure
 
-Показывает структуру типа в терминах 1С: какой тип значения присваивать, что обязательно,
-где нужен вложенный объект, какие значения допустимы. Заменяет чтение `Package.bin`
-или XSD с ручным переводом `xs:decimal` → `Число` и `lowerBound="0"` → необязательный.
+Shows the type structure in 1C terms: which value type to assign, what is required,
+where a nested object is needed, which values are allowed. Replaces reading `Package.bin`
+or XSD with manual translation of `xs:decimal` → `Число` and `lowerBound="0"` → optional.
 
-## Параметры
+## Parameters
 
-| Параметр | Обязательный | Описание |
+| Parameter | Required | Description |
 |----------|--------------|----------|
-| `PackagePath` | да | Каталог пакета либо корень исходников конфигурации. Псевдоним — `-Path` |
-| `Namespace` | нет | Выбрать пакет по пространству имён (когда путь — корень исходников) |
-| `Package` | нет | Выбрать пакет по имени объекта метаданных |
-| `Name` | нет | Имя типа. Без выбранного пакета ищется по всей конфигурации |
-| `Depth` | нет | Глубина разузлования вложенных объектов. По умолчанию 1 |
-| `RequiredOnly` | нет | Оставить только обязательные свойства — скелет для «заполни обязательное». Необязательный объект уходит вместе со своим содержимым |
-| `Mode` | нет | `used-by` — показать, кто ссылается на тип |
-| `Limit` / `Offset` | нет | Пагинация. По умолчанию 150 строк |
-| `OutFile` | нет | Записать результат в файл (UTF-8 BOM) |
+| `PackagePath` | yes | Package directory or configuration source root. Alias - `-Path` |
+| `Namespace` | no | Select a package by namespace (when the path is the source root) |
+| `Package` | no | Select a package by metadata object name |
+| `Name` | no | Type name. Without a selected package, searched across the whole configuration |
+| `Depth` | no | Nesting expansion depth for nested objects. Default 1 |
+| `RequiredOnly` | no | Keep only required properties - a skeleton for "fill the required". An optional object goes away with its content |
+| `Mode` | no | `used-by` - show who references the type |
+| `Limit` / `Offset` | no | Pagination. Default 150 lines |
+| `OutFile` | no | Write the result to a file (UTF-8 BOM) |
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/xdto-info.py" -PackagePath "<путь>"
 ```
 
-## Что показывает
+## What it shows
 
-Точка входа определяется по пути: корень исходников — список пакетов, каталог пакета —
-его состав.
+The entry point is determined by the path: source root - a list of packages; package directory -
+its content.
 
-| Вызов | Результат |
+| Call | Result |
 |---|---|
-| `-PackagePath src` | все пакеты конфигурации: имя, число типов, namespace |
-| `-PackagePath src/XDTOPackages/ОбменСБанком` | импорты, точки входа, списки типов |
-| `... -Name ПлатежныйДокумент` | структура типа для заполнения |
-| `... -Name ПлатежныйДокумент -Depth 3` | то же с раскрытием вложенных объектов |
-| `... -Mode used-by -Name СуммаТип` | кто ссылается на тип, включая соседние пакеты |
+| `-PackagePath src` | all configuration packages: name, type count, namespace |
+| `-PackagePath src/XDTOPackages/ОбменСБанком` | imports, entry points, type lists |
+| `... -Name ПлатежныйДокумент` | type structure for filling |
+| `... -Name ПлатежныйДокумент -Depth 3` | same with nested objects expanded |
+| `... -Mode used-by -Name СуммаТип` | who references the type, including neighboring packages |
 
-## Когда известны namespace и тип, но не имя пакета
+## When the namespace and type are known but the package name is not
 
-Так бывает чаще всего: namespace и имя типа видны в коде или в образце XML,
-а как называется пакет — нет. Вызов повторяет строку, от которой отталкиваешься:
+This happens most often: the namespace and type name are visible in code or in a sample XML,
+but the package name is not. The call repeats the string you start from:
 
 ```bash
 # ФабрикаXDTO.Тип("urn:1C.ru:ClientBankExchange", "ПлатежныйДокумент")
 ... -PackagePath src -Namespace "urn:1C.ru:ClientBankExchange" -Name ПлатежныйДокумент
 ```
 
-Если известно только имя типа — укажи `-Name` и корень исходников: тип найдётся
-по всем пакетам. При нескольких совпадениях навык покажет, где именно, чтобы уточнить.
+If only the type name is known - pass `-Name` and the source root: the type is found
+across all packages. With several matches the skill shows exactly where, so you can refine.
 
-## Что в выводе
+## What is in the output
 
-Свойства показаны так, как их предстоит заполнять в коде: тип значения — в нотации
-1С и с учётом ограничений (`Строка(6)`, `Число(18,2)`), обязательность и коллекции —
-флагами, для перечислимых типов перечислены допустимые значения. Непомеченное
-свойство необязательно.
+Properties are shown as they are to be filled in code: the value type in 1C notation
+and with restrictions (`Строка(6)`, `Число(18,2)`), requiredness and collections -
+by flags; for enum types the allowed values are listed. An unmarked
+property is optional.
 
-Обозначения, которые сами по себе неочевидны, навык поясняет прямо в выводе —
-и только те, что в нём встретились.
+Notations that are not self-evident are explained by the skill right in the output -
+and only those that occur in it.
 
-## Типичный workflow
+## Typical workflow
 
-1. `/xdto-info src` — какие пакеты есть
-2. `/xdto-info src -Namespace "<URI>"` — точки входа и типы пакета
-3. `/xdto-info src -Namespace "<URI>" -Name <Тип> -Depth 2` — структура для кода
-4. Перед правкой типа: `-Mode used-by -Name <Тип>` — кого затронет
+1. `/xdto-info src` - which packages exist
+2. `/xdto-info src -Namespace "<URI>"` - package entry points and types
+3. `/xdto-info src -Namespace "<URI>" -Name <Тип> -Depth 2` - structure for code
+4. Before editing a type: `-Mode used-by -Name <Тип>` - who is affected
 
-Нужна сама XML-схема, а не сводка, — это `/xdto-decompile`.
+If you need the XML schema itself rather than a summary, use `/xdto-decompile`.

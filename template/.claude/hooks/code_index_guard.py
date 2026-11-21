@@ -1,10 +1,10 @@
 #!/usr/bin/env python
-"""PreToolUse-хук code-index-guard (Python-порт).
+"""PreToolUse hook code-index-guard (Python port).
 
-Источник: Regsorm/code-index-mcp, crates/code-index-guard, v1.15.4
-(commit fd3199f204183179aad2d39873a0341d5849ddae), лицензия MIT.
-Перенаправляет нативные Read/Grep/Glob/Bash/PowerShell по индексированным
-каталогам в инструменты code-index. При сомнении воздерживается.
+Source: Regsorm/code-index-mcp, crates/code-index-guard, v1.15.4
+(commit fd3199f204183179aad2d39873a0341d5849ddae), MIT license.
+Redirects native Read/Grep/Glob/Bash/PowerShell over indexed
+directories to code-index tools. When in doubt, it abstains.
 """
 import sys
 from pathlib import Path

@@ -5,16 +5,16 @@
 import sys, os, argparse, re
 from lxml import etree
 
-# Регистронезависимый ввод: имена параметров и значения choices принимаются
-# в любом регистре (в argparse по умолчанию совпадение точное).
+# Case-insensitive input: parameter names and choices values are accepted
+# in any case (argparse matches exactly by default).
 def ci_parse_args(parser, argv=None):
-    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
+    """parse_args: parameter names and choices values are accepted in any case."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
         if tok.startswith('-') and tok.lower() in names:
             argv[i] = names[tok.lower()]
-    # choices — зеркало [ValidateSet]; канонизируем ДО разбора, иначе argparse отвергнет регистр
+    # choices - mirror of [ValidateSet]; canonicalize BEFORE parsing, otherwise argparse rejects the case
     choice_map = {}
     for a in parser._actions:
         if a.choices:
@@ -160,9 +160,9 @@ KNOWN_RIGHTS = {
     ],
 }
 
-# Виды вложенности (предпоследний сегмент пути) → допустимые права. Списки сняты с корпуса
-# типовых конфигураций и с выгрузки роли, где права проставлены по всему дереву редактора:
-# догадкам тут не место — закрытый список превращает промах в ложный отказ.
+# Nested kinds (penultimate path segment) -> allowed rights. The lists were taken from a corpus of
+# typical configurations and from a role dump where rights are set across the whole editor tree:
+# no place for guesses here - a closed list turns a miss into a false rejection.
 NESTED_KIND_RIGHTS = {
     'Attribute': ['View', 'Edit'],
     'StandardAttribute': ['View', 'Edit'],
@@ -189,8 +189,8 @@ NESTED_KIND_RIGHTS = {
     ],
 }
 
-# Виды, существующие только у одного типа-родителя: без этой привязки
-# `Catalog.Товары.Field.Цена` прошёл бы как валидный вложенный объект.
+# Kinds that exist only under one parent type: without this binding
+# `Catalog.Товары.Field.Цена` would pass as a valid nested object.
 KIND_OWNERS = {
     'Table': 'ExternalDataSource',
     'Cube': 'ExternalDataSource',
@@ -203,16 +203,16 @@ KIND_OWNERS = {
     'IntegrationServiceChannel': 'IntegrationService',
 }
 
-# Подсказка формата для каждого вида сервиса: {0} подставляется как `Тип.Имя` из роли.
+# Format hint for each service kind: {0} is substituted as `Тип.Имя` from the role.
 SERVICE_LEAF_HINTS = {
     'WebService': '{0}.Operation.<Операция>',
     'HTTPService': '{0}.URLTemplate.<Шаблон>.Method.<Метод>',
     'IntegrationService': '{0}.IntegrationServiceChannel.<Канал>',
 }
 
-# Один и тот же вид под разными родителями имеет разный набор: измерение регистра —
-# View + Edit, измерение куба внешнего источника — только View. Объединять нельзя,
-# объединение молча разрешило бы Edit там, где платформа его не даёт.
+# The same kind under different parents has a different set: a register dimension -
+# View + Edit, an external data source cube dimension - View only. Do not merge them:
+# merging would silently allow Edit where the platform does not grant it.
 NESTED_KIND_RIGHTS_BY_TYPE = {
     'ExternalDataSource': {
         'Dimension': ['View'],
@@ -220,8 +220,8 @@ NESTED_KIND_RIGHTS_BY_TYPE = {
     },
 }
 
-# Типы без прав в ролях (в дереве редактора ролей их нет). Таблица НЕ управляет поведением —
-# отказ даёт отсутствие типа в KNOWN_RIGHTS; здесь только причина для сообщения.
+# Types without rights in roles (they are absent from the role editor tree). This table does NOT drive
+# behavior - rejection comes from the type missing in KNOWN_RIGHTS; here it is only the reason for the message.
 NO_RIGHTS_TYPES = [
     'Enum', 'CommonModule', 'DefinedType', 'CommonPicture', 'CommonTemplate', 'Language',
     'FunctionalOption', 'FunctionalOptionsParameter', 'EventSubscription', 'ScheduledJob',
@@ -241,8 +241,8 @@ def is_nested_object(name):
 
 
 def get_nested_kind(name):
-    """Вид вложенности — предпоследний сегмент: путь бывает и восьмисегментным
-    (ExternalDataSource.И.Cube.К.DimensionTable.Т.Field.П), считать от конца."""
+    """Nested kind - the penultimate segment: a path can have eight segments
+    (ExternalDataSource.И.Cube.К.DimensionTable.Т.Field.П), so count from the end."""
     parts = name.split('.')
     if len(parts) < 3:
         return None
@@ -269,8 +269,8 @@ def find_similar(needle, haystack):
 
 
 def format_type_error(obj_name, object_type):
-    """Запрещённый тип и незнакомый тип — разные диагнозы: первый документирован,
-    второй скорее опечатка или пробел в таблице."""
+    """A forbidden type and an unknown type are different diagnoses: the first is documented,
+    the second is more likely a typo or a gap in the table."""
     if object_type in NO_RIGHTS_TYPES:
         return f"{obj_name}: тип '{object_type}' не имеет прав в роли — блок нужно удалить"
     similar = find_similar(object_type, list(KNOWN_RIGHTS.keys()))
@@ -298,8 +298,8 @@ def get_child_el(parent, local_name, ns):
     return None
 
 
-# Штамп версии формата — атрибут version КОРНЕВОГО элемента файла. Копия общего эталона (семья
-# root_version, авторитет — meta-validate).
+# Format version stamp - the version attribute of the ROOT element of the file. Copy of the common reference (family
+# root_version, authority - meta-validate).
 def root_version(xml_path):
     if not os.path.isfile(xml_path):
         return None
@@ -314,8 +314,8 @@ def root_version(xml_path):
     return None
 
 
-# Корень автономной внешней обработки/отчёта. Копия общего эталона (семья is_external_root,
-# авторитет — cf-edit).
+# Root of a standalone external data processor/report. Copy of the common reference (family is_external_root,
+# authority - cf-edit).
 def _sg_is_external_root(xml_path):
     if not os.path.isfile(xml_path):
         return False
@@ -329,8 +329,8 @@ def _sg_is_external_root(xml_path):
     return False
 
 
-# Якорь выгрузки: корень автономной EPF/ERF либо Configuration.xml, ближайший вверх. Копия общего
-# эталона (семья find_dump_anchor, авторитет — meta-validate).
+# Dump anchor: root of a standalone EPF/ERF or Configuration.xml, nearest upward. Copy of the common
+# reference (family find_dump_anchor, authority - meta-validate).
 def find_dump_anchor(start_dir):
     d = start_dir
     for _ in range(15):
@@ -348,8 +348,8 @@ def find_dump_anchor(start_dir):
     return None
 
 
-# Владелец тела X/Ext/<файл>.xml — дескриптор X.xml рядом с каталогом X. Копия общего эталона
-# (семья ext_body_owner, авторитет — form-validate).
+# Owner of the body X/Ext/<file>.xml - the descriptor X.xml next to directory X. Copy of the common
+# reference (family ext_body_owner, authority - form-validate).
 def ext_body_owner(body_path):
     ext_dir = os.path.dirname(body_path)
     if os.path.basename(ext_dir) != "Ext":
@@ -507,8 +507,8 @@ def main():
         object_type = get_object_type(obj_name)
         is_nested = is_nested_object(obj_name)
 
-        # Тип проверяется ВСЕГДА, включая вложенные пути: раньше `Enum.Х.Attribute.Y`
-        # не проверялся вообще — ветка «unknown» стояла под `not is_nested`.
+        # The type is checked ALWAYS, including nested paths: previously `Enum.Х.Attribute.Y`
+        # was not checked at all - the "unknown" branch sat under `not is_nested`.
         nested_kind = get_nested_kind(obj_name) if is_nested else None
         type_known = object_type in KNOWN_RIGHTS
         if not type_known:
@@ -518,10 +518,10 @@ def main():
         elif is_nested and get_nested_rights(object_type, nested_kind) is None:
             report_error(f"{obj_name}: неизвестный вид вложенности '{nested_kind}'")
         elif not is_nested and object_type in SERVICE_LEAF_HINTS:
-            # Право на сервис целиком платформа игнорирует: проверяется лист (метод шаблона
-            # URL, операция, канал). Роль формально валидна и молча не работает — 403 на всех
-            # маршрутах, причина по симптому не читается. В Конфигураторе галки на корне
-            # сервиса нет вовсе, так что это недостижимое состояние, а не стилистика.
+            # The platform ignores a right on the whole service: the leaf is checked (URL template
+            # method, operation, channel). The role is formally valid and silently does not work - 403 on all
+            # routes, and the cause cannot be read from the symptom. In the Configurator there is no
+            # checkbox on the service root at all, so this is an unreachable state, not style.
             hint = SERVICE_LEAF_HINTS[object_type].format(obj_name)
             report_error(f"{obj_name}: право на сервис целиком не действует — "
                          f"назначайте права на вложенные объекты: {hint}")
@@ -567,7 +567,7 @@ def main():
 
             right_count += 1
 
-            # Validate right name. Тип уже отвергнут выше — второй раз про него не пишем.
+            # Validate right name. The type was already rejected above - do not report it a second time.
             if not type_known:
                 pass
             elif is_nested:
@@ -665,11 +665,11 @@ def main():
         except etree.XMLSyntaxError as e:
             report_error(f'Metadata XML parse error: {e}')
 
-    # --- 4b. Format version: Rights.xml — как у дескриптора роли; сверка с выгрузкой ---
-    # Права и дескриптор роли платформа загружает только в одной версии формата: «Версия формата
-    # загружаемого файла … отличается от версии формата ранее загруженных файлов». С остальной выгрузкой
-    # роль может расходиться — платформа такое грузит, это лишь неоднородность выгрузки (типично после
-    # мержа веток, выгруженных разными платформами).
+    # --- 4b. Format version: Rights.xml - same as the role descriptor; compare with the dump ---
+    # The platform loads rights and the role descriptor only in one format version: «Версия формата
+    # загружаемого файла … отличается от версии формата ранее загруженных файлов». The role may differ
+    # from the rest of the dump - the platform loads it; this is just a non-uniform dump (typical after
+    # merging branches dumped by different platforms).
     rights_ver = root.get('version', '')
     if rights_ver:
         owner_path = ext_body_owner(resolved_path)

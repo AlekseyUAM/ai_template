@@ -5,16 +5,16 @@
 import sys, os, argparse, re
 from lxml import etree
 
-# Регистронезависимый ввод: имена параметров и значения choices принимаются
-# в любом регистре (в argparse по умолчанию совпадение точное).
+# Case-insensitive input: parameter names and choices values are accepted
+# in any case (argparse matches exactly by default).
 def ci_parse_args(parser, argv=None):
-    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
+    """parse_args: parameter names and choices values are accepted in any case."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
         if tok.startswith('-') and tok.lower() in names:
             argv[i] = names[tok.lower()]
-    # choices — зеркало [ValidateSet]; канонизируем ДО разбора, иначе argparse отвергнет регистр
+    # choices - mirror of [ValidateSet]; canonicalize BEFORE parsing, otherwise argparse rejects the case
     choice_map = {}
     for a in parser._actions:
         if a.choices:
@@ -95,8 +95,8 @@ def find_duplicates(items):
     return dupes
 
 
-# Штамп версии формата — атрибут version КОРНЕВОГО элемента файла. Копия общего эталона (семья
-# root_version, авторитет — meta-validate).
+# Format version stamp - the version attribute of the ROOT element of the file. Copy of the common reference (family
+# root_version, authority - meta-validate).
 def root_version(xml_path):
     if not os.path.isfile(xml_path):
         return None
@@ -111,8 +111,8 @@ def root_version(xml_path):
     return None
 
 
-# Корень автономной внешней обработки/отчёта. Копия общего эталона (семья is_external_root,
-# авторитет — cf-edit).
+# Root of a standalone external data processor/report. Copy of the common reference (family is_external_root,
+# authority - cf-edit).
 def _sg_is_external_root(xml_path):
     if not os.path.isfile(xml_path):
         return False
@@ -126,8 +126,8 @@ def _sg_is_external_root(xml_path):
     return False
 
 
-# Якорь выгрузки: корень автономной EPF/ERF либо Configuration.xml, ближайший вверх. Копия общего
-# эталона (семья find_dump_anchor, авторитет — meta-validate).
+# Dump anchor: root of a standalone EPF/ERF or Configuration.xml, nearest upward. Copy of the common
+# reference (family find_dump_anchor, authority - meta-validate).
 def find_dump_anchor(start_dir):
     d = start_dir
     for _ in range(15):
@@ -145,8 +145,8 @@ def find_dump_anchor(start_dir):
     return None
 
 
-# Владелец тела X/Ext/<файл>.xml — дескриптор X.xml рядом с каталогом X; у тел конфигурации —
-# Configuration.xml. Копия общего эталона (семья ext_body_owner, авторитет — form-validate).
+# Owner of the body X/Ext/<file>.xml - the descriptor X.xml next to directory X; for configuration
+# bodies - Configuration.xml. Copy of the common reference (family ext_body_owner, authority - form-validate).
 def ext_body_owner(body_path):
     ext_dir = os.path.dirname(body_path)
     if os.path.basename(ext_dir) != "Ext":
@@ -462,12 +462,12 @@ def main():
                 suffix = ' ...' if len(bad_refs) > 5 else ''
                 r.warn(f'13. Command reference format: {len(bad_refs)} unrecognized: {", ".join(shown)}{suffix}')
 
-    # --- 14. Format version: как у владельца (подсистемы или конфигурации); сверка с выгрузкой ---
-    # Командный интерфейс и его владелец — дескриптор подсистемы или Configuration.xml — платформа
-    # загружает только в одной версии формата: «Версия формата загружаемого файла … отличается от версии
-    # формата ранее загруженных файлов». С остальной выгрузкой владелец может расходиться — платформа
-    # такое грузит, это лишь неоднородность выгрузки (типично после мержа веток, выгруженных разными
-    # платформами).
+    # --- 14. Format version: same as the owner (subsystem or configuration); compare with the dump ---
+    # The platform loads the command interface and its owner - the subsystem descriptor or Configuration.xml -
+    # only in one format version: «Версия формата загружаемого файла … отличается от версии
+    # формата ранее загруженных файлов». The owner may differ from the rest of the dump - the platform
+    # loads that; this is just a non-uniform dump (typical after merging branches dumped by different
+    # platforms).
     if not r.stopped and version:
         owner_path = ext_body_owner(resolved_path)
         owner_ver = root_version(owner_path) if owner_path else None

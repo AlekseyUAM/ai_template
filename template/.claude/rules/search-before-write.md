@@ -1,13 +1,13 @@
 ---
 name: search-before-write
-description: Перед написанием нового кода искать существующее.
+description: Before writing new code, search for existing code.
 ---
 
-# Поиск перед написанием
+# Search before writing
 
-Перед созданием новой процедуры, функции или объекта метаданных:
-1. Найди существующие аналоги через `code_index` (`search_terms`).
-2. Проверь состав и структуру метаданных через `code_index` (`get_object_structure`, при необходимости `bsl_sql` по `metadata_objects`).
-3. Переиспользуй или расширяй существующее, если это уместно.
+Before creating a new procedure, function or metadata object:
+1. Find existing analogues via `code_index` (`search_terms`).
+2. Check the metadata composition and structure via `code_index` (`get_object_structure`, if needed `bsl_sql` over `metadata_objects`).
+3. Reuse or extend the existing one if appropriate.
 
-Дублирование логики — повод остановиться и поискать ещё раз.
+Duplicating logic is a reason to stop and search again.

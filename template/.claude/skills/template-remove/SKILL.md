@@ -1,6 +1,6 @@
 ---
 name: template-remove
-description: Удалить макет из объекта 1С (обработка, отчёт, справочник, документ и др.)
+description: Delete a template from a 1C object (data processor, report, catalog, document, etc.)
 argument-hint: <ObjectName> <TemplateName>
 disable-model-invocation: true
 allowed-tools:
@@ -12,9 +12,9 @@ allowed-tools:
   - Grep
 ---
 
-# /template-remove — Удаление макета
+# /template-remove - Delete a template
 
-Удаляет макет и убирает его регистрацию из корневого XML объекта.
+Deletes the template and removes its registration from the object's root XML.
 
 ## Usage
 
@@ -22,26 +22,26 @@ allowed-tools:
 /template-remove <ObjectName> <TemplateName>
 ```
 
-| Параметр     | Обязательный | По умолчанию | Описание                            |
+| Parameter    | Required | Default | Description                |
 |--------------|:------------:|--------------|-------------------------------------|
-| ObjectName   | да           | —            | Имя объекта                         |
-| TemplateName | да           | —            | Имя макета для удаления             |
-| SrcDir       | нет          | `src`        | Каталог исходников                  |
+| ObjectName   | yes          | -            | Object name                |
+| TemplateName | yes          | -            | Template name to delete    |
+| SrcDir       | no           | `src`        | Source directory           |
 
-## Команда
+## Command
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/template-remove.py" -ObjectName "<ObjectName>" -TemplateName "<TemplateName>" [-SrcDir "<SrcDir>"]
 ```
 
-## Что удаляется
+## What is deleted
 
 ```
 <SrcDir>/<ObjectName>/Templates/<TemplateName>.xml     # Метаданные макета
 <SrcDir>/<ObjectName>/Templates/<TemplateName>/         # Каталог макета (рекурсивно)
 ```
 
-## Что модифицируется
+## What is modified
 
-- `<SrcDir>/<ObjectName>.xml` — убирается `<Template>` из `ChildObjects`
-- Для ExternalReport/Report: если удалённый макет был указан в `MainDataCompositionSchema` — значение очищается
+- `<SrcDir>/<ObjectName>.xml` - `<Template>` is removed from `ChildObjects`
+- For ExternalReport/Report: if the deleted template was specified in `MainDataCompositionSchema`, the value is cleared

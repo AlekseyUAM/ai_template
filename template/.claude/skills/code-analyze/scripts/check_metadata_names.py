@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""Проверить имена метаданных на совпадение с системными перечислениями/наборами.
+"""Check metadata names for collisions with system enums/value sets.
 
-Сканирует XML-выгрузку конфигурации (`src/cf`, `src/cfe`) и сообщает о
-`<Name>`, совпадающих с именами системных перечислений и наборов значений.
-Такие имена зарезервированы платформой и не должны использоваться для
-объектов, реквизитов, табличных частей и других метаданных.
+Scans an XML configuration dump (`src/cf`, `src/cfe`) and reports
+`<Name>` values matching the names of system enums and value sets.
+Such names are reserved by the platform and must not be used for
+objects, attributes, tabular sections and other metadata.
 
     python .claude/skills/code-analyze/scripts/check_metadata_names.py src/cf src/cfe
 
-Код возврата 1 — есть находки. Формат строки совместим с analyze_code.py:
-    error | reserved-system-name | путь:строка | сообщение
+Exit code 1 - findings exist. Line format is compatible with analyze_code.py:
+    error | reserved-system-name | path:line | message
 """
 from __future__ import annotations
 
@@ -52,7 +52,7 @@ def _git_lines(args: list[str]) -> list[str]:
 
 
 def changed_xml() -> list[str]:
-    """XML, изменённые/добавленные в рабочем дереве (для проверки правок задачи)."""
+    """XML files changed/added in the working tree (for checking task edits)."""
     files = (_git_lines(["diff", "--name-only", "--diff-filter=ACMR"])
              + _git_lines(["ls-files", "--others", "--exclude-standard"]))
     return sorted({name for name in files if name.lower().endswith(".xml")})

@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 # v8-xsd-fetch v1.0 — Download 1C platform XSD schemas (dump format) into .v8-xsd
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
-"""Загрузка XSD-схем формата выгрузки 1С по версиям формата.
+"""Download 1C dump format XSD schemas by format version.
 
-Скачивает schemas/designer/<версия>/*.xsd из репозитория yellow-hammer/namespace-forest
-в каталог схем проекта: -OutPath, иначе xsdPath из .v8-project.json, иначе .v8-xsd
-рядом с .v8-project.json (нет его — в текущем каталоге).
+Downloads schemas/designer/<version>/*.xsd from the yellow-hammer/namespace-forest
+repository into the project's schema directory: -OutPath, otherwise xsdPath from
+.v8-project.json, otherwise .v8-xsd next to .v8-project.json (if absent - in the current directory).
 """
 import argparse
 import json
@@ -24,18 +24,18 @@ REPO = "yellow-hammer/namespace-forest"
 REPO_URL = "https://github.com/" + REPO
 TIMEOUT = 60
 
-# Текст README — в templates/ навыка, одна копия на оба порта
+# README text lives in the skill's templates/, one copy for both ports
 README_TEMPLATE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "templates", "README.md")
 
 
 def ci_parse_args(parser, argv=None):
-    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
+    """parse_args: parameter names and choices values are accepted in any case."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
         if tok.startswith('-') and tok.lower() in names:
             argv[i] = names[tok.lower()]
-    # choices — зеркало [ValidateSet]; канонизируем ДО разбора, иначе argparse отвергнет регистр
+    # choices mirrors [ValidateSet]; canonicalize BEFORE parsing, otherwise argparse rejects the case
     choice_map = {}
     for a in parser._actions:
         if a.choices:
@@ -80,7 +80,7 @@ def http_get(url):
 
 def main():
     parser = argparse.ArgumentParser(description="Download 1C platform XSD schemas into .v8-xsd", allow_abbrev=False)
-    # Версии одной строкой через запятую (не массивом).
+    # Versions as one comma-separated string (not an array).
     parser.add_argument("-Versions", default="")
     parser.add_argument("-OutPath", default="")
     parser.add_argument("-Ref", default="main")
@@ -89,7 +89,7 @@ def main():
     args = ci_parse_args(parser)
     ref = args.Ref
 
-    # --- Версии: проверяем до сети ---
+    # --- Versions: validate before hitting the network ---
     wanted = []
     if args.Versions:
         for v in re.split(r"[,;\s]+", args.Versions):
@@ -100,7 +100,7 @@ def main():
             if v not in wanted:
                 wanted.append(v)
 
-    # --- Каталог схем ---
+    # --- Schema directory ---
     cwd = os.getcwd()
     pj = _sg_find_v8project(cwd)
     if args.OutPath:
@@ -123,7 +123,7 @@ def main():
     if os.path.isfile(target):
         fail("каталог схем '%s' — это файл" % target)
 
-    # --- Состав репозитория ---
+    # --- Repository tree ---
     try:
         tree = json.loads(http_get("https://api.github.com/repos/%s/git/trees/%s?recursive=1"
                                    % (REPO, urllib.parse.quote(ref, safe=""))).decode("utf-8"))
@@ -158,12 +158,12 @@ def main():
     if missing:
         fail("версии %s нет в %s@%s (есть: %s)" % (", ".join(missing), REPO, ref, ", ".join(available)))
 
-    # --- Загрузка ---
+    # --- Download ---
     os.makedirs(target, exist_ok=True)
     fetched = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    # Происхождение — по версиям: уже лежащие файлы без -Force не перекачиваются, поэтому коммит
-    # версии обновляем, только когда её файлы действительно скачаны в этом запуске
+    # Provenance - per version: existing files are not re-downloaded without -Force, so the
+    # version's commit is updated only when its files were actually downloaded in this run
     src_path = os.path.join(target, "source.json")
     src_vers = {}
     if os.path.isfile(src_path):
@@ -188,7 +188,7 @@ def main():
             if os.path.exists(dest) and not args.Force:
                 kept += 1
                 continue
-            # Файлы берём по коммиту, а не по ветке: весь набор — из одного состояния репозитория
+            # Files are taken by commit, not by branch: the whole set comes from one repository state
             url = "https://raw.githubusercontent.com/%s/%s/%s" % (REPO, commit, f["path"])
             try:
                 data = http_get(url)
@@ -205,15 +205,15 @@ def main():
             line += ", уже было %d" % kept
         print(line)
 
-    # --- README и source.json ---
+    # --- README and source.json ---
     readme_path = os.path.join(target, "README.md")
     if not os.path.exists(readme_path) and os.path.isfile(README_TEMPLATE):
         shutil.copyfile(README_TEMPLATE, readme_path)
     local_versions = sorted((d for d in os.listdir(target)
                              if re.match(r"^\d+\.\d+$", d) and os.path.isdir(os.path.join(target, d))),
                             key=version_key)
-    # Руками, а не json.dumps: стабильное форматирование.
-    # Версия без записи о происхождении (скопирована вручную) — с пустыми полями.
+    # Written by hand, not json.dumps: stable formatting.
+    # A version without a provenance record (copied manually) - with empty fields.
     def esc_json(s):
         return s.replace("\\", "\\\\").replace('"', '\\"')
     ver_lines = []

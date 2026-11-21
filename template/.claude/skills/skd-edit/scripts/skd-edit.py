@@ -12,16 +12,16 @@ from lxml import etree
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
-# Регистронезависимый ввод: имена параметров и значения choices принимаются
-# в любом регистре (в argparse по умолчанию совпадение точное).
+# Case-insensitive input: parameter names and choices values are accepted
+# in any case (argparse matches exactly by default).
 def ci_parse_args(parser, argv=None):
-    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
+    """parse_args: parameter names and choices values are accepted in any case."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
         if tok.startswith('-') and tok.lower() in names:
             argv[i] = names[tok.lower()]
-    # choices — зеркало [ValidateSet]; канонизируем ДО разбора, иначе argparse отвергнет регистр
+    # choices mirrors [ValidateSet]; canonicalize BEFORE parsing, otherwise argparse rejects the case
     choice_map = {}
     for a in parser._actions:
         if a.choices:
@@ -103,7 +103,7 @@ def local_name(node):
 # ── helpers ──────────────────────────────────────────────────
 
 def esc_xml(s):
-    # Эскейп ЗНАЧЕНИЯ АТРИБУТА: & < > и кавычка — внутри "..." литеральная " невалидна.
+    # Escape an ATTRIBUTE VALUE: & < > and the quote - inside "..." a literal " is invalid.
     return s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;')
 
 
@@ -150,7 +150,7 @@ resolved_path = os.path.abspath(template_path)
 
 # ============================================================
 # Support guard (Ext/ParentConfigurations.bin) — see docs/1c-support-state-spec.md
-# Blocks edits of vendor objects "на замке" / read-only configs. Trigger = bin
+# Blocks edits of vendor objects on lock / read-only configs. Trigger = bin
 # present; reaction from .v8-project.json editingAllowedCheck (deny|warn|off,
 # default deny). Never throws (except sys.exit on deny) — errors degrade to allow.
 # ============================================================
@@ -363,33 +363,33 @@ output_param_types = {
 }
 
 
-# Алиас на локальный словарь: тело resolve_type_str ниже — общая реализация,
-# одинаковая во всех навыках (реестр в tests/skills/check-inline-drift.mjs).
+# Alias for the local dictionary: the body of resolve_type_str below is a shared implementation,
+# identical across all skills (registry in tests/skills/check-inline-drift.mjs).
 TYPE_SYNONYMS = type_synonyms
 
 
 def resolve_type_str(type_str):
     if not type_str:
         return type_str
-    # Прощающий ввод: ведущий префикс приходит копипастой из выгрузки. Без срезания он ломает
-    # поиск в словаре — русское имя типа остаётся непереведённым, и платформа отвечает
-    # «Неизвестное имя типа». cfg: снимаем всегда — он однозначно означает текущую конфигурацию.
-    # Сгенерированный dNpM: (в корпусе на этом URI встречаются d4p1, d5p1, d6p1 — имя префикса
-    # платформа выдаёт по порядку объявления) снимаем ТОЛЬКО у ссылочных типов, с точкой:
-    # сам по себе префикс многозначен — в формах d5p1:Chart, d5p1:TextDocument,
-    # d5p1:GeographicalSchema адресуют чужие пространства имён, и там он часть значения.
+    # Forgiving input: a leading prefix comes in copy-pasted from a dump. Without stripping it
+    # breaks the dictionary lookup - the Russian type name stays untranslated, and the platform
+    # answers «Неизвестное имя типа». cfg: is always stripped - it unambiguously means the current configuration.
+    # A generated dNpM: (in the corpus on this URI there are d4p1, d5p1, d6p1 - the platform
+    # issues the prefix name in declaration order) is stripped ONLY from reference types, with a dot:
+    # by itself the prefix is ambiguous - in the forms d5p1:Chart, d5p1:TextDocument,
+    # d5p1:GeographicalSchema they address foreign namespaces, and there it is part of the value.
     if type_str.startswith('cfg:'):
         type_str = type_str[4:]
     elif '.' in type_str and re.match(r'^d\d+p\d+:', type_str):
         type_str = type_str[type_str.index(':') + 1:]
-    # Хвосты, которые дописывает вывод meta-info к множествам типов: суффикс обобщённого метатипа
-    # и счётчик состава. Копипаста строки оттуда — обычный путь, поэтому хвост снимаем молча.
-    # Срезаем ТОЛЬКО эти известные формы: круглые скобки заняты параметризованными типами
-    # (Число(15,2)), слепой срез скобок сломал бы их.
+    # Tails that meta-info output appends to type sets: the generalized metatype suffix
+    # and the composition counter. Copy-pasting a line from there is a common path, so the tail
+    # is stripped silently. We cut ONLY these known forms: parentheses are used by parameterized
+    # types (Число(15,2)), a blind cut of parentheses would break them.
     type_str = re.sub(r'\s*\((?:все|all)\)\s*$', '', type_str, flags=re.IGNORECASE).strip()
     type_str = re.sub(r'\s*[—-]\s*(?:типов|types):\s*\d+\s*$', '', type_str, flags=re.IGNORECASE).strip()
     type_str = re.sub(r'\s*\((?:типов|types):\s*\d+\)\s*$', '', type_str, flags=re.IGNORECASE).strip()
-    # Параметризованные типы: Number(15,2), Строка(100)
+    # Parameterized types: Number(15,2), Строка(100)
     m = re.match(r'^([^(]+)\((.+)\)$', type_str)
     if m:
         base_name = m.group(1).strip()
@@ -398,7 +398,7 @@ def resolve_type_str(type_str):
         if resolved:
             return f'{resolved}({params})'
         return type_str
-    # Ссылочные типы: СправочникСсылка.Организации -> CatalogRef.Организации
+    # Reference types: СправочникСсылка.Организации -> CatalogRef.Организации
     if '.' in type_str:
         dot_idx = type_str.index('.')
         prefix = type_str[:dot_idx]
@@ -407,7 +407,7 @@ def resolve_type_str(type_str):
         if resolved:
             return f'{resolved}{suffix}'
         return type_str
-    # Простое имя
+    # Simple name
     resolved = TYPE_SYNONYMS.get(type_str.lower())
     if resolved:
         return resolved
@@ -442,20 +442,21 @@ def parse_field_shorthand(s):
     return result
 
 
-# lxml отдаёт фрагмент через tostring как самостоятельный документ и переобъявляет на нём каждый
-# префикс, который был в области видимости. Такие объявления избыточны: родительский контекст в точке
-# вставки их уже даёт. Но объявление, которого в корне НЕТ, значимо — например xmlns:d5p1 на <v8:Type>:
-# только оно связывает префикс, которым квалифицировано значение узла (d5p1:CatalogRef.X). Срезать его
-# нельзя, иначе отказ будет тихим: XML останется well-formed (префикс в тексте парсер не проверяет), а
-# 1С отвергнет тип. Поэтому выбрасываем лишь унаследованное — префикс, объявленный в корне с тем же URI.
+# lxml returns a fragment via tostring as a standalone document and re-declares on it every
+# prefix that was in scope. Such declarations are redundant: the parent context at the insertion
+# point already provides them. But a declaration that is NOT in the root is significant - e.g.
+# xmlns:d5p1 on <v8:Type>: only it binds the prefix that qualifies the node value
+# (d5p1:CatalogRef.X). It must not be cut, otherwise the failure will be silent: the XML stays
+# well-formed (the parser does not check prefixes in text), while 1C rejects the type. Therefore
+# we drop only the inherited ones - a prefix declared in the root with the same URI.
 def strip_inherited_xmlns(raw):
     if not raw:
         return raw
-    # Корень не распознан — сохраняем прежнее поведение, чтобы не менять статус-кво.
+    # Root not recognized - keep the previous behavior so as not to change the status quo.
     if not raw_root_opening:
         return re.sub(r' xmlns(?::\w+)?="[^"]*"', "", raw)
     root_ns = {}
-    # В корне атрибуты бывают разложены по строкам — разделитель \s+, а не пробел.
+    # In the root, attributes may be spread across lines - the separator is \s+, not a space.
     for m in re.finditer(r'\s+xmlns(?::(\w+))?="([^"]*)"', raw_root_opening):
         root_ns[m.group(1) or ""] = m.group(2)
 
@@ -1163,7 +1164,7 @@ def build_restriction_xml(restrict, indent):
     if not restrict:
         return ""
     restrict_map = {"noField": "field", "noFilter": "condition", "noCondition": "condition", "noGroup": "group", "noOrder": "order"}
-    # Флаги — в порядке XSD FieldUseRestriction (field condition group order), не в порядке ввода
+    # Flags - in XSD FieldUseRestriction order (field condition group order), not input order
     given = [restrict_map.get(r) for r in restrict]
     lines = [f"{indent}<useRestriction>"]
     for xml_name in ("field", "condition", "group", "order"):
@@ -1190,9 +1191,9 @@ def build_field_fragment(parsed, indent):
     elif parsed.get("title"):
         lines.append(build_mltext_xml("title", parsed["title"], f"{i}\t"))
 
-    # Остальные части собираем как (место по XSD, xml) и выводим по месту: сохранённые как есть
-    # узлы (attributeUseRestriction, presentationExpression, orderExpression, appearance, …)
-    # встают на своё место, а не в хвост после valueType. Незнакомые — в конец, как раньше.
+    # The remaining parts are collected as (XSD position, xml) and emitted in place: nodes kept
+    # as is (attributeUseRestriction, presentationExpression, orderExpression, appearance, …)
+    # take their place rather than the tail after valueType. Unknown ones - at the end, as before.
     field_order = XSD_CHILD_ORDER['DataSetFieldField']
     parts = []
     if parsed.get("restrict"):
@@ -1216,7 +1217,7 @@ def build_field_fragment(parsed, indent):
         m = re.match(r'^<(?:[\w.-]+:)?([\w.-]+)', raw)
         r = field_order.index(m.group(1)) if m and m.group(1) in field_order else len(field_order)
         parts.append((r, f"{i}\t" + raw))
-    # Устойчивая сортировка по месту: при равенстве — порядок добавления
+    # Stable sort by position: on ties - insertion order
     for _, x in sorted(parts, key=lambda t: t[0]):
         lines.append(x)
 
@@ -1343,9 +1344,9 @@ def build_param_fragment(parsed, indent):
 
     if parsed.get("autoDates"):
         param_name = parsed["name"]
-        # Canonical БСП pattern: title + valueType + value + useRestriction + expression
-        # NB: expr автодат собираем в переменную (не в f-string): бэкслеш в \uXXXX
-        # внутри {} f-строки — SyntaxError на python < 3.12 (PEP 701). Совместимость с 3.9.
+        # Canonical BSP pattern: title + valueType + value + useRestriction + expression
+        # NB: autoDate exprs are built into a variable (not an f-string): a backslash in \uXXXX
+        # inside an f-string {} - SyntaxError on python < 3.12 (PEP 701). Compatibility with 3.9.
         expr_start = esc_xml_text('&' + param_name + '.\u0414\u0430\u0442\u0430\u041d\u0430\u0447\u0430\u043b\u0430')
         b_lines = [
             f"{i}<parameter>",
@@ -1997,9 +1998,9 @@ def resolve_variant_settings():
     sys.exit(1)
 
 
-# Порядок детей по XSD схемы компоновки: чтение по схеме (XDTO) отвергает нарушенный порядок,
-# поэтому новый узел встаёт перед первым соседом, который по схеме идёт позже. Ключ — вид
-# контейнера: settings, поле набора или xsi:type элемента структуры (без xsi:type — группа).
+# Child order per the DCS XSD: schema reading (XDTO) rejects a broken order, so a new node
+# is placed before the first neighbor that comes later in the schema. The key is the container
+# kind: settings, dataset field or the xsi:type of a structure item (no xsi:type - group).
 XSD_CHILD_ORDER = {
     'settings': ['userFields', 'selection', 'filter', 'dataParameters', 'order', 'conditionalAppearance', 'outputParameters',
                  'item', 'additionalProperties', 'itemsViewMode', 'itemsUserSettingID', 'itemsUserSettingPresentation'],
@@ -2030,7 +2031,7 @@ def get_xsd_child_order(container):
 
 
 def find_ordered_insert_ref(container, child_name):
-    """Первый сосед, который по XSD идёт после child_name; None — вставлять в конец."""
+    """The first neighbor that comes after child_name per the XSD; None - insert at the end."""
     order = get_xsd_child_order(container)
     if child_name not in order:
         return None
@@ -2102,7 +2103,7 @@ raw_root_opening = _root_open_m.group(0) if _root_open_m else None
 
 # Detect line ending convention so save can normalize back to whatever the source used.
 line_ending = "\r\n" if "\r\n" in raw_original_text else "\n"
-# Round-trip: сохранить BOM / регистр encoding / финальный перенос как в оригинале.
+# Round-trip: preserve BOM / encoding case / final newline as in the original.
 _skd_had_bom = raw_original_bytes.startswith(b"\xef\xbb\xbf")
 _skd_body = raw_original_bytes[3:] if _skd_had_bom else raw_original_bytes
 _skd_enc_m = re.search(rb'encoding="([^"]+)"', _skd_body[:200])
@@ -2809,7 +2810,7 @@ elif operation == "set-structure":
     struct_items = parse_structure_shorthand(value_arg)
     settings_indent = get_child_indent(settings)
 
-    # Место по XSD: после outputParameters и прочих блоков, до additionalProperties/itemsViewMode
+    # XSD position: after outputParameters and other blocks, before additionalProperties/itemsViewMode
     ref_node = find_ordered_insert_ref(settings, "item")
 
     for struct_item in struct_items:
@@ -3303,7 +3304,7 @@ elif operation == "set-field-role":
         lines.append(f"{field_indent}</role>")
         frag_xml = "\n".join(lines)
 
-        # Место по XSD: после attributeUseRestriction, до presentationExpression/orderExpression/valueType
+        # XSD position: after attributeUseRestriction, before presentationExpression/orderExpression/valueType
         ref_node = find_ordered_insert_ref(field_el, "role")
         for node in import_fragment(xml_doc, frag_xml):
             insert_before_element(field_el, node, ref_node, field_indent)
@@ -3549,7 +3550,7 @@ if not dirty:
     sys.exit(0)
 
 xml_bytes = etree.tostring(tree, xml_declaration=True, encoding="UTF-8")
-# Round-trip: восстановить регистр encoding как в оригинале.
+# Round-trip: restore the encoding case as in the original.
 xml_bytes = xml_bytes.replace(
     b"<?xml version='1.0' encoding='UTF-8'?>",
     b'<?xml version="1.0" encoding="' + _skd_enc.encode("ascii") + b'"?>')
@@ -3560,20 +3561,20 @@ xml_bytes = xml_bytes.replace(
 xml_text = xml_bytes.decode("utf-8")
 if raw_root_opening:
     xml_text = re.sub(r"<DataCompositionSchema\b[^>]*>", lambda m: raw_root_opening, xml_text, count=1, flags=re.DOTALL)
-# Пустой элемент: XmlWriter отдаёт `<a />`, Конфигуратор пишет `<a/>` (lxml и так
-# пишет плотно — правка защитная, чтобы порты оставались байт-эквивалентны). Внутри
-# CDATA/комментария ` />` может быть содержимым (там `>` не экранируется),
-# поэтому они идут первыми ветками альтернации и возвращаются как есть.
+# Empty element: XmlWriter yields `<a />`, Configurator writes `<a/>` (lxml already writes
+# compactly - the edit is defensive, so ports stay byte-equivalent). Inside a
+# CDATA/comment ` />` may be content (there `>` is not escaped),
+# therefore they are the first alternation branches and are returned as is.
 xml_text = re.sub(r"(?s)<!\[CDATA\[.*?\]\]>|<!--.*?-->|(?<=\S) />",
                   lambda m: "/>" if m.group(0) == " />" else m.group(0), xml_text)
 
-# Канонизировать переносы к LF (убирает возможный &#13;), затем к стилю источника.
+# Canonicalize line breaks to LF (removes a possible &#13;), then to the source style.
 xml_text = xml_text.replace("&#13;\n", "\n").replace("&#13;", "").replace("\r\n", "\n").replace("\r", "\n")
 if line_ending == "\r\n":
     xml_text = xml_text.replace("\n", "\r\n")
 xml_bytes = xml_text.encode("utf-8")
 
-# Финальный перенос — как в оригинале.
+# Final newline - as in the original.
 if line_ending == "\r\n":
     xml_bytes = xml_bytes.rstrip(b"\r\n")
     if _skd_final_nl:

@@ -2,7 +2,7 @@
 // Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 /**
  * Shared function strings embedded into page.evaluate() generators.
- * Не экспортируются наружу через dom.mjs facade — внутренняя кухня.
+ * Not exported through the dom.mjs facade - internal details.
  */
 
 /** Find visible #modalSurface. 1C may leave multiple #modalSurface in DOM (duplicate id),
@@ -21,7 +21,7 @@ export const HAS_VISIBLE_MODAL_FN = `function hasVisibleModal() {
  * form's horizontal viewport (the `.gridLine` spans ALL columns, frozen + scrollable),
  * so `mouse.click` at that X falls on an overlay outside the visible grid and the row
  * is never hit — the click silently does nothing. Seen on narrow modal selection forms
- * with many columns (множественный выбор) and the `not_selectable` bug on selection forms.
+ * with many columns (multiple selection) and the `not_selectable` bug on selection forms.
  *
  * Picks the first visible non-checkbox cell that HAS text (so center-clicking never
  * toggles a checkbox/picture mark), skips the first column on tree grids (it holds the
@@ -427,11 +427,11 @@ function resolveColumnByName(model, name) {
       || null;
 }`;
 
-// Селекторы детекции формы. EDIT_SEL — «редактируемые» контролы (поля/кнопки): их наличие
-// исторически = «это форма». Но страницы настроек/справки (напр. «Интернет-поддержка и сервисы»)
-// собраны только из гиперссылок/frameButton/групп и НЕ имеют ни одного из этих трёх → форма не
-// детектировалась (form=null). ANY_SEL добавляет контентные/интерактивные классы декораций, чтобы
-// такие формы регистрировались. form0 (рабочий стол, тоже полон гиперссылок) исключается фильтром n>0.
+// Form detection selectors. EDIT_SEL - "editable" controls (fields/buttons): their presence
+// historically = "this is a form". But settings/help pages (e.g. «Интернет-поддержка и сервисы»)
+// consist only of hyperlinks/frameButton/groups and have NONE of these three -> the form was not
+// detected (form=null). ANY_SEL adds content/interactive decoration classes so that
+// such forms get registered. form0 (desktop, also full of hyperlinks) is excluded by the n>0 filter.
 const FORM_DETECT_EDIT_SEL = 'input.editInput[id], textarea[id], a.press[id]';
 const FORM_DETECT_ANY_SEL = FORM_DETECT_EDIT_SEL + ', .staticTextHyper[id], .frameButton[id], .checkbox[id], .radio[id], .tumblerItem[id], .grid[id]';
 
@@ -441,8 +441,8 @@ export const DETECT_FORM_FN = HAS_VISIBLE_MODAL_FN + `
 function detectForm() {
   const editSel = ${JSON.stringify(FORM_DETECT_EDIT_SEL)};
   const anySel = ${JSON.stringify(FORM_DETECT_ANY_SEL)};
-  const editCounts = {};   // строгие поля/кнопки
-  const anyCounts = {};    // + контентные декорации
+  const editCounts = {};   // strict fields/buttons
+  const anyCounts = {};    // + content decorations
   document.querySelectorAll(anySel).forEach(el => {
     if (el.offsetWidth === 0) return;
     const m = el.id.match(/^form(\\d+)_/);
@@ -459,9 +459,9 @@ function detectForm() {
     const maxForm = Math.max(...candidates);
     if (anyCounts[maxForm] >= 1) return maxForm;
   }
-  // Двухуровневый выбор: пока есть формы с редактируемыми контролами — выбираем по ним (прежнее
-  // поведение, обычные формы не сдвигаются). Только когда у ВСЕХ кандидатов их нет (info-страница) —
-  // выбираем по расширенному счёту.
+  // Two-tier selection: while forms with editable controls exist - pick by them (previous
+  // behavior, regular forms are not shifted). Only when ALL candidates lack them (info page) -
+  // pick by the extended count.
   const editable = candidates.filter(n => editCounts[n] > 0);
   const pool = editable.length ? editable : candidates;
   const metric = editable.length ? editCounts : anyCounts;
@@ -815,20 +815,20 @@ function readForm(p) {
   if (iframeCount) result.iframes = iframeCount;
 
   // Collapsible / popup groups — surface that part of the form is hidden + its state.
-  // Идентификация раскрываемой группы (есть заголовок <base>#title_text и один из признаков):
-  //   • заголовок — гиперссылка (.staticTextHyper: ControlRepresentation=TitleHyperlink);
-  //   • рядом кнопка-каретка <base>#titleBtn (ControlRepresentation=Picture);
-  //   • есть панель <base>#panel_div — это ВСПЛЫВАЮЩАЯ (popup) группа.
-  // Обычные (несворачиваемые) группы не имеют ничего из этого — их не показываем.
-  // Состояние — groupCollapsed (GROUP_STATE_FN), общая с резолвером цели клика.
+  // Identification of an expandable group (there is a <base>#title_text header and one of the signs):
+  //   • the header is a hyperlink (.staticTextHyper: ControlRepresentation=TitleHyperlink);
+  //   • next to it a caret button <base>#titleBtn (ControlRepresentation=Picture);
+  //   • there is a panel <base>#panel_div - this is a POPUP group.
+  // Regular (non-collapsible) groups have none of this - we do not show them.
+  // State - groupCollapsed (GROUP_STATE_FN), shared with the click-target resolver.
   const groups = [];
   document.querySelectorAll('[id^="' + p + '"][id$="#title_text"]').forEach(tt => {
     if (tt.offsetWidth === 0 && tt.offsetHeight === 0) return;
     const base = tt.id.slice(0, -('#title_text'.length));
-    const panelDiv = document.getElementById(base + '#panel_div');   // popup-маркер
+    const panelDiv = document.getElementById(base + '#panel_div');   // popup marker
     const isHyper = tt.classList.contains('staticTextHyper');
     const hasBtn = !!document.getElementById(base + '#titleBtn');
-    if (!isHyper && !hasBtn && !panelDiv) return; // обычная (несворачиваемая) группа
+    if (!isHyper && !hasBtn && !panelDiv) return; // regular (non-collapsible) group
     const g = { name: base.replace(p, ''), title: nbsp(tt.innerText?.trim() || '') };
     if (panelDiv) g.behavior = 'popup';
     const collapsed = groupCollapsed(base);

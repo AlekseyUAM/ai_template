@@ -1,4 +1,6 @@
 import json
+import ntpath
+import posixpath
 
 from .project_checks import infer_db_kind
 
@@ -67,6 +69,18 @@ def git_commit_all(prov, project_dir, message="init", *, config=None) -> None:
         raise RuntimeError(res.stderr or "git commit не удался")
 
 
+def _join_target(root: str, name: str) -> str:
+    """Join a path on the target's filesystem, not the monitor's.
+
+    A remote (ssh/docker) target is POSIX even when the monitor runs Windows,
+    so `os.path.join` would produce backslashes there. The drive/backslash
+    check picks the Windows flavor for local paths and POSIX otherwise.
+    """
+    if (len(root) >= 2 and root[1] == ":") or "\\" in root:
+        return ntpath.normpath(ntpath.join(root, name))
+    return posixpath.join(root, name)
+
+
 def _platform_path(prov, platform_dir: str) -> str:
     # 1c-batch ждёт путь к бинарнику 1cv8 (не каталог). Пустая строка → CLI
     # определит платформу сам (find_platform_binary).
@@ -75,7 +89,7 @@ def _platform_path(prov, platform_dir: str) -> str:
     if prov.is_file(platform_dir):
         return platform_dir
     for name in ("1cv8", "1cv8.exe"):
-        cand = f"{platform_dir}/{name}"
+        cand = _join_target(platform_dir, name)
         if prov.exists(cand):
             return cand
     return ""

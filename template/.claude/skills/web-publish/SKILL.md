@@ -1,6 +1,6 @@
 ---
 name: web-publish
-description: Публикация информационной базы 1С через Apache. Используй когда пользователь просит опубликовать базу, сервисы, настроить веб-доступ, веб-клиент, открыть в браузере
+description: Publishing a 1C infobase through Apache. Use when the user asks to publish a database, services, set up web access, web client, open in a browser
 argument-hint: "[database]"
 allowed-tools:
   - Bash
@@ -9,9 +9,9 @@ allowed-tools:
   - AskUserQuestion
 ---
 
-# /web-publish — Публикация 1С через Apache
+# /web-publish - Publishing 1C through Apache
 
-Генерирует `default.vrd`, настраивает `httpd.conf` и запускает Apache HTTP Server для веб-доступа к информационной базе. При необходимости скачивает portable Apache. Идемпотентный — повторный вызов обновляет конфигурацию.
+Generates `default.vrd`, configures `httpd.conf` and starts Apache HTTP Server for web access to the infobase. Downloads portable Apache if needed. Idempotent - a repeated call updates the configuration.
 
 ## Usage
 
@@ -22,73 +22,73 @@ allowed-tools:
 /web-publish dev --port 9090
 ```
 
-## Параметры подключения
+## Connection parameters
 
-Прочитай `.v8-project.json` из корня проекта и разреши базу:
-1. Если пользователь указал параметры подключения (путь, сервер) — используй напрямую
-2. Если указал базу по имени — ищи по id / alias / name в `.v8-project.json`
-3. Если не указал — сопоставь текущую ветку Git с `databases[].branches`
-4. Если ветка не совпала — используй `default`
+Read `.v8-project.json` from the project root and resolve the database:
+1. If the user specified connection parameters (path, server) - use them directly
+2. If the user specified a database by name - search by id / alias / name in `.v8-project.json`
+3. If not specified - match the current Git branch against `databases[].branches`
+4. If the branch did not match - use `default`
 
-**ОБЯЗАТЕЛЬНО передавай все найденные параметры:**
-- **`-V8Path`** — `v8path` найденной записи базы, иначе корневой `v8path`. Не задан ни там, ни там — не передавай, но версия платформы тогда выберется автоматически и может оказаться не той
-- **`-UserName`** — из поля `user` найденной записи базы (если есть)
-- **`-Password`** — из поля `password` найденной записи базы (если есть)
-- **`-ApachePath`** — из `webPath` в `.v8-project.json` (если есть)
+**ALWAYS pass all found parameters:**
+- **`-V8Path`** - `v8path` of the found database record, otherwise the root `v8path`. If neither is set - do not pass it, but then the platform version is chosen automatically and may be the wrong one
+- **`-UserName`** - from the `user` field of the found database record (if present)
+- **`-Password`** - from the `password` field of the found database record (if present)
+- **`-ApachePath`** - from `webPath` in `.v8-project.json` (if present)
 
-Если файла `.v8-project.json` нет — предложи `/db-list add`.
+If the `.v8-project.json` file does not exist - offer `/db-list add`.
 
-## Команда
+## Command
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/web-publish.py" <параметры>
 ```
 
-### Параметры скрипта
+### Script parameters
 
-| Параметр | Обязательный | Описание |
+| Parameter | Required | Description |
 |----------|:------------:|----------|
-| `-V8Path <путь>` | нет | Каталог bin платформы (для wsap24.dll) |
-| `-InfoBasePath <путь>` | * | Файловая база |
-| `-InfoBaseServer <сервер>` | * | Сервер 1С (для серверной базы) |
-| `-InfoBaseRef <имя>` | * | Имя базы на сервере |
-| `-UserName <имя>` | нет | Имя пользователя |
-| `-Password <пароль>` | нет | Пароль |
-| `-AppName <имя>` | нет | Имя публикации (по умолчанию из имени каталога базы) |
-| `-ApachePath <путь>` | нет | Корень Apache (по умолчанию `tools/apache24`) |
-| `-Port <порт>` | нет | Порт (по умолчанию `8081`) |
-| `-Manual` | нет | Не скачивать — только проверить и дать инструкцию |
+| `-V8Path <путь>` | no | Platform bin directory (for wsap24.dll) |
+| `-InfoBasePath <путь>` | * | File infobase |
+| `-InfoBaseServer <сервер>` | * | 1C server (for a server infobase) |
+| `-InfoBaseRef <имя>` | * | Database name on the server |
+| `-UserName <имя>` | no | User name |
+| `-Password <пароль>` | no | Password |
+| `-AppName <имя>` | no | Publication name (default from the database directory name) |
+| `-ApachePath <путь>` | no | Apache root (default `tools/apache24`) |
+| `-Port <порт>` | no | Port (default `8081`) |
+| `-Manual` | no | Do not download - only check and give instructions |
 
-> `*` — нужен либо `-InfoBasePath`, либо пара `-InfoBaseServer` + `-InfoBaseRef`
+> `*` - either `-InfoBasePath` is needed, or the pair `-InfoBaseServer` + `-InfoBaseRef`
 
-## Несколько пользователей одной базы
+## Multiple users of one database
 
-Повторный вызов с тем же AppName **заменяет** публикацию (идемпотентность). Это используется для:
-- смены пользователя: «опубликуй под Ивановым» → тот же AppName, новый `-UserName`
-- перезапуска после `/web-stop`: тот же вызов поднимает Apache обратно
+A repeated call with the same AppName **replaces** the publication (idempotency). This is used for:
+- changing the user: "publish under Ivanov" -> same AppName, new `-UserName`
+- restart after `/web-stop`: the same call brings Apache back up
 
-Если пользователь просит **параллельную** публикацию под другим пользователем (для тестирования разных наборов прав), добавь суффикс к AppName:
-- база `bpdemo`, пользователь `Иванов` → `-AppName bpdemo-ivanov`
-- база `bpdemo`, пользователь `Admin` → `-AppName bpdemo-admin` (или просто `bpdemo`)
+If the user asks for a **parallel** publication under another user (to test different permission sets), add a suffix to AppName:
+- database `bpdemo`, user `Иванов` -> `-AppName bpdemo-ivanov`
+- database `bpdemo`, user `Admin` -> `-AppName bpdemo-admin` (or just `bpdemo`)
 
-Ключевые слова: «ещё одну публикацию», «дополнительно», «параллельно», «под другим пользователем не убирая текущую».
+Keywords: "one more publication", "additionally", "in parallel", "under another user without removing the current one".
 
-## После выполнения
+## After execution
 
-1. Сообщи URL-ы:
-   - Веб-клиент: `http://localhost:{Port}/{AppName}`
+1. Report the URLs:
+   - Web client: `http://localhost:{Port}/{AppName}`
    - OData: `http://localhost:{Port}/{AppName}/odata/standard.odata`
-   - HTTP-сервисы: `http://localhost:{Port}/{AppName}/hs/<RootUrl>/...`
-   - Web-сервисы: `http://localhost:{Port}/{AppName}/ws/<Имя>?wsdl`
-2. Предложи открыть в браузере
-3. Если нужно протестировать сервис — помоги составить запрос
-4. Если база не зарегистрирована — предложи `/db-list add`
+   - HTTP services: `http://localhost:{Port}/{AppName}/hs/<RootUrl>/...`
+   - Web services: `http://localhost:{Port}/{AppName}/ws/<Имя>?wsdl`
+2. Offer to open it in the browser
+3. If a service needs testing - help compose a request
+4. If the database is not registered - offer `/db-list add`
 
-Сервисы расширений публикуются наравне с сервисами конфигурации. Если сервис расширения всё же
-отдаёт 404 (HTTP) или 500 «Сервис не найден» (SOAP) — расширение не применено к базе данных:
+Extension services are published on par with configuration services. If an extension service still
+returns 404 (HTTP) or 500 "Сервис не найден" (SOAP) - the extension has not been applied to the database:
 `/db-update -Extension <имя>`.
 
-## Примеры
+## Examples
 
 ```bash
 # Файловая база

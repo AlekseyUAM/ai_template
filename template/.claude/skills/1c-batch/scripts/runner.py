@@ -1,4 +1,4 @@
-"""Запуск процессов 1cv8 — интерактивный и пакетный режимы."""
+"""Run 1cv8 processes - interactive and batch modes."""
 
 import shlex
 import signal
@@ -13,12 +13,13 @@ from .config import Config
 
 
 def _pdeathsig_preexec() -> None:
-    """Linux: прибить дочерний 1cv8, если родитель (обёртка) погибнет.
+    """Linux: kill the child 1cv8 if the parent (wrapper) dies.
 
-    Защита от «осиротевших» процессов конфигуратора: если обёртку снимет
-    таймаут/сигнал, незавершённая реструктуризация в осиротевшем 1cv8 может
-    оставить ИБ в состоянии «Infobase structure error». PR_SET_PDEATHSIG=1
-    заставляет ядро послать потомку SIGKILL при смерти родителя.
+    Protection against orphaned Configurator processes: if the wrapper is
+    killed by a timeout/signal, an unfinished restructure in the orphaned 1cv8
+    may leave the infobase in the "Infobase structure error" state.
+    PR_SET_PDEATHSIG=1 makes the kernel send SIGKILL to the child when the
+    parent dies.
     """
     try:
         import ctypes
@@ -30,17 +31,17 @@ def _pdeathsig_preexec() -> None:
 
 
 def _run_kwargs() -> dict:
-    """Параметры subprocess.run: привязать жизнь 1cv8 к обёртке (только Linux)."""
+    """subprocess.run parameters: tie the life of 1cv8 to the wrapper (Linux only)."""
     if sys.platform.startswith("linux"):
         return {"preexec_fn": _pdeathsig_preexec}
     return {}
 
 
 def build_connection_args(cfg: Config) -> list[str]:
-    """Формирование аргументов подключения к ИБ.
+    """Build infobase connection arguments.
 
-    Значения передаются отдельными argv-элементами без литеральных кавычек —
-    их добавит шелл/list2cmdline при необходимости. 1С получает чистое значение.
+    Values are passed as separate argv items without literal quotes -
+    the shell/list2cmdline adds them when needed. 1C receives the raw value.
     """
     if cfg.connection_type == "server":
         return ["/S", f"{cfg.server}/{cfg.base}"]
@@ -48,7 +49,7 @@ def build_connection_args(cfg: Config) -> list[str]:
 
 
 def build_auth_args(cfg: Config) -> list[str]:
-    """Формирование аргументов аутентификации."""
+    """Build authentication arguments."""
     args: list[str] = []
     if cfg.user:
         args.extend(["/N", cfg.user])
@@ -58,9 +59,9 @@ def build_auth_args(cfg: Config) -> list[str]:
 
 
 def build_base_command(cfg: Config, mode: str) -> list[str]:
-    """Формирование базовой командной строки 1cv8 с общими параметрами подключения.
+    """Build the base 1cv8 command line with common connection parameters.
 
-    mode: "ENTERPRISE", "DESIGNER" или "CREATEINFOBASE"
+    mode: "ENTERPRISE", "DESIGNER" or "CREATEINFOBASE"
     """
     cmd = [cfg.platform_path, mode]
     cmd.extend(build_connection_args(cfg))
@@ -69,7 +70,7 @@ def build_base_command(cfg: Config, mode: str) -> list[str]:
 
 
 def build_log_path(cfg: Config, command_name: str) -> Path:
-    """Формирование пути к лог-файлу для пакетной команды."""
+    """Build the log file path for a batch command."""
     log_dir = Path(cfg.log_dir)
     log_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -77,11 +78,11 @@ def build_log_path(cfg: Config, command_name: str) -> Path:
 
 
 def read_log(log_path: Path) -> str | None:
-    """Чтение и возврат содержимого лог-файла (/Out)."""
+    """Read and return the contents of the log file (/Out)."""
     if not log_path.exists():
         return None
     try:
-        # 1С может писать в разных кодировках
+        # 1C may write in different encodings
         for encoding in ("utf-8-sig", "utf-8", "cp1251", "cp866"):
             try:
                 return log_path.read_text(encoding=encoding)
@@ -93,18 +94,18 @@ def read_log(log_path: Path) -> str | None:
 
 
 def _echo_command(cmd: list[str]) -> None:
-    """Печать команды для пользователя — кавычит значения только там, где это нужно."""
+    """Print the command for the user - quote values only where needed."""
     click.echo(f"Запуск: {shlex.join(cmd)}")
 
 
 def run_interactive(cfg: Config, mode: str, extra_args: list[str] | None = None,
                     wait: bool = False) -> int:
-    """Запуск 1С в режиме предприятия/конфигуратора.
+    """Run 1C in Enterprise/Configurator mode.
 
-    mode: "ENTERPRISE" или "DESIGNER"
-    wait=False — не ждать завершения (интерактивный запуск приложения).
-    wait=True  — дождаться завершения сеанса (автоматический прогон: /C, /Execute).
-                 Возвращает код возврата процесса.
+    mode: "ENTERPRISE" or "DESIGNER"
+    wait=False - do not wait for completion (interactive app launch).
+    wait=True  - wait for the session to finish (automated run: /C, /Execute).
+                 Returns the process exit code.
     """
     errors = cfg.validate()
     if errors:
@@ -118,18 +119,18 @@ def run_interactive(cfg: Config, mode: str, extra_args: list[str] | None = None,
 
     _echo_command(cmd)
     if wait:
-        # Ждём завершения сеанса, чтобы вызывающий знал, что прогон закончился,
-        # и не стартовал следующий этап параллельно с живым сеансом.
+        # Wait for the session to finish so the caller knows the run is over
+        # and does not start the next stage in parallel with a live session.
         return subprocess.run(cmd, **_run_kwargs()).returncode
     subprocess.Popen(cmd)
     return 0
 
 
 def run_batch(cfg: Config, command_name: str, extra_args: list[str]) -> int:
-    """Запуск 1С в пакетном режиме (DESIGNER с /DisableStartupDialogs).
+    """Run 1C in batch mode (DESIGNER with /DisableStartupDialogs).
 
-    Возвращает код возврата процесса.
-    Логирует вывод (/Out) в файл и выводит содержимое при ошибке.
+    Returns the process exit code.
+    Logs the output (/Out) to a file and prints its contents on error.
     """
     errors = cfg.validate()
     if errors:
@@ -145,11 +146,11 @@ def run_batch(cfg: Config, command_name: str, extra_args: list[str]) -> int:
     cmd.extend(extra_args)
 
     _echo_command(cmd)
-    # Без таймаута: обновление конфигурации БД может идти часами. От осиротевания
-    # при гибели обёртки защищает _run_kwargs() (PR_SET_PDEATHSIG на Linux).
+    # No timeout: updating the DB configuration can take hours. _run_kwargs()
+    # protects against orphaning when the wrapper dies (PR_SET_PDEATHSIG on Linux).
     result = subprocess.run(cmd, **_run_kwargs())
 
-    # Чтение и вывод содержимого лога
+    # Read and print the log contents
     log_content = read_log(log_path)
 
     if result.returncode != 0:
@@ -167,10 +168,10 @@ def run_batch(cfg: Config, command_name: str, extra_args: list[str]) -> int:
 
 
 def run_create_infobase(cfg: Config, path: str, extra_args: list[str] | None = None) -> int:
-    """Создание информационной базы.
+    """Create an infobase.
 
-    Использует особый синтаксис строки соединения `File="..."` — это **одно**
-    argv-значение, кавычки здесь часть синтаксиса 1С, а не оформление.
+    Uses the special connection string syntax `File="..."` - this is **one**
+    argv value; the quotes are part of 1C syntax here, not formatting.
     """
     if not cfg.platform_path:
         click.echo("Ошибка: Не задан путь к платформе 1С (platform_path).", err=True)

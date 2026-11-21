@@ -1,6 +1,6 @@
 ---
 name: cf-init
-description: Создать пустую конфигурацию 1С (scaffold XML-исходников). Используй когда нужно начать новую конфигурацию с нуля
+description: Create an empty 1C configuration (scaffold XML sources). Use when you need to start a new configuration from scratch
 argument-hint: <Name> [-Synonym <name>] [-OutputDir src]
 allowed-tools:
   - Bash
@@ -8,41 +8,39 @@ allowed-tools:
   - Glob
 ---
 
-# /cf-init — Создание пустой конфигурации 1С
+# /cf-init - Creating an empty 1C configuration
 
-Создаёт scaffold исходников пустой конфигурации 1С: `Configuration.xml`, `Languages/Русский.xml`.
+Creates a scaffold of empty 1C configuration sources: `Configuration.xml`, `Languages/Русский.xml`.
 
-## Параметры и команда
+## Parameters and command
 
-| Параметр | Описание |
+| Parameter | Description |
 |----------|----------|
-| `Name` | Имя конфигурации (обязат.) |
-| `Synonym` | Синоним (= Name если не указан) |
-| `OutputDir` | Каталог для создания (default: `src`) |
-| `Version` | Версия конфигурации |
-| `Vendor` | Поставщик |
-| `CompatibilityMode` | Режим совместимости (default: `Version8_3_24`) |
-| `FormatVersion` | Версия формата выгрузки (default: `2.17`) |
+| `Name` | Configuration name (required) |
+| `Synonym` | Synonym (= Name if not specified) |
+| `OutputDir` | Directory to create (default: `src`) |
+| `Version` | Configuration version |
+| `Vendor` | Vendor |
+| `CompatibilityMode` | Compatibility mode (default: `Version8_3_24`) |
+| `FormatVersion` | Export format version (default: `2.17`) |
 
-Оба параметра задаются от **целевой платформы** — той, на которой конфигурация будет работать, — но по
-разным правилам.
+Both parameters are set from the **target platform** - the one the configuration will run on - but by different rules.
 
-`FormatVersion` — **не выше** версии формата целевой платформы: 8.3.24 — `2.17`, 8.3.25 — `2.18`,
-8.3.26 — `2.19`, 8.3.27 — `2.20`, 8.5 — `2.21`. Ниже брать можно: платформа читает свой формат и любой
-более старый, поэтому дефолт `2.17` подходит для всей линейки 8.3.24 и выше.
+`FormatVersion` - **not higher** than the target platform format version: 8.3.24 - `2.17`, 8.3.25 - `2.18`,
+8.3.26 - `2.19`, 8.3.27 - `2.20`, 8.5 - `2.21`. A lower one may be taken: the platform reads its own format and any
+older one, so the default `2.17` fits the whole 8.3.24 and higher line.
 
-`CompatibilityMode` влияет на доступную функциональность. Если в задаче не оговорено иное — **равен
-целевой платформе** (`Version8_3_27` для 8.3.27); это то же самое, что «Не использовать» в
-Конфигураторе, и именно такое значение платформа проставляет новой базе. Более низкий режим берут
-осознанно — когда конфигурация должна работать и на старых платформах; он отключает возможности,
-появившиеся позже. Выше целевой платформы — нельзя: такая конфигурация загрузится, но работать на ней
-не будет.
+`CompatibilityMode` affects the available functionality. If the task does not say otherwise - **equal to the
+target platform** (`Version8_3_27` for 8.3.27); this is the same as "Do not use" in the
+Configurator, and this is exactly the value the platform sets for a new infobase. A lower mode is taken
+deliberately - when the configuration must also work on older platforms; it disables features that
+appeared later. Above the target platform - not allowed: such a configuration will load, but will not work on it.
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/cf-init.py" -Name "МояКонфигурация"
 ```
 
-## Примеры
+## Examples
 
 ```bash
 # Базовая конфигурация
@@ -55,7 +53,7 @@ python "${CLAUDE_SKILL_DIR}/scripts/cf-init.py" -Name "МояКонфигура�
 ... -Name TestCfg -FormatVersion 2.20 -CompatibilityMode Version8_3_27 -OutputDir test-tmp/cf3
 ```
 
-## Верификация
+## Verification
 
 ```
 /cf-init TestConfig -OutputDir test-tmp/cf

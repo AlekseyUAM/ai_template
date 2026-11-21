@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""PostToolUse-хук: напоминает прогнать статанализ после правки *.bsl."""
+"""PostToolUse hook: reminds to run static analysis after editing *.bsl."""
 import json
 import sys
 
@@ -21,15 +21,15 @@ def build_output(event: dict) -> dict:
         return {"hookSpecificOutput": {
             "hookEventName": "PostToolUse",
             "additionalContext": (
-                "[ai1c] Изменён BSL-модуль — прогони статический анализ "
-                "(навык mcp-usage, MCP bsl_ls, mcp__bsl_ls__check) с обязательным "
-                "sha256 файла (`sha256sum <файл>`); текст модуля не перепечатывай."),
+                "[ai1c] BSL module changed - run static analysis "
+                "(skill mcp-usage, MCP bsl_ls, mcp__bsl_ls__check) with the mandatory "
+                "file sha256 (`sha256sum <file>`); do not reprint the module text."),
         }}
     return {}
 
 
 def main() -> None:
-    # Ошибка хука не должна ломать PostToolUse: молча выходим с кодом 0.
+    # A hook error must not break PostToolUse: exit silently with code 0.
     try:
         event = json.load(sys.stdin)
         out = build_output(event) if isinstance(event, dict) else {}

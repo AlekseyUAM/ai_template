@@ -52,14 +52,25 @@ def test_reader_never_sees_torn_json(tmp_path):
     errors = []
 
     def writer():
-        for _ in range(150):
-            mod.update(str(d), "s0", "done")
-        stop.set()
+        try:
+            # `restart` is valid on every iteration; `done` is only valid from
+            # `running`, and a SystemExit from it would kill this thread
+            # before `stop` is set.
+            for _ in range(150):
+                mod.update(str(d), "s0", "restart")
+        except BaseException as exc:           # noqa: BLE001
+            errors.append(exc)
+        finally:
+            stop.set()
 
     def reader():
         while not stop.is_set():
             try:
                 json.loads(path.read_text(encoding="utf-8"))
+            except PermissionError:
+                # Windows: the atomic os.replace briefly locks the target,
+                # so a reader can hit a sharing violation. Not torn JSON.
+                continue
             except ValueError as exc:
                 errors.append(exc)
                 return
@@ -79,6 +90,9 @@ def test_approve_and_stage_update_do_not_lose_each_other(tmp_path):
         d = ts.task_dir(tmp_path, s.id)
         # approve идёт в analyze, update — в tests: разные поля одного файла.
         task = {"id": int(s.id), "identifier": s.id}
+        # `done` is only valid from `running`; move the stage first, while the
+        # concurrent part stays approve-vs-update.
+        mod.update(str(d), "tests", "running")
         barrier = threading.Barrier(2)
         errors = []
 

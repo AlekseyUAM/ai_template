@@ -105,6 +105,12 @@ class Monitor:
         # shlex корректно разбивает аргументы/пути с пробелами (naive .split()
         # их ломал); posix=False на Windows — чтобы не съедать бэкслеши путей.
         base = shlex.split(cmd, posix=(os.name != "nt"))
+        if os.name == "nt":
+            # posix=False keeps the quotes (needed to preserve Windows
+            # backslashes); strip the surrounding quotes ourselves so a
+            # quoted path with spaces stays one argument.
+            base = [t[1:-1] if len(t) >= 2 and t[0] == t[-1]
+                    and t[0] in "\"'" else t for t in base]
         if base and base[-1] == ".":
             base = base[:-1]          # хвостовой "." — аргумент интерактивного режима
         return base + ["-p", prompt]

@@ -1,9 +1,9 @@
-"""Конфиг хука code-index-guard (порт main.rs: GuardConfig и TOML-парсеры).
+"""code-index-guard hook config (port of main.rs: GuardConfig and TOML parsers).
 
-Формат — TOML-подобный, разбирается построчно: поддерживаются top-level
-ключи-строки и секции [[local]] / [[paths]] с ключами path и alias.
-Полноценный TOML не нужен, а ошибки разбора трактуются как «нет настроек»:
-без путей хук ничего не перехватывает.
+The format is TOML-like, parsed line by line: top-level
+string keys and [[local]] / [[paths]] sections with path and alias keys are supported.
+Full TOML is not needed, and parse errors are treated as "no settings":
+without paths the hook intercepts nothing.
 """
 import os
 from dataclasses import dataclass, field
@@ -12,8 +12,8 @@ from pathlib import Path
 from .paths import norm_prefix
 
 DEFAULT_MCP_PREFIX = "mcp__code_index__"
-# Сколько отказов подряд допускается для одного (session, tool, input), прежде
-# чем пропустить нативный вызов. 0 — не уступать никогда (прежнее поведение).
+# How many consecutive denials are allowed for one (session, tool, input) before
+# letting the native call through. 0 - never yield (previous behavior).
 DEFAULT_MAX_DENIES = 2
 
 
@@ -52,9 +52,9 @@ def daemon_toml_path(cfg: GuardConfig) -> str | None:
 
 def indexed_paths(cfg: GuardConfig, *, case_insensitive: bool | None = None
                   ) -> list[tuple[str, str]]:
-    """[(norm_prefix, alias)]: репо из daemon.toml, затем [[local]] без повторов пути.
+    """[(norm_prefix, alias)]: repos from daemon.toml, then [[local]] without duplicate paths.
 
-    daemon.toml приоритетен: его alias сохраняется при совпадении пути.
+    daemon.toml takes priority: its alias is kept when the path matches.
     """
     v: list[tuple[str, str]] = []
     seen: set[str] = set()
@@ -78,10 +78,10 @@ def indexed_paths(cfg: GuardConfig, *, case_insensitive: bool | None = None
 
 
 def parse_path_blocks(content: str, header: str) -> list[tuple[str, str]]:
-    """Секции header (напр. "[[local]]") → [(path, alias)].
+    """header sections (e.g. "[[local]]") -> [(path, alias)].
 
-    alias по умолчанию — последний сегмент path в нижнем регистре,
-    пробелы заменены на `_`.
+    alias defaults to the last path segment in lower case,
+    spaces replaced with `_`.
     """
     out: list[tuple[str, str]] = []
     for block in content.split(header)[1:]:
@@ -90,7 +90,7 @@ def parse_path_blocks(content: str, header: str) -> list[tuple[str, str]]:
         for line in block.splitlines():
             l = line.strip()
             if l.startswith("["):
-                break  # следующая секция — конец блока
+                break  # next section - end of block
             v = kv(l, "path")
             if v is not None:
                 if path is None:
@@ -108,10 +108,10 @@ def parse_path_blocks(content: str, header: str) -> list[tuple[str, str]]:
 
 
 def kv(line: str, key: str) -> str | None:
-    """Строка `key = "value"` → value без кавычек и с разэкранированием.
+    """Line `key = "value"` -> value without quotes and unescaped.
 
-    Возвращает None, если строка не начинается с key: комментарии и вложенные
-    в секции ключи так не задевают top-level разбор.
+    Returns None if the line does not start with key: comments and keys nested
+    in sections do not interfere with top-level parsing.
     """
     rest = line.lstrip()
     if not rest.startswith(key):
@@ -123,7 +123,7 @@ def kv(line: str, key: str) -> str | None:
     if not rest.startswith('"'):
         return None
     rest = rest[1:]
-    # Закрывающая кавычка — первая неэкранированная.
+    # The closing quote is the first unescaped one.
     i = 0
     while i < len(rest):
         c = rest[i]
@@ -137,7 +137,7 @@ def kv(line: str, key: str) -> str | None:
 
 
 def unescape_toml(s: str) -> str:
-    """`\\` → `\\`, `\"` → `"`, `\\/` → `/`; прочие последовательности как есть."""
+    """`\\` -> `\\`, `\"` -> `"`, `\\/` -> `/`; other sequences as is."""
     out: list[str] = []
     i = 0
     while i < len(s):
@@ -161,7 +161,7 @@ def unescape_toml(s: str) -> str:
 
 
 def parse_top_level_string(content: str, key: str) -> str | None:
-    """Первое значение top-level ключа `key = "value"`."""
+    """First value of top-level key `key = "value"`."""
     for line in content.splitlines():
         v = kv(line.strip(), key)
         if v is not None:
@@ -170,7 +170,7 @@ def parse_top_level_string(content: str, key: str) -> str | None:
 
 
 def parse_top_level_int(content: str, key: str, default: int) -> int:
-    """Первое целое значение top-level ключа `key = N` (отрицательное → 0)."""
+    """First integer value of top-level key `key = N` (negative -> 0)."""
     for line in content.splitlines():
         rest = line.strip()
         if not rest.startswith(key):

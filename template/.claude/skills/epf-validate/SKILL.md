@@ -1,6 +1,6 @@
 ---
 name: epf-validate
-description: Валидация внешней обработки 1С (EPF). Используй после создания или модификации обработки для проверки корректности
+description: Validation of a 1C external data processor (EPF). Use after creating or modifying a data processor to check correctness
 argument-hint: <ObjectPath> [-Detailed] [-MaxErrors 30]
 allowed-tools:
   - Bash
@@ -8,25 +8,24 @@ allowed-tools:
   - Glob
 ---
 
-# /epf-validate — валидация внешней обработки (EPF)
+# /epf-validate - external data processor (EPF) validation
 
-Проверяет структурную корректность XML-исходников внешней обработки: корневую структуру, InternalInfo, свойства, ChildObjects, реквизиты, табличные части, уникальность имён, наличие файлов форм и макетов. Также работает для внешних отчётов (ERF).
+Checks the structural correctness of the external data processor XML sources: root structure, InternalInfo, properties, ChildObjects, attributes, tabular sections, name uniqueness, presence of form and template files. Also works for external reports (ERF).
 
-Проверяется XML. Синтаксис модулей проверяет сборка: навык `1c-batch` (команда `build-epf`).
+XML is checked. Module syntax is checked by the build: skill `1c-batch` (command `build-epf`).
 
-## Параметры
+## Parameters
 
-| Параметр   | Обяз. | Умолч. | Описание                                      |
+| Parameter   | Req. | Default | Description                                      |
 |------------|:-----:|---------|-------------------------------------------------|
-| ObjectPath | да    | —       | Путь к корневому XML или каталогу обработки     |
-| Detailed   | нет   | —       | Подробный вывод (все проверки, включая успешные) |
-| MaxErrors  | нет   | 30      | Остановиться после N ошибок                     |
-| OutFile    | нет   | —       | Записать результат в файл (UTF-8 BOM)           |
+| ObjectPath | yes   | -       | Path to the root XML or the data processor directory     |
+| Detailed   | no    | -       | Detailed output (all checks, including successful ones) |
+| MaxErrors  | no    | 30      | Stop after N errors                     |
+| OutFile    | no    | -       | Write the result to a file (UTF-8 BOM)           |
 
-## Команда
+## Command
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/epf-validate.py" -ObjectPath "src/МояОбработка"
 python "${CLAUDE_SKILL_DIR}/scripts/epf-validate.py" -ObjectPath "src/МояОбработка/МояОбработка.xml"
 ```
-

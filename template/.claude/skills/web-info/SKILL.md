@@ -1,6 +1,6 @@
 ---
 name: web-info
-description: Статус Apache и веб-публикаций 1С — запущен ли сервер, какие базы опубликованы, ошибки. Используй когда пользователь спрашивает про статус веб-сервера, опубликованные базы, работает ли Apache
+description: Apache and 1C web publication status - whether the server is running, which databases are published, errors. Use when the user asks about web server status, published databases, whether Apache is running
 argument-hint: ""
 allowed-tools:
   - Bash
@@ -8,9 +8,9 @@ allowed-tools:
   - Glob
 ---
 
-# /web-info — Статус Apache и публикаций 1С
+# /web-info - Apache and 1C publication status
 
-Показывает состояние Apache HTTP Server, список опубликованных баз и последние ошибки.
+Shows the Apache HTTP Server state, the list of published databases and recent errors.
 
 ## Usage
 
@@ -18,47 +18,47 @@ allowed-tools:
 /web-info
 ```
 
-## Параметры подключения
+## Connection parameters
 
-Прочитай `.v8-project.json` из корня проекта. Если задан `webPath` — используй как `-ApachePath`.
-По умолчанию `tools/apache24` от корня проекта.
+Read `.v8-project.json` from the project root. If `webPath` is set - use it as `-ApachePath`.
+Default is `tools/apache24` from the project root.
 
-## Команда
+## Command
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/web-info.py" <параметры>
 ```
 
-### Параметры скрипта
+### Script parameters
 
-| Параметр | Обязательный | Описание |
+| Parameter | Required | Description |
 |----------|:------------:|----------|
-| `-ApachePath <путь>` | нет | Корень Apache (по умолчанию `tools/apache24`) |
+| `-ApachePath <путь>` | no | Apache root (default `tools/apache24`) |
 
-## Как читать вывод
+## How to read the output
 
-Три секции: состояние сервера, список публикаций (имя, URL, строка соединения, теги сервисов),
-хвост журнала Apache.
+Three sections: server state, publication list (name, URL, connection string, service tags),
+tail of the Apache log.
 
-| В выводе | Что значит |
+| In the output | What it means |
 |----------|------------|
-| `Status: Остановлен` | Apache не запущен — публикации в `httpd.conf` есть, но URL-ы не отвечают. Поднимается повторным `/web-publish` |
-| `Port: 9191 (не отвечает)` | Порт не слушается — URL-ы не откроются. Вместе с `Status: Запущен` значит, что сервер не поднялся (занятый порт, битый конфиг): смотри секцию ошибок |
-| `[WARN] Обнаружен сторонний Apache` | На машине работает чужой экземпляр — может держать порт; наши команды им не управляют |
-| `[WS HTTP OData]` | Что опубликовано для базы: SOAP-сервисы, HTTP-сервисы, стандартный OData |
-| `+ext` (`WS+ext`) | Публикуются и сервисы, поставляемые расширениями конфигурации |
-| `(нет публикаций)` | Apache установлен, но ни одна база не опубликована — нужен `/web-publish` |
-| `(ошибок нет)` / `(нет файла)` | Норма, а не сбой: ошибок в журнале нет или он ещё не создан |
+| `Status: Остановлен` | Apache is not running - publications in `httpd.conf` exist, but URLs do not respond. Bring it up with `/web-publish` again |
+| `Port: 9191 (не отвечает)` | The port is not listening - URLs will not open. Together with `Status: Запущен` it means the server did not start (busy port, broken config): see the errors section |
+| `[WARN] Обнаружен сторонний Apache` | Another instance is running on the machine - it may hold the port; our commands do not manage it |
+| `[WS HTTP OData]` | What is published for the database: SOAP services, HTTP services, standard OData |
+| `+ext` (`WS+ext`) | Services supplied by configuration extensions are published too |
+| `(нет публикаций)` | Apache is installed, but no database is published - `/web-publish` is needed |
+| `(ошибок нет)` / `(нет файла)` | Normal, not a failure: there are no errors in the log or it has not been created yet |
 
-В ошибках — последние записи уровня `error` и выше, информационные строки отфильтрованы. Журнал не
-ротируется, поэтому запись может быть полугодовой давности: смотри дату, прежде чем считать её
-причиной текущей проблемы. Рядом печатается путь к журналу — нужен полный контекст, прочитай файл.
+The errors section holds the latest `error`-level and higher entries; informational lines are filtered
+out. The log is not rotated, so an entry may be half a year old: check the date before treating it as
+the cause of the current problem. The log path is printed nearby - if you need full context, read the file.
 
-Строка публикации говорит «так настроено», а не «база отвечает»: проверяется доступность самого
-Apache, но не публикаций. Убедиться в конкретной базе можно запросом к её URL — но учти, что такой
-запрос поднимает сеанс 1С и занимает лицензию.
+A publication line says "this is how it is configured", not "the database responds": only the
+availability of Apache itself is checked, not the publications. You can verify a specific database with
+a request to its URL - but note that such a request starts a 1C session and takes a license.
 
-## Примеры
+## Examples
 
 ```bash
 # Статус по умолчанию

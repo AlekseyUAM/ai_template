@@ -10,16 +10,16 @@ import sys
 from io import StringIO
 from lxml import etree
 
-# Регистронезависимый ввод: имена параметров и значения choices принимаются
-# в любом регистре (в argparse по умолчанию совпадение точное).
+# Case-insensitive input: parameter names and choices values are accepted
+# in any case (in argparse exact match is the default).
 def ci_parse_args(parser, argv=None):
-    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
+    """parse_args: parameter names and choices values are accepted in any case."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
         if tok.startswith('-') and tok.lower() in names:
             argv[i] = names[tok.lower()]
-    # choices — зеркало [ValidateSet]; канонизируем ДО разбора, иначе argparse отвергнет регистр
+    # choices - a mirror of [ValidateSet]; we canonicalize BEFORE parsing, otherwise argparse rejects the case
     choice_map = {}
     for a in parser._actions:
         if a.choices:
@@ -49,7 +49,7 @@ CLASS_IDS = {
     "ExternalReport": "e41aff26-25cf-4bb6-b6c1-3f478a75f374",
 }
 
-# Команд объекта у внешней обработки/отчёта нет: платформа выбрасывает их при сборке (#108).
+# An external data processor/report has no object commands: the platform drops them during assembly (#108).
 ALLOWED_CHILD_TYPES = {"Attribute", "TabularSection", "Form", "Template"}
 
 CHILD_TYPE_ORDER = {
@@ -61,22 +61,22 @@ CHILD_TYPE_ORDER = {
 
 
 # ── Format version ───────────────────────────────────────────
-# Проверенный диапазон версий формата выгрузки: 2.17 (8.3.24) … 2.21 (8.5). Полная лестница —
-# docs/1c-configuration-spec.md, «Лестница версий». Версию задаёт платформа ВЫГРУЗКИ, а не режим
-# совместимости конфигурации. Версии ниже 2.17 (платформы 8.3.23 и старше) существуют, но навыки
-# на них не проверялись — это предупреждение о непокрытии, а не о некорректности файла.
+# Verified range of export format versions: 2.17 (8.3.24) ... 2.21 (8.5). The full ladder is in
+# docs/1c-configuration-spec.md, "Version ladder". The version is set by the EXPORT platform, not by the configuration
+# compatibility mode. Versions below 2.17 (platforms 8.3.23 and older) exist, but the skills
+# have not been verified on them - this is a warning about non-coverage, not about file incorrectness.
 FORMAT_VERIFIED_MIN = "2.17"
 FORMAT_VERIFIED_MAX = "2.21"
 
 
 def format_rank(ver):
-    """"2.20" → 220, "2.9" → 209. Строковое сравнение неверно ("2.9" > "2.17")."""
+    """"2.20" -> 220, "2.9" -> 209. String comparison is wrong ("2.9" > "2.17")."""
     m = re.match(r'^(\d+)\.(\d+)$', ver or '')
     return int(m.group(1)) * 100 + int(m.group(2)) if m else 0
 
 
-# Штамп версии формата — атрибут version КОРНЕВОГО элемента файла. Копия общего эталона (семья
-# root_version, авторитет — meta-validate).
+# The format version stamp - the version attribute of the file ROOT element. A copy of the common reference (family
+# root_version, authority - meta-validate).
 def root_version(xml_path):
     if not os.path.isfile(xml_path):
         return None
@@ -697,7 +697,7 @@ def main():
     if os.path.isfile(obj_module):
         files_checked += 1
 
-    # Модуля менеджера у внешней обработки/отчёта нет: платформа выбрасывает файл без сообщения.
+    # An external data processor/report has no manager module: the platform drops the file without a message.
     mgr_module = os.path.join(obj_dir, "Ext", "ManagerModule.bsl")
     if os.path.isfile(mgr_module):
         report_error("9. Ext/ManagerModule.bsl — у внешней обработки/отчёта нет модуля менеджера, платформа выбросит его молча")
@@ -765,12 +765,12 @@ def main():
         else:
             pass  # no form descriptors to check
 
-    # --- Check 11: версия формата согласована внутри объектов обработки; сверка с корнем ---
-    # Корень обработки и его штампованные тела (Ext/Help.xml), дескриптор формы/макета и его тело платформа
-    # загружает только в одной версии: «Версия формата загружаемого файла … отличается от версии формата
-    # ранее загруженных файлов» — сборка отменяется. Форма или макет целиком в другой версии, чем корень,
-    # собирается — это лишь неоднородность исходников (типично после мержа веток, выгруженных разными
-    # платформами), поэтому такое расхождение только предупреждение.
+    # --- Check 11: format version consistent inside data processor objects; comparison with the root ---
+    # The data processor root and its stamped bodies (Ext/Help.xml), the form/template descriptor and its body are
+    # loaded by the platform only in one version: «Версия формата загружаемого файла … отличается от версии формата
+    # ранее загруженных файлов» - assembly is cancelled. A form or template entirely in a different version than the root
+    # is assembled - this is only source heterogeneity (typically after merging branches exported by different
+    # platforms), so such a mismatch is only a warning.
     if version:
         ver_obj_dir = os.path.join(src_dir, os.path.splitext(os.path.basename(resolved_path))[0])
         ver_descriptors = [resolved_path]

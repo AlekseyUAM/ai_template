@@ -1,6 +1,6 @@
 ---
 name: skd-edit
-description: Точечное редактирование схемы компоновки данных 1С (СКД). Используй когда нужно модифицировать существующую СКД — добавить поля, итоги, фильтры, параметры, изменить текст запроса
+description: Point editing of a 1C data composition schema (DCS). Use when you need to modify an existing DCS - add fields, totals, filters, parameters, change the query text
 argument-hint: <TemplatePath> -Operation <op> -Value <value>
 allowed-tools:
   - Bash
@@ -9,49 +9,49 @@ allowed-tools:
   - Glob
 ---
 
-# /skd-edit — точечное редактирование СКД (Template.xml)
+# /skd-edit - point editing of a DCS (Template.xml)
 
-Атомарные операции модификации существующей схемы компоновки данных: добавление, удаление и модификация полей, итогов, фильтров, параметров, настроек варианта, управление структурой, замена запроса.
+Atomic operations for modifying an existing data composition schema: adding, deleting and modifying fields, totals, filters, parameters, variant settings, structure management, query replacement.
 
-## Параметры и команда
+## Parameters and command
 
-| Параметр | Описание |
+| Parameter | Description |
 |----------|----------|
-| `TemplatePath` | Путь к Template.xml (или к папке — автодополнение Ext/Template.xml) |
-| `Operation` | Операция (см. список ниже) |
-| `Value` | Значение операции (shorthand-строка или текст запроса) |
-| `DataSet` | (опц.) Имя набора данных (умолч. первый) |
-| `Variant` | (опц.) Имя варианта настроек (умолч. первый) |
-| `NoSelection` | (опц.) Не добавлять поле в selection варианта |
+| `TemplatePath` | Path to Template.xml (or to the folder - Ext/Template.xml autocompletion) |
+| `Operation` | Operation (see the list below) |
+| `Value` | Operation value (a shorthand string or query text) |
+| `DataSet` | (optional) Data set name (default: the first) |
+| `Variant` | (optional) Settings variant name (default: the first) |
+| `NoSelection` | (optional) Do not add the field to the variant selection |
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/skd-edit.py" -TemplatePath "<path>" -Operation <op> -Value "<value>"
 ```
 
-## Пакетный режим (batch)
+## Batch mode (batch)
 
-Несколько значений в одном вызове через разделитель `;;`:
+Several values in one call via the `;;` separator:
 
 ```bash
 -Operation add-field -Value "Цена: decimal(15,2) ;; Количество: decimal(15,3) ;; Сумма: decimal(15,2)"
 ```
 
-Работает для всех операций кроме `set-query`, `set-structure` и `add-dataSet`.
+Works for all operations except `set-query`, `set-structure` and `add-dataSet`.
 
-## Правила правки отчёта
+## Report editing rules
 
-Перед правкой отчёта на СКД прочитай целиком:
-[особенности СКД](../bsl-coding-standards/reference/skd-specifics.md),
-[регистры накопления](../bsl-coding-standards/reference/accumulation-registers.md),
-[регистры сведений](../bsl-coding-standards/reference/information-registers.md).
+Before editing a DCS report, read in full:
+[DCS specifics](../bsl-coding-standards/reference/skd-specifics.md),
+[accumulation registers](../bsl-coding-standards/reference/accumulation-registers.md),
+[information registers](../bsl-coding-standards/reference/information-registers.md).
 
-Помни: `add-field` и `add-calculated-field` по умолчанию добавляют поле в выборку варианта;
-для служебного поля, нужного только формуле, передавай `-NoSelection`.
-После правок — `skd-validate -ExpectedFields "<колонки ТЗ>"` и `skd-info -Mode variant`.
+Remember: `add-field` and `add-calculated-field` add the field to the variant selection by default;
+for a service field needed only by a formula, pass `-NoSelection`.
+After edits - `skd-validate -ExpectedFields "<колонки ТЗ>"` and `skd-info -Mode variant`.
 
-## Операции
+## Operations
 
-### add-field — добавить поле в набор данных
+### add-field - add a field to the data set
 
 Shorthand: `"Имя [Заголовок]: тип @роль #ограничение"`.
 
@@ -61,13 +61,13 @@ Shorthand: `"Имя [Заголовок]: тип @роль #ограничени
 "Служебное: string #noFilter #noOrder"
 ```
 
-Поле добавляется в набор и в selection варианта (если нет `-NoSelection`). Дубликат dataPath — предупреждение, пропуск.
+The field is added to the set and to the variant selection (unless `-NoSelection`). A duplicate dataPath - warning, skipped.
 
-Чтобы поле попало в selection не варианта, а конкретной группировки структуры — используй `-NoSelection` и затем `add-selection "Имя @group=ИмяГруппы"`.
+To make the field go into the selection of a specific structure grouping rather than the variant - use `-NoSelection` and then `add-selection "Имя @group=ИмяГруппы"`.
 
-### add-total — добавить итог
+### add-total - add a total
 
-Shorthand: `"<dataPath>: <выражение>"`. Если выражение — известная аггрегатная функция без скобок (`Сумма`, `Количество`, `Минимум`, `Максимум`, `Среднее`), оно автоматически оборачивается в `Func(dataPath)`. Если функция со скобками или произвольное выражение — используется как есть.
+Shorthand: `"<dataPath>: <выражение>"`. If the expression is a known aggregate function without parentheses (`Сумма`, `Количество`, `Минимум`, `Максимум`, `Среднее`), it is automatically wrapped in `Func(dataPath)`. If the function has parentheses or the expression is arbitrary - it is used as is.
 
 ```
 "Цена: Среднее"                  # → Среднее(Цена)
@@ -75,7 +75,7 @@ Shorthand: `"<dataPath>: <выражение>"`. Если выражение —
 "Проверка: Проверка"             # identity: выражение = Проверка
 ```
 
-### add-calculated-field — добавить вычисляемое поле
+### add-calculated-field - add a calculated field
 
 Shorthand: `"Имя [Заголовок]: тип = Выражение #noFilter #noOrder #noGroup"`.
 
@@ -85,26 +85,26 @@ Shorthand: `"Имя [Заголовок]: тип = Выражение #noFilter 
 "Служебное: string = \"\" #noFilter #noOrder #noGroup"
 ```
 
-`#noFilter`, `#noOrder`, `#noGroup`, `#noField` → `<useRestriction>` (аналогично add-field).
+`#noFilter`, `#noOrder`, `#noGroup`, `#noField` -> `<useRestriction>` (similarly to add-field).
 
-Также добавляется в selection варианта.
+It is also added to the variant selection.
 
-### add-parameter — добавить параметр
+### add-parameter - add a parameter
 
 ```
 "Период [Отчетный период]: StandardPeriod = LastMonth @autoDates"
 "Организация: CatalogRef.Организации"
 ```
 
-Shorthand: `"Имя [Заголовок]: тип = значение [availableValue=список] [@флаги]"`. `[Заголовок]` опциональный — добавляет `<title>`.
+Shorthand: `"Имя [Заголовок]: тип = значение [availableValue=список] [@флаги]"`. `[Заголовок]` is optional - adds `<title>`.
 
-Флаги:
-- `@autoDates` — генерирует пару скрытых параметров `ДатаНачала`/`ДатаОкончания` для StandardPeriod-параметра.
-- `@hidden` — скрывает параметр от пользовательских настроек (для параметров-констант, используемых в запросе).
-- `@always` — параметр всегда подставляется в запрос. Часто вместе с `@hidden`, но используется и отдельно (для видимых обязательных параметров типа отчётного периода).
-- `@valueList` — разрешает передавать в параметр список значений (при значении-списке ниже подразумевается автоматически, отдельно указывать не обязательно).
+Flags:
+- `@autoDates` - generates a pair of hidden parameters `ДатаНачала`/`ДатаОкончания` for a StandardPeriod parameter.
+- `@hidden` - hides the parameter from user settings (for constant parameters used in the query).
+- `@always` - the parameter is always substituted into the query. Often together with `@hidden`, but also used separately (for visible required parameters such as the report period).
+- `@valueList` - allows passing a value list into the parameter (for a list value below it is implied automatically, no need to specify it separately).
 
-Значение-список: несколько значений по умолчанию задаются через запятую в `значение`. Для запятой внутри одного значения — кавычки `'...'`.
+List value: several default values are set comma-separated in `значение`. For a comma inside one value - quotes `'...'`.
 
 ```
 "Виды [Виды субконто]: ChartOfCharacteristicTypesRef.ВидыСубконтоХозрасчетные = ПланВидовХарактеристик.ВидыСубконтоХозрасчетные.Контрагенты, ПланВидовХарактеристик.ВидыСубконтоХозрасчетные.Договоры"
@@ -117,15 +117,15 @@ Shorthand: `"Имя [Заголовок]: тип = значение [availableVa
 "Округление: EnumRef.Округления = Окр1 availableValue=Перечисление.Округления.Окр1: руб., Перечисление.Округления.Окр1000: тыс."
 ```
 
-`availableValue=` задаёт начальный список допустимых значений. Формат списка: `v1[: p1], v2[: p2], ...` — элементы через `,`, представление после `:`. Если в значении или представлении встречается `,` или `:` — оборачивай в одинарные кавычки `'...'`:
+`availableValue=` sets the initial list of allowed values. List format: `v1[: p1], v2[: p2], ...` - elements separated by `,`, presentation after `:`. If `,` or `:` occurs in a value or presentation - wrap it in single quotes `'...'`:
 
 ```
 "Округление: ... = Окр1 availableValue=Окр1_00: 'руб., коп.', Окр1: руб."
 ```
 
-### modify-parameter — изменить существующий параметр
+### modify-parameter - modify an existing parameter
 
-Shorthand: `"ИмяПараметра [Заголовок] [ключ=значение]... [@флаги]"`. Находит параметр по имени, обновляет указанные свойства.
+Shorthand: `"ИмяПараметра [Заголовок] [ключ=значение]... [@флаги]"`. Finds the parameter by name, updates the specified properties.
 
 ```
 "ПорядокОкругления use=Always"
@@ -137,33 +137,33 @@ Shorthand: `"ИмяПараметра [Заголовок] [ключ=значе�
 "Контрагент @hidden @always"
 ```
 
-`[Заголовок]` опциональный — устанавливает или заменяет `<title>`. Можно вызывать без других kv-пар, чтобы только обновить title.
+`[Заголовок]` is optional - sets or replaces `<title>`. Can be called without other kv pairs to update only the title.
 
-`availableValue=` **заменяет весь список** допустимых значений (старые удаляются). Формат и кавычки — те же, что в `add-parameter`.
+`availableValue=` **replaces the whole list** of allowed values (old ones are deleted). Format and quotes are the same as in `add-parameter`.
 
-`value=` заменяет значение параметра. Несколько значений через запятую → **список значений** (заменяет все прежние); для запятой внутри значения — кавычки `'...'`.
+`value=` replaces the parameter value. Several values comma-separated -> a **value list** (replaces all previous ones); for a comma inside a value - quotes `'...'`.
 
-Флаги `@hidden` / `@always` — те же, что и в `add-parameter`. Идемпотентны.
+The `@hidden` / `@always` flags are the same as in `add-parameter`. Idempotent.
 
-### rename-parameter — переименовать параметр
+### rename-parameter - rename a parameter
 
-Shorthand: `"OldName => NewName"`. Атомарно обновляет имя параметра, ссылки `&Имя` в выражениях других параметров (только полные совпадения, `&ПериодX` не задевается), и записи в `dataParameters` всех вариантов. Текст запроса не трогает — переименование строго в области параметров.
+Shorthand: `"OldName => NewName"`. Atomically updates the parameter name, `&Имя` references in expressions of other parameters (full matches only, `&ПериодX` is not affected), and entries in `dataParameters` of all variants. It does not touch the query text - renaming is strictly within the parameters area.
 
 ```
 "Период => ПериодОтчета"
 ```
 
-### reorder-parameters — переставить параметры в указанном порядке
+### reorder-parameters - reorder parameters in the given order
 
-Shorthand: `"Имя1, Имя2, Имя3"`. Частичный список — указанные параметры идут первыми в заданном порядке, остальные сохраняют исходный порядок и идут в конце. Параметры из списка, которых нет в схеме — warning, пропуск.
+Shorthand: `"Имя1, Имя2, Имя3"`. A partial list - the specified parameters go first in the given order, the rest keep their original order and go at the end. Parameters from the list that are absent in the schema - warning, skipped.
 
 ```
 "ПериодОтчета, НачалоПериода, КонецПериода"
 ```
 
-### add-filter — добавить фильтр в вариант
+### add-filter - add a filter to the variant
 
-Shorthand: `"Поле оператор значение @флаги"`. Флаги: `@off` (use=false), `@user` (userSettingID=auto), `@quickAccess`, `@normal`, `@inaccessible`.
+Shorthand: `"Поле оператор значение @флаги"`. Flags: `@off` (use=false), `@user` (userSettingID=auto), `@quickAccess`, `@normal`, `@inaccessible`.
 
 ```
 "Номенклатура = _ @off @user"
@@ -171,7 +171,7 @@ Shorthand: `"Поле оператор значение @флаги"`. Флаг�
 "Статус filled"
 ```
 
-### add-dataParameter — добавить параметр данных в вариант
+### add-dataParameter - add a data parameter to the variant
 
 Shorthand: `"Имя [= значение] @флаги"`.
 
@@ -180,16 +180,16 @@ Shorthand: `"Имя [= значение] @флаги"`.
 "Организация @off @user"
 ```
 
-### add-order — добавить сортировку
+### add-order - add sorting
 
-Shorthand: `"Поле [desc]"`. По умолчанию asc. `Auto` — авто-элемент.
+Shorthand: `"Поле [desc]"`. asc by default. `Auto` - an auto item.
 
 ```
 "Количество desc"
 "Auto"
 ```
 
-### add-selection — добавить элемент выборки
+### add-selection - add a selection item
 
 ```
 "Номенклатура"
@@ -197,15 +197,15 @@ Shorthand: `"Поле [desc]"`. По умолчанию asc. `Auto` — авто
 "Folder(Поступление: ПолеА, ПолеБ, ПолеВ)"
 ```
 
-`Folder(Название: поле1, поле2)` — группа полей (SelectedItemFolder) с заголовком и `placement=Auto`.
+`Folder(Название: поле1, поле2)` - a field group (SelectedItemFolder) with a title and `placement=Auto`.
 
-`@group=ИмяГруппировки` — добавить в selection именованной группировки (вместо уровня варианта):
+`@group=ИмяГруппировки` - add to the selection of a named grouping (instead of the variant level):
 
 ```
 "Folder(Поступление: ПолеА, ПолеБ) @group=ДанныеОтчета"
 ```
 
-### add-dataSetLink — добавить связь наборов данных
+### add-dataSetLink - add a data set link
 
 Shorthand: `"Источник > Приёмник on ВырИсточника = ВырПриёмника [param Имя]"`.
 
@@ -214,9 +214,9 @@ Shorthand: `"Источник > Приёмник on ВырИсточника = �
 "Набор1 > Набор2 on Поле1 = Поле2 [param Связь]"
 ```
 
-### add-dataSet — добавить набор данных
+### add-dataSet - add a data set
 
-Shorthand: `"Имя: ТЕКСТ_ЗАПРОСА"` или `"ТЕКСТ_ЗАПРОСА"` (авто-имя `НаборДанныхN`).
+Shorthand: `"Имя: ТЕКСТ_ЗАПРОСА"` or `"ТЕКСТ_ЗАПРОСА"` (auto name `НаборДанныхN`).
 
 ```
 "Доп: ВЫБРАТЬ 1 КАК Тест"
@@ -224,22 +224,22 @@ Shorthand: `"Имя: ТЕКСТ_ЗАПРОСА"` или `"ТЕКСТ_ЗАПРО�
 "Продажи: @queries/sales.sql"
 ```
 
-`dataSource` берётся из первого существующего. Дубликат имени — предупреждение, пропуск. Не поддерживает пакетный режим (запрос может содержать `;;`).
+`dataSource` is taken from the first existing one. A duplicate name - warning, skipped. Does not support batch mode (the query may contain `;;`).
 
-### add-variant — добавить вариант настроек
+### add-variant - add a settings variant
 
-Shorthand: `"Имя [Представление]"`. Представление опционально, по умолчанию = имя.
+Shorthand: `"Имя [Представление]"`. The presentation is optional, defaults to the name.
 
 ```
 "Детальный"
 "Детальный [Детальный отчёт]"
 ```
 
-Создаёт вариант с Auto selection + detail group. Дубликат имени — предупреждение, пропуск.
+Creates a variant with Auto selection + detail group. A duplicate name - warning, skipped.
 
-### add-conditionalAppearance — добавить условное оформление
+### add-conditionalAppearance - add conditional appearance
 
-Shorthand: `"Параметр = значение [when условие] [for Поле1, Поле2]"`. Блок `when` — синтаксис `add-filter` (Поле оператор значение).
+Shorthand: `"Параметр = значение [when условие] [for Поле1, Поле2]"`. The `when` block uses the `add-filter` syntax (field operator value).
 
 ```
 "ЦветТекста = web:Red when Сумма < 0"
@@ -248,60 +248,60 @@ Shorthand: `"Параметр = значение [when условие] [for По
 "Формат = ЧДЦ=2 for Цена, Сумма"
 ```
 
-Типы значений appearance (автодетект): `web:*`/`style:*`/`win:*` → Color, `true`/`false` → Boolean, параметр `Формат`/`Текст`/`Заголовок` → LocalStringType, иначе String.
+Appearance value types (auto-detected): `web:*`/`style:*`/`win:*` -> Color, `true`/`false` -> Boolean, the `Формат`/`Текст`/`Заголовок` parameter -> LocalStringType, otherwise String.
 
-Типы значений фильтра (автодетект): `Перечисление.*`/`Справочник.*`/`ПланСчетов.*`/`Документ.*` → DesignTimeValue, `true`/`false` → Boolean, дата → DateTime, числа → Decimal, иначе String.
+Filter value types (auto-detected): `Перечисление.*`/`Справочник.*`/`ПланСчетов.*`/`Документ.*` -> DesignTimeValue, `true`/`false` -> Boolean, date -> DateTime, numbers -> Decimal, otherwise String.
 
-OrGroup: несколько условий через ` or ` в `when` объединяются в FilterItemGroup/OrGroup:
+OrGroup: several conditions via ` or ` in `when` are combined into FilterItemGroup/OrGroup:
 
 ```
 "Формат = ЧЦ=15; ЧДЦ=0 when ПараметрыДанных.Округление = Перечисление.Округления.Окр1 or ПараметрыДанных.Округление = Перечисление.Округления.Окр1000"
 ```
 
-**Важно**: для параметров данных используйте префикс `ПараметрыДанных.` в поле фильтра.
+**Important**: for data parameters use the `ПараметрыДанных.` prefix in the filter field.
 
-### add-drilldown — подключить расшифровку к ресурсам в шаблонах
+### add-drilldown - connect decryption to resources in templates
 
-Value — имена ресурсов (как в полях/вычисляемых полях СКД) через запятую.
+Value - resource names (as in DCS fields/calculated fields), comma-separated.
 
 ```
 "ПоступлениеИзПроизводства, ВыбытиеПрочее"
 "Сумма_Дт83, Сумма_Дт99, Сумма_68, Сумма_84"
 ```
 
-Подключает DrillDown по `ИмяРесурса` ко всем шаблонам, содержащим указанные ресурсы. Идемпотентно.
+Connects DrillDown by `ИмяРесурса` to all templates containing the specified resources. Idempotent.
 
-### set-query — заменить текст запроса
+### set-query - replace the query text
 
-Не поддерживает пакетный режим. Value — полный текст запроса или `@path/to/file.sql` (ссылка на внешний файл). Путь разрешается относительно Template.xml, затем CWD.
+Does not support batch mode. Value - the full query text or `@path/to/file.sql` (a reference to an external file). The path is resolved relative to Template.xml, then CWD.
 
-Когда что: **существенная переработка** (добавить поля, соединения, переписать пакет) → выгрузи запрос через `/skd-info <tpl> -Mode query -Name <набор> -Raw -OutFile file.sql`, отредактируй файл, верни `set-query @file`. `-Raw` отдаёт запрос целиком без декораций, поэтому выгрузка ↔ возврат точны (включая многопакетные запросы). **Точечная замена** (переименовать идентификатор, заменить подстроку) → выгрузка не нужна, используй `patch-query` ниже.
+When to use what: **substantial rework** (add fields, joins, rewrite a batch) -> dump the query via `/skd-info <tpl> -Mode query -Name <набор> -Raw -OutFile file.sql`, edit the file, return `set-query @file`. `-Raw` returns the query in full without decorations, so dump <-> return are exact (including multi-batch queries). **Point replacement** (rename an identifier, replace a substring) -> no dump needed, use `patch-query` below.
 
-### patch-query — точечная замена в тексте запроса
+### patch-query - point replacement in the query text
 
-Shorthand: `"старое => новое [@once]"`. По умолчанию заменяет все вхождения подстроки. Поддерживает пакетный режим и `-DataSet`.
+Shorthand: `"старое => новое [@once]"`. Replaces all occurrences of the substring by default. Supports batch mode and `-DataSet`.
 
 ```
 "СубконтоДт1) В => СубконтоКт1) В"
 "КАК ВТ_СтароеИмя => КАК ВТ_НовоеИмя @once"
 ```
 
-`@once` — упасть с ошибкой, если в запросе не **ровно одно** вхождение. Защищает от случайных замен в комментариях и однотипных идентификаторах.
+`@once` - fail with an error if the query does not have **exactly one** occurrence. Protects against accidental replacements in comments and similar identifiers.
 
-Многострочные подстроки поддерживаются.
+Multiline substrings are supported.
 
-### set-outputParameter — установить параметр вывода
+### set-outputParameter - set an output parameter
 
 ```
 "Заголовок = Мой отчёт"
 "ВыводитьЗаголовок = true"
 ```
 
-Если параметр уже существует — заменяет значение.
+If the parameter already exists - replaces the value.
 
-### set-structure — установить структуру варианта
+### set-structure - set the variant structure
 
-Shorthand: `"Поле1 > Поле2 > details"`. `>` — вложенный уровень группировки, `,` — несколько полей в одном уровне, `details` — детальные записи. **Заменяет всю структуру полностью** (включая Selection/order/filter/conditionalAppearance каждой группы). Для точечной модификации полей группировки с сохранением настроек — используй `modify-structure`. Не поддерживает пакетный режим.
+Shorthand: `"Поле1 > Поле2 > details"`. `>` - a nested grouping level, `,` - several fields in one level, `details` - detail records. **Replaces the whole structure entirely** (including Selection/order/filter/conditionalAppearance of each group). For point modification of grouping fields while preserving settings - use `modify-structure`. Does not support batch mode.
 
 ```
 "Организация > Номенклатура > details"
@@ -310,11 +310,11 @@ Shorthand: `"Поле1 > Поле2 > details"`. `>` — вложенный ур�
 "СчетМеждународногоУчета @name=ДанныеОтчета"
 ```
 
-`@name=Имя` — присваивает имя группировке (`<dcsset:name>`). Используется для привязки шаблонов через `groupName`.
+`@name=Имя` - assigns a name to the grouping (`<dcsset:name>`). Used for binding templates via `groupName`.
 
-### modify-structure — изменить поля группировки существующей группы
+### modify-structure - change the grouping fields of an existing group
 
-Тот же shorthand что и `set-structure`. Находит группу по `@name=`, заменяет только `<groupItems>` (поля группировки). Selection/order/filter/conditionalAppearance/outputParameters группы сохраняются. Без `@name=` — ошибка.
+The same shorthand as `set-structure`. Finds the group by `@name=`, replaces only `<groupItems>` (grouping fields). The group's Selection/order/filter/conditionalAppearance/outputParameters are preserved. Without `@name=` - an error.
 
 ```
 "Валюта @name=ДанныеОтчета"
@@ -322,17 +322,17 @@ Shorthand: `"Поле1 > Поле2 > details"`. `>` — вложенный ур�
 "details @name=ДанныеОтчета"
 ```
 
-### modify-field — изменить существующее поле
+### modify-field - modify an existing field
 
-Тот же shorthand что и `add-field`. Находит по dataPath, объединяет свойства (непустые переопределяют), сохраняет позицию.
+The same shorthand as `add-field`. Finds by dataPath, merges properties (non-empty ones override), preserves the position.
 
 ```
 "Цена [Цена USD]: decimal(10,4) @dimension"
 ```
 
-### set-field-role — установить роль поля
+### set-field-role - set the field role
 
-Shorthand: `"<dataPath> [@флаги] [kv=значение]"`. **Полностью заменяет** роль поля. Если в значении только dataPath без флагов/kv — удаляет роль.
+Shorthand: `"<dataPath> [@флаги] [kv=значение]"`. **Fully replaces** the field role. If the value contains only dataPath without flags/kv - removes the role.
 
 ```
 "Сумма"                                                                 # снять роль полностью
@@ -342,41 +342,41 @@ Shorthand: `"<dataPath> [@флаги] [kv=значение]"`. **Полност�
 "Период @period"                                                        # роль периода
 ```
 
-Флаги: `@balance`, `@dimension`, `@account`, `@period`, `@required`, `@autoOrder`, `@ignoreNullValues`.
+Flags: `@balance`, `@dimension`, `@account`, `@period`, `@required`, `@autoOrder`, `@ignoreNullValues`.
 KV: `balanceGroupName`, `balanceType` (OpeningBalance/ClosingBalance), `parentDimension`, `accountTypeExpression`, `orderType` (Asc/Desc), `expression`, `periodNumber`, `periodType`.
 
-Поддерживает пакетный режим (`;;`).
+Supports batch mode (`;;`).
 
-### modify-filter — изменить существующий фильтр
+### modify-filter - modify an existing filter
 
-Тот же shorthand что и `add-filter`. Находит по полю, обновляет оператор/значение/флаги. См. правило для `<use>` ниже.
+The same shorthand as `add-filter`. Finds by field, updates the operator/value/flags. See the `<use>` rule below.
 
-### modify-dataParameter — изменить параметр данных
+### modify-dataParameter - modify a data parameter
 
-Тот же shorthand что и `add-dataParameter`. Находит по имени, обновляет значение/флаги. См. правило для `<use>` ниже.
+The same shorthand as `add-dataParameter`. Finds by name, updates the value/flags. See the `<use>` rule below.
 
-#### Правило `<use>` для modify-filter / modify-dataParameter
+#### `<use>` rule for modify-filter / modify-dataParameter
 
-В отличие от `add-*`, в `modify-*` поле `<use>` обновляется **только если флаг задан явно**:
-- `@off` — установить `<use>false</use>`
-- `@on` — убрать существующий `<use>false</use>` (включить параметр)
-- ни `@off`, ни `@on` не задано — `<use>` не трогается, существующее значение сохраняется (важно: это значит, что отключённый параметр останется отключённым после модификации других свойств)
+Unlike `add-*`, in `modify-*` the `<use>` field is updated **only if a flag is set explicitly**:
+- `@off` - set `<use>false</use>`
+- `@on` - remove the existing `<use>false</use>` (enable the parameter)
+- neither `@off` nor `@on` is set - `<use>` is not touched, the existing value is preserved (important: this means a disabled parameter will remain disabled after modifying other properties)
 
-### remove-* и clear-*
+### remove-* and clear-*
 
-| Операция | Value | Действие |
+| Operation | Value | Action |
 |----------|-------|----------|
-| `remove-field` | dataPath | Удаляет поле из набора + из selection варианта |
-| `remove-total` | dataPath | Удаляет итог |
-| `remove-calculated-field` | dataPath | Удаляет вычисляемое поле + из selection |
-| `remove-parameter` | name | Удаляет параметр |
-| `remove-filter` | поле | Удаляет первый фильтр с указанным полем |
-| `clear-selection` | `*` | Очищает все элементы selection |
-| `clear-order` | `*` | Очищает все элементы order |
-| `clear-filter` | `*` | Очищает все элементы filter |
-| `clear-conditionalAppearance` | `*` | Очищает все правила условного оформления |
+| `remove-field` | dataPath | Removes the field from the set + from the variant selection |
+| `remove-total` | dataPath | Removes the total |
+| `remove-calculated-field` | dataPath | Removes the calculated field + from selection |
+| `remove-parameter` | name | Removes the parameter |
+| `remove-filter` | field | Removes the first filter with the specified field |
+| `clear-selection` | `*` | Clears all selection items |
+| `clear-order` | `*` | Clears all order items |
+| `clear-filter` | `*` | Clears all filter items |
+| `clear-conditionalAppearance` | `*` | Clears all conditional appearance rules |
 
-## Верификация
+## Verification
 
 ```
 /skd-validate <TemplatePath>    — валидация структуры после редактирования

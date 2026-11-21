@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# help-add v1.24 — Add built-in help to 1C object (+write_xml_file/write_utf8_bom: общий эталон записи)
+# help-add v1.24 - Add built-in help to 1C object (+write_xml_file/write_utf8_bom: common write reference)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 
 import argparse
@@ -10,16 +10,16 @@ import sys
 
 from lxml import etree
 
-# Регистронезависимый ввод: имена параметров и значения choices принимаются
-# в любом регистре (в argparse по умолчанию совпадение точное).
+# Case-insensitive input: parameter names and choices values are accepted
+# in any case (argparse matches exactly by default).
 def ci_parse_args(parser, argv=None):
-    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
+    """parse_args: parameter names and choices values are accepted in any case."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
         if tok.startswith('-') and tok.lower() in names:
             argv[i] = names[tok.lower()]
-    # choices — зеркало [ValidateSet]; канонизируем ДО разбора, иначе argparse отвергнет регистр
+    # choices - mirror of [ValidateSet]; canonicalize BEFORE parsing, otherwise argparse rejects the case
     choice_map = {}
     for a in parser._actions:
         if a.choices:
@@ -213,8 +213,8 @@ def assert_edit_allowed(target_path, require):
 
 def detect_format_version(d):
     while d:
-        # Автономная внешняя обработка/отчёт: своего Configuration.xml у неё нет, версию несёт
-        # корень самой обработки. Без этого форма и макет внутри обработки 2.21 писались бы 2.17.
+        # Standalone external data processor/report: it has no Configuration.xml of its own; the version is carried by
+        # the root of the processor itself. Without this, a form and a template inside a 2.21 processor would be written as 2.17.
         ext_path = d + ".xml"
         if os.path.isfile(ext_path):
             with open(ext_path, "r", encoding="utf-8-sig") as f:
@@ -238,8 +238,8 @@ def detect_format_version(d):
 
 
 def _detect_xml_style(path):
-    """Стиль существующего файла для round-trip-сохранения: BOM / EOL / регистр encoding /
-    финальный перенос. None → файл новый (сохранить текущее поведение)."""
+    """Style of the existing file for round-trip saving: BOM / EOL / encoding case /
+    final newline. None -> file is new (keep current behavior)."""
     try:
         raw = open(path, "rb").read()
     except OSError:
@@ -254,21 +254,21 @@ def _detect_xml_style(path):
 
 
 def _finalize_xml_bytes(xml_bytes, style):
-    """Привести байты к стилю оригинала; для НОВОГО файла (style is None) — к канону
-    выгрузки Конфигуратора: encoding="UTF-8", CRLF в разделителях, без перевода в конце."""
+    """Bring bytes to the original style; for a NEW file (style is None) - to the
+    Configurator dump canon: encoding="UTF-8", CRLF in separators, no final newline."""
     enc_decl = style["enc"] if style else "UTF-8"
     xml_bytes = xml_bytes.replace(
         b"<?xml version='1.0' encoding='UTF-8'?>",
         b'<?xml version="1.0" encoding="' + enc_decl.encode("ascii") + b'"?>')
-    # Канонизировать переносы к LF (убирает &#13; от \r в tail'ах)
+    # Canonicalize line breaks to LF (removes &#13; from \r in tails)
     xml_bytes = (xml_bytes.replace(b"&#13;\n", b"\n").replace(b"&#13;", b"")
                  .replace(b"\r\n", b"\n").replace(b"\r", b"\n"))
-    # Финальный перенос — как в оригинале (новый файл → нет, канон #57)
+    # Final newline - as in the original (new file -> none, canon #57)
     want_final_nl = style["final_nl"] if style else False
     xml_bytes = xml_bytes.rstrip(b"\n")
     if want_final_nl:
         xml_bytes += b"\n"
-    # EOL — как в оригинале (новый файл → CRLF, канон #57)
+    # EOL - as in the original (new file -> CRLF, canon #57)
     if (style["crlf"] if style else True):
         xml_bytes = xml_bytes.replace(b"\n", b"\r\n")
     return xml_bytes
@@ -286,25 +286,25 @@ def save_xml_with_bom(tree, path):
 
 
 def write_utf8_bom(path, content):
-    # newline='' — без трансляции: иначе текстовый режим Python дал бы CRLF на Windows
-    # и LF на macOS, то есть вывод навыка зависел бы от ОС.
+    # newline='' - no translation: otherwise Python text mode would give CRLF on Windows
+    # and LF on macOS, that is, the skill output would depend on the OS.
     with open(path, 'w', encoding='utf-8-sig', newline='') as f:
         f.write(content)
 
 
 
 def is_valid_lang(code):
-    """Код языка идёт и в текст XML, и в имя файла страницы.
+    """The language code goes both into the XML text and into the page file name.
 
-    Пустое значение дало бы файл «.html» и пустой <Page></Page>, разделитель пути — запись
-    мимо каталога страниц, а зарезервированное имя устройства (nul, con, prn, aux, com1…, lpt1…)
-    на Windows уводит запись в само устройство: при -Lang nul этот порт молча писал
-    <Page>nul</Page> и пустой каталог с кодом 0. Все отказы платформы были бы тихими.
+    An empty value would give a ".html" file and an empty <Page></Page>, a path separator - a write
+    outside the pages directory, and a reserved device name (nul, con, prn, aux, com1…, lpt1…)
+    on Windows redirects the write into the device itself: with -Lang nul this port silently wrote
+    <Page>nul</Page> and an empty directory with exit code 0. All platform rejections would be silent.
 
-    fullmatch, а не match: последний с `$` допускает перевод строки в конце.
+    fullmatch, not match: the latter with `$` allows a trailing newline.
 
-    Копия этой функции есть в template-add (навыки автономны, формат «дескриптор + страница»
-    у них общий). Держать копии одинаковыми — сознательно; за дрейфом следит check-inline-drift.
+    A copy of this function exists in template-add (the skills are autonomous, the "descriptor + page"
+    format is common to them). Keeping the copies identical is intentional; drift is tracked by check-inline-drift.
     """
     if not re.fullmatch(r"[A-Za-z0-9_-]+", code):
         return False
@@ -314,12 +314,12 @@ def is_valid_lang(code):
 
 
 def write_xml_file(path, content):
-    """XML в каноне выгрузки Конфигуратора: CRLF в разделителях, без перевода в конце.
+    """XML in the Configurator dump canon: CRLF in separators, no final newline.
 
-    Копия этой функции есть в каждом навыке-эмиттере (навыки автономны). Держать
-    копии одинаковыми — сознательно: разошедшиеся копии сводят на нет весь смысл.
+    A copy of this function exists in every emitter skill (the skills are autonomous). Keeping
+    the copies identical is intentional: diverged copies negate the whole point.
 
-    HTML-страница сюда НЕ идёт — платформа хранит её с LF.
+    An HTML page does NOT go here - the platform stores it with LF.
     """
     text = content.replace('\r\n', '\n').replace('\n', '\r\n').rstrip('\r\n')
     write_utf8_bom(path, text)
@@ -347,10 +347,10 @@ def main():
         print(f"Каталог объекта не найден: {ext_dir}. Проверьте путь ObjectName (например Catalogs/МойСправочник).", file=sys.stderr)
         sys.exit(1)
 
-    # Справка — тело объекта, а тело и дескриптор платформа загружает только в одной версии формата.
-    # Поэтому версию берём прежде всего из дескриптора <объект>.xml (объект может быть старше выгрузки после
-    # мержа веток), и только без него — подъёмом от каталога объекта. Не от SrcDir: у внешней обработки
-    # корень <Имя>.xml лежит В SrcDir, подъём его не видел, и справка обработки 2.20 писалась 2.17.
+    # Help is an object body, and the platform loads a body and its descriptor only in one format version.
+    # Therefore take the version first of all from the descriptor <object>.xml (the object may be older than the
+    # dump after merging branches), and only without it - by walking up from the object directory. Not from SrcDir:
+    # for an external data processor the root <Name>.xml lies IN SrcDir, the walk-up did not see it, and help of processor 2.20 was written as 2.17.
     format_version = None
     owner_xml = os.path.abspath(object_dir) + ".xml"
     if os.path.isfile(owner_xml):
@@ -409,9 +409,9 @@ def main():
         '</html>'
     )
 
-    # Файл страницы НЕ перезаписываем: отказ выше смотрит только на Help.xml, а страница может
-    # пережить его (удалённый дескриптор, частичная выгрузка, справка, сделанная руками) — и тогда
-    # безусловная запись молча стирала бы текст справки с кодом 0.
+    # Do NOT overwrite the page file: the refusal above looks only at Help.xml, while the page may
+    # survive it (deleted descriptor, partial dump, help made by hand) - and then
+    # an unconditional write would silently erase the help text with exit code 0.
     if os.path.exists(help_html_path):
         print(f"[WARN] Страница {lang}.html уже лежала на диске — содержимое сохранено, создан только дескриптор.")
     else:

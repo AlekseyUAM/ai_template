@@ -1,6 +1,6 @@
 ---
 name: skd-decompile
-description: Декомпиляция схемы компоновки данных 1С (СКД) в JSON-черновик в формате skd-compile. Используй для scaffold нового отчёта по образцу или структурного рефакторинга. Не для точечных правок
+description: Decompile a 1C data composition schema (DCS) into a JSON draft in skd-compile format. Use for scaffolding a new report from an example or for structural refactoring. Not for point edits
 argument-hint: <TemplatePath> [-OutputPath <out.json>]
 disable-model-invocation: true
 allowed-tools:
@@ -10,43 +10,43 @@ allowed-tools:
   - Glob
 ---
 
-# /skd-decompile — JSON-черновик из Template.xml СКД
+# /skd-decompile - JSON draft from DCS Template.xml
 
-Читает Template.xml и эмитит JSON в формате `skd-compile`. **Результат — черновик**, а не обратимое представление: см. раздел «Что получаешь».
+Reads Template.xml and emits JSON in the `skd-compile` format. **The result is a draft**, not a reversible representation: see the "What you get" section.
 
-## Когда использовать
+## When to use
 
-- **Scaffold нового отчёта по образцу** — взять существующий СКД, получить JSON, поправить и скомпилировать в новый.
-- **Структурный рефакторинг** — переписать вариант, перерисовать шаблон, перебрать набор полей.
+- **Scaffold a new report from an example** - take an existing DCS, get JSON, fix it and compile into a new one.
+- **Structural refactoring** - rewrite a variant, redraw a template, rework a field set.
 
-## Когда **не** использовать
+## When **not** to use
 
-- **Точечные правки готового отчёта** (добавить поле, фильтр, итог, переименовать) → `/skd-edit`. Цикл «декомпиляция → правка JSON → компиляция» переписывает шаблон целиком, может терять непокрытые конструкции и даёт большой diff в исходниках. `/skd-edit` правит адресно, без полной реконструкции.
+- **Point edits of a finished report** (add a field, filter, total, rename) -> `/skd-edit`. The "decompile -> edit JSON -> compile" cycle rewrites the template entirely, may lose uncovered constructs and produces a large diff in the sources. `/skd-edit` edits locally, without full reconstruction.
 
-## Параметры
+## Parameters
 
-| Параметр | Описание |
+| Parameter | Description |
 |----------|----------|
-| `TemplatePath` | Путь к Template.xml (обязательный) |
-| `OutputPath` | Путь к выходному JSON. Если не задан — JSON в stdout |
+| `TemplatePath` | Path to Template.xml (required) |
+| `OutputPath` | Path to the output JSON. If not set - JSON to stdout |
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/skd-decompile.py" -TemplatePath "<Template.xml>" -OutputPath "<out.json>"
 ```
 
-## Что получаешь
+## What you get
 
-JSON-черновик в формате `/skd-compile` — **не полное обратимое представление СКД**. На вход компилятору такой JSON напрямую может не пойти: в нём встречаются sentinel-узлы (маркер `__unsupported__`).
+A JSON draft in the `/skd-compile` format - **not a complete reversible representation of the DCS**. Such JSON may not go straight into the compiler: it contains sentinel nodes (the `__unsupported__` marker).
 
-- **Готовые узлы** — большая часть СКД (поля, параметры, шаблоны, варианты со structure/filter/order/conditionalAppearance и т.п.) ложится в JSON как обычные узлы DSL.
-- **Sentinel-узлы** — места, где встретилась конструкция, которую декомпилятор не умеет выразить в DSL. JSON остаётся валидным, но компилятор откажется его собирать, пока sentinel не **заменён ручной реализацией** (явный raw `template`, прописанный appearance и т.п.) **или не удалён**, если в новом отчёте конструкция не нужна. Это намеренный барьер — чтобы непокрытое не уехало в финальный отчёт незамеченным.
-- **`<basename>.warnings.md`** рядом с `OutputPath` — список всех sentinel-узлов с координатами в исходнике, по нему удобно обходить места под ручную доработку.
-- **Критичные конструкции** (Picture cells, ХранилищеЗначения, вложенные схемы, не-СКД root) — скрипт падает с ненулевым кодом и сообщением в stderr; такой Template как образец не годится.
+- **Ready nodes** - most of the DCS (fields, parameters, templates, variants with structure/filter/order/conditionalAppearance, etc.) maps into JSON as regular DSL nodes.
+- **Sentinel nodes** - places where a construct occurred that the decompiler cannot express in the DSL. The JSON remains valid, but the compiler will refuse to build it until the sentinel is **replaced with a manual implementation** (explicit raw `template`, explicit appearance, etc.) **or removed**, if the construct is not needed in the new report. This is a deliberate barrier - so that uncovered items do not end up in the final report unnoticed.
+- **`<basename>.warnings.md`** next to `OutputPath` - a list of all sentinel nodes with coordinates in the source; it is convenient for walking through places that need manual rework.
+- **Critical constructs** (Picture cells, ХранилищеЗначения, nested schemas, non-DCS root) - the script fails with a non-zero code and a message to stderr; such a Template is not suitable as an example.
 
 ## Workflow
 
-1. `/skd-decompile <Template.xml> -OutputPath draft.json` — получить черновик.
-2. Открыть `draft.warnings.md`, посмотреть, что не покрылось.
-3. Поправить JSON под задачу. Sentinel-узлы — заменить на ручную реализацию (через явный raw `template`, через ручное описание appearance и т.п.) либо удалить, если конструкция в новом отчёте не нужна.
-4. `/skd-compile -DefinitionFile draft.json -OutputPath new-Template.xml` — собрать обратно.
-5. `/skd-validate` + `/skd-info` — проверить.
+1. `/skd-decompile <Template.xml> -OutputPath draft.json` - get the draft.
+2. Open `draft.warnings.md`, see what was not covered.
+3. Fix the JSON for the task. Sentinel nodes - replace with a manual implementation (via explicit raw `template`, via a manual appearance description, etc.) or delete them if the construct is not needed in the new report.
+4. `/skd-compile -DefinitionFile draft.json -OutputPath new-Template.xml` - build it back.
+5. `/skd-validate` + `/skd-info` - check.

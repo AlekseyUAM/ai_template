@@ -1,36 +1,36 @@
 ---
 name: v8-xsd-fetch
-description: Загрузка XSD-схем формата XML-выгрузки 1С по версиям формата в каталог проекта. Используй когда нужно скачать или обновить схемы платформы для проверки выгрузки по XSD, или узнать, какие версии схем доступны
+description: Downloading 1C XML dump format XSD schemas by format version into the project directory. Use when you need to download or update platform schemas for validating a dump by XSD, or find out which schema versions are available
 argument-hint: "[-Versions 2.20,2.21] [-List]"
 allowed-tools:
   - Bash
   - Read
 ---
 
-# /v8-xsd-fetch — XSD-схемы платформы
+# /v8-xsd-fetch - Platform XSD schemas
 
-Скачивает XSD-схемы формата выгрузки по версиям формата в каталог схем проекта
-(`.v8-xsd` рядом с `.v8-project.json` или путь из его ключа `xsdPath`).
+Downloads XSD schemas of the dump format by format version into the project schema directory
+(`.v8-xsd` next to `.v8-project.json`, or the path from its `xsdPath` key).
 
-## Команда
+## Command
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/v8-xsd-fetch.py" -Versions "2.20"
 ```
 
-| Параметр | Описание |
+| Parameter | Description |
 |----------|----------|
-| `-Versions "<список>"` | Версии формата через запятую. Без него — все доступные (около 600 КБ на версию) |
-| `-List` | Показать доступные версии и какие уже скачаны, ничего не скачивая |
-| `-OutPath <путь>` | Другой каталог схем — только если пользователь его назвал |
-| `-Force` | Перекачать уже скачанные файлы |
+| `-Versions "<список>"` | Format versions, comma-separated. Without it - all available (about 600 KB per version) |
+| `-List` | Show available versions and which are already downloaded, without downloading anything |
+| `-OutPath <путь>` | Another schema directory - only if the user named it |
+| `-Force` | Re-download already downloaded files |
 
-## Какую версию брать
+## Which version to take
 
-Версия формата — атрибут `version` корня `Configuration.xml` выгрузки (например, `2.20`), а не номер
-релиза платформы. Скачивай версии выгрузок, с которыми работает проект.
+The format version is the `version` attribute of the dump's `Configuration.xml` root (for example,
+`2.20`), not the platform release number. Download the dump versions the project works with.
 
-Каталог схем в Git не добавляй: если проект — репозиторий, каталог должен быть в `.gitignore`.
+Do not add the schema directory to Git: if the project is a repository, the directory must be in `.gitignore`.
 
-Нет сети — сообщи пользователю: схемы можно скопировать вручную из каталогов
-`schemas/designer/<версия>/` репозитория https://github.com/yellow-hammer/namespace-forest.
+No network - tell the user: schemas can be copied manually from the
+`schemas/designer/<версия>/` directories of the repository https://github.com/yellow-hammer/namespace-forest.

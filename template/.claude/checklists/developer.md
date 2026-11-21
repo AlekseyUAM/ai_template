@@ -1,123 +1,123 @@
-> **Чеклист этапа.** Это не отдельный агент: все пункты выполняешь ты сам
-> в главном потоке.
+> **Stage checklist.** This is not a separate agent: you perform every item yourself
+> in the main thread.
 
-# Разработчик
+# Developer
 
-Ты — разработчик 1С. Реализуешь BSL-код, чтобы тесты проходили, следуя стандартам.
+You are a 1C developer. You implement BSL code so tests pass, following the standards.
 
-## Когда применяется
-Этап «разработка» (код): после аналитика, архитектора и разработчика тестов. Документацию по готовому решению пишет отдельный агент (`technical-writer`) на этапе «документация».
+## When applied
+Stage "development" (code): after the analyst, architect and test developer. Documentation for the ready solution is written by a separate agent (`technical-writer`) at the "documentation" stage.
 
-## Вход
-Используй имеющиеся артефакты задачи: `ANALYZE.md` (спецификация), `ARCHITECT.md` (техдизайн), ранее написанные тесты. Если каких-то из них нет (включены не все этапы) — опирайся на `TASK.md` (цель, план, ограничения) как первичный источник.
+## Input
+Use the task's existing artifacts: `ANALYZE.md` (specification), `ARCHITECT.md` (technical design), previously written tests. If some of them are absent (not all stages enabled) - rely on `TASK.md` (goal, plan, constraints) as the primary source.
 
-## Порядок действий
+## Steps
 
-**Приоритет этапа.** Сначала рабочий код: модуль → `check-modules` → загрузка в ИБ
-(`db-update start`, `load-config-optimized.py`, `db-update done`) → прогон
-`run-tests.py` и доведение тестов до зелёного → `DEVELOP.md`.
-Статанализ (`bsl_ls`, `query-analyze`, `code-analyze`) и `validate_query` — после
-загрузки, по одному вызову на изменённый модуль и статический текст запроса.
+**Stage priority.** Working code first: module -> `check-modules` -> infobase load
+(`db-update start`, `load-config-optimized.py`, `db-update done`) -> run
+`run-tests.py` and bring tests to green -> `DEVELOP.md`.
+Static analysis (`bsl_ls`, `query-analyze`, `code-analyze`) and `validate_query` - after
+the load, one call per changed module and static query text.
 
-> **Регистры накопления.** Если создаёшь регистр накопления, до загрузки в ИБ
-> проверь регистраторы: документы с `RegisterRecords` и `<Registrars>` у регистра.
-> Без согласованных регистраторов загрузка падает («Ни один из документов не
-> является регистратором»).
+> **Accumulation registers.** If you create an accumulation register, before the IB load
+> check the registrars: documents with `RegisterRecords` and the register's `<Registrars>`.
+> Without matched registrars the load fails ("Ни один из документов не
+> является регистратором").
 
-1. Ищу существующий код перед написанием нового (правило search-before-write).
-2. Пишу минимальный BSL-код по стандартам (навык bsl-coding-standards).
-   **Обработка проведения** — реализую по `ARCHITECT.md`: в нём уже учтены
-   контроль остатков, блокировки, граница и момент времени, удаление движений
-   (метаданные беру из `code_index`). Справки по этим темам открываю точечно,
-   для отдельного неясного вопроса:
-   - [контроль остатков](../skills/bsl-coding-standards/reference/balance-control-methodology.md);
-   - [блокировки](../skills/bsl-coding-standards/reference/locks.md);
-   - [граница и момент времени](../skills/bsl-coding-standards/reference/boundary-and-moment.md);
-   - [удаление движений](../skills/bsl-coding-standards/reference/movements-deletion.md).
-   **Запросы** — пишу по чеклисту `query-review` (индексы; `ЕСТЬNULL` при левом
-   соединении с остатками; статический текст обязан открываться конструктором;
-   исходный текст запроса ровно как записан обязан проходить `validate_query`;
-   подстановка через `СтрЗаменить` — только в валидные места (`&ОсобыйПараметр`,
-   `1 = 1`), заглушки `!...!`/`%1`/`{0}` запрещены; запрос к табличной части документа
-   напрямую вместо выгрузки её в таблицу значений) и переиспользую готовые функции
-   БСП вместо ручных реализаций (`bsp-reuse`). Навыки доступны через инструмент Skill.
-   Если запрос использует `ИТОГИ`, помни: неагрегированные поля на строках итогов
-   возвращаются как `NULL`.
-   **Новые метаданные и `validate_query`.** Если запрос обращается к объектам, которых
-   ещё нет в ИБ (они добавлены в этой задаче), `validate_query` до загрузки вернёт
-   «Таблица не найдена». Это отложенная проверка: фиксирую её в `DEVELOP.md` и
-   перехожу к загрузке; после загрузки проверяю запрос.
-   **Результат `validate_query`.** Ответ содержит поле `valid` — оно авторитетно:
-   `valid: true` — текст принят; `valid: false` — дефект текста запроса,
-   исправляю текст и проверяю заново до `valid: true`. В `DEVELOP.md` фиксирую
-   фактический результат строкой `validate_query: valid` (или `deferred` для
-   новых объектов).
-   **Сбой вызова `validate_query`.** Если в ответе нет поля `valid` (транспорт,
-   HTTP, сервер), делаю одну повторную попытку; затем фиксирую сбой инструмента
-   в `DEVELOP.md` и продолжаю. Синтаксическая ошибка (`valid: false`) — это
-   дефект запроса, а не сбой инструмента.
-   **Финальные файлы — на месте.** Создавай и правь `src/cf/**/*.bsl` и `src/cfe/**`
-   через `Write`/`Edit` по реальным путям. `tmp/` — для генерируемых JSON и
-   промежуточных данных; финальную версию модуля пиши прямо в целевой файл.
-   **СКД и отчёты** — перед правкой схемы/отчёта прочитай целиком
-   [особенности СКД](../skills/bsl-coding-standards/reference/skd-specifics.md) и справки
-   [регистры накопления](../skills/bsl-coding-standards/reference/accumulation-registers.md),
-   [регистры сведений](../skills/bsl-coding-standards/reference/information-registers.md).
-   Реализуй по ТЗ и этим правилам; перед сдачей выполни проверки из `skd-specifics.md`
+1. I search for existing code before writing new (rule search-before-write).
+2. I write minimal BSL code per the standards (skill bsl-coding-standards).
+   **Posting logic** - I implement per `ARCHITECT.md`: it already accounts for
+   balance control, locks, boundary and point in time, movement deletion
+   (metadata from `code_index`). I open the references on these topics pointwise,
+   for a specific unclear question:
+   - [balance control](../skills/bsl-coding-standards/reference/balance-control-methodology.md);
+   - [locks](../skills/bsl-coding-standards/reference/locks.md);
+   - [boundary and point in time](../skills/bsl-coding-standards/reference/boundary-and-moment.md);
+   - [movement deletion](../skills/bsl-coding-standards/reference/movements-deletion.md).
+   **Queries** - I write per the `query-review` checklist (indexes; `ЕСТЬNULL` on a left
+   join with balances; static text must open in the Configurator;
+   the source query text exactly as written must pass `validate_query`;
+   substitution via `СтрЗаменить` - only into valid places (`&ОсобыйПараметр`,
+   `1 = 1`), stubs `!...!`/`%1`/`{0}` are forbidden; a query to a document's tabular section
+   directly instead of unloading it into a value table) and reuse ready BSP functions
+   instead of manual implementations (`bsp-reuse`). Skills are available via the Skill tool.
+   If the query uses `ИТОГИ`, remember: non-aggregated fields on total rows
+   are returned as `NULL`.
+   **New metadata and `validate_query`.** If the query references objects that
+   are not yet in the IB (they were added in this task), `validate_query` before the load will return
+   "Таблица не найдена". This is a deferred check: I record it in `DEVELOP.md` and
+   proceed to the load; after the load I check the query.
+   **`validate_query` result.** The response contains the `valid` field - it is authoritative:
+   `valid: true` - the text is accepted; `valid: false` - a defect of the query text,
+   I fix the text and check again until `valid: true`. In `DEVELOP.md` I record
+   the actual result as the line `validate_query: valid` (or `deferred` for
+   new objects).
+   **`validate_query` call failure.** If the response has no `valid` field (transport,
+   HTTP, server), I make one retry; then I record the tool failure
+   in `DEVELOP.md` and continue. A syntax error (`valid: false`) is a
+   query defect, not a tool failure.
+   **Final files - in place.** Create and edit `src/cf/**/*.bsl` and `src/cfe/**`
+   via `Write`/`Edit` at real paths. `tmp/` - for generated JSON and
+   intermediate data; write the final version of the module directly into the target file.
+   **DCS and reports** - before editing the schema/report read in full
+   [DCS specifics](../skills/bsl-coding-standards/reference/skd-specifics.md) and the references
+   [accumulation registers](../skills/bsl-coding-standards/reference/accumulation-registers.md),
+   [information registers](../skills/bsl-coding-standards/reference/information-registers.md).
+   Implement per the TS and these rules; before submitting, perform the checks from `skd-specifics.md`
    (`skd-validate -ExpectedFields`, `skd-info -Mode variant`).
-3. После правок прогоняю статический анализ (правило verify-with-syntax-checker);
-   перед вызовом вычисляю sha256 файла (`sha256sum <файл>` или
-   `shasum -a 256 <файл>`) и передаю его в `check`. Без `sha256` инструмент
-   отклонит вызов. Не перепечатываю модуль вручную;
-   по изменённым модулям прогоняю `code-analyze`; для статического текста запроса
-   из исходника — один вызов `validate_query` (подстановка направления сортировки
-   через `СтрЗаменить` в валидное место отдельной валидации не требует; для
-   запросов к новым объектам `validate_query` откладывается до загрузки в ИБ).
-   При 0 замечаний `bsl_ls` перехожу к загрузке; находки устраняю до передачи на
-   ревью; результат фиксирую в `DEVELOP.md`.
-   **Проверка компиляции основной конфигурации (обязательно).** Перед сдачей
-   этапа запускаю модули основной конфигурации пакетным конфигуратором — не в
-   фоне, `timeout: 600000` (10 мин):
+3. After edits I run static analysis (rule verify-with-syntax-checker);
+   before the call I compute the file's sha256 (`sha256sum <файл>` or
+   `shasum -a 256 <файл>`) and pass it to `check`. Without `sha256` the tool
+   will reject the call. I do not retype the module manually;
+   for changed modules I run `code-analyze`; for static query text
+   from the source - one `validate_query` call (substitution of the sort direction
+   via `СтрЗаменить` into a valid place does not require a separate validation; for
+   queries to new objects `validate_query` is deferred until the IB load).
+   At 0 `bsl_ls` findings I proceed to the load; I eliminate findings before handing over to
+   review; I record the result in `DEVELOP.md`.
+   **Main configuration compilation check (mandatory).** Before submitting
+   the stage I run the main configuration modules with the batch configurator - not in
+   the background, `timeout: 600000` (10 min):
    ```bash
    python .claude/skills/1c-batch/scripts/1c-batch.py check-modules --thin-client --server
    ```
-   Ошибка компиляции в `src/cf` иначе всплывёт модальным окном и подвесит
-   предприятие; ошибки клиентского контекста (например, `Новый Запрос` в общем
-   модуле с флагом «Клиент») исправляю кодом или снятием флага у модуля.
-   Precheck `run-tests.py` дополняет эту проверку, но не заменяет её. Код возврата
-   `run-tests.py` `3` — среда/лицензия или таймаут проверки модулей (600 c),
-   в том числе при диагностике после таймаута сеанса, — а не ошибка компиляции;
-   `124` — настоящий таймаут сеанса.
-   **Имена метаданных.** После `meta-compile`/`meta-edit` проверяю изменённые
-   XML на зарезервированные системные имена:
+   A compilation error in `src/cf` would otherwise pop up as a modal window and hang
+   the enterprise; client context errors (for example, `Новый Запрос` in a common
+   module with the "Client" flag) I fix with code or by clearing the module flag.
+   The `run-tests.py` precheck complements this check but does not replace it. The
+   `run-tests.py` return code `3` - environment/license or module check timeout (600 s),
+   including diagnostics after a session timeout - not a compilation error;
+   `124` - a real session timeout.
+   **Metadata names.** After `meta-compile`/`meta-edit` I check the changed
+   XML for reserved system names:
    ```bash
    python .claude/skills/code-analyze/scripts/check_metadata_names.py --changed
    ```
-   Находки `reserved-system-name` переименовываю до загрузки в ИБ.
-4. Довожу тесты до «зелёного». В single-agent режиме загрузку конфигурации в ИБ,
-   обновление БД и прогон тестов выполняю я сам по правилу `single-agent-workflow`:
-   после `db-update done` запускаю `.claude/tools/run-tests.py configs/task#<id>/test.json`,
-   красные тесты исправляю в прикладном коде и повторяю прогон, пока все сценарии
-   не станут зелёными (в рамках лимита этапа). Тест-модуль оставляю без изменений.
-   Результат прогона и `validate_query: valid` фиксирую в `DEVELOP.md`.
+   `reserved-system-name` findings I rename before the IB load.
+4. I bring tests to "green". In single-agent mode I perform the configuration load into the IB,
+   the DB update and the test run myself per the `single-agent-workflow` rule:
+   after `db-update done` I run `.claude/tools/run-tests.py configs/task#<id>/test.json`,
+   fix red tests in the applied code and repeat the run until all scenarios
+   become green (within the stage limit). I leave the test module unchanged.
+   I record the run result and `validate_query: valid` in `DEVELOP.md`.
 
-## Комментарии в BSL
+## Comments in BSL
 
-В теле `Процедура`/`Функция`, между операторами и **внутри текста запроса**
-комментарии не пишем. Допустимы только:
+In the body of `Процедура`/`Функция`, between statements and **inside the query text**
+we do not write comments. Only allowed:
 
-- заголовок модуля (краткое назначение);
-- описание метода перед объявлением (`// Описание`, `// Параметры`,
+- module header (brief purpose);
+- method description before the declaration (`// Описание`, `// Параметры`,
   `// Возвращаемое значение`, `// Пример`).
 
-Существующие комментарии не удаляй. Исключение — обязательные маркеры
-`mark_changes` (см. раздел ниже). Если нужно объяснить неочевидное решение или
-отклонённое замечание анализатора — пиши в `DEVELOP.md`, а не в код.
+Do not delete existing comments. Exception - mandatory markers
+`mark_changes` (see the section below). If you need to explain a non-obvious decision or
+a rejected analyzer finding - write in `DEVELOP.md`, not in the code.
 
-## Отклонённые замечания анализаторов (waiver)
+## Rejected analyzer findings (waiver)
 
-Каждый `error`/`warning` любого анализатора (`bsl_ls`, `code-analyze`,
-`query-analyze`) либо исправляется, либо попадает в таблицу `DEVELOP.md`:
+Each `error`/`warning` of any analyzer (`bsl_ls`, `code-analyze`,
+`query-analyze`) is either fixed or goes into the `DEVELOP.md` table:
 
 ```markdown
 | Инструмент | Код | Файл:строка | Решение | Ссылка на ТЗ/дизайн |
@@ -125,77 +125,77 @@
 | query-analyze | vt-filter-in-where | src/cf/.../Module.bsl:125 | фильтр по индексу обязателен по условиям задачи | TASK.md, п. «Остатки» |
 ```
 
-«Решение» объясняет, почему замечание не исправляется; «Ссылка» указывает на
-конкретную строку `TASK.md`/`ANALYZE.md`/`ARCHITECT.md` или справки, которая
-доказывает, что нарушения нет. Общая фраза «шум анализатора» waiver'ом не
-является. Если отклонённых замечаний нет — явно напиши
+"Решение" explains why the finding is not fixed; "Ссылка" points to a
+specific line of `TASK.md`/`ANALYZE.md`/`ARCHITECT.md` or a reference that
+proves there is no violation. A generic phrase "analyzer noise" is not a waiver. If there are no
+rejected findings - explicitly write
 `Отклонённых замечаний нет.`
 
-`Information`-диагностики `bsl_ls` не блокируют и в waiver не вносятся:
-исправляй только `Error` и `Warning`, указывающие на реальный дефект.
+`Information` diagnostics of `bsl_ls` do not block and are not entered into the waiver:
+fix only `Error` and `Warning` that point to a real defect.
 
-`validate_query` с `valid: false` — дефект текста запроса: устраняю его в тексте
-и проверяю заново; в таблицу waiver'ов такой результат не попадает.
+`validate_query` with `valid: false` - a query text defect: I eliminate it in the text
+and check again; such a result does not go into the waiver table.
 
-## Разбор возврата на доработку (упавшие тесты / ошибка загрузки в ИБ)
-В stage-scoped режиме прогон тестов и загрузку ИБ выполняю я сам; раздел использую
-как инструкцию по исправлению. При возврате на `develop` сначала определяю причину
-по логу:
+## Handling a return for rework (failed tests / IB load error)
+In stage-scoped mode I perform the test run and the IB load myself; I use the section
+as fixing instructions. On a return to `develop`, first I determine the cause
+from the log:
 
-При возврате на тот же этап тебе передадут компактный re-brief. Не перечитывай
-всю задачу заново: прочитай текущие `DEVELOP.md` (файл без суффикса; предыдущая
-версия — `DEVELOP.<n>.md`), вердикт и лог, изменённый модуль — и правь код. Полные
-`ARCHITECT.md`/архивы не перечитывай; в `DEVELOP.md` добавь секцию итерации, не
-переписывай отчёт целиком. Вердикт этапа авторитетен — не защищай прежнюю
-реализацию.
+On a return to the same stage you will be given a compact re-brief. Do not re-read
+the whole task again: read the current `DEVELOP.md` (the file without a suffix; the previous
+version is `DEVELOP.<n>.md`), the verdict and the log, the changed module - and fix the code. Do not re-read full
+`ARCHITECT.md`/archives; add an iteration section to `DEVELOP.md`, do not
+rewrite the report entirely. The stage Вердикт is authoritative - do not defend the previous
+implementation.
 
-Вердикт читай так: текущий `TESTING.md`/`REVIEW.md`, если он есть; иначе —
-новейший по номеру архив `TESTING.<n>.md`/`REVIEW.<n>.md` (при возврате вердикт
-уже заархивирован `task_status.py`). `<n>` — итерация **этапа вердикта**
-(`testing`/`review`), а не возвращаемого этапа.
+Read the Вердикт as follows: the current `TESTING.md`/`REVIEW.md`, if it exists; otherwise -
+the newest by number archive `TESTING.<n>.md`/`REVIEW.<n>.md` (on return the verdict
+is already archived by `task_status.py`). `<n>` - iteration of the **verdict stage**
+(`testing`/`review`), not of the returned stage.
 
-**Упали тесты по вине кода** (возврат с этапа `testing`, в `TESTING.md` виновник — код):
-1. Прочитай лог прогона `logs/task#<id>/result.json` (абсолютный путь задан в конфиге
-   `configs/task#<id>/test.json`) и сводку `ИТОГ:` из `run-tests.log`. Там: `Выполнено`,
-   `ОписаниеОшибки`, по каждому тесту `Результат` и `ОписаниеОшибки`. При необходимости
-   смотри журнал регистрации ИБ.
-2. Найди причину падения по логу и исправь **прикладной код** — тест не трогай и не
-   подгоняй под баг.
-3. Доведи тесты до «зелёного».
+**Tests failed due to code** (return from the `testing` stage, in `TESTING.md` виновник - код):
+1. Read the run log `logs/task#<id>/result.json` (the absolute path is set in the config
+   `configs/task#<id>/test.json`) and the `ИТОГ:` summary from `run-tests.log`. There: `Выполнено`,
+   `ОписаниеОшибки`, for each test `Результат` and `ОписаниеОшибки`. If needed,
+   look at the IB event log.
+2. Find the failure cause from the log and fix **applied code** - do not touch the test and do not
+   adjust it to the bug.
+3. Bring the tests to "green".
 
-> Если падение вызвано дефектом самого теста (виновник — тест), этап вернут
-> задачу не тебе, а на этап `tests` к разработчику тестов (`developer-tests`) —
-> правка тест-модулей не твоя зона (см. правило `single-agent-workflow`).
+> If the failure is caused by a defect of the test itself (виновник - тест), the stage will return
+> the task not to you, but to the `tests` stage to the test developer (`developer-tests`) -
+> editing test modules is not your area (see the `single-agent-workflow` rule).
 
-**Ошибка загрузки в ИБ** (флаг `update_db`, загрузку выполняешь ты после разработки):
-1. Прочитай лог загрузки `logs/task#<id>/load-config.log`.
-2. Найди причину (невалидные/несогласованные исходники или метаданные) и исправь их;
-   прогони статический анализ заново.
+**IB load error** (flag `update_db`, you perform the load after development):
+1. Read the load log `logs/task#<id>/load-config.log`.
+2. Find the cause (invalid/inconsistent sources or metadata) and fix them;
+   run static analysis again.
 
-В обоих случаях зафиксируй правки в `DEVELOP.md`.
+In both cases record the fixes in `DEVELOP.md`.
 
-## Выделение изменений идентификаторами (по флагу `mark_changes`)
-Прочитай `tasks/task#<id>/task.json`, поле `mark_changes`. Считай флаг включённым,
-если значение истинно в любом виде: `1`, `true`, `"да"`, `"yes"`. Если флаг не
-включён — пиши код как обычно, без обрамления.
+## Marking changes with identifiers (per the `mark_changes` flag)
+Read `tasks/task#<id>/task.json`, the `mark_changes` field. Consider the flag enabled
+if the value is truthy in any form: `1`, `true`, `"да"`, `"yes"`. If the flag is not
+enabled - write code as usual, without wrapping.
 
-Если флаг включён — обрамляй написанный тобой BSL-код комментариями-маркерами.
-Данные для маркера бери из того же `task.json`:
-- идентификатор разработчика — поле `developer_id`;
-- идентификатор задачи — поле `identifier`;
-- текущая дата в формате `ДД.ММ.ГГГГ` (например `21.05.2026`) — получи её командой
-  `date +%d.%m.%Y`.
+If the flag is enabled - wrap the BSL code you wrote with marker comments.
+Take the data for the marker from the same `task.json`:
+- developer identifier - `developer_id` field;
+- task identifier - `identifier` field;
+- current date in `ДД.ММ.ГГГГ` format (for example `21.05.2026`) - get it with the
+  `date +%d.%m.%Y` command.
 
-Формат обрамления:
+Wrapping format:
 ```bsl
 // {developer_id} #{identifier} {дата} -->
     ... написанный код
 // <-- {developer_id} #{identifier}
 ```
 
-Если подряд добавляется больше одной функции или процедуры — НЕ обрамляй каждую
-по отдельности: поставь один открывающий маркер перед первой и один закрывающий
-после последней:
+If more than one function or procedure is added in a row - do NOT wrap each
+separately: put one opening marker before the first and one closing marker
+after the last:
 ```bsl
 // {developer_id} #{identifier} {дата} -->
     Функция ИмяФункции1()
@@ -208,29 +208,29 @@
 // <-- {developer_id} #{identifier}
 ```
 
-Обрамляй только свой новый/изменённый код, а не весь модуль.
+Wrap only your new/changed code, not the whole module.
 
-## Выход
-Файл `DEVELOP.md` с описанием кода, в каталоге задачи, со списком изменённых файлов.
+## Output
+`DEVELOP.md` file with a description of the code, in the task directory, with a list of changed files.
 
-## Возможности окружения
+## Environment capabilities
 
-Навыки из `.claude/skills` доступны через инструмент `Skill` — полный актуальный список с описаниями виден при его вызове; выбирай нужный по описанию. Руководства: `mcp-usage`, `bsl-coding-standards`, `sdd-tdd-workflow`. Операционные навыки 1С (создание/правка/анализ/валидация метаданных, форм, ролей, СКД, макетов, XDTO, конфигураций и расширений, подсистем, интерфейсов, внешних обработок и отчётов), пакетные операции (`1c-batch`), веб-публикации и работа с БД — ищи по описанию в этом списке.
+Skills from `.claude/skills` are available through the `Skill` tool - the full current list with descriptions is visible when it is invoked; choose the needed one by description. Guides: `mcp-usage`, `bsl-coding-standards`, `sdd-tdd-workflow`. 1C operational skills (create/edit/analyze/validate metadata, forms, roles, DCS, templates, XDTO, configurations and extensions, subsystems, interfaces, external data processors and reports), batch operations (`1c-batch`), web publications and database work - look them up by description in this list.
 
-**Обязательный первый шаг перед работой:** вызови навык `mcp-usage` (инструмент Skill) и следуй ему — какой MCP под какую задачу, когда искать существующее, когда прогонять статанализ. Единый источник правды по MCP.
+**Mandatory first step before work:** invoke the `mcp-usage` skill (Skill tool) and follow it - which MCP for which task, when to search for existing things, when to run static analysis. The single source of truth on MCP.
 
-**Граница индекса:** `src/cf/**` индексирован — только `mcp__code_index__*`, без `Read`/`Grep`/`cat`/`sed`; `src/cfe/**`, `tasks/**`, `logs/**`, `tmp/**`, `configs/**`, `docs/**` не индексированы — обычные `Read`/`Grep`/`Glob`/`cat`/`grep` разрешены.
+**Index boundary:** `src/cf/**` is indexed - only `mcp__code_index__*`, no `Read`/`Grep`/`cat`/`sed`; `src/cfe/**`, `tasks/**`, `logs/**`, `tmp/**`, `configs/**`, `docs/**` are not indexed - regular `Read`/`Grep`/`Glob`/`cat`/`grep` are allowed.
 
-## Границы
-Реализую по утверждённому дизайну. Расширение объёма — к архитектору.
+## Boundaries
+I implement per the approved design. Scope expansion - to the architect.
 
-**Дефисы в BSL.** В коде и комментариях — только ASCII `-`: `—` (U+2014) и `–`
-(U+2013) дают `InvalidCharacterInFile` в `bsl_ls`. После правок ищу их в изменённых
-модулях: `grep -nE '–|—' <файлы>` (без `-P` — работает и в GNU, и в BSD/macOS grep).
+**Hyphens in BSL.** In code and comments - only ASCII `-`: `—` (U+2014) and `–`
+(U+2013) give `InvalidCharacterInFile` in `bsl_ls`. After edits I search for them in changed
+modules: `grep -nE '–|—' <файлы>` (without `-P` - works in both GNU and BSD/macOS grep).
 
-**Процессы 1С.** Никогда не выполняй `pkill -f "1cv8 ENTERPRISE"`: шаблон
-матчит собственную командную строку, shell убивает сам себя (`Exit code 144`) и
-может задеть чужие сеансы. Безопасно: `pkill -f '[1]cv8'`,
-`pgrep -f '[1]cv8'` + точечный `kill <pid>`; предпочитай `run-tests.py` и
-`1c-batch` — они убивают только своё дерево процессов по таймауту.
-Windows — см. `single-agent-workflow`, раздел «Долгие операции и процессы 1С».
+**1C processes.** Never run `pkill -f "1cv8 ENTERPRISE"`: the pattern
+matches its own command line, the shell kills itself (`Exit code 144`) and
+may affect foreign sessions. Safe: `pkill -f '[1]cv8'`,
+`pgrep -f '[1]cv8'` + targeted `kill <pid>`; prefer `run-tests.py` and
+`1c-batch` - they kill only their own process tree on timeout.
+Windows - see `single-agent-workflow`, section "Long operations and 1C processes".

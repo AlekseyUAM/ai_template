@@ -113,13 +113,13 @@ def test_create_task_disk_files_content(tmp_path):
     assert r.status_code == 200
     task_dir = project_path / "tasks" / "task#T-1"
 
-    task_md = (task_dir / "TASK.md").read_text()
+    task_md = (task_dir / "TASK.md").read_text(encoding="utf-8")
     assert "Моя цель" in task_md
     assert "Мой план" in task_md
     assert "Мои ограничения" in task_md
     assert "мои тесты" in task_md
 
-    task_json_data = json.loads((task_dir / "task.json").read_text())
+    task_json_data = json.loads((task_dir / "task.json").read_text(encoding="utf-8"))
     assert isinstance(task_json_data["stages"], list)
 
 
@@ -147,10 +147,10 @@ def test_create_task_persists_update_db_and_max_minutes(tmp_path):
     assert task["max_minutes"] == 90
 
     task_dir = project_path / "tasks" / "task#P-1"
-    task_json_data = json.loads((task_dir / "task.json").read_text())
+    task_json_data = json.loads((task_dir / "task.json").read_text(encoding="utf-8"))
     assert task_json_data["update_db"] is True
     assert task_json_data["max_minutes"] == 90
-    task_md = (task_dir / "TASK.md").read_text()
+    task_md = (task_dir / "TASK.md").read_text(encoding="utf-8")
     assert "90" in task_md
     assert "Обновлять базу данных и расширения" in task_md
 
@@ -180,10 +180,10 @@ def test_create_task_persists_mark_changes_and_developer_id(tmp_path):
     assert task["mark_changes"] == 1
 
     task_dir = project_path / "tasks" / "task#M-1"
-    task_json_data = json.loads((task_dir / "task.json").read_text())
+    task_json_data = json.loads((task_dir / "task.json").read_text(encoding="utf-8"))
     assert task_json_data["mark_changes"] is True
     assert task_json_data["developer_id"] == "dev42"
-    task_md = (task_dir / "TASK.md").read_text()
+    task_md = (task_dir / "TASK.md").read_text(encoding="utf-8")
     assert "Выделять изменения в коде идентификаторами: да" in task_md
 
 
@@ -206,9 +206,9 @@ def test_create_task_defaults_mark_changes_false(tmp_path):
     assert r.status_code == 200
     assert r.json()["task"]["mark_changes"] == 0
     task_json_data = json.loads(
-        (project_path / "tasks" / "task#NM-1" / "task.json").read_text())
+        (project_path / "tasks" / "task#NM-1" / "task.json").read_text(encoding="utf-8"))
     assert task_json_data["mark_changes"] is False
-    task_md = (project_path / "tasks" / "task#NM-1" / "TASK.md").read_text()
+    task_md = (project_path / "tasks" / "task#NM-1" / "TASK.md").read_text(encoding="utf-8")
     assert "Выделять изменения в коде идентификаторами: нет" in task_md
 
 
@@ -257,9 +257,9 @@ def test_create_task_persists_interactive(tmp_path):
     assert task["interactive"] == 1
 
     task_dir = project_path / "tasks" / "task#I-1"
-    task_json_data = json.loads((task_dir / "task.json").read_text())
+    task_json_data = json.loads((task_dir / "task.json").read_text(encoding="utf-8"))
     assert "interactive" not in task_json_data
-    task_md = (task_dir / "TASK.md").read_text()
+    task_md = (task_dir / "TASK.md").read_text(encoding="utf-8")
     assert "Интерактивный режим" not in task_md
 
 
@@ -847,7 +847,7 @@ def test_create_task_writes_iso_created_at(tmp_path):
     assert isinstance(task["created_at"], (int, float))
 
     task_json_data = json.loads(
-        (project_path / "tasks" / "task#C-1" / "task.json").read_text())
+        (project_path / "tasks" / "task#C-1" / "task.json").read_text(encoding="utf-8"))
     created = task_json_data["created_at"]
     assert isinstance(created, str)
     parsed = datetime.fromisoformat(created)

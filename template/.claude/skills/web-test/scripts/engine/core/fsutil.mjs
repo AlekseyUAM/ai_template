@@ -1,42 +1,42 @@
-// web-test core/fsutil v1.0 — удаление и копирование, устойчивые к не-ASCII путям на Windows.
+// web-test core/fsutil v1.0 - deletion and copying robust to non-ASCII paths on Windows.
 // Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 
 // ─── fsutil:begin ───────────────────────────────────────────────────────────
-// Ниже этого маркера файл побайтно совпадает со второй копией. Расхождение ловит
-// tests/skills/check-nonascii-fs.mjs. Правку вносим в обе копии сразу.
+// Below this marker the file is byte-for-byte identical to the second copy. Divergence is caught by
+// tests/skills/check-nonascii-fs.mjs. Make edits in both copies at once.
 
 import { cpSync, copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync,
          rmSync, rmdirSync, unlinkSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-// На Windows fs.rmSync и fs.cpSync ломаются, когда не-ASCII символы есть в САМОМ аргументе
-// пути (nodejs/node#61067, апстрим открыт). Снято на стенде из восьми сборок:
+// On Windows fs.rmSync and fs.cpSync break when non-ASCII characters are in the path argument
+// ITSELF (nodejs/node#61067, upstream still open). Captured on a stand of eight builds:
 //
-//   сборка                         rmSync   cpSync → приёмник   cpSync ← источник
-//   22.15.1                        ок       ок                  ок
-//   22.18.0 … 22.23.2 (LTS Jod)    ок       молча ничего        краш 0xC0000409
-//   24.12.0, 24.13.0               молча    молча ничего        краш
-//   24.14.0                        ок       молча ничего        краш
-//   24.15.0, 24.19.0, 25.9.0, 26.7.0   ок   ок                  ок
+//   build                          rmSync   cpSync → dest       cpSync ← source
+//   22.15.1                        ok       ok                  ok
+//   22.18.0 … 22.23.2 (LTS Jod)    ok       silently nothing    crash 0xC0000409
+//   24.12.0, 24.13.0               silently silently nothing    crash
+//   24.14.0                        ok       silently nothing    crash
+//   24.15.0, 24.19.0, 25.9.0, 26.7.0   ok   ok                  ok
 //
-// Это НЕ обход одного старого релиза: ветка 22 LTS сломана до сих пор — фикс приехал в
-// fs-слой Node 24.15 и в 22.x не бэкпортирован, а README проекта рекомендует «Node.js 18+».
-// Зависимость не монотонна по версиям (24.14 чинит rmSync, но не cpSync), поэтому гард по
-// номеру версии невозможен в принципе: решает только сам путь. Снимать гард можно, лишь
-// когда исправной станет вся поддерживаемая линейка, а не текущая машина разработчика.
+// This is NOT a workaround for one old release: the 22 LTS branch is still broken - the fix landed in
+// the Node 24.15 fs layer and was not backported to 22.x, while the project README recommends "Node.js 18+".
+// The dependency is not monotonic across versions (24.14 fixes rmSync but not cpSync), so a version-number
+// guard is impossible in principle: only the path itself decides. The guard can be removed only when
+// the whole supported line becomes healthy, not just the current developer machine.
 //
-// mkdirSync, readdirSync, lstatSync, existsSync, copyFileSync (включая перезапись),
-// unlinkSync, rmdirSync с не-ASCII исправны на ВСЕХ сломанных сборках — на них и стоит
-// ручной обход. Асинхронные fs.promises.rm/cp не затронуты.
+// mkdirSync, readdirSync, lstatSync, existsSync, copyFileSync (including overwrite),
+// unlinkSync, rmdirSync with non-ASCII are healthy on ALL broken builds - the manual walk relies on them.
+// Asynchronous fs.promises.rm/cp are not affected.
 
 const NON_ASCII = /[^\x00-\x7F]/;
 const RETRY_CODES = new Set(['EBUSY', 'EPERM', 'ENOTEMPTY', 'EMFILE']);
 
-// Проверяем РАЗРЕШЁННЫЙ путь, а не строку аргумента: относительный ASCII-аргумент при
-// не-ASCII cwd платформа роняет так же молча, а по строке аргумента это не видно.
+// We check the RESOLVED path, not the argument string: a relative ASCII argument with a
+// non-ASCII cwd crashes the platform just as silently, and the argument string does not show it.
 export function pathIsUnsafe(p) {
-  // Тест-шов только для check-nonascii-fs.mjs: без него ручной обход никогда не исполняется
-  // на macOS/Linux и остаётся непокрытым. В обычном прогоне переменная не задана.
+  // Test seam only for check-nonascii-fs.mjs: without it the manual walk never runs
+  // on macOS/Linux and stays uncovered. In a normal run the variable is not set.
   if (process.env.CC1C_FSUTIL_FORCE_WALK === "1") return true;
   return process.platform === 'win32' && NON_ASCII.test(resolve(p));
 }
@@ -55,8 +55,8 @@ function withRetrySync(fn, maxRetries, retryDelay) {
   }
 }
 
-// Симлинк или junction на каталог: unlinkSync на нём даёт EPERM, снимается rmdirSync.
-// Внутрь не заходим — rmSync тоже сносит саму ссылку, а не её цель.
+// Symlink or junction to a directory: unlinkSync gives EPERM on it, rmdirSync removes it.
+// We do not go inside - rmSync also removes the link itself, not its target.
 function removeLeafSync(p) {
   try { unlinkSync(p); }
   catch (e) {
@@ -74,14 +74,14 @@ function removeTreeWalkSync(dir, maxRetries, retryDelay) {
   withRetrySync(() => rmdirSync(dir), maxRetries, retryDelay);
 }
 
-// Семантика rm -rf: файл, каталог или отсутствующий путь. opts.maxRetries / opts.retryDelay
-// работают на обоих путях — на быстром их принимает сам rmSync, на ручном обходе повторяем сами.
+// rm -rf semantics: file, directory or missing path. opts.maxRetries / opts.retryDelay
+// work on both paths - on the fast one rmSync accepts them, on the manual walk we retry ourselves.
 export function removePathSync(target, opts = {}) {
   const { maxRetries = 0, retryDelay = 100 } = opts;
 
   if (!pathIsUnsafe(target)) {
     rmSync(target, { recursive: true, force: true, maxRetries, retryDelay });
-    // Тихий отказ ровно здесь и есть болезнь: подтверждаем результат одним existsSync.
+    // A silent failure right here is the disease: confirm the result with a single existsSync.
     if (!existsSync(target)) return;
   } else if (!existsSync(target)) {
     return;
@@ -98,17 +98,17 @@ function copyTreeWalkSync(src, dest) {
   for (const entry of readdirSync(src, { withFileTypes: true })) {
     const from = join(src, entry.name);
     const to = join(dest, entry.name);
-    // Перезаписываем безусловно — как cpSync с дефолтным force: true.
+    // Overwrite unconditionally - like cpSync with the default force: true.
     if (entry.isDirectory()) copyTreeWalkSync(from, to);
     else copyFileSync(from, to);
   }
 }
 
-// Рекурсивная копия КАТАЛОГА с перезаписью. Для одиночного файла хватает copyFileSync:
-// он не затронут и работает с не-ASCII на всех сборках.
+// Recursive copy of a DIRECTORY with overwrite. For a single file copyFileSync is enough:
+// it is not affected and works with non-ASCII on all builds.
 export function copyTreeSync(src, dest) {
   if (!pathIsUnsafe(src) && !pathIsUnsafe(dest)) {
-    // Ошибки не глотаем: настоящий ENOENT/EACCES должен долететь до вызывающего.
+    // We do not swallow errors: a real ENOENT/EACCES must reach the caller.
     cpSync(src, dest, { recursive: true });
     return;
   }

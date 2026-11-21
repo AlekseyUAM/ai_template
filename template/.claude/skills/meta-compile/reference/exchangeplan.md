@@ -1,27 +1,27 @@
 # ExchangePlan (План обмена)
 
-Близок к справочнику (без иерархии/владельцев), плюс состав объектов обмена. Наследует слой Catalog:
+Close to a catalog (without hierarchy/owners), plus the composition of exchange objects. Inherits the Catalog layer:
 `codeLength`, `codeAllowedLength`, `descriptionLength`, `defaultPresentation`, `editType`, `quickChoice`,
-`choiceMode`, формы, `standardAttributes`, `characteristics`, `inputByString`, `basedOn`, представления —
-см. `catalog.md` / `attributes.md` / `blocks.md`.
+`choiceMode`, forms, `standardAttributes`, `characteristics`, `inputByString`, `basedOn`, presentations -
+see `catalog.md` / `attributes.md` / `blocks.md`.
 
-| Ключ | Умолчание | Значения |
+| Key | Default | Values |
 |------|-----------|----------|
-| `comment` | пусто | строка |
-| `distributedInfoBase` | `false` | bool (распределённая ИБ — РИБ) |
-| `includeConfigurationExtensions` | `false` | bool (включать расширения конфигурации) |
-| `descriptionLength` | `150` | длина наименования |
+| `comment` | empty | string |
+| `distributedInfoBase` | `false` | bool (distributed infobase - DIB) |
+| `includeConfigurationExtensions` | `false` | bool (include configuration extensions) |
+| `descriptionLength` | `150` | description length |
 | `createOnInput` | `DontUse` | `Auto` / `Use` / `DontUse` |
 | `dataLockControlMode` | `Managed` | `Automatic` / `Managed` |
 | `dataHistory` | `DontUse` | `Use` / `DontUse` |
 | `useStandardCommands` | `true` | bool |
-| `content` | `[]` | состав обмена (см. ниже) |
-| `attributes` / `tabularSections` | `[]` / `{}` | реквизиты / табличные части |
+| `content` | `[]` | exchange content (see below) |
+| `attributes` / `tabularSections` | `[]` / `{}` | attributes / tabular sections |
 
-## `content` — состав плана обмена
+## `content` - exchange plan content
 
-Список объектов-участников обмена; у каждого — признак авторегистрации изменений (по умолчанию выключена).
-Элемент — ссылка на объект метаданных (строка) или объект с признаком:
+A list of exchange participant objects; each has an auto-registration of changes flag (off by default).
+An item is a reference to a metadata object (string) or an object with the flag:
 
 ```json
 "content": [
@@ -31,8 +31,8 @@
 ]
 ```
 
-- Строка `"Тип.Имя"` — авторегистрация выключена; суффикс `: autoRecord` — включена.
-- Объект: `metadata` (ссылка), `autoRecord` (bool или `Allow`/`Deny`).
+- A string `"Тип.Имя"` - auto-registration off; the `: autoRecord` suffix - on.
+- Object: `metadata` (reference), `autoRecord` (bool or `Allow`/`Deny`).
 
 ```json
 { "type": "ExchangePlan", "name": "ОбменССайтом", "distributedInfoBase": false,

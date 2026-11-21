@@ -1,7 +1,7 @@
 ---
 name: epf-init
-description: Создать пустую внешнюю обработку 1С (scaffold XML-исходников). Используй когда нужно создать новую внешнюю обработку с нуля
-argument-hint: -Name <Name> [-Synonym <Synonym>] [-SrcDir <SrcDir>] [-FormatVersion <версия>]
+description: Create an empty 1C external data processor (scaffold XML sources). Use when you need to create a new external data processor from scratch
+argument-hint: -Name <Name> [-Synonym <Synonym>] [-SrcDir <SrcDir>] [-FormatVersion <version>]
 allowed-tools:
   - Bash
   - Read
@@ -11,9 +11,9 @@ allowed-tools:
   - Grep
 ---
 
-# /epf-init — Создание новой обработки
+# /epf-init - Creating a new data processor
 
-Генерирует минимальный набор XML-исходников для внешней обработки 1С: корневой файл метаданных и каталог обработки.
+Generates a minimal set of XML sources for a 1C external data processor: the root metadata file and the data processor directory.
 
 ## Usage
 
@@ -21,28 +21,28 @@ allowed-tools:
 /epf-init <Name> [Synonym] [SrcDir] [FormatVersion]
 ```
 
-| Параметр      | Обязательный | По умолчанию | Описание                                       |
+| Parameter      | Required | Default | Description                                       |
 |---------------|:------------:|--------------|------------------------------------------------|
-| Name          | да           | —            | Имя обработки (латиница/кириллица)             |
-| Synonym       | нет          | = Name       | Синоним (отображаемое имя)                     |
-| SrcDir        | нет          | `src`        | Каталог исходников относительно CWD            |
-| FormatVersion | нет          | `2.17`       | Версия формата выгрузки — см. ниже              |
+| Name          | yes           | -            | Data processor name (Latin/Cyrillic)             |
+| Synonym       | no           | = Name       | Synonym (display name)                     |
+| SrcDir        | no           | `src`        | Source directory relative to CWD            |
+| FormatVersion | no           | `2.17`       | Export format version - see below              |
 
-`FormatVersion` — **не выше** версии формата платформы, на которой объект будут собирать и открывать:
-8.3.24 — `2.17`, 8.3.25 — `2.18`, 8.3.26 — `2.19`, 8.3.27 — `2.20`, 8.5 — `2.21`. Ниже брать можно:
-платформа читает свой формат и любой более старый, поэтому дефолт `2.17` подходит для всей линейки
-8.3.24 и выше. Для более старых платформ счёт идёт так же, по одной версии на релиз (8.3.23 — `2.16`),
-но на них навыки не проверялись — такое значение принимается с предупреждением.
+`FormatVersion` - **not higher** than the format version of the platform on which the object will be built and opened:
+8.3.24 - `2.17`, 8.3.25 - `2.18`, 8.3.26 - `2.19`, 8.3.27 - `2.20`, 8.5 - `2.21`. A lower one may be taken:
+the platform reads its own format and any older one, so the default `2.17` fits the whole line of
+8.3.24 and higher. For older platforms the count goes the same way, one version per release (8.3.23 - `2.16`),
+but the skills were not tested on them - such a value is accepted with a warning.
 
-## Команда
+## Command
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/epf-init.py" -Name "<Name>" [-Synonym "<Synonym>"] [-SrcDir "<SrcDir>"] [-FormatVersion "<версия>"]
 ```
 
-## Дальнейшие шаги
+## Next steps
 
-- Добавить форму: `/form-add`
-- Добавить макет: `/template-add`
-- Добавить справку: `/help-add`
-- Собрать EPF: навык `1c-batch`, команда `build-epf`
+- Add a form: `/form-add`
+- Add a template: `/template-add`
+- Add help: `/help-add`
+- Build EPF: skill `1c-batch`, command `build-epf`

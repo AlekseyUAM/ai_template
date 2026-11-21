@@ -1,23 +1,23 @@
 ---
 name: code-analyze
-description: Автоматический анализ BSL-кода 1С на нарушения стандартов разработки. Используй для поиска проблем/ошибок/потенциальных проблем в модулях перед код-ревью. Дополняет диагностики bsl_ls — проверяет то, чего в нём нет.
+description: Automatic analysis of 1C BSL code for violations of development standards. Use to find problems/errors/potential issues in modules before code review. Complements bsl_ls diagnostics - checks what it lacks.
 allowed-tools:
   - Bash
   - Read
   - Glob
 ---
 
-# /code-analyze — автоматический анализ BSL-кода 1С
+# /code-analyze - automatic analysis of 1C BSL code
 
-Находит нарушения стандартов разработки 1С, **которых нет в BSL Language
-Server (bsl_ls)**. Работает по структурной модели модуля (методы, циклы,
-объявления), построенной лёгким Python-парсером — без внешних зависимостей.
+Finds violations of 1C development standards **that are not in BSL Language
+Server (bsl_ls)**. Works on a structural module model (methods, loops,
+declarations) built by a lightweight Python parser - no external dependencies.
 
-Это первый шаг ревью. Требования, которые нельзя проверить скриптом (нужны
-метаданные, семантика задачи, контекст конфигурации), вынесены в ручной чеклист
-навыка `bsl-coding-standards`.
+This is the first review step. Requirements that a script cannot check (metadata,
+task semantics, configuration context) are moved to the manual checklist of the
+`bsl-coding-standards` skill.
 
-## Анализ модуля
+## Module analysis
 
 ```bash
 # Один .bsl-файл
@@ -28,86 +28,86 @@ python "${CLAUDE_SKILL_DIR}/scripts/analyze_code.py" src/cf/CommonModules
 cat Module.bsl | python "${CLAUDE_SKILL_DIR}/scripts/analyze_code.py" -
 ```
 
-Находки печатаются как `severity | код | строка | сообщение`. Флаг `-Detailed`
-показывает и пройденные правила. Код возврата ≠ 0 при находках уровня `error`
-(подавляется флагом `-NoFail`). При анализе каталога блоки разделяются
+Findings are printed as `severity | код | строка | сообщение`. The `-Detailed` flag
+also shows passed rules. Exit code is not 0 when there are `error`-level findings
+(suppressed by the `-NoFail` flag). When analyzing a directory, blocks are separated by
 `--- 8< ---`.
 
-## Реестр правил
+## Rule registry
 
-Правила объявлены в `scripts/rules.py` через декоратор `@rule(code, severity,
-title)`; каждое возвращает список `Finding`. Коды — осмысленные слаги (не `std*`).
+Rules are declared in `scripts/rules.py` via the decorator `@rule(code, severity,
+title)`; each returns a list of `Finding`. Codes are meaningful slugs (not `std*`).
 
-| Код | Severity | Что ловит |
+| Code | Severity | What it catches |
 |---|---|---|
-| `string-concat-in-loop` | warning | Конкатенация-аккумулятор `Х = Х + …` в теле цикла, кроме числовых аккумуляторов (`Сумма`, `Стоимость`, `Количество` и т.п.) |
-| `tv-find-multiple-columns` | warning | `ТаблицаЗначений.Найти(.., "Кол1, Кол2")` — индекс по одному полю |
-| `var-name-starts-with-underscore` | warning | Имя переменной/параметра начинается с `_` |
-| `var-name-single-char` | info | Односимвольное имя переменной/параметра, кроме счётчиков циклов |
-| `raise-in-cancel-event` | info | `ВызватьИсключение` в обработчике с параметром `Отказ` |
-| `error-description-without-stack` | info | Вызов `ОписаниеОшибки()` вместо `ПодробноеПредставлениеОшибки()` |
-| `type-check-via-metadata-name` | warning | Определение типа через `Метаданные().Имя = "…"` вместо `ТипЗнч() = Тип()` |
-| `column-copy-loop` | info | Копирование строк ТЗ перебором `.Колонки` вместо `ЗаполнитьЗначенияСвойств` |
-| `char-code-literal` | info | `Символ(10)` вместо системного набора `Символы.*` |
-| `attachable-handler-prefix` | info | Обработчик из `УстановитьДействие` без префикса `Подключаемый_` |
-| `record-manager-in-loop` | info | `СоздатьМенеджерЗаписи()` в цикле вместо `НаборЗаписей` |
-| `new-applied-object-via-constructor` | warning | `Новый("ДокументОбъект.…")` вместо метода менеджера |
-| `explicit-write-in-posting` | warning | Явная `.Записать()` в `ОбработкаПроведения` |
-| `system-enum-value` | error | Несуществующее значение системного перечисления/набора значений: `<Тип>.<Значение>` |
-| `reserved-system-name` | error | Имя переменной/параметра/процедуры/функции/метки цикла совпадает с системным перечислением или набором значений |
-| `record-set-in-loop` | info | `СоздатьНаборЗаписей()` в цикле вместо записи одним набором |
-| `sequence-boundary-in-posting` | info | `УстановитьГраницу` последовательности в обработчике проведения |
-| `query-execute-in-loop` | warning | `Запрос.Выполнить()`/`.ВыполнитьПакет()` в теле цикла |
-| `query-new-in-loop` | warning | `Новый Запрос` в теле цикла |
-| `query-execute-in-loop-via-call` | warning | вызов в цикле локального метода модуля, который выполняет запрос (глубина 1) |
-| `query-new-in-loop-via-call` | warning | вызов в цикле локального метода модуля, который создаёт `Новый Запрос` (глубина 1) |
-| `user-message-via-constructor` | info | `Новый СообщениеПользователю` вместо `ОбщегоНазначения.СообщитьПользователю` |
-| `use-before-assignment` | warning | Переменная инициализируется только в ветке `Если` без `Иначе` и используется после блока — возможен `Неопределено` |
+| `string-concat-in-loop` | warning | Accumulator concatenation `Х = Х + …` in a loop body, except numeric accumulators (`Сумма`, `Стоимость`, `Количество`, etc.) |
+| `tv-find-multiple-columns` | warning | `ТаблицаЗначений.Найти(.., "Кол1, Кол2")` - index on a single field |
+| `var-name-starts-with-underscore` | warning | Variable/parameter name starts with `_` |
+| `var-name-single-char` | info | Single-character variable/parameter name, except loop counters |
+| `raise-in-cancel-event` | info | `ВызватьИсключение` in a handler with the `Отказ` parameter |
+| `error-description-without-stack` | info | Call to `ОписаниеОшибки()` instead of `ПодробноеПредставлениеОшибки()` |
+| `type-check-via-metadata-name` | warning | Type check via `Метаданные().Имя = "…"` instead of `ТипЗнч() = Тип()` |
+| `column-copy-loop` | info | Copying value table rows by iterating `.Колонки` instead of `ЗаполнитьЗначенияСвойств` |
+| `char-code-literal` | info | `Символ(10)` instead of the system set `Символы.*` |
+| `attachable-handler-prefix` | info | Handler from `УстановитьДействие` without the `Подключаемый_` prefix |
+| `record-manager-in-loop` | info | `СоздатьМенеджерЗаписи()` in a loop instead of `НаборЗаписей` |
+| `new-applied-object-via-constructor` | warning | `Новый("ДокументОбъект.…")` instead of the manager method |
+| `explicit-write-in-posting` | warning | Explicit `.Записать()` in `ОбработкаПроведения` |
+| `system-enum-value` | error | Nonexistent value of a system enum/value set: `<Тип>.<Значение>` |
+| `reserved-system-name` | error | Variable/parameter/procedure/function/loop label name matches a system enum or value set |
+| `record-set-in-loop` | info | `СоздатьНаборЗаписей()` in a loop instead of writing as one set |
+| `sequence-boundary-in-posting` | info | `УстановитьГраницу` of a sequence in a posting handler |
+| `query-execute-in-loop` | warning | `Запрос.Выполнить()`/`.ВыполнитьПакет()` in a loop body |
+| `query-new-in-loop` | warning | `Новый Запрос` in a loop body |
+| `query-execute-in-loop-via-call` | warning | call in a loop to a local module method that executes a query (depth 1) |
+| `query-new-in-loop-via-call` | warning | call in a loop to a local module method that creates `Новый Запрос` (depth 1) |
+| `user-message-via-constructor` | info | `Новый СообщениеПользователю` instead of `ОбщегоНазначения.СообщитьПользователю` |
+| `use-before-assignment` | warning | Variable is initialized only in an `Если` branch without `Иначе` and is used after the block - `Неопределено` is possible |
 
-## Системные перечисления и наборы значений
+## System enums and value sets
 
-Правила `system-enum-value` и `reserved-system-name` используют
-`scripts/system_enums.json` — снапшот справки платформы (664 перечисления,
-2914 значений; 8 наборов, 517 значений; ru/en). **Не читай этот файл** —
-его читает скрипт. Обновление данных — `scripts/tools/README.md`.
+The `system-enum-value` and `reserved-system-name` rules use
+`scripts/system_enums.json` - a snapshot of platform help (664 enums,
+2914 values; 8 sets, 517 values; ru/en). **Do not read this file** - it is read
+by the script. To update data, see `scripts/tools/README.md`.
 
-Имена метаданных проверяются по XML-выгрузке (для правок задачи — `--changed`):
+Metadata names are checked against the XML dump (for task changes - `--changed`):
 
 ```bash
 python .claude/skills/code-analyze/scripts/check_metadata_names.py --changed
 ```
 
-Код возврата 1 — есть находки; формат строк совместим с `analyze_code.py`.
+Exit code 1 means findings exist; the line format is compatible with `analyze_code.py`.
 
-## Шкала severity и вердикт
+## Severity scale and verdict
 
-Единая шкала (как в статанализе `bsl_ls` / LSP): `error` = **критичная**, `warning` =
-**важная**, `info` = **минорная**. Правило вердикта: **любая находка `error` или
-`warning` (критичная|важная) блокирует приёмку** — см. чеклист `reviewer`. `info`
-(минорная) не блокирует. Код возврата скрипта ≠ 0 только на `error`; `warning`
-блокирует на уровне вердикта ревьюера, а не кода возврата.
+Single scale (as in `bsl_ls` / LSP static analysis): `error` = **critical**, `warning` =
+**important**, `info` = **minor**. Verdict rule: **any `error` or `warning` finding
+(critical|important) blocks acceptance** - see the `reviewer` checklist. `info`
+(minor) does not block. Script exit code is non-zero only on `error`; `warning`
+blocks at the reviewer verdict level, not at the exit code level.
 
-## Границы анализа
+## Analysis boundaries
 
-Парсер даёт структуру модуля (методы, вложенность блоков, объявления Перем,
-параметры), но **не полный AST выражений**. Проверки, требующие анализа потока
-данных или знания метаданных/конфигурации, не делаются автоматически — они в
-чеклисте `bsl-coding-standards`. Анализатор не дублирует bsl_ls: пересекающиеся
-требования покрываются диагностиками bsl_ls (прогоняй `mcp__bsl_ls__check`
-отдельно).
+The parser provides module structure (methods, block nesting, Перем declarations,
+parameters), but **not a full expression AST**. Checks that require data-flow analysis
+or knowledge of metadata/configuration are not performed automatically - they are in
+the `bsl-coding-standards` checklist. The analyzer does not duplicate bsl_ls:
+overlapping requirements are covered by bsl_ls diagnostics (run `mcp__bsl_ls__check`
+separately).
 
-Правило `use-before-assignment` консервативное: ловит только одиночное условное
-присваивание — параметры, объявления `Перем`, переменные циклов, повторные
-присваивания и ветки `Иначе`/`ИначеЕсли` исключают находку.
+The `use-before-assignment` rule is conservative: it catches only a single conditional
+assignment - parameters, `Перем` declarations, loop variables, repeated assignments
+and `Иначе`/`ИначеЕсли` branches exclude a finding.
 
-## Зависимости
+## Dependencies
 
-Только Python 3.6+. Node/бандлы не нужны.
+Python 3.6+ only. Node/bundles not needed.
 
-## Тесты
+## Tests
 
 ```bash
 cd "${CLAUDE_SKILL_DIR}/scripts" && python -m pytest tests/ -q
 ```
-Каждое правило покрыто тестами на корректный и некорректный примеры из
-стандарта.
+Each rule is covered by tests for a correct and an incorrect example from the
+standard.

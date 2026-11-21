@@ -1,4 +1,4 @@
-"""Тесты загрузки .1c-devbase.json и автоопределения платформы."""
+"""Tests for loading .1c-devbase.json and platform auto-detection."""
 
 import json
 from pathlib import Path
@@ -8,7 +8,7 @@ from onec_batch.config import Config, _find_config_file, load_config
 
 def test_validate_ok_file_mode():
     cfg = Config(
-        platform_path=__file__,  # любой существующий файл
+        platform_path=__file__,  # any existing file
         connection_type="file",
         connection_path="/tmp/base",
     )
@@ -76,5 +76,5 @@ def test_load_config_file_mode_defaults(tmp_path: Path):
     cfg = load_config(tmp_path)
     assert cfg.connection_type == "file"
     assert cfg.connection_path == "/tmp/base"
-    assert cfg.cf_dir == "src/cf"  # дефолт
-    assert cfg.log_dir == "logs"   # дефолт
+    assert cfg.cf_dir == "src/cf"  # default
+    assert cfg.log_dir == "logs"   # default

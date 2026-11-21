@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# template-add v1.27 — Add template to 1C object (+write_xml_file/write_utf8_bom: общий эталон записи)
+# template-add v1.27 - Add template to 1C object (+write_xml_file/write_utf8_bom: common write reference)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 
 import argparse
@@ -11,16 +11,16 @@ import uuid
 
 from lxml import etree
 
-# Регистронезависимый ввод: имена параметров и значения choices принимаются
-# в любом регистре (в argparse по умолчанию совпадение точное).
+# Case-insensitive input: parameter names and choices values are accepted
+# in any case (argparse matches exactly by default).
 def ci_parse_args(parser, argv=None):
-    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
+    """parse_args: parameter names and choices values are accepted in any case."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
         if tok.startswith('-') and tok.lower() in names:
             argv[i] = names[tok.lower()]
-    # choices — зеркало [ValidateSet]; канонизируем ДО разбора, иначе argparse отвергнет регистр
+    # choices - mirror of [ValidateSet]; canonicalize BEFORE parsing, otherwise argparse rejects the case
     choice_map = {}
     for a in parser._actions:
         if a.choices:
@@ -221,8 +221,8 @@ TYPE_MAP = {
 
 
 def _detect_xml_style(path):
-    """Стиль существующего файла для round-trip-сохранения: BOM / EOL / регистр encoding /
-    финальный перенос. None → файл новый (сохранить текущее поведение)."""
+    """Style of the existing file for round-trip saving: BOM / EOL / encoding case /
+    final newline. None -> file is new (keep current behavior)."""
     try:
         raw = open(path, "rb").read()
     except OSError:
@@ -237,21 +237,21 @@ def _detect_xml_style(path):
 
 
 def _finalize_xml_bytes(xml_bytes, style):
-    """Привести байты к стилю оригинала; для НОВОГО файла (style is None) — к канону
-    выгрузки Конфигуратора: encoding="UTF-8", CRLF в разделителях, без перевода в конце."""
+    """Bring bytes to the original style; for a NEW file (style is None) - to the
+    Configurator dump canon: encoding="UTF-8", CRLF in separators, no final newline."""
     enc_decl = style["enc"] if style else "UTF-8"
     xml_bytes = xml_bytes.replace(
         b"<?xml version='1.0' encoding='UTF-8'?>",
         b'<?xml version="1.0" encoding="' + enc_decl.encode("ascii") + b'"?>')
-    # Канонизировать переносы к LF (убирает &#13; от \r в tail'ах)
+    # Canonicalize line breaks to LF (removes &#13; from \r in tails)
     xml_bytes = (xml_bytes.replace(b"&#13;\n", b"\n").replace(b"&#13;", b"")
                  .replace(b"\r\n", b"\n").replace(b"\r", b"\n"))
-    # Финальный перенос — как в оригинале (новый файл → нет, канон #57)
+    # Final newline - as in the original (new file -> none, canon #57)
     want_final_nl = style["final_nl"] if style else False
     xml_bytes = xml_bytes.rstrip(b"\n")
     if want_final_nl:
         xml_bytes += b"\n"
-    # EOL — как в оригинале (новый файл → CRLF, канон #57)
+    # EOL - as in the original (new file -> CRLF, canon #57)
     if (style["crlf"] if style else True):
         xml_bytes = xml_bytes.replace(b"\n", b"\r\n")
     return xml_bytes
@@ -269,25 +269,25 @@ def save_xml_with_bom(tree, path):
 
 
 def write_utf8_bom(path, content):
-    # newline='' — без трансляции: иначе текстовый режим Python дал бы CRLF на Windows
-    # и LF на macOS, то есть вывод навыка зависел бы от ОС.
+    # newline='' - no translation: otherwise Python text mode would give CRLF on Windows
+    # and LF on macOS, that is, the skill output would depend on the OS.
     with open(path, 'w', encoding='utf-8-sig', newline='') as f:
         f.write(content)
 
 
 
 def is_valid_lang(code):
-    """Код языка идёт и в текст XML, и в имя файла страницы.
+    """The language code goes both into the XML text and into the page file name.
 
-    Пустое значение дало бы файл «.html» и пустой <Page></Page>, разделитель пути — запись
-    мимо каталога страниц, а зарезервированное имя устройства (nul, con, prn, aux, com1…, lpt1…)
-    на Windows уводит запись в само устройство: при -Lang nul этот порт молча писал
-    <Page>nul</Page> и пустой каталог с кодом 0. Все отказы платформы были бы тихими.
+    An empty value would give a ".html" file and an empty <Page></Page>, a path separator - a write
+    outside the pages directory, and a reserved device name (nul, con, prn, aux, com1…, lpt1…)
+    on Windows redirects the write into the device itself: with -Lang nul this port silently wrote
+    <Page>nul</Page> and an empty directory with exit code 0. All platform rejections would be silent.
 
-    fullmatch, а не match: последний с `$` допускает перевод строки в конце.
+    fullmatch, not match: the latter with `$` allows a trailing newline.
 
-    Копия этой функции есть в help-add (навыки автономны, формат «дескриптор + страница»
-    у них общий). Держать копии одинаковыми — сознательно; за дрейфом следит check-inline-drift.
+    A copy of this function exists in help-add (the skills are autonomous, the "descriptor + page"
+    format is common to them). Keeping the copies identical is intentional; drift is tracked by check-inline-drift.
     """
     if not re.fullmatch(r"[A-Za-z0-9_-]+", code):
         return False
@@ -297,12 +297,12 @@ def is_valid_lang(code):
 
 
 def write_xml_file(path, content):
-    """XML в каноне выгрузки Конфигуратора: CRLF в разделителях, без перевода в конце.
+    """XML in the Configurator dump canon: CRLF in separators, no final newline.
 
-    Копия этой функции есть в каждом навыке-эмиттере (навыки автономны). Держать
-    копии одинаковыми — сознательно: разошедшиеся копии сводят на нет весь смысл.
+    A copy of this function exists in every emitter skill (the skills are autonomous). Keeping
+    the copies identical is intentional: diverged copies negate the whole point.
 
-    HTML-страница макета сюда НЕ идёт — платформа хранит её с LF.
+    An HTML template page does NOT go here - the platform stores it with LF.
     """
     text = content.replace('\r\n', '\n').replace('\n', '\r\n').rstrip('\r\n')
     write_utf8_bom(path, text)
@@ -310,8 +310,8 @@ def write_xml_file(path, content):
 
 def detect_format_version(d):
     while d:
-        # Автономная внешняя обработка/отчёт: своего Configuration.xml у неё нет, версию несёт
-        # корень самой обработки. Без этого форма и макет внутри обработки 2.21 писались бы 2.17.
+        # Standalone external data processor/report: it has no Configuration.xml of its own; the version is carried by
+        # the root of the processor itself. Without this, a form and a template inside a 2.21 processor would be written as 2.17.
         ext_path = d + ".xml"
         if os.path.isfile(ext_path):
             with open(ext_path, "r", encoding="utf-8-sig") as f:
@@ -334,7 +334,7 @@ def detect_format_version(d):
     return "2.17"
 
 def format_rank(ver):
-    """"2.20" → 220, "2.9" → 209. Строковое сравнение неверно ("2.9" > "2.17")."""
+    """"2.20" -> 220, "2.9" -> 209. String comparison is wrong ("2.9" > "2.17")."""
     m = re.match(r'^(\d+)\.(\d+)$', ver or '')
     return int(m.group(1)) * 100 + int(m.group(2)) if m else 0
 
@@ -404,9 +404,9 @@ def main():
         print("Ожидается код вида ru, en (буквы, цифры, дефис, подчёркивание; имена устройств Windows недопустимы)", file=sys.stderr)
         sys.exit(1)
 
-    # Существующий HTML-макет — не всегда повод отказать: в один макет платформа кладёт
-    # несколько языков (<Page> на каждый, страницы рядом), и повторный вызов с другим -Lang
-    # добавляет страницу. Для остальных типов поведение прежнее — отказ.
+    # An existing HTML template is not always a reason to refuse: the platform puts
+    # several languages into one template (<Page> for each, pages alongside), and a repeated call with a different -Lang
+    # adds a page. For other types the behavior is the previous one - refusal.
     add_lang_mode = False
     if os.path.exists(template_meta_path):
         with open(template_meta_path, "r", encoding="utf-8-sig") as f:
@@ -426,8 +426,8 @@ def main():
 
     assert_edit_allowed(root_xml_path, "editable")
 
-    # Версию берём прежде всего из корня самого объекта — он её несёт всегда, а у автономной
-    # внешней обработки/отчёта подниматься к Configuration.xml просто некуда.
+    # Take the version first of all from the root of the object itself - it always carries it, and for a standalone
+    # external data processor/report there is nowhere to walk up to Configuration.xml.
     format_version = None
     with open(root_xml_path, "r", encoding="utf-8-sig") as f:
         obj_head = f.read(2000)
@@ -437,8 +437,8 @@ def main():
     if not format_version:
         format_version = detect_format_version(os.path.abspath(src_dir))
 
-    # Объявления пространств имён — одной переменной: место эмиссии её только подставляет.
-    # Правки шапки (как xmlns:pal в формате 2.21) делаются здесь, в одном месте.
+    # Namespace declarations - in a single variable: the emission site only substitutes it.
+    # Header edits (like xmlns:pal in format 2.21) are made here, in one place.
     xmlns_decl = (
         'xmlns="http://v8.1c.ru/8.3/MDClasses"'
         ' xmlns:app="http://v8.1c.ru/8.2/managed-application/core"'
@@ -459,9 +459,9 @@ def main():
         ' xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"'
     )
 
-    # 2.21 (8.5) добавила в шапку пространство палитры — ради <Color> у значений перечисления.
-    # Вставляем НА МЕСТО (после lf, перед style): платформа держит объявления по алфавиту,
-    # дописать в конец нельзя.
+    # 2.21 (8.5) added the palette namespace to the header - for <Color> in enum values.
+    # We insert it IN PLACE (after lf, before style): the platform keeps declarations alphabetically,
+    # appending at the end is not allowed.
     if format_rank(format_version) >= 221:
         xmlns_decl = xmlns_decl.replace(
             ' xmlns:style=',
@@ -472,9 +472,9 @@ def main():
     template_ext_dir = os.path.join(templates_dir, template_name, "Ext")
     os.makedirs(template_ext_dir, exist_ok=True)
 
-    # Скелет HTML-страницы макета — в том же виде, в каком его пишет редактор платформы
-    # (одной строкой, парный </meta>): первое сохранение в Конфигураторе даст минимальный
-    # дифф. Нужен в двух местах (новый макет и добавление языка) — поэтому одной переменной.
+    # Skeleton of the template HTML page - in the same form the platform editor writes it
+    # (single line, paired </meta>): the first save in the Configurator will give a minimal
+    # diff. Needed in two places (new template and adding a language) - hence a single variable.
     html_skeleton = (
         '<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">'
         '<html><head>'
@@ -483,10 +483,10 @@ def main():
         '</body></html>'
     )
 
-    # --- 1a. Добавление страницы на другом языке в существующий HTML-макет ---
-    # Метаданные макета и ChildObjects здесь НЕ трогаем: и то и другое уже на месте,
-    # перезапись сменила бы UUID. Язык, не объявленный в Languages/ конфигурации, платформа
-    # принимает и возвращает при выгрузке (проверено на 8.3.27) — состав языков не проверяем.
+    # --- 1a. Adding a page in another language to an existing HTML template ---
+    # Do NOT touch template metadata and ChildObjects here: both are already in place,
+    # overwriting would change the UUID. A language not declared in the configuration Languages/ is accepted
+    # by the platform and returned on dump (verified on 8.3.27) - we do not check the language set.
     if add_lang_mode:
         desc_path = os.path.join(template_ext_dir, "Template.xml")
         page_dir = os.path.join(template_ext_dir, "Template")
@@ -494,29 +494,29 @@ def main():
         langs = []
         desc_version = format_version
 
-        # Сначала РАЗБОР состояния, и только в самом конце запись: иначе отказ на полпути
-        # оставляет макет разобранным (страница есть, дескриптора нет) — а такую раскладку
-        # платформа снова молча игнорирует.
+        # First PARSE the state, and write only at the very end: otherwise a refusal halfway
+        # leaves the template parsed (page present, descriptor missing) - and the platform
+        # silently ignores such a layout again.
         legacy_pending = False
         page_path = os.path.join(page_dir, f"{lang}.html")
 
         if os.path.exists(desc_path):
             with open(desc_path, "r", encoding="utf-8-sig") as f:
                 desc_text = f.read()
-            # Версию берём из самого дескриптора: правка чужой выгрузки не должна менять формат.
+            # Take the version from the descriptor itself: editing someone else's dump must not change the format.
             m_dv = re.search(r'<Help[^>]+version="(\d+\.\d+)"', desc_text)
             if m_dv:
                 desc_version = m_dv.group(1)
             langs = re.findall(r"<Page>([^<]+)</Page>", desc_text)
-            # Полумигрированное дерево: дескриптор уже есть, а старый Ext/Template.html остался рядом.
-            # Платформа его игнорирует, поэтому текст в нём пропадёт незаметно — говорим вслух.
+            # Half-migrated tree: the descriptor is already there, but the old Ext/Template.html remains nearby.
+            # The platform ignores it, so the text in it will disappear unnoticed - we say it out loud.
             if os.path.exists(legacy_page_path):
                 print("[WARN] Рядом лежит старый Ext/Template.html — платформа его игнорирует.")
                 print("       Перенесите нужное в Template/<язык>.html и удалите его.")
         elif os.path.exists(legacy_page_path):
-            # Раскладка до v1.24 — одиночный Ext/Template.html, который платформа молча игнорирует.
-            # Языка у него нет, но создать его могла только версия навыка без параметра -Lang,
-            # то есть это страница на языке по умолчанию.
+            # Layout before v1.24 - a single Ext/Template.html that the platform silently ignores.
+            # It has no language, but only a version of the skill without the -Lang parameter could create it,
+            # that is, it is a page in the default language.
             if os.path.exists(os.path.join(page_dir, "ru.html")):
                 print("Макет разобран: есть и старый Ext/Template.html, и Template/ru.html — что из них актуально, решать не навыку.", file=sys.stderr)
                 print("Оставьте один файл и повторите.", file=sys.stderr)
@@ -524,22 +524,22 @@ def main():
             legacy_pending = True
             langs = ["ru"]
 
-        # Файл страницы НИКОГДА не перезаписываем: в нём может лежать текст макета.
-        # Ошибка — только когда добавлять нечего: язык уже в дескрипторе И страница на диске.
-        # Сравнение без учёта регистра.
+        # The page file is NEVER overwritten: it may contain template text.
+        # An error - only when there is nothing to add: the language is already in the descriptor AND the page is on disk.
+        # Comparison is case-insensitive.
         lang_known = lang.lower() in [x.lower() for x in langs]
-        # Существование страницы — тоже без учёта регистра: os.path.exists на Linux различает
-        # регистр, поэтому сверяем имена принудительно без учёта регистра.
+        # Page existence - also case-insensitive: os.path.exists on Linux is case-sensitive,
+        # so we compare names forcibly case-insensitively.
         page_exists = False
         if os.path.isdir(page_dir):
             want = f"{lang}.html".lower()
             page_exists = any(f.lower() == want for f in os.listdir(page_dir))
-        # При миграции проверять нечего: langs там задан нами же, а страница появится переносом.
+        # During migration there is nothing to check: langs there is set by us, and the page will appear by moving.
         if lang_known and page_exists and not legacy_pending:
             print(f"Страница макета на языке '{lang}' уже существует: {page_path}", file=sys.stderr)
             sys.exit(1)
 
-        # Порядок страниц — по коду языка (в выгрузке ERP так во всех 54 двуязычных макетах).
+        # Page order - by language code (in the ERP dump this is so in all 54 bilingual templates).
         if not lang_known:
             langs = langs + [lang]
         langs = sorted(langs)
@@ -555,7 +555,7 @@ def main():
             '</Help>'
         )
 
-        # --- запись ---
+        # --- write ---
         os.makedirs(page_dir, exist_ok=True)
         if legacy_pending:
             os.replace(legacy_page_path, os.path.join(page_dir, "ru.html"))
@@ -563,7 +563,7 @@ def main():
             print("       Страница считана как ru и перенесена в Template/ru.html.")
         write_xml_file(desc_path, desc_xml)
         if os.path.exists(page_path):
-            # При миграции про сохранённое содержимое уже сказано выше — не повторяемся.
+            # During migration, the saved content was already mentioned above - do not repeat.
             if not legacy_pending:
                 print(f"[WARN] Страница {lang}.html уже лежала на диске — содержимое сохранено, дописан только <Page>.")
         else:
@@ -602,15 +602,15 @@ def main():
     # --- 2. Template content (Templates/<TemplateName>/Ext/Template.<ext>) ---
 
     template_file_path = os.path.join(template_ext_dir, f"Template{tmpl['Ext']}")
-    # Куда класть текст макета. Совпадает с template_file_path у всех типов, кроме HTML:
-    # там содержимое живёт в отдельной странице, а Template.xml — только дескриптор.
+    # Where to put the template text. Matches template_file_path for all types except HTML:
+    # there the content lives in a separate page, and Template.xml is only a descriptor.
     template_body_path = template_file_path
 
     if template_type == "HTML":
-        # HTML-макет платформа хранит парой, как справку: дескриптор Ext/Template.xml
-        # со списком страниц и сама страница Ext/Template/<язык>.html (картинки —
-        # рядом в _files/). Одиночный Ext/Template.html платформа молча игнорирует:
-        # загрузка проходит без ошибок, а макет в базе пустой.
+        # The platform stores an HTML template as a pair, like help: the descriptor Ext/Template.xml
+        # with a list of pages and the page itself Ext/Template/<language>.html (images -
+        # nearby in _files/). A single Ext/Template.html is silently ignored by the platform:
+        # loading succeeds without errors, but the template in the infobase is empty.
         page_xml = (
             '<?xml version="1.0" encoding="UTF-8"?>\n'
             '<Help xmlns="http://v8.1c.ru/8.3/xcf/extrnprops"'
@@ -626,18 +626,18 @@ def main():
         os.makedirs(page_dir, exist_ok=True)
         template_body_path = os.path.join(page_dir, f"{lang}.html")
 
-        # Шапка — в том же виде, в каком её пишет редактор платформы (одной строкой,
-        # парный </meta>): первое сохранение в Конфигураторе даст минимальный дифф.
-        # Страница — с LF: платформа хранит HTML именно так.
+        # Header - in the same form the platform editor writes it (single line,
+        # paired </meta>): the first save in the Configurator will give a minimal diff.
+        # Page - with LF: the platform stores HTML exactly like that.
         write_utf8_bom(template_body_path, html_skeleton)
 
     elif template_type == "Text":
         write_utf8_bom(template_file_path, "")
 
     elif template_type == "SpreadsheetDocument":
-        # Пустой макет — самозакрывающимся корнем: пустых пар платформа не пишет
-        # ни в одной форме (0 на 65 040 XML выгрузки acc_8.3.27, включая разнесённые
-        # по строкам). Для XML `<A/>` и `<A></A>` тождественны по спецификации.
+        # Empty template - as a self-closing root: the platform writes no empty pairs
+        # in any form (0 out of 65 040 XML dumps of acc_8.3.27, including those spread
+        # across lines). For XML `<A/>` and `<A></A>` are identical by specification.
         content = (
             '<?xml version="1.0" encoding="UTF-8"?>\n'
             '<SpreadsheetDocument xmlns="http://v8.1c.ru/spreadsheet/document"'

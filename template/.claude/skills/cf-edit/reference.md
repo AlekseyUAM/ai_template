@@ -1,20 +1,20 @@
-# cf-edit — справочник операций
+# cf-edit - operations reference
 
 ## modify-property
 
-Свойства для редактирования:
+Properties to edit:
 
-### Скалярные
+### Scalar
 `Name`, `Version`, `Vendor`, `Comment`, `NamePrefix`, `UpdateCatalogAddress`
 
-### LocalString (многоязычные)
+### LocalString (multilingual)
 `Synonym`, `BriefInformation`, `DetailedInformation`, `Copyright`, `VendorInformationAddress`, `ConfigurationInformationAddress`
 
 ### Enum
-| Свойство | Допустимые значения |
+| Property | Allowed values |
 |----------|---------------------|
 | `CompatibilityMode` | `Version8_3_20` ... `Version8_3_28`, `Version8_5_1`, `DontUse` |
-| `ConfigurationExtensionCompatibilityMode` | то же |
+| `ConfigurationExtensionCompatibilityMode` | same |
 | `DefaultRunMode` | `ManagedApplication`, `OrdinaryApplication`, `Auto` |
 | `ScriptVariant` | `Russian`, `English` |
 | `DataLockControlMode` | `Managed`, `Automatic`, `AutomaticAndManaged` |
@@ -26,22 +26,22 @@
 | `MainClientApplicationWindowMode` | `Normal`, `Workplace`, `FullscreenWorkplace`, `Kiosk`, `EmbeddedWorkplace` |
 
 ### Ref
-`DefaultLanguage` — значение вида `Language.Русский`
+`DefaultLanguage` - value of the form `Language.Русский`
 
-### Формат batch
+### Batch format
 `"Version=1.0.0.1 ;; Vendor=Фирма 1С ;; Synonym=Тестовая конфигурация"`
 
 ## add-childObject / remove-childObject
 
-Формат: `Type.Name` — XML-тип и имя объекта через точку.
+Format: `Type.Name` - XML type and object name separated by a dot.
 
-**Важно про `add-childObject`**: регистрирует в `<ChildObjects>` объект, **файл которого уже существует на диске**. Если файла нет — exit 1. Для создания нового объекта используй профильный навык — `/meta-compile` (Catalog, Document, Enum, Report, регистры и т.д.), `/role-compile` (Role), `/subsystem-compile` (Subsystem). Они создают файл И регистрируют его за один вызов.
+**Important about `add-childObject`**: registers in `<ChildObjects>` an object **whose file already exists on disk**. If the file is missing - exit 1. To create a new object use the dedicated skill - `/meta-compile` (Catalog, Document, Enum, Report, registers, etc.), `/role-compile` (Role), `/subsystem-compile` (Subsystem). They create the file AND register it in one call.
 
 Batch: `"Catalog.Товары ;; Document.Заказ ;; Enum.ВидыОплат"`
 
 ## sort-childObjects
 
-Упорядочивает объекты в `<ChildObjects>` по имени **внутри вида**. Значение — имя вида (`Catalog`, `Role`, …), batch через `;;`. Без значения обрабатываются все виды, какие есть в файле.
+Sorts objects in `<ChildObjects>` by name **within a kind**. The value is the kind name (`Catalog`, `Role`, ...), batch via `;;`. Without a value, all kinds present in the file are processed.
 
 ```
 -Operation sort-childObjects                       — все виды, кроме перечисленных ниже
@@ -49,41 +49,41 @@ Batch: `"Catalog.Товары ;; Document.Заказ ;; Enum.ВидыОплат"
 -Operation sort-childObjects -Value "Catalog ;; Role"
 ```
 
-Не сортируются, пока вид не назван явно: `CommonAttribute`, `Subsystem`, `CommandGroup`, `Language`.
+Kinds are not sorted until explicitly named: `CommonAttribute`, `Subsystem`, `CommandGroup`, `Language`.
 
-Вызов без значения дополнительно ставит группы видов в канонический порядок; вызов с явным видом трогает только имена внутри него.
+A call without a value additionally puts kind groups into canonical order; a call with an explicit kind touches only names within it.
 
 ## add-defaultRole / remove-defaultRole / set-defaultRoles
 
-Имя роли: `ПолныеПрава` или `Role.ПолныеПрава` (префикс `Role.` добавляется автоматически).
+Role name: `ПолныеПрава` or `Role.ПолныеПрава` (the `Role.` prefix is added automatically).
 
-`set-defaultRoles` полностью заменяет список ролей.
+`set-defaultRoles` fully replaces the list of roles.
 
 ## set-panels
 
-Перезаписывает `Ext/ClientApplicationInterface.xml` — раскладку панелей рабочего пространства Taxi. Файл создаётся с нуля; то, что не упомянуто в `value`, отсутствует на экране.
+Overwrites `Ext/ClientApplicationInterface.xml` - the panel layout of the Taxi workspace. The file is created from scratch; anything not mentioned in `value` is absent from the screen.
 
-`value` — объект с ключами `top`, `left`, `right`, `bottom`. Каждый ключ — массив записей. Ключ можно опустить (= пустая сторона).
+`value` - an object with keys `top`, `left`, `right`, `bottom`. Each key is an array of entries. A key may be omitted (= empty side).
 
-**Запись** — одна из:
-- Строка-алиас (одна панель в этом слоте)
-- Объект `{"group": [...]}` (стек: панели/подгруппы внутри располагаются друг под другом)
+**Entry** - one of:
+- An alias string (one panel in this slot)
+- An object `{"group": [...]}` (stack: panels/subgroups inside are placed one below another)
 
-**Алиасы панелей:**
+**Panel aliases:**
 
-| Алиас | Панель |
+| Alias | Panel |
 |-------|--------|
-| `sections` | Панель разделов |
-| `open` | Панель открытых |
-| `favorites` | Панель избранного |
-| `history` | Панель истории |
-| `functions` | Панель функций текущего раздела |
+| `sections` | Sections panel |
+| `open` | Open panel |
+| `favorites` | Favorites panel |
+| `history` | History panel |
+| `functions` | Functions panel of the current section |
 
-**Семантика:**
-- Несколько записей в одной стороне → отдельные слоты «рядом» (несколько тегов `<top>`/...)
-- `{"group":[...]}` → один тег с `<group>`-обёрткой, элементы внутри идут стеком
+**Semantics:**
+- Several entries on one side -> separate slots "side by side" (several `<top>`/... tags)
+- `{"group":[...]}` -> one tag with a `<group>` wrapper, the elements inside go as a stack
 
-**Пример** (DefinitionFile):
+**Example** (DefinitionFile):
 ```json
 [
   {
@@ -98,36 +98,36 @@ Batch: `"Catalog.Товары ;; Document.Заказ ;; Enum.ВидыОплат"
 ]
 ```
 
-Через `-Value` (CLI): передай объект как JSON-строку — `... -Operation set-panels -Value '{"top":["open"]}'`.
+Via `-Value` (CLI): pass the object as a JSON string - `... -Operation set-panels -Value '{"top":["open"]}'`.
 
 ## set-home-page
 
-Перезаписывает `Ext/HomePageWorkArea.xml` — раскладка форм на начальной странице (рабочая область). Файл создаётся с нуля; то, что не упомянуто в `value`, отсутствует.
+Overwrites `Ext/HomePageWorkArea.xml` - the layout of forms on the home page (working area). The file is created from scratch; anything not mentioned in `value` is absent.
 
-`value` — объект:
+`value` - an object:
 
-| Ключ | Канонич. (XML) | Описание |
+| Key | Canonical (XML) | Description |
 |------|----------------|----------|
-| `template` | `WorkingAreaTemplate` | `OneColumn` / `TwoColumnsEqualWidth` (дефолт) / `TwoColumnsVariableWidth` |
-| `left` | `LeftColumn` | массив записей форм |
-| `right` | `RightColumn` | массив записей форм (запрещён при `OneColumn`) |
+| `template` | `WorkingAreaTemplate` | `OneColumn` / `TwoColumnsEqualWidth` (default) / `TwoColumnsVariableWidth` |
+| `left` | `LeftColumn` | array of form entries |
+| `right` | `RightColumn` | array of form entries (forbidden with `OneColumn`) |
 
-Принимаются и короткие и канонич. ключи (XML-имена) — оба работают.
+Both short and canonical (XML) keys are accepted - both work.
 
-**Запись формы** — одна из:
-- Строка `"<form>"` — только имя формы, дефолты `height=10`, `visibility=true`
-- Объект `{form, height?, visibility?, roles?}`
+**Form entry** - one of:
+- A string `"<form>"` - form name only, defaults `height=10`, `visibility=true`
+- An object `{form, height?, visibility?, roles?}`
 
-| Поле | Канонич. | Дефолт | Описание |
+| Field | Canonical | Default | Description |
 |------|----------|--------|----------|
-| `form` | `Form` | — | `CommonForm.X` или `Type.Object.Form.Name` (или UUID) |
-| `height` | `Height` | `10` | Высота |
-| `visibility` | `Visibility` | `true` | Общая видимость (`<xr:Common>`) |
-| `roles` | — | — | `{"Role.Имя": true|false, ...}` — переопределения по ролям |
+| `form` | `Form` | - | `CommonForm.X` or `Type.Object.Form.Name` (or UUID) |
+| `height` | `Height` | `10` | Height |
+| `visibility` | `Visibility` | `true` | Common visibility (`<xr:Common>`) |
+| `roles` | - | - | `{"Role.Имя": true|false, ...}` - per-role overrides |
 
-**Семантика visibility:** `visibility` = общее правило, `roles` — точечные исключения. Скрыть для всех кроме одной роли: `{"visibility": false, "roles": {"Role.Опер": true}}`.
+**Visibility semantics:** `visibility` = the common rule, `roles` - point exceptions. Hide for everyone except one role: `{"visibility": false, "roles": {"Role.Опер": true}}`.
 
-**Пример:**
+**Example:**
 ```json
 [
   {
@@ -161,4 +161,3 @@ Batch: `"Catalog.Товары ;; Document.Заказ ;; Enum.ВидыОплат"
   { "operation": "add-defaultRole", "value": "ПолныеПрава" }
 ]
 ```
-

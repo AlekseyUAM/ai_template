@@ -1,4 +1,4 @@
-"""1c-batch — кроссплатформенный инструмент для пакетных операций с 1С:Предприятие 8."""
+"""1c-batch - a cross-platform tool for batch operations with 1C:Enterprise 8."""
 
 from importlib.metadata import PackageNotFoundError, version
 

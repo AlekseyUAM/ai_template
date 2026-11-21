@@ -1,29 +1,29 @@
 ---
 name: cyclic-review-workflow
-description: Циклический workflow develop → [testing] → review для итеративного улучшения кода по замечаниям.
+description: Cyclic workflow develop -> [testing] -> review for iterative code improvement based on review findings.
 ---
 
-# Циклический workflow: develop → [testing] → review → develop
+# Cyclic workflow: develop -> [testing] -> review -> develop
 
-Для задач, где требуется итеративное улучшение кода на основе результатов тестирования и замечаний ревьюера.
+For tasks that need iterative code improvement based on test results and reviewer findings.
 
-## Включение циклического workflow
+## Enabling the cyclic workflow
 
-Циклический workflow **активируется автоматически**, если включены этапы:
-- `testing: true` И/ИЛИ `review: true`, ИЛИ включён флаг `update_db: true`
+The cyclic workflow is **enabled automatically** if these stages are on:
+- `testing: true` AND/OR `review: true`, OR the `update_db: true` flag is on
 
-При этом:
-- Если `update_db` включён и загрузка в ИБ упала → цикл: develop → develop
-- Если `testing` включен и не пройдён → цикл: develop → testing → develop
-- Если `testing` включен и пройдён → цикл: develop → testing → review → develop
-- Если `testing` отключен, но `review` включен → цикл: develop → review → develop
-- Если review вернул `tests`, после правки тестов автор тестов сам выполняет красный
-  смоук и фиксирует доказательства в `TESTS.md`; исполнитель проверяет их до перевода
-  `tests` в `done` — независимо от того, включён ли `testing`.
+In this case:
+- If `update_db` is on and the infobase load fails -> cycle: develop -> develop
+- If `testing` is on and not passed -> cycle: develop -> testing -> develop
+- If `testing` is on and passed -> cycle: develop -> testing -> review -> develop
+- If `testing` is off but `review` is on -> cycle: develop -> review -> develop
+- If review returns `tests`, then after fixing the tests the test author runs the red
+  smoke check themselves and records the evidence in `TESTS.md`; the executor checks it before moving
+  `tests` to `done` - regardless of whether `testing` is on.
 
-## Логика выполнения
+## Execution logic
 
-### 0. Загрузка в ИБ после `develop` (если `update_db` включён)
+### 0. Infobase load after `develop` (if `update_db` is on)
 ```
 develop остаётся running, пока загрузка не завершится успехом: task_status.py
 не даст поставить develop done без db-update done (загрузка — часть этапа).
@@ -43,7 +43,7 @@ single-agent-workflow и optimized-config-loading); лог — logs/task#<id>/lo
    └─ Перейти к следующему включённому этапу (testing/review/docs)
 ```
 
-### 1. Этап `testing` (если включен)
+### 1. Stage `testing` (if enabled)
 ```
 После завершения testing ищем в TESTING.md строку-ячейку вердикта ровно
 «| Вердикт | ✓ ПРОЙДЕНО |» (не голый глиф ✓/✗):
@@ -67,7 +67,7 @@ single-agent-workflow и optimized-config-loading); лог — logs/task#<id>/lo
    └─ Перейти к review
 ```
 
-### 2. Этап `review` (если включен)
+### 2. Stage `review` (if enabled)
 ```
 После завершения review ищем в REVIEW.md строку-ячейку вердикта ровно
 «| Вердикт | ✓ ПРИНЯТО |» (не голый глиф ✓/✗ — он встречается в чек-листе):
@@ -90,19 +90,19 @@ single-agent-workflow и optimized-config-loading); лог — logs/task#<id>/lo
    └─ Перейти к следующему включённому этапу (обычно `docs`)
 ```
 
-> **Исполнитель цикла — ты сам.** Отдельного инструмента для цикла нет:
-> архивирование `DEVELOP.md`/`TESTS.md` и возврат этапа в `pending` ведёт сам
-> исполнитель обычными файловыми операциями (см. правило
-> `single-agent-workflow`). **Архив вердиктов и счётчик итераций ведёт
-> `task_status.py` автоматически:** он инкрементирует поле `iteration` этапа в
-> `task.json` при переводе этапа в `running` и архивирует `TESTING.md`/`REVIEW.md`
-> при возврате `develop`/`tests` в `pending` (см. «Архивирование артефактов»).
+> **The cycle executor is you.** There is no separate tool for the cycle:
+> archiving `DEVELOP.md`/`TESTS.md` and returning the stage to `pending` is done by the
+> executor itself with ordinary file operations (see the rule
+> `single-agent-workflow`). **Verdict archiving and the iteration counter are handled by
+> `task_status.py` automatically:** it increments the stage's `iteration` field in
+> `task.json` when the stage moves to `running` and archives `TESTING.md`/`REVIEW.md`
+> when `develop`/`tests` returns to `pending` (see "Archiving artifacts").
 
-## Управление итерациями этапа
+## Managing stage iterations
 
-Номер итерации хранится в поле `iteration` каждого этапа в `task.json`.
-`task_status.py` инкрементирует его автоматически при каждом новом `running` этапа
-(и при `restart`), если история прогонов этапа уже есть; первый прогон — `iteration = 1`:
+The iteration number is stored in the `iteration` field of each stage in `task.json`.
+`task_status.py` increments it automatically on each new `running` of the stage
+(and on `restart`) if the stage run history already exists; the first run is `iteration = 1`:
 
 ```bash
 # Пример: посмотреть текущую итерацию этапа develop
@@ -112,22 +112,22 @@ grep -A 20 '"name": "develop"' tasks/task#001/task.json | grep '"iteration"'
 # Максимум: 10 итераций
 ```
 
-`done` переводится только из `running`. Повторный запуск этапа без возврата на
-доработку — команда `restart`: она закрывает открытый прогон, увеличивает
-`iteration` и начинает новый. `restart` не архивирует `TESTING.md`/`REVIEW.md` —
-для возврата на доработку используйте `pending`, затем `running`. `pending`
-используется только для возврата на доработку (и архивирует вердикты). Повторный
-запуск из `failed` (или из `pending`) через `running` также увеличивает
-`iteration`, если история прогонов этапа уже есть.
+`done` is only set from `running`. Re-running a stage without returning it to
+rework is the `restart` command: it closes the open run, increments
+`iteration` and starts a new one. `restart` does not archive `TESTING.md`/`REVIEW.md` -
+to return for rework use `pending`, then `running`. `pending`
+is used only to return for rework (and archives verdicts). A repeated
+run from `failed` (or from `pending`) via `running` also increments
+`iteration` if the stage run history already exists.
 
-`task_status.py` **запрещает `restart` для `review`, если текущий `REVIEW.md`
-содержит вердикт «✗ НА ДОРАБОТКУ»/«НЕ ПРОЙДЕНО»**: это возврат на доработку, его
-нужно проводить через `pending` (с архивом вердикта), затем `running`, а не
-запускать новый круг поверх старого вердикта.
+`task_status.py` **forbids `restart` for `review` if the current `REVIEW.md`
+contains the verdict "✗ НА ДОРАБОТКУ"/"НЕ ПРОЙДЕНО"**: this is a return for rework, it
+must be done via `pending` (with verdict archiving), then `running`, and not
+start a new round on top of the old verdict.
 
-## Архивирование артефактов при циклах
+## Archiving artifacts during cycles
 
-Перед новой итерацией артефакты переименовываются для сохранения истории:
+Before a new iteration the artifacts are renamed to preserve history:
 
 ```bash
 # <n> — текущее значение поля iteration этапа в task.json НА МОМЕНТ архивирования
@@ -141,55 +141,55 @@ grep -A 20 '"name": "develop"' tasks/task#001/task.json | grep '"iteration"'
 # Новые артефакты создаются с исходным именем: DEVELOP.md, TESTS.md, TESTING.md, REVIEW.md
 ```
 
-**Автоматически `task_status.py`** при переводе `develop` или `tests` в `pending`:
+**Automatically by `task_status.py`** when `develop` or `tests` moves to `pending`:
 
-- если `testing.status == "done"` и есть `TESTING.md` → переименовать в
+- if `testing.status == "done"` and `TESTING.md` exists -> rename to
   `TESTING.<iteration testing>.md`;
-- если `review.status == "done"` и есть `REVIEW.md` → переименовать в
+- if `review.status == "done"` and `REVIEW.md` exists -> rename to
   `REVIEW.<iteration review>.md`.
 
-Архив выполняется до смены статуса. Если целевой файл уже существует, команда
-завершается ошибкой и статус не меняется — разберите файлы вручную и повторите.
-Если исходного файла нет (или этап вердикта не `done`, например при возврате из-за
-падения загрузки) — ничего не происходит. `TESTING.md`/`REVIEW.md` вручную **не
-переименовывайте** — получите конфликт с автоархивом. `DEVELOP.md`/`TESTS.md`
-исполнитель архивирует сам, как и раньше.
+Archiving happens before the status change. If the target file already exists, the command
+fails and the status is not changed - sort out the files manually and retry.
+If the source file does not exist (or the verdict stage is not `done`, for example on a return due to
+a load failure) - nothing happens. Do **not** rename `TESTING.md`/`REVIEW.md` manually
+- you will get a conflict with auto-archiving. `DEVELOP.md`/`TESTS.md`
+are archived by the executor itself, as before.
 
-Каждый перевод этапа в `running` и каждая команда `restart` добавляют в
-`stage["runs"]` запись `{"iteration", "started_at", "finished_at"}` — история
-прогонов для метрик. `finished_at` проставляется при `done`/`failed`, а также
-когда открытый прогон закрывается командой `pending`, новым `running` или
-`restart`. Поле `iteration` увеличивается при новом `running` или `restart`,
-если история прогонов уже есть (иначе начинается с 1). Автоархив
-`TESTING.md`/`REVIEW.md` поля `runs[]` и `iteration` не меняет.
+Every move of a stage to `running` and every `restart` command adds a
+`{"iteration", "started_at", "finished_at"}` record to
+`stage["runs"]` - run history for metrics. `finished_at` is set on `done`/`failed`, and also
+when the open run is closed by the `pending` command, a new `running` or
+`restart`. The `iteration` field increases on a new `running` or `restart`
+if run history already exists (otherwise it starts at 1). Auto-archiving of
+`TESTING.md`/`REVIEW.md` does not change the `runs[]` field or `iteration`.
 
-## Повторное ревью и оспоренные находки
+## Re-review and disputed findings
 
-- На итерации `review` > 1 ревьюер проверяет **дельту**: изменённые файлы и
-  изменённые запросы/процедуры целиком, ранее выданные находки — закрыты/оспорены;
-  неизменённые модули повторно не аудируются. Полный чек-лист по неизменённым
-  файлам не повторяется (см. `reviewer.md`, «Повторное ревью»).
-- Критичная/важная находка обязана содержать дословную цитату и `файл:строка`.
-  Оркестратор проверяет цитату; без неё находка понижается до минорной.
-- Спорная находка проверяется **одной адресной проверкой**, а не новым полным
-  кругом ревью; `restart` для обхода вердикта «на доработку» не используется —
-  только `pending` с архивом вердикта (см. `single-agent-workflow`).
+- On `review` iteration > 1 the reviewer checks the **delta**: changed files and
+  changed queries/procedures in full, previously issued findings - closed/disputed;
+  unchanged modules are not audited again. The full checklist is not repeated for unchanged
+  files (see `reviewer.md`, "Step 1a. Re-review (iteration > 1)").
+- A critical/important finding must contain a verbatim quote and `файл:строка`.
+  The orchestrator checks the quote; without it the finding is downgraded to minor.
+- A disputed finding is checked by **one targeted check**, not a new full
+  review round; `restart` is not used to bypass a "for rework" verdict -
+  only `pending` with verdict archiving (see `single-agent-workflow`).
 
-## Остановка цикла
+## Stopping the cycle
 
-Цикл останавливается:
-- ✅ **Одобрения ревьюером** (строка «| Вердикт | ✓ ПРИНЯТО |» в REVIEW.md)
-- ❌ **Достижения максимума итераций** (iteration ≥ 10 в task.json) → этап отмечается `failed`
-- ❌ **Явной остановки** командой `python .claude/tools/task_status.py <task_dir> <stage> failed`
+The cycle stops on:
+- ✅ **Reviewer approval** (the line "| Вердикт | ✓ ПРИНЯТО |" in REVIEW.md)
+- ❌ **Reaching the iteration limit** (iteration >= 10 in task.json) -> the stage is marked `failed`
+- ❌ **Explicit stop** by the command `python .claude/tools/task_status.py <task_dir> <stage> failed`
 
-## Примечания
+## Notes
 
-- Счётчик итераций начинается с 1 в поле `iteration` этапа в `task.json`
-- `task_status.py` инкрементирует `iteration` при переводе этапа в `running`
-- Максимум 10 итераций предотвращает бесконечные циклы
-- Каждый раз при возврате в develop обновляется DEVELOP.md с указанием номера итерации;
-  при возврате на tests — TESTS.md; вердикты TESTING.md/REVIEW.md архивирует
-  `task_status.py` автоматически
-- История всех версий сохраняется через архивные файлы (DEVELOP.1.md, DEVELOP.2.md и т.д.)
-- Разработчик видит номер итерации в артефактах
-- Вердикт этапа `testing` (его выносит исполнитель) и чеклист ревьюера дают замечания в каждой итерации
+- The iteration counter starts at 1 in the stage's `iteration` field in `task.json`
+- `task_status.py` increments `iteration` when the stage moves to `running`
+- The maximum of 10 iterations prevents infinite loops
+- On every return to develop, DEVELOP.md is updated with the iteration number;
+  on a return to tests - TESTS.md; TESTING.md/REVIEW.md verdicts are archived by
+  `task_status.py` automatically
+- The history of all versions is preserved via archive files (DEVELOP.1.md, DEVELOP.2.md, etc.)
+- The developer sees the iteration number in the artifacts
+- The `testing` stage verdict (issued by the executor) and the reviewer checklist produce findings on every iteration

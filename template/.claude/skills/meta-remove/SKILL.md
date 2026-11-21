@@ -1,6 +1,6 @@
 ---
 name: meta-remove
-description: Удалить объект метаданных из конфигурации 1С. Используй когда нужно удалить, убрать объект из конфигурации
+description: Delete a metadata object from a 1C configuration. Use when you need to delete or remove an object from the configuration
 argument-hint: <ConfigDir> -Object <Type.Name>
 allowed-tools:
   - Bash
@@ -9,37 +9,37 @@ allowed-tools:
   - AskUserQuestion
 ---
 
-# /meta-remove — удаление объекта метаданных
+# /meta-remove - deleting a metadata object
 
-Безопасно удаляет объект из XML-выгрузки конфигурации. Перед удалением проверяет ссылки на объект в реквизитах, коде и других метаданных. Если ссылки найдены — удаление блокируется.
+Safely deletes an object from the configuration XML dump. Before deletion it checks references to the object in attributes, code and other metadata. If references are found - deletion is blocked.
 
-## Использование
+## Usage
 
 ```
 /meta-remove <ConfigDir> -Object <Type.Name>
 ```
 
-## Параметры
+## Parameters
 
-| Параметр   | Обязательный | Описание                                        |
+| Parameter   | Required | Description                                        |
 |------------|:------------:|-------------------------------------------------|
-| ConfigDir  | да           | Корневая директория выгрузки (где Configuration.xml) |
-| Object     | да           | Тип и имя объекта: `Catalog.Товары`, `Document.Заказ` и т.д. Таблица внешнего источника — четырьмя частями: `ExternalDataSource.PG.Table.products` |
-| DryRun     | нет          | Только показать что будет удалено, без изменений |
-| KeepFiles  | нет          | Не удалять файлы, только дерегистрировать       |
-| Force      | нет          | Удалить несмотря на найденные ссылки; ссылки на формы объекта при этом очищаются |
+| ConfigDir  | yes          | Root dump directory (where Configuration.xml is) |
+| Object     | yes          | Object type and name: `Catalog.Товары`, `Document.Заказ`, etc. An external data source table - in four parts: `ExternalDataSource.PG.Table.products` |
+| DryRun     | no           | Only show what will be deleted, without changes |
+| KeepFiles  | no           | Do not delete files, only deregister       |
+| Force      | no           | Delete despite the found references; references to the object's forms are cleared |
 
-## Команда
+## Command
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/meta-remove.py" -ConfigDir "<путь>" -Object "Catalog.Товары"
 ```
 
-## Поддерживаемые типы
+## Supported types
 
 Catalog, Document, Enum, Constant, InformationRegister, AccumulationRegister, AccountingRegister, CalculationRegister, ChartOfAccounts, ChartOfCharacteristicTypes, ChartOfCalculationTypes, BusinessProcess, Task, ExchangePlan, DocumentJournal, Report, DataProcessor, CommonModule, ScheduledJob, EventSubscription, HTTPService, WebService, DefinedType, Role, Subsystem, CommonForm, CommonTemplate, CommonPicture, CommonAttribute, SessionParameter, FunctionalOption, FunctionalOptionsParameter, Sequence, FilterCriterion, SettingsStorage, XDTOPackage, WSReference, StyleItem, Language
 
-## Примеры
+## Examples
 
 ```bash
 # Проверка ссылок + dry run

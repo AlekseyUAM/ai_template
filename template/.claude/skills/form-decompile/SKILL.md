@@ -1,6 +1,6 @@
 ---
 name: form-decompile
-description: Декомпиляция управляемой формы 1С (Form.xml) в JSON-черновик в формате form-compile. Используй для scaffold новой формы по образцу или структурного рефакторинга. Не для точечных правок
+description: Decompile a 1C managed form (Form.xml) into a JSON draft in form-compile format. Use to scaffold a new form from a sample or for structural refactoring. Not for point edits
 argument-hint: <FormPath> [-OutputPath <out.json>]
 disable-model-invocation: true
 allowed-tools:
@@ -10,39 +10,39 @@ allowed-tools:
   - Glob
 ---
 
-# /form-decompile — JSON-черновик из Form.xml управляемой формы
+# /form-decompile - JSON draft from a managed form's Form.xml
 
-Читает Form.xml и эмитит компактный JSON в формате `form-compile`. **Результат — черновик**, а не обратимое представление: см. раздел «Что получаешь».
+Reads Form.xml and emits compact JSON in the `form-compile` format. **The result is a draft**, not a reversible representation: see the "What you get" section.
 
-## Когда использовать
+## When to use
 
-- **Scaffold новой формы по образцу** — взять существующую форму, получить JSON, поправить и скомпилировать в новую.
-- **Структурный рефакторинг** — перебрать дерево элементов, реквизиты, команды.
+- **Scaffold a new form from a sample** - take an existing form, get JSON, adjust it and compile it into a new one.
+- **Structural refactoring** - iterate over the element tree, attributes, commands.
 
-## Когда **не** использовать
+## When **not** to use
 
-- **Точечные правки готовой формы** (добавить элемент, реквизит, команду) → `/form-edit`. Цикл «декомпиляция → правка JSON → компиляция» переписывает форму целиком, может терять непокрытые конструкции и даёт большой diff. `/form-edit` правит адресно.
+- **Point edits of a ready form** (add an element, attribute, command) -> `/form-edit`. The "decompile -> edit JSON -> compile" cycle rewrites the whole form, may lose unsupported constructs and produces a big diff. `/form-edit` edits surgically.
 
-## Параметры
+## Parameters
 
-| Параметр | Описание |
+| Parameter | Description |
 |----------|----------|
-| `FormPath` | Путь к Form.xml (обязательный) |
-| `OutputPath` | Путь к выходному JSON. Если не задан — JSON в stdout |
+| `FormPath` | Path to Form.xml (required) |
+| `OutputPath` | Path to the output JSON. If not set - JSON to stdout |
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/form-decompile.py" -FormPath "<Form.xml>" -OutputPath "<out.json>"
 ```
 
-## Что получаешь
+## What you get
 
-JSON-черновик в формате `/form-compile` — **не полное обратимое представление**: раундтрип `xml → json → xml` не гарантируется, часть конструкций DSL не покрывает и **теряет молча**.
+A JSON draft in the `/form-compile` format - **not a full reversible representation**: the roundtrip `xml → json → xml` is not guaranteed, some DSL constructs are not covered and are **lost silently**.
 
-Критичные конструкции (`ConditionalAppearance` со scope, design-time диаграммы/планировщики на реквизите, неизвестный тип элемента, не-Form root) → скрипт падает с ненулевым кодом и сообщением в stderr; для правок такой формы — `/form-edit`.
+Critical constructs (`ConditionalAppearance` with scope, design-time charts/schedulers on an attribute, unknown element type, non-Form root) -> the script fails with a non-zero code and a message on stderr; to edit such a form use `/form-edit`.
 
 ## Workflow
 
-1. `/form-decompile <Form.xml> -OutputPath draft.json` — получить черновик.
-2. Поправить JSON под задачу.
-3. `/form-compile -JsonPath draft.json -OutputPath new/Form.xml` — собрать обратно.
-4. `/form-validate` + `/form-info` — проверить результат.
+1. `/form-decompile <Form.xml> -OutputPath draft.json` - get a draft.
+2. Adjust the JSON for the task.
+3. `/form-compile -JsonPath draft.json -OutputPath new/Form.xml` - assemble it back.
+4. `/form-validate` + `/form-info` - check the result.

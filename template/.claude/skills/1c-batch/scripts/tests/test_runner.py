@@ -1,8 +1,8 @@
-"""Юнит-тесты сборки argv для 1cv8.
+"""Unit tests for argv assembly for 1cv8.
 
-Ключевая инвариантa: значения в списке argv передаются БЕЗ литеральных кавычек.
-Кавычит ОС (execvp на POSIX, list2cmdline на Windows). Литеральные `"`
-в argv сломали бы передачу значения в 1С.
+Key invariant: values in the argv list are passed WITHOUT literal quotes.
+The OS does the quoting (execvp on POSIX, list2cmdline on Windows). Literal `"`
+in argv would break passing the value to 1C.
 """
 
 from onec_batch.config import Config
@@ -20,7 +20,7 @@ def test_connection_args_file():
 
 
 def test_connection_args_no_literal_quotes():
-    """Регрессионный: значение не должно начинаться/заканчиваться `"`."""
+    """Regression: the value must not start/end with `"`."""
     cfg = Config(connection_type="server", server="srv", base="ref")
     _, value = build_connection_args(cfg)
     assert not value.startswith('"')
@@ -42,7 +42,7 @@ def test_auth_args_empty():
 
 
 def test_auth_args_value_with_spaces_passed_raw():
-    """Пробелы в значении не должны экранироваться вручную — это сделает ОС."""
+    """Spaces in the value must not be escaped manually - the OS does that."""
     cfg = Config(user="Иван Иванов")
     assert build_auth_args(cfg) == ["/N", "Иван Иванов"]
 

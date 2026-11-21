@@ -1,20 +1,20 @@
 #!/usr/bin/env python
-# cfe-init v1.11 — Create 1C configuration extension scaffold (CFE) (+write_xml_file/write_utf8_bom: общий эталон записи)
+# cfe-init v1.11 - Create 1C configuration extension scaffold (CFE) (+write_xml_file/write_utf8_bom: shared writing reference)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 """Generates minimal XML source files for a 1C configuration extension."""
 import sys, os, re, argparse, uuid
 from xml.etree import ElementTree as ET
 
-# Регистронезависимый ввод: имена параметров и значения choices принимаются
-# в любом регистре (в argparse по умолчанию совпадение точное).
+# Case-insensitive input: parameter names and choices values are accepted
+# in any case (in argparse exact match is the default).
 def ci_parse_args(parser, argv=None):
-    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
+    """parse_args: parameter names and choices values are accepted in any case."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
         if tok.startswith('-') and tok.lower() in names:
             argv[i] = names[tok.lower()]
-    # choices — зеркало [ValidateSet]; канонизируем ДО разбора, иначе argparse отвергнет регистр
+    # choices - a mirror of [ValidateSet]; we canonicalize BEFORE parsing, otherwise argparse rejects the case
     choice_map = {}
     for a in parser._actions:
         if a.choices:
@@ -28,31 +28,31 @@ def ci_parse_args(parser, argv=None):
 
 
 def esc_xml_text(s):
-    # Эскейп ТЕКСТА элемента: только & < > — кавычку и апостроф платформа держит сырыми.
+    # Element TEXT escape: only & < > - the platform keeps quotes and apostrophes raw.
     return s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
 
 def new_uuid():
     return str(uuid.uuid4())
 
 def write_utf8_bom(path, content):
-    # newline='' — без трансляции: иначе текстовый режим Python дал бы CRLF на Windows
-    # и LF на macOS, то есть вывод навыка зависел бы от ОС.
+    # newline='' - no translation: otherwise Python text mode would produce CRLF on Windows
+    # and LF on macOS, that is, the skill output would depend on the OS.
     with open(path, 'w', encoding='utf-8-sig', newline='') as f:
         f.write(content)
 
 
 def write_xml_file(path, content):
-    """XML в каноне выгрузки Конфигуратора: CRLF в разделителях, без перевода в конце.
+    """XML in the Configurator export canon: CRLF in separators, no trailing newline translation.
 
-    Копия этой функции есть в каждом навыке-эмиттере (навыки автономны). Держать
-    копии одинаковыми — сознательно: разошедшиеся копии сводят на нет весь смысл.
+    A copy of this function exists in every emitter skill (skills are autonomous). Keeping
+    copies identical is deliberate: diverged copies negate the whole point.
     """
     text = content.replace('\r\n', '\n').replace('\n', '\r\n').rstrip('\r\n')
     write_utf8_bom(path, text)
 
 
 def format_rank(ver):
-    """"2.20" → 220, "2.9" → 209. Строковое сравнение неверно ("2.9" > "2.17")."""
+    """"2.20" -> 220, "2.9" -> 209. String comparison is wrong ("2.9" > "2.17")."""
     m = re.match(r'^(\d+)\.(\d+)$', ver or '')
     return int(m.group(1)) * 100 + int(m.group(2)) if m else 0
 
@@ -170,8 +170,8 @@ def main():
     if synonym:
         synonym_xml = f"\r\n\t\t\t\t<v8:item>\r\n\t\t\t\t\t<v8:lang>ru</v8:lang>\r\n\t\t\t\t\t<v8:content>{esc_xml_text(synonym)}</v8:content>\r\n\t\t\t\t</v8:item>\r\n\t\t\t"
 
-    # Элемент целиком, а не значение внутри пары: при пустом значении Конфигуратор
-    # пишет <Vendor/>, а не <Vendor></Vendor>.
+    # The element as a whole, not the value inside the pair: with an empty value Configurator
+    # writes <Vendor/>, not <Vendor></Vendor>.
     vendor_el = f"<Vendor>{esc_xml_text(vendor)}</Vendor>" if vendor else "<Vendor/>"
     version_el = f"<Version>{esc_xml_text(version)}</Version>" if version else "<Version/>"
 
@@ -179,7 +179,7 @@ def main():
     role_name = f"{name_prefix}ОсновнаяРоль"
 
     # --- DefaultRoles XML ---
-    # Элемент целиком: без роли Конфигуратор пишет <DefaultRoles/>, а не пустую пару.
+    # The element as a whole: without roles Configurator writes <DefaultRoles/>, not an empty pair.
     default_roles_el = "<DefaultRoles/>"
     if not args.NoRole:
         default_roles_el = ('<DefaultRoles>\r\n\t\t\t\t'
@@ -204,8 +204,8 @@ def main():
 
     contained_objects = ""
 
-    # Объявления пространств имён — одной переменной: места эмиссии её только подставляют.
-    # Правки шапки (как xmlns:pal в формате 2.21) делаются здесь, в одном месте.
+    # Namespace declarations - as one variable: emission sites only substitute it.
+    # Header edits (like xmlns:pal in format 2.21) are done here, in one place.
     xmlns_decl = (
         'xmlns="http://v8.1c.ru/8.3/MDClasses"'
         ' xmlns:app="http://v8.1c.ru/8.2/managed-application/core"'
@@ -226,11 +226,11 @@ def main():
         ' xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"'
     )
 
-    # 2.21 (8.5) добавила в шапку пространство палитры — ради <Color> у значений перечисления.
-    # Вставляем НА МЕСТО (после lf, перед style): платформа держит объявления по алфавиту,
-    # дописать в конец нельзя.
-    # Caption/ShortCaption — свойства корня из того же формата 2.21, между Version и
-    # DefaultLanguage (позиция снята с выгрузки расширения из базы 8.5).
+    # 2.21 (8.5) added the palette namespace to the header - for <Color> in enum values.
+    # We insert IN PLACE (after lf, before style): the platform keeps declarations alphabetically,
+    # appending at the end is not possible.
+    # Caption/ShortCaption - root properties from the same format 2.21, between Version and
+    # DefaultLanguage (the position is taken from the extension export from the 8.5 base).
     f221_captions = ""
     if format_rank(format_version) >= 221:
         xmlns_decl = xmlns_decl.replace(

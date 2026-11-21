@@ -58,7 +58,15 @@ def atomic_write_text(path, text: str) -> None:
     tmp = target.with_name(f"{target.name}.tmp.{os.getpid()}")
     try:
         tmp.write_text(text, encoding="utf-8")
-        os.replace(tmp, target)
+        # Windows: os.replace fails while a reader has the target open.
+        for attempt in range(100):
+            try:
+                os.replace(tmp, target)
+                break
+            except PermissionError:
+                if attempt == 99:
+                    raise
+                time.sleep(0.01)
     finally:
         try:
             if tmp.exists():

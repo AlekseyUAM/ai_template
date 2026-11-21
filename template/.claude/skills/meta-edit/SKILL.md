@@ -1,6 +1,6 @@
 ---
 name: meta-edit
-description: Точечное редактирование объекта метаданных 1С. Используй когда нужно добавить, удалить или изменить реквизиты, табличные части, измерения, ресурсы или свойства существующего объекта конфигурации
+description: Point edit of a 1C metadata object. Use when you need to add, remove or change attributes, tabular sections, dimensions, resources or properties of an existing configuration object
 argument-hint: <ObjectPath> -Operation <op> -Value "<val>" | -DefinitionFile <json> [-NoValidate]
 allowed-tools:
   - Bash
@@ -9,37 +9,37 @@ allowed-tools:
   - Glob
 ---
 
-# /meta-edit — точечное редактирование метаданных 1С
+# /meta-edit - point editing of 1C metadata
 
-Атомарные операции модификации существующих XML объектов метаданных.
+Atomic operations for modifying existing metadata object XML.
 
-## Команда
+## Command
 
-### Inline mode (простые операции)
+### Inline mode (simple operations)
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/meta-edit.py" -ObjectPath "<path>" -Operation <op> -Value "<val>"
 ```
 
-### JSON mode (сложные/комбинированные)
+### JSON mode (complex/combined)
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/meta-edit.py" -DefinitionFile "<json>" -ObjectPath "<path>"
 ```
 
-| Параметр | Описание |
+| Parameter | Description |
 |----------|----------|
-| ObjectPath | XML-файл или директория объекта (обязательный, авторезолв `<dirName>.xml`) |
-| Operation | Inline-операция (альтернатива DefinitionFile) |
-| Value | Значение для inline-операции |
-| DefinitionFile | JSON-файл с операциями (альтернатива Operation) |
-| NoValidate | Не запускать валидацию после правки |
+| ObjectPath | Object XML file or directory (required, auto-resolved `<dirName>.xml`) |
+| Operation | Inline operation (alternative to DefinitionFile) |
+| Value | Value for the inline operation |
+| DefinitionFile | JSON file with operations (alternative to Operation) |
+| NoValidate | Do not run validation after the edit |
 
-## Частые операции
+## Common operations
 
-Batch через `;;` во всех операциях.
+Batch via `;;` in all operations.
 
-| Операция | Формат Value | Пример |
+| Operation | Value format | Example |
 |----------|-------------|--------|
 | `add-attribute` | `Имя: Тип \| флаги` | `"Сумма: Число(15,2) \| req, index"` |
 | `add-dimension` | `Имя: Тип \| флаги` | `"Организация: CatalogRef.Организации \| master"` |
@@ -54,11 +54,11 @@ Batch через `;;` во всех операциях.
 | `modify-ts` | `ТЧ: ключ=значение` | `"Товары: synonym=Товарный состав"` |
 | `modify-property` | `Ключ=Значение` | `"CodeLength=11 ;; DescriptionLength=150"` |
 
-Позиционная вставка: `"Склад: CatalogRef.Склады >> after Организация"`.
+Positional insert: `"Склад: CatalogRef.Склады >> after Организация"`.
 
-Составной тип — через `+`: `"Значение: Строка + Число(15,2) + Дата"`.
+Composite type - via `+`: `"Значение: Строка + Число(15,2) + Дата"`.
 
-## Быстрые примеры
+## Quick examples
 
 ```bash
 # Добавить реквизиты
@@ -80,22 +80,22 @@ Batch через `;;` во всех операциях.
 -Operation set-owners -Value "Catalog.Контрагенты ;; Catalog.Организации"
 ```
 
-## Индекс: что правишь → файл
+## Index: what you edit -> file
 
-| Что нужно | Файл |
+| What you need | File |
 |-----------|------|
-| Реквизит, измерение, ресурс, графа: флаги, составные типы, структурные свойства (`Format`, `ChoiceParameters`, `FillValue`, …) | `reference/attributes.md` |
-| Табличная часть и её реквизиты | `reference/tabular-sections.md` |
-| Свойства самого объекта, списочные свойства (владельцы, движения, основание, ввод по строке) | `reference/properties.md` |
-| Предопределённые элементы | `reference/predefined.md` |
-| Значения перечисления, команды | `reference/other-children.md` |
-| Внешний источник данных: поля, таблицы, функции | `reference/external-data-source.md` |
-| Комбинированные операции в одном JSON, синонимы ключей и типов, какие дети допустимы у типа объекта | `reference/json-dsl.md` |
+| Attribute, dimension, resource, column: flags, composite types, structural properties (`Format`, `ChoiceParameters`, `FillValue`, …) | `reference/attributes.md` |
+| Tabular section and its attributes | `reference/tabular-sections.md` |
+| The object's own properties, list properties (owners, movements, based on, input by string) | `reference/properties.md` |
+| Predefined items | `reference/predefined.md` |
+| Enum values, commands | `reference/other-children.md` |
+| External data source: fields, tables, functions | `reference/external-data-source.md` |
+| Combined operations in one JSON, key and type synonyms, which children are allowed for an object type | `reference/json-dsl.md` |
 
-Форму добавляет и удаляет навык `form-add` / `form-remove`, макет — навык `template-add` /
-`template-remove`: кроме записи в `ChildObjects` у них есть собственные файлы, и `meta-edit` их не трогает.
+A form is added and removed by the `form-add` / `form-remove` skill, a template by the `template-add` /
+`template-remove` skill: besides the entry in `ChildObjects` they have their own files, and `meta-edit` does not touch them.
 
-## Верификация
+## Verification
 
 ```
 /meta-validate <ObjectPath>    — валидация после редактирования

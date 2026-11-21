@@ -1,6 +1,6 @@
 ---
 name: web-unpublish
-description: Удаление веб-публикации 1С из Apache. Используй когда пользователь просит убрать публикацию, удалить веб-доступ к базе
+description: Removing a 1C web publication from Apache. Use when the user asks to remove a publication, delete web access to a database
 argument-hint: "<appname | --all>"
 allowed-tools:
   - Bash
@@ -9,11 +9,11 @@ allowed-tools:
   - AskUserQuestion
 ---
 
-# /web-unpublish — Удаление веб-публикации 1С из Apache
+# /web-unpublish - Removing a 1C web publication from Apache
 
-Удаляет блок публикации из `httpd.conf` и каталог `publish/{appname}` внутри Apache. Если других публикаций не осталось — удаляет глобальный блок 1C и останавливает Apache. С флагом `--all` удаляет все публикации разом.
+Removes the publication block from `httpd.conf` and the `publish/{appname}` directory inside Apache. If no other publications remain - removes the global 1C block and stops Apache. With the `--all` flag it removes all publications at once.
 
-> **Внимание:** этот навык управляет только веб-публикациями в Apache (блоки в `httpd.conf` + каталог `publish/`). Он **НЕ** удаляет каталоги проекта, `upload/`, базы данных или исходники.
+> **Warning:** this skill manages only web publications in Apache (blocks in `httpd.conf` + the `publish/` directory). It does **NOT** delete project directories, `upload/`, databases or sources.
 
 ## Usage
 
@@ -23,32 +23,32 @@ allowed-tools:
 /web-unpublish --all
 ```
 
-## Параметры подключения
+## Connection parameters
 
-Прочитай `.v8-project.json` из корня проекта. Если задан `webPath` — используй как `-ApachePath`.
-По умолчанию `tools/apache24` от корня проекта.
+Read `.v8-project.json` from the project root. If `webPath` is set - use it as `-ApachePath`.
+Default is `tools/apache24` from the project root.
 
-Если пользователь не указал `appname` и не указал `--all`, выполни `/web-info` чтобы показать список публикаций и спроси какую удалить.
+If the user did not specify `appname` and did not specify `--all`, run `/web-info` to show the publication list and ask which one to remove.
 
-Если пользователь просит удалить **все** публикации — используй `-All`.
+If the user asks to remove **all** publications - use `-All`.
 
-## Команда
+## Command
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/web-unpublish.py" <параметры>
 ```
 
-### Параметры скрипта
+### Script parameters
 
-| Параметр | Обязательный | Описание |
+| Parameter | Required | Description |
 |----------|:------------:|----------|
-| `-AppName <имя>` | * | Имя публикации |
-| `-All` | * | Удалить все публикации |
-| `-ApachePath <путь>` | нет | Корень Apache (по умолчанию `tools/apache24`) |
+| `-AppName <имя>` | * | Publication name |
+| `-All` | * | Remove all publications |
+| `-ApachePath <путь>` | no | Apache root (default `tools/apache24`) |
 
-> `*` — нужен либо `-AppName`, либо `-All`
+> `*` - either `-AppName` is needed, or `-All`
 
-## Примеры
+## Examples
 
 ```bash
 # Удалить одну публикацию

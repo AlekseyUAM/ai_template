@@ -1,6 +1,6 @@
 ---
 name: subsystem-compile
-description: Создать подсистему 1С — XML-исходники из JSON-определения. Используй когда нужно добавить подсистему (раздел) в конфигурацию
+description: Create a 1C subsystem - XML sources from a JSON definition. Use when you need to add a subsystem (section) to the configuration
 argument-hint: "[-DefinitionFile <json> | -Value <json-string>] -OutputDir <ConfigDir> [-Parent <path>]"
 allowed-tools:
   - Bash
@@ -9,25 +9,25 @@ allowed-tools:
   - Glob
 ---
 
-# /subsystem-compile — генерация подсистемы из JSON
+# /subsystem-compile - generate a subsystem from JSON
 
-Принимает JSON-определение подсистемы → генерирует XML + файловую структуру + регистрирует в родителе (Configuration.xml или родительская подсистема).
+Takes a JSON subsystem definition → generates XML + file structure + registers it in the parent (Configuration.xml or a parent subsystem).
 
-## Параметры и команда
+## Parameters and command
 
-| Параметр | Описание |
+| Parameter | Description |
 |----------|----------|
-| `DefinitionFile` | Путь к JSON-файлу определения |
-| `Value` | Инлайн JSON-строка (альтернатива DefinitionFile) |
-| `OutputDir` | Корень выгрузки (где `Subsystems/`, `Configuration.xml`) |
-| `Parent` | Путь к XML родительской подсистемы (для вложенных) |
-| `NoValidate` | Пропустить авто-валидацию |
+| `DefinitionFile` | Path to the JSON definition file |
+| `Value` | Inline JSON string (alternative to DefinitionFile) |
+| `OutputDir` | Dump root (where `Subsystems/`, `Configuration.xml` are) |
+| `Parent` | Path to the parent subsystem XML (for nested ones) |
+| `NoValidate` | Skip auto-validation |
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/subsystem-compile.py" -Value '<json>' -OutputDir '<ConfigDir>'
 ```
 
-## JSON-определение
+## JSON definition
 
 ```json
 {
@@ -42,9 +42,9 @@ python "${CLAUDE_SKILL_DIR}/scripts/subsystem-compile.py" -Value '<json>' -Outpu
 }
 ```
 
-Минимально: только `name`. Остальное — дефолты.
+Minimal: only `name`. Everything else has defaults.
 
-## Примеры
+## Examples
 
 ```bash
 # Минимальная подсистема
@@ -56,4 +56,3 @@ python "${CLAUDE_SKILL_DIR}/scripts/subsystem-compile.py" -Value '<json>' -Outpu
 # Вложенная подсистема
 ... -Value '{"name":"Дочерняя"}' -OutputDir config/ -Parent config/Subsystems/Продажи.xml
 ```
-

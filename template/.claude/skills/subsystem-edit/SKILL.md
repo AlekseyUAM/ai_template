@@ -1,6 +1,6 @@
 ---
 name: subsystem-edit
-description: Точечное редактирование подсистемы 1С. Используй когда нужно добавить или удалить объекты из подсистемы, управлять дочерними подсистемами или изменить свойства
+description: Point edits of a 1C subsystem. Use when you need to add or remove objects from a subsystem, manage child subsystems or change properties
 argument-hint: -SubsystemPath <path> -Operation <op> -Value <value>
 allowed-tools:
   - Bash
@@ -9,35 +9,35 @@ allowed-tools:
   - Glob
 ---
 
-# /subsystem-edit — редактирование подсистемы 1С
+# /subsystem-edit - editing a 1C subsystem
 
-Точечное редактирование XML подсистемы: состав, дочерние подсистемы, свойства.
+Point edits of subsystem XML: content, child subsystems, properties.
 
-## Параметры и команда
+## Parameters and command
 
-| Параметр | Описание |
+| Parameter | Description |
 |----------|----------|
-| `SubsystemPath` | Путь к XML-файлу подсистемы |
-| `DefinitionFile` | JSON-файл с массивом операций |
-| `Operation` | Одна операция (альтернатива DefinitionFile) |
-| `Value` | Значение для операции |
-| `NoValidate` | Пропустить авто-валидацию |
+| `SubsystemPath` | Path to the subsystem XML file |
+| `DefinitionFile` | JSON file with an array of operations |
+| `Operation` | One operation (alternative to DefinitionFile) |
+| `Value` | Value for the operation |
+| `NoValidate` | Skip auto-validation |
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/subsystem-edit.py" -SubsystemPath '<path>' -Operation add-content -Value 'Catalog.Товары'
 ```
 
-## Операции
+## Operations
 
-| Операция | Значение | Описание |
+| Operation | Value | Description |
 |----------|----------|----------|
-| `add-content` | `"Catalog.X"` или `["Catalog.X","Document.Y"]` | Добавить объекты в Content |
-| `remove-content` | `"Catalog.X"` или `["Catalog.X"]` | Удалить объекты из Content |
-| `add-child` | `"ИмяПодсистемы"` | Добавить дочернюю подсистему в ChildObjects |
-| `remove-child` | `"ИмяПодсистемы"` | Удалить дочернюю подсистему |
-| `set-property` | `{"name":"prop","value":"val"}` | Изменить свойство (Synonym, IncludeInCommandInterface, UseOneCommand, etc.) |
+| `add-content` | `"Catalog.X"` or `["Catalog.X","Document.Y"]` | Add objects to Content |
+| `remove-content` | `"Catalog.X"` or `["Catalog.X"]` | Remove objects from Content |
+| `add-child` | `"ИмяПодсистемы"` | Add a child subsystem to ChildObjects |
+| `remove-child` | `"ИмяПодсистемы"` | Remove a child subsystem |
+| `set-property` | `{"name":"prop","value":"val"}` | Change a property (Synonym, IncludeInCommandInterface, UseOneCommand, etc.) |
 
-## Примеры
+## Examples
 
 ```bash
 # Добавить объект в состав

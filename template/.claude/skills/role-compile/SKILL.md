@@ -1,6 +1,6 @@
 ---
 name: role-compile
-description: Создание роли 1С из описания прав. Используй когда нужно создать новую роль с набором прав на объекты
+description: Create a 1C role from a rights description. Use when you need to create a new role with a set of rights on objects
 argument-hint: <JsonPath> <OutputDir>
 allowed-tools:
   - Bash
@@ -9,34 +9,34 @@ allowed-tools:
   - Glob
 ---
 
-# /role-compile — генерация роли 1С из JSON DSL
+# /role-compile - generate a 1C role from JSON DSL
 
-Принимает JSON-определение роли → генерирует `Roles/Имя.xml` (метаданные) и `Roles/Имя/Ext/Rights.xml` (права). UUID автоматически.
+Takes a JSON role definition → generates `Roles/Имя.xml` (metadata) and `Roles/Имя/Ext/Rights.xml` (rights). UUID is automatic.
 
-## Параметры и команда
+## Parameters and command
 
-| Параметр | Описание |
+| Parameter | Description |
 |----------|----------|
-| `JsonPath` | Путь к JSON-определению роли |
-| `OutputDir` | Корень выгрузки конфигурации (где `Configuration.xml`, `Roles/` и т.д.) |
+| `JsonPath` | Path to the JSON role definition |
+| `OutputDir` | Root of the configuration dump (where `Configuration.xml`, `Roles/` etc. are) |
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/role-compile.py" -JsonPath "<json>" -OutputDir "<ConfigDir>"
 ```
 
-Создаёт `{OutputDir}/Roles/Имя.xml` и `{OutputDir}/Roles/Имя/Ext/Rights.xml`. Регистрирует `<Role>` в `Configuration.xml`.
+Creates `{OutputDir}/Roles/Имя.xml` and `{OutputDir}/Roles/Имя/Ext/Rights.xml`. Registers `<Role>` in `Configuration.xml`.
 
 ## JSON DSL
 
-### Структура
+### Structure
 
 ```json
 { "name": "ИмяРоли", "synonym": "Отображаемое имя", "objects": [...], "templates": [...] }
 ```
 
-Необязательные: `comment` (""), `setForNewObjects` (false), `setForAttributesByDefault` (true), `independentRightsOfChildObjects` (false).
+Optional: `comment` (""), `setForNewObjects` (false), `setForAttributesByDefault` (true), `independentRightsOfChildObjects` (false).
 
-### Shorthand-строки и объектная форма
+### Shorthand strings and object form
 
 ```json
 "objects": [
@@ -49,50 +49,50 @@ python "${CLAUDE_SKILL_DIR}/scripts/role-compile.py" -JsonPath "<json>" -OutputD
 ]
 ```
 
-- Shorthand: `"Тип.Имя: @пресет"` или `"Тип.Имя: Право1, Право2"`
-- Объектная форма: `preset` + `rights` (точечные значения прав) + `rls` (ограничения)
+- Shorthand: `"Тип.Имя: @пресет"` or `"Тип.Имя: Право1, Право2"`
+- Object form: `preset` + `rights` (per-right values) + `rls` (restrictions)
 
-### Пресеты
+### Presets
 
-| Пресет | Действие |
+| Preset | Action |
 |--------|----------|
-| `@view` | Просмотр — Read, View (+InputByString для справочников/документов; Use+View для обработок/отчётов) |
-| `@edit` | Полное редактирование — CRUD + Interactive* + Posting (документы) |
+| `@view` | View - Read, View (+InputByString for catalogs/documents; Use+View for data processors/reports) |
+| `@edit` | Full editing - CRUD + Interactive* + Posting (documents) |
 
-`@` обязателен в shorthand. В объектной форме — `"preset": "view"` без `@`.
+`@` is required in shorthand. In object form - `"preset": "view"` without `@`.
 
 
-### Сервисы
+### Services
 
-Право живёт на **вложенном объекте** сервиса — методе шаблона URL, операции, канале; на сервисе целиком его не бывает. Весь сервис — короткая запись, навык раскроет её по метаданным в `OutputDir`:
+Rights live on a **nested object** of the service - a URL template method, operation, channel; they are never on the service as a whole. A whole service is a short notation; the skill expands it from metadata in `OutputDir`:
 
 ```json
 "objects": ["HTTPService.ЭДО: Use"]
 ```
-→ `HTTPService.ЭДО.URLTemplate.ЕстьНовыеДокументы.Method.POST: Use`, и так по каждому методу каждого шаблона.
+→ `HTTPService.ЭДО.URLTemplate.ЕстьНовыеДокументы.Method.POST: Use`, and so on for every method of every template.
 
-Часть маршрутов — полным путём: `"HTTPService.ЭДО.URLTemplate.ЕстьНовыеДокументы.Method.POST: Use"`.
+Some routes are full path only: `"HTTPService.ЭДО.URLTemplate.ЕстьНовыеДокументы.Method.POST: Use"`.
 
 
-### Шаблоны RLS
+### RLS templates
 
 ```json
 "templates": [{"name": "ДляОбъекта(Мод)", "condition": "ГДЕ Организация = &ТекОрг"}]
 ```
 
-Ссылка в `rls`: `"#ДляОбъекта(\"\")"`. Символ `&` автоматически экранируется в XML.
+Reference in `rls`: `"#ДляОбъекта(\"\")"`. The `&` character is escaped automatically in XML.
 
-Длинное условие держи в файле — в значении пишется `@путь`. Относительный путь ищется рядом
-с JSON-описанием роли, затем в текущем каталоге:
+Keep a long condition in a file - the value contains `@путь`. A relative path is looked up next to
+the JSON role definition, then in the current directory:
 
 ```json
 "objects": [{"name": "Document.Продажа", "preset": "view", "rls": {"Read": "@условие.txt"}}],
 "templates": [{"name": "ДляОбъекта(Мод)", "condition": "@шаблон.txt"}]
 ```
 
-## Примеры
+## Examples
 
-### Простая роль
+### Simple role
 
 ```json
 {
@@ -101,7 +101,7 @@ python "${CLAUDE_SKILL_DIR}/scripts/role-compile.py" -JsonPath "<json>" -OutputD
 }
 ```
 
-### Роль с RLS
+### Role with RLS
 
 ```json
 {
@@ -115,24 +115,24 @@ python "${CLAUDE_SKILL_DIR}/scripts/role-compile.py" -JsonPath "<json>" -OutputD
 }
 ```
 
-## Что можно писать в `objects`
+## What can be written in `objects`
 
-Прав не бывает у `Enum`, `CommonModule`, `DefinedType`, `CommonPicture`, `CommonTemplate`, `Language`, `FunctionalOption`, `EventSubscription`, `ScheduledJob`, `StyleItem`, `SettingsStorage` и подобных — в дереве редактора ролей их нет. Ошибка в описании — отказ до записи: файлы не создаются, `Configuration.xml` не меняется.
+Rights do not exist for `Enum`, `CommonModule`, `DefinedType`, `CommonPicture`, `CommonTemplate`, `Language`, `FunctionalOption`, `EventSubscription`, `ScheduledJob`, `StyleItem`, `SettingsStorage` and similar - they are not in the role editor tree. An error in the definition is a refusal before writing: files are not created, `Configuration.xml` is not changed.
 
-Права на части объекта задаются точечным путём: `Catalog.Контрагенты.Attribute.ИНН: View, Edit`, `WebService.Обмен.Operation.Загрузить: Use`, `HTTPService.ЭДО.URLTemplate.ЕстьНовыеДокументы.Method.POST: Use`.
+Rights on parts of an object are set by dotted path: `Catalog.Контрагенты.Attribute.ИНН: View, Edit`, `WebService.Обмен.Operation.Загрузить: Use`, `HTTPService.ЭДО.URLTemplate.ЕстьНовыеДокументы.Method.POST: Use`.
 
-Реквизиты, табличные части, измерения и ресурсы наследуют права своего объекта — им задают
-запрет, чтобы закрыть унаследованное:
+Attributes, tabular sections, dimensions and resources inherit the rights of their object - they are given
+a deny to close what is inherited:
 
 ```json
 {"name": "Catalog.Товары.Attribute.Цена", "rights": {"View": false}}
 ```
 
-Роль расширения, включённая в основные (`DefaultRoles`), прав на заимствованные объекты давать не может — платформа это запрещает. Такие права выноси в отдельную роль вне основных.
+An extension role included in the main roles (`DefaultRoles`) cannot grant rights on borrowed objects - the platform forbids it. Put such rights in a separate role outside the main ones.
 
-Полные таблицы «тип → права», виды вложенности (включая внешние источники данных), список типов без прав, таблицы пресетов и дополнительные примеры — в `dsl-reference.md`.
+Full type-to-rights tables, nesting kinds (including external data sources), the list of types without rights, preset tables and additional examples are in `dsl-reference.md`.
 
-## Верификация
+## Verification
 
 ```
 /role-validate <RightsPath>  — проверка корректности XML, прав, RLS

@@ -1,15 +1,15 @@
 ---
 name: task-artifacts
-description: Исполнитель этапа оставляет результат в каталоге задачи.
+description: The stage executor leaves the result in the task directory.
 ---
 
-# Артефакты задачи
+# Task artifacts
 
-По завершении этапа его исполнитель:
-1. Записывает результат в файл этапа в каталоге задачи
+When a stage completes, its executor:
+1. Writes the result to the stage file in the task directory
    (`ANALYZE.md`, `ARCHITECT.md`, `TESTS.md`, `DEVELOP.md`, `TESTING.md`, `REVIEW.md`, `DOCS.md`).
-   Артефакты этапов пишет исполнитель (в single-agent — ты сам); `TESTING.md` — тоже
-   ты, этап `testing` отдельного исполнителя не имеет.
-2. Указывает статус и список изменённых файлов.
+   Stage artifacts are written by the executor (in single-agent mode - you yourself); `TESTING.md` - also
+   you, the `testing` stage has no separate executor.
+2. Specifies the status and the list of changed files.
 
-Это обеспечивает передачу контекста между этапами и прозрачность хода задачи.
+This ensures context transfer between stages and transparency of the task progress.

@@ -9,16 +9,16 @@ from lxml import etree
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
-# Регистронезависимый ввод: имена параметров и значения choices принимаются
-# в любом регистре (в argparse по умолчанию совпадение точное).
+# Case-insensitive input: parameter names and choices values are accepted
+# in any case (argparse matches exactly by default).
 def ci_parse_args(parser, argv=None):
-    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
+    """parse_args: parameter names and choices values are accepted in any case."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
         if tok.startswith('-') and tok.lower() in names:
             argv[i] = names[tok.lower()]
-    # choices — зеркало [ValidateSet]; канонизируем ДО разбора, иначе argparse отвергнет регистр
+    # choices mirrors [ValidateSet]; canonicalize BEFORE parsing, otherwise argparse rejects the case
     choice_map = {}
     for a in parser._actions:
         if a.choices:
@@ -38,8 +38,8 @@ parser.add_argument("-TemplatePath", "-Path", required=True)
 parser.add_argument("-Detailed", action="store_true")
 parser.add_argument("-MaxErrors", type=int, default=20)
 parser.add_argument("-OutFile", default="")
-# Ожидаемый состав полей отчёта по ТЗ (через запятую/точку с запятой). Задаёт
-# дополнительную смысловую проверку: выборка должна ссылаться ровно на эти поля.
+# Expected composition of report fields per the spec (comma/semicolon separated). Enables
+# an additional semantic check: the selection must reference exactly these fields.
 parser.add_argument("-ExpectedFields", default="")
 args = ci_parse_args(parser)
 
@@ -82,8 +82,8 @@ errors = 0
 warnings = 0
 ok_count = 0
 stopped = False
-# Проверка, которая не выполнялась, — в итоговую строку: без этого «Validation OK» читается как
-# «проверено всё» (модель так и докладывала пользователю при нарушенном порядке)
+# A check that did not run goes into the final line: otherwise "Validation OK" reads as
+# "everything checked" (the model reported exactly that to the user on a broken order)
 xsd_note = None
 output_lines = []
 
@@ -196,8 +196,9 @@ def inner_text(node):
 
 # ── 3. Root element checks ───────────────────────────────────
 
-# Строчную (dataCompositionSchema — имя из XSD, так пишет сериализатор XDTO) платформа загружает,
-# но конфигуратор всегда пишет DataCompositionSchema — это предупреждение, не ошибка.
+# The lowercase form (dataCompositionSchema - the name from the XSD, as the XDTO serializer
+# writes it) is loaded by the platform, but the Configurator always writes DataCompositionSchema -
+# this is a warning, not an error.
 if local_name(root) == "DataCompositionSchema":
     report_ok("Root element: DataCompositionSchema")
 elif local_name(root).lower() == "datacompositionschema":
@@ -891,7 +892,7 @@ for vn in value_nodes:
         elif not _re_vt.match(r'^[A-Za-zА-Яа-яЁё]+\.[A-Za-zА-Яа-яЁё0-9_]+', stripped):
             report_warn(f"<value xsi:type=\"dcscor:DesignTimeValue\">{text}</value> — doesn't look like a typical ref path")
     elif xsi_type == 'xs:boolean' and text.strip() not in ('true', 'false', '1', '0'):
-        # Платформа прощает True/False, чтение по схеме (XDTO) — нет
+        # The platform forgives True/False, schema reading (XDTO) does not
         report_error(f"<value xsi:type=\"xs:boolean\">{text}</value> — boolean must be true or false (lowercase)")
         v_ok = False
 
@@ -902,13 +903,13 @@ if stopped:
     finalize()
     sys.exit(1)
 
-# ── 18. Смысловые проверки: состав полей, ТЗ и GROUP BY по ВТ ──
-# Структурная валидация не видит, соответствует ли выборка ТЗ и не является ли
-# группировка по виртуальной таблице лишней. Эти проверки дополняют её:
-#   - -ExpectedFields задаёт колонки ТЗ; выборка должна ссылаться ровно на них;
-#   - выбранное вычисляемое поле не должно подменять поле ТЗ с тем же заголовком;
-#   - запрос к ВТ «Обороты»/«Остатки»/«Остатки и обороты» не должен содержать
-#     СГРУППИРОВАТЬ ПО без обоснования (ВТ уже агрегирует).
+# ── 18. Semantic checks: field composition, spec and GROUP BY over a VT ──
+# Structural validation cannot see whether the selection matches the spec or whether
+# grouping by a virtual table is redundant. These checks supplement it:
+#   - -ExpectedFields sets the spec columns; the selection must reference exactly them;
+#   - a selected calculated field must not replace a spec field with the same title;
+#   - a query to the «Обороты»/«Остатки»/«Остатки и обороты» VT must not contain
+#     GROUP BY without justification (the VT already aggregates).
 
 import re as _re_sem
 
@@ -916,7 +917,7 @@ expected_fields = [f.strip() for f in _re_sem.split(r"[,;]", expected_fields_raw
 
 
 def _ml_title(node):
-    """Заголовок элемента (title) или пустая строка."""
+    """Element title, or an empty string."""
     title = find(node, "s:title")
     if title is None:
         return ""
@@ -930,7 +931,7 @@ def _field_title(node, path):
     return _ml_title(node) or path
 
 
-# Заголовки полей набора данных (по dataPath) и вычисляемых полей.
+# Titles of dataset fields (by dataPath) and calculated fields.
 dataset_titles = {}
 for f in find_all(root, "//s:dataSet//s:field"):
     dp = find(f, "s:dataPath")
@@ -949,11 +950,11 @@ for cf in calc_field_nodes:
 
 
 def _collect_selection(settings_node):
-    """Поля, выводимые в выборке (включая вложенные группировки и папки)."""
+    """Fields shown in the selection (including nested groupings and folders)."""
     result = []
-    # Собираем выборку на всех уровнях: колонки отчёта могут быть заданы как в
-    # варианте, так и в группировках. Условное оформление сюда не входит — его
-    # selection перечисляет поля для форматирования, а не колонки отчёта.
+    # Collect the selection at all levels: report columns may be set both in the
+    # variant and in groupings. Conditional appearance is not included - its
+    # selection lists fields for formatting, not report columns.
     selection_items = settings_node.xpath(
         "./dcsset:selection/dcsset:item | ./dcsset:item//dcsset:selection/dcsset:item",
         namespaces=NS,
@@ -988,11 +989,11 @@ def _collect_variant_selections():
 sem_ok = True
 selections = _collect_variant_selections()
 
-# 18.1. Состав выборки = поля ТЗ (если список ТЗ передан).
+# 18.1. Selection composition = spec fields (if a spec list is passed).
 if expected_fields:
     for v_name, selected in selections:
-        # Явные поля важнее Auto: Auto во вложенной группировке не означает, что
-        # состав отчёта не задан на другом уровне.
+        # Explicit fields matter more than Auto: Auto in a nested grouping does not mean
+        # the report composition is not set at another level.
         visible = []
         seen_fields = set()
         for f in selected:
@@ -1031,7 +1032,7 @@ if expected_fields:
                 f"({', '.join(visible) or 'empty'} vs {', '.join(expected_fields)})"
             )
 
-# 18.2. Поля набора данных сверх ТЗ — повод для обоснования, а не ошибка структуры.
+# 18.2. Dataset fields beyond the spec - a reason for justification, not a structural error.
 if expected_fields:
     extra_fields = [p for p in sorted(dataset_titles) if p not in expected_fields]
     if extra_fields:
@@ -1040,7 +1041,7 @@ if expected_fields:
             " — service fields/joins must be justified and must not be selected"
         )
 
-# 18.3. Подмена поля ТЗ вычисляемым полем с тем же заголовком (без -ExpectedFields).
+# 18.3. A spec field replaced by a calculated field with the same title (without -ExpectedFields).
 for v_name, selected in selections:
     for path in selected:
         if path == "Auto" or path in dataset_titles:
@@ -1054,7 +1055,7 @@ for v_name, selected in selections:
                 f"which collides with field '{title}' — use the TZ field in selection"
             )
 
-# 18.4. GROUP BY по виртуальной таблице регистра накопления.
+# 18.4. GROUP BY over an accumulation register virtual table.
 _vt_re = _re_sem.compile(
     r"ИЗ\s+РегистрНакопления\s*\.\s*([A-Za-zА-Яа-яЁё0-9_]+)\s*\.\s*"
     r"(Обороты|Остатки|ОстаткиИОбороты)\s*\(",
@@ -1088,9 +1089,9 @@ if stopped:
     sys.exit(1)
 
 # ── 19. XSD (schemas of the platform, /v8-xsd-fetch) ──────────
-# Порядок элементов, типы и значения — по XSD платформы, если они есть в проекте. Нет схем —
-# нет проверки. Схемы XDTO совпадают с выгрузкой конфигуратора только в СКД, и то кроме
-# нескольких мест, которые платформа пишет иначе, — они отсекаются ниже (xsd_platform_noise).
+# Element order, types and values - per the platform XSD, if present in the project. No schemas -
+# no check. XDTO schemas match the Configurator dump only in DCS, and even then except for
+# a few places the platform writes differently - they are filtered out below (xsd_platform_noise).
 import json
 import re
 import shutil
@@ -1113,8 +1114,9 @@ def _sg_find_v8project(start_dir):
     return None
 
 
-# Штамп версии формата — атрибут version КОРНЕВОГО элемента файла. Именно корневого: в Form.xml
-# расширения ниже стоит <BaseForm version=…>. Читается только заголовок, без разбора файла.
+# Format version stamp - the version attribute of the file's ROOT element. The root specifically:
+# in an extension's Form.xml a nested <BaseForm version=…> appears below. Only the header is read,
+# without parsing the file.
 def root_version(xml_path):
     if not os.path.isfile(xml_path):
         return None
@@ -1129,8 +1131,8 @@ def root_version(xml_path):
     return None
 
 
-# Корень автономной внешней обработки/отчёта. Копия общего эталона (семья is_external_root,
-# авторитет — cf-edit).
+# Root of a standalone external data processor/report. Copy of the shared reference (the
+# is_external_root family, cf-edit is authoritative).
 def _sg_is_external_root(xml_path):
     if not os.path.isfile(xml_path):
         return False
@@ -1144,9 +1146,9 @@ def _sg_is_external_root(xml_path):
     return False
 
 
-# Якорь выгрузки, в чьём дереве лежит файл: корень автономной EPF/ERF либо Configuration.xml,
-# ближайший вверх. Корень обработки проверяется первым — иначе обработка, лежащая в дереве
-# конфигурации, сверялась бы с конфигурацией. Нет якоря — сверять не с чем.
+# The dump anchor whose tree contains the file: the root of a standalone EPF/ERF or the nearest
+# Configuration.xml upward. The data processor root is checked first - otherwise a processor
+# inside a configuration tree would be compared against the configuration. No anchor - nothing to compare with.
 def find_dump_anchor(start_dir):
     d = start_dir
     for _ in range(15):
@@ -1165,7 +1167,7 @@ def find_dump_anchor(start_dir):
 
 
 def format_rank(ver):
-    """"2.20" → 220, "2.9" → 209. Строковое сравнение неверно ("2.9" > "2.17")."""
+    """"2.20" -> 220, "2.9" -> 209. String comparison is wrong ("2.9" > "2.17")."""
     m = re.match(r'^(\d+)\.(\d+)$', ver or '')
     return int(m.group(1)) * 100 + int(m.group(2)) if m else 0
 
@@ -1175,7 +1177,7 @@ XS_NS = "http://www.w3.org/2001/XMLSchema"
 
 
 def xsd_target_ns(path):
-    """targetNamespace схемы — из заголовка файла, без разбора."""
+    """The schema's targetNamespace - from the file header, without parsing."""
     with open(path, "rb") as f:
         head = f.read(4096).decode("utf-8", errors="ignore")
     m = re.search(r'targetNamespace="([^"]*)"', head)
@@ -1183,7 +1185,7 @@ def xsd_target_ns(path):
 
 
 def xsd_index(vdir):
-    """namespace → файл схемы в каталоге версии."""
+    """namespace -> schema file in the version directory."""
     idx = {}
     for name in sorted(os.listdir(vdir)):
         fp = os.path.join(vdir, name)
@@ -1195,8 +1197,8 @@ def xsd_index(vdir):
 
 
 def resolve_xsd_root(template_dir):
-    """Каталог схем: .v8-project.json — сначала от шаблона (проект, которому он принадлежит),
-    потом от текущего каталога; xsdPath из него, иначе .v8-xsd рядом с ним. Нет проекта — нет схем."""
+    """Schema directory: .v8-project.json - first from the template (the project it belongs to),
+    then from the current directory; xsdPath from it, otherwise .v8-xsd next to it. No project - no schemas."""
     pj = _sg_find_v8project(template_dir) or _sg_find_v8project(os.getcwd())
     if not pj:
         return None
@@ -1214,9 +1216,9 @@ def resolve_xsd_root(template_dir):
 
 
 def xsd_platform_noise(info):
-    """Места, которые платформа пишет не так, как описывает XSD, — сверено на всех схемах
-    компоновки выгрузок БП и УНФ. Правило — по месту (элемент, родитель, xsi:type), не по тексту:
-    текст зависит от движка и языка."""
+    """Places the platform writes differently from what the XSD describes - verified on all DCS
+    schemas of BP and UNF dumps. The rule is by place (element, parent, xsi:type), not by text:
+    text depends on the engine and language."""
     e, p = info["elem"], info["parent"]
     if p in ("groupTemplate", "groupHeaderTemplate") and e in ("templateType", "groupName"):
         return True
@@ -1226,17 +1228,18 @@ def xsd_platform_noise(info):
         return True
     if info["xsiNs"] == "http://v8.1c.ru/8.2/data/chart":
         return True
-    # Пустое выражение параметра макета платформа не пишет, схема требует
+    # The platform does not write an empty template parameter expression, the schema requires it
     if e == "parameter" and info["xsiLocal"] == "ExpressionAreaTemplateParameter":
         return True
     return False
 
 
 def _xsd_build_schema(vdir, tmp):
-    """Схема для lxml. У import в схемах платформы нет schemaLocation, а libxml2 сам по namespace
-    не ищет, — корневая схема импортирует замыкание зависимостей СКД с путями, листья первыми.
-    Корень DataCompositionSchema в схеме объявлен как dataCompositionSchema (строчная) — схему
-    СКД подключаем через обёртку: xs:include настоящего файла плюс элемент с нужным именем."""
+    """Schema for lxml. Imports in the platform schemas have no schemaLocation, and libxml2 does not
+    look up by namespace itself - the root schema imports the closure of DCS dependencies with
+    paths, leaves first. The DataCompositionSchema root is declared in the schema as
+    dataCompositionSchema (lowercase) - we include the DCS schema via a wrapper: xs:include of
+    the real file plus an element with the required name."""
     idx = xsd_index(vdir)
     order, seen = [], set()
 
@@ -1249,9 +1252,9 @@ def _xsd_build_schema(vdir, tmp):
             visit(imp.get("namespace"))
         order.append(ns)
 
-    # Сначала замыкание СКД, затем остальные схемы каталога: значения в выгрузке ссылаются через
-    # xsi:type на типы, которые схема СКД не импортирует (data/enterprise: LinkedValueChangeMode,
-    # FoldersAndItemsUse …) — в набор кладутся все схемы.
+    # First the DCS closure, then the remaining schemas of the directory: values in the dump reference
+    # via xsi:type types that the DCS schema does not import (data/enterprise: LinkedValueChangeMode,
+    # FoldersAndItemsUse …) - all schemas are put into the set.
     visit(XSD_DCS_NS)
     for ns in idx:
         visit(ns)
@@ -1294,9 +1297,9 @@ def _xsd_elem_info(el):
 
 
 def _xsd_error_element(err):
-    """Элемент нарушения по error.path. Путь несёт префиксы документа (dcsset:settings) — xpath
-    получает их из корня; префикс, объявленный глубже, не разрешится — тогда ищем по строке и
-    имени последнего шага."""
+    """The offending element by error.path. The path carries document prefixes (dcsset:settings) -
+    xpath gets them from the root; a prefix declared deeper will not resolve - then we search by
+    line and the last step's name."""
     if not err.path:
         return None
     ns = {k: v for k, v in tree.getroot().nsmap.items() if k}
@@ -1313,11 +1316,11 @@ def _xsd_error_element(err):
     return None
 
 
-# ── Подсказка по схеме: что именно исправить ──
-# Текст валидатора про порядок («недопустимый дочерний X, ожидается A, B») читается как «добавь A»,
-# а означает «X стоит слишком поздно». Поэтому для нарушений порядка строим свою подсказку: тип
-# родителя и порядок его детей берём из XSD, сравниваем с соседями нарушителя в документе. Обход
-# схемы — свой, по XSD-документам: по одному на каждый XSD-документ.
+# ── Schema hint: what exactly to fix ──
+# The validator's text about order ("invalid child X, expected A, B") reads as "add A",
+# but means "X is too late". Therefore for order violations we build our own hint: the parent
+# type and its child order come from the XSD, compared with the offender's siblings in the document.
+# The schema walk is our own, over XSD documents: one at a time per XSD document.
 
 def xsd_model(vdir):
     m = {"types": {}, "elems": {}, "orders": {}}
@@ -1340,7 +1343,7 @@ def xsd_model(vdir):
 
 
 def xsd_resolve_qname(node, qn):
-    """QName из атрибута схемы → "ns|имя" по пространствам имён узла XSD."""
+    """QName from a schema attribute -> "ns|name" by the XSD node's namespaces."""
     if not qn:
         return None
     pp = qn.split(":")
@@ -1349,13 +1352,13 @@ def xsd_resolve_qname(node, qn):
 
 
 def xsd_child_order(model, type_key):
-    """Дети типа по порядку: {name, type, maxOne}. База расширения — первой. Порядок не определён
-    (choice, all, any, group) или тип неизвестен — None."""
+    """Children of a type in order: {name, type, maxOne}. Extension base first. Order not defined
+    (choice, all, any, group) or type unknown - None."""
     if not type_key:
         return None
     if type_key in model["orders"]:
         return model["orders"][type_key]
-    model["orders"][type_key] = None   # защита от циклов
+    model["orders"][type_key] = None   # cycle guard
     ct = model["types"].get(type_key)
     if ct is None:
         return None
@@ -1377,7 +1380,7 @@ def xsd_child_order(model, type_key):
                 return None
             base_key = xsd_resolve_qname(ext, ext.get("base"))
             base = xsd_child_order(model, base_key)
-            # База известна, но порядок у неё не определён — не определён и здесь
+            # Base is known but its order is not defined - so neither is it here
             if base is None and base_key in model["types"]:
                 return None
             if base:
@@ -1424,7 +1427,7 @@ def _xsd_add_sequence(model, seq, lst):
 
 
 def _xsd_ancestor(el):
-    """Предок для спуска по схеме: {name, ns, xsiKey}."""
+    """Ancestor for the schema walk: {name, ns, xsiKey}."""
     q = etree.QName(el)
     e = {"name": q.localname, "ns": q.namespace or "", "xsiKey": None}
     xt = el.get(XSI_TYPE)
@@ -1436,7 +1439,7 @@ def _xsd_ancestor(el):
 
 
 def xsd_parent_type(model, ancestors):
-    """Тип родителя нарушителя: спуск от корня по цепочке предков."""
+    """Type of the offender's parent: walk from the root along the ancestor chain."""
     if not ancestors:
         return None
     root = ancestors[0]
@@ -1480,7 +1483,7 @@ def xsd_order_hint(model, ancestors, name, preceding):
 
 
 def compress_xsd_message(m):
-    """Текст валидатора без пространств имён: остаются имена и значения."""
+    """Validator text without namespaces: names and values remain."""
     m = re.sub(r'[\r\n]+', ' ', m)
     m = re.sub(r'\s(в пространстве имен|in namespace)\s"[^"]*"', '', m)
     m = re.sub(r"\s(в пространстве имен|in namespace)\s'[^']*'", '', m)
@@ -1501,7 +1504,7 @@ def xsd_check():
         xsd_note = "XSD not checked: template outside a dump"
         return
 
-    # Точная версия — ошибки; ближайшая более новая — предупреждения; только старше — пропуск
+    # Exact version - errors; the nearest newer one - warnings; only older - skip
     cands = sorted((d for d in os.listdir(xsd_root)
                     if re.match(r'^\d+\.\d+$', d) and os.path.isdir(os.path.join(xsd_root, d))
                     and format_rank(d) >= format_rank(ver)), key=format_rank)
@@ -1516,7 +1519,7 @@ def xsd_check():
     try:
         try:
             schema = _xsd_build_schema(os.path.join(xsd_root, use_ver), tmp)
-            # Модель — после компиляции: битый .xsd даёт предупреждение, а не трейсбэк
+            # Model after compilation: a broken .xsd gives a warning, not a traceback
             model = xsd_model(os.path.join(xsd_root, use_ver))
         except Exception as ex:
             report_warn(f"XSD: schemas in '{os.path.join(xsd_root, use_ver)}' do not compile — not checked: {ex}")
@@ -1534,12 +1537,12 @@ def xsd_check():
         info = _xsd_elem_info(el)
         if xsd_platform_noise(info):
             continue
-        # Недопустимое булево значение уже сообщила собственная проверка значений (раздел 17)
+        # An invalid boolean value was already reported by our own value check (section 17)
         if info["elem"] == "value" and info["xsiNs"] == XS_NS and info["xsiLocal"] == "boolean":
             continue
         found += 1
         hint = None
-        # «Лишний/не на месте» у libxml2 — «This element is not expected» (текст не локализуется)
+        # "Extra/out of place" in libxml2 is "This element is not expected" (the text is not localized)
         if el is not None and "This element is not expected" in err.message:
             ancestors = [_xsd_ancestor(a) for a in reversed(list(el.iterancestors()))]
             preceding = [etree.QName(x).localname for x in reversed(list(el.itersiblings(preceding=True)))

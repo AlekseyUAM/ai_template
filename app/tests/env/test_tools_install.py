@@ -1,4 +1,5 @@
 import pytest
+from pathlib import Path
 from unittest.mock import patch
 from agentmon.env.config_schema import EnvConfig, SCHEMA_VERSION
 from agentmon.backends import RunResult
@@ -40,10 +41,10 @@ def test_installs_cli_and_deps(tmp_path):
 
     assert len(prov.calls) == 2
     # Первый вызов: pip install scripts (содержит 1c-batch)
-    assert prov.calls[0][0] == str(tmp_path / ".venv" / "bin" / "python")
+    assert Path(prov.calls[0][0]) == tmp_path / ".venv" / "bin" / "python"
     assert any("1c-batch" in arg for arg in prov.calls[0])
     # Второй вызов: pip install lxml Pillow psutil
-    assert prov.calls[1][0] == str(tmp_path / ".venv" / "bin" / "python")
+    assert Path(prov.calls[1][0]) == tmp_path / ".venv" / "bin" / "python"
     assert "lxml" in prov.calls[1]
 
 

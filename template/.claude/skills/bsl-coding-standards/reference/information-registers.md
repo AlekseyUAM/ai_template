@@ -1,91 +1,91 @@
-# Регистры сведений: хранение, срезы и запись
+# Information registers: storage, slices and writing
 
-Справка для проектирования запросов и кода, работающего с регистрами сведений.
-Проверки ручные: свойства регистра и семантика запроса не выводятся из XML автоматически.
-Severity как в остальных справках: `[критичная]` = error, `[важная]` = warning,
-`[минорная]` = info. Находка наследует severity своего пункта.
+Reference for designing queries and code that works with information registers.
+The checks are manual: register properties and query semantics are not derived from XML automatically.
+Severity as in the other references: `[critical]` = error, `[important]` = warning,
+`[minor]` = info. A finding inherits the severity of its item.
 
-## Как устроен регистр
+## How the register is structured
 
-- Регистр сведений — плоская таблица: строки — записи, колонки — измерения, ресурсы и
-  реквизиты. Разделение «ресурс/реквизит» логическое; в СУБД оба хранятся одинаково.
-- **Измерения** входят во все индексы в порядке конфигуратора. Индекс работает, когда
-  отбор начинается с первого поля индекса; поэтому порядок измерений влияет на запросы.
-- Регистр может быть **независимым** (ключ — измерения; возможно, период) или
-  **подчинённым регистратору** (в ключе регистратор и номер строки).
-- **Периодический** регистр хранит несколько значений во времени. Периодичность
-  «По позиции регистратора» допускает несколько записей в одну секунду и даёт самый
-  сложный запрос среза.
-- В 8.3 у периодического регистра можно включить **таблицы итогов среза** (`СрезПоследних`
-  или `СрезПервых`, при необходимости обе). В таблице среза по каждой комбинации
-  измерений хранится только одна — самая актуальная — запись. Поддержание среза
-  добавляет запросы при каждой записи регистра.
+- An information register is a flat table: rows are records, columns are dimensions, resources and
+  attributes. The "resource/attribute" distinction is logical; in the DBMS both are stored the same way.
+- **Dimensions** are included in all indexes in Configurator order. An index works when
+  the filter starts with the first index field; therefore dimension order affects queries.
+- A register can be **independent** (key - dimensions; possibly period) or
+  **subordinate to a recorder** (the key contains the recorder and line number).
+- A **periodic** register stores several values over time. Periodicity
+  "By recorder position" allows several records in one second and produces the most
+  complex slice query.
+- In 8.3 a periodic register can have **slice totals tables** enabled (`СрезПоследних`
+  or `СрезПервых`, both if needed). A slice table stores only one - the most current -
+  record per combination of dimensions. Maintaining the slice
+  adds queries on every register write.
 
-## Запросы срезов
+## Slice queries
 
-- [критичная] **Отборы по измерениям — в параметрах виртуальной таблицы, а не в `ГДЕ`
-  после среза.** `СрезПоследних(&Дата, Измерение1 = &Значение1)` отбирает записи до
-  вычисления среза; тот же отбор в `ГДЕ` заставляет платформу сначала прочитать все
-  записи регистра, вычислить срез и только потом отфильтровать. На файловой базе это
-  гарантированно лишнее чтение, на SQL — риск плохого плана.
-- [важная] **`СрезПоследних(<Дата>, ...)` не использует таблицу итогов среза.** Итоги
-  применяются только для самого актуального среза — когда период в ВТ не указан
-  (`СрезПоследних(, ...)`). Если запрос всегда идёт на дату, включать таблицу итогов
-  бессмысленно: это только накладные расходы на запись.
-- [важная] **`СрезПоследних` — двухуровневый запрос, `ПоПозицииРегистратора` —
-  трёхуровневый.** Не соединяй много срезов подряд без необходимости; сложность
-  запроса растёт быстро.
-- [важная] **Периодичность «По позиции регистратора» — только если действительно
-  возможны две записи с одинаковыми измерениями в одну секунду.** Иначе это лишняя
-  сложность и худший план запроса.
-- [важная] **Не используй срез, если нужна вся история.** `СрезПоследних` возвращает
-  только последнюю запись на дату; для истории/динамики читай регистр напрямую (при
-  необходимости с условием по периоду).
-- [важная] **Для непериодического регистра среза нет.** Не проектируй `СрезПоследних`
-  для регистра без периодичности.
+- [critical] **Dimension filters - in the virtual table parameters, not in `ГДЕ`
+  after the slice.** `СрезПоследних(&Дата, Измерение1 = &Значение1)` filters records before
+  computing the slice; the same filter in `ГДЕ` forces the platform to first read all
+  register records, compute the slice and only then filter. On a file infobase this is
+  guaranteed extra reading, on SQL - a risk of a bad plan.
+- [important] **`СрезПоследних(<Дата>, ...)` does not use the slice totals table.** Totals
+  apply only to the most current slice - when the period is not specified in the VT
+  (`СрезПоследних(, ...)`). If the query always goes to a date, enabling the totals table
+  is pointless: it only adds write overhead.
+- [important] **`СрезПоследних` is a two-level query, `ПоПозицииРегистратора` is a
+  three-level one.** Do not join many slices in a row without necessity; query
+  complexity grows fast.
+- [important] **Periodicity "By recorder position" - only if two records with the same
+  dimensions in one second are really possible.** Otherwise it is extra
+  complexity and a worse query plan.
+- [important] **Do not use a slice if the whole history is needed.** `СрезПоследних` returns
+  only the last record as of a date; for history/dynamics read the register directly (with
+  a period condition if needed).
+- [important] **There is no slice for a non-periodic register.** Do not design `СрезПоследних`
+  for a register without periodicity.
 
-## Запись регистра
+## Writing the register
 
-- [важная] **Режим записи выбирается по задаче:**
-  - `Записать(Истина)` — замещение: сначала удаляются записи по установленному отбору,
-    затем вставляются новые. Если отбор не установлен, удаляется всё — это частая
-    причина потери данных.
-  - `Записать(Ложь)` — добавление с проверкой уникальности: платформа ищет дубли по
-    ключу и падает при конфликте.
-  - `ОбменДанными.Загрузка = Истина` + `Записать(Ложь)` — самый быстрый режим без
-    проверок; допустим только когда уникальность гарантирована логикой/архитектурой
-    (например, загрузка обмена).
-- [важная] **Перед замещением устанавливай `Отбор` по измерениям.** Иначе `Записать(Истина)`
-  очистит весь регистр, а не только нужный набор.
-- [важная] **Менеджер записи — для точечного редактирования одной записи.** Для наборов
-  записей он менее эффективен: при `Прочитать()` платформа выполняет дополнительный
-  запрос и удаление старой записи при изменении измерения.
-- [важная] **Таблицы итогов среза — не включай «на всякий случай».** Каждая запись
-  документа в такой регистр добавляет запросы обслуживания среза; при массовом
-  проведении это заметная нагрузка на СУБД и сервер 1С.
-- [минорная] **Порядок измерений проектируй под частые запросы.** Кластерный индекс
-  должен покрывать самый частый отбор; при необходимости добавляй индексируемое
-  измерение/реквизит.
+- [important] **The write mode is chosen by task:**
+  - `Записать(Истина)` - substitution: records by the set filter are deleted first,
+    then new ones are inserted. If no filter is set, everything is deleted - this is a common
+    cause of data loss.
+  - `Записать(Ложь)` - addition with a uniqueness check: the platform looks for duplicates by
+    key and fails on a conflict.
+  - `ОбменДанными.Загрузка = Истина` + `Записать(Ложь)` - the fastest mode without
+    checks; allowed only when uniqueness is guaranteed by logic/architecture
+    (e.g., exchange load).
+- [important] **Before substitution set `Отбор` by dimensions.** Otherwise `Записать(Истина)`
+  clears the whole register, not only the needed set.
+- [important] **The record manager is for point editing of one record.** For record
+  sets it is less efficient: on `Прочитать()` the platform runs an additional
+  query and deletes the old record when a dimension changes.
+- [important] **Do not enable slice totals tables "just in case".** Every document write
+  to such a register adds slice maintenance queries; with mass
+  posting this is a noticeable load on the DBMS and the 1C server.
+- [minor] **Design dimension order for frequent queries.** The clustered index
+  must cover the most frequent filter; if needed, add an indexed
+  dimension/attribute.
 
-## Проектирование
+## Design
 
-- [критичная] **Регистр сведений — для данных, которые не являются числовым учётом в
-  разрезе измерений.** Числовые остатки/обороты — это регистр накопления; справочные
-  значения, настройки, курсы, цены по измерениям — регистр сведений. Не подменяй один
-  объект другим.
-- [важная] **Периодичность, независимость/подчинённость и уникальность ключа — по
-  задаче.** Периодический регистр без необходимости усложняет запросы и запись;
-  отсутствие контроля уникальности даёт дубли.
-- [важная] **Проверка заполнения измерений/ресурсов** — по чеклисту
-  [дизайн метаданных](metadata-design.md).
+- [critical] **An information register is for data that is not numerical accounting by
+  dimensions.** Numerical balances/turnovers are an accumulation register; reference
+  values, settings, rates, prices by dimensions - an information register. Do not substitute one
+  object for another.
+- [important] **Periodicity, independence/subordination and key uniqueness - by
+  task.** A periodic register without necessity complicates queries and writing;
+  lack of uniqueness control produces duplicates.
+- [important] **Fill check of dimensions/resources** - per the checklist
+  [metadata design](metadata-design.md).
 
-## Чеклист перед сдачей
+## Checklist before submission
 
-- [ ] Отборы по измерениям стоят в параметрах `СрезПоследних`/`СрезПервых`.
-- [ ] Если срез всегда на дату — таблица итогов среза не включена без причины.
-- [ ] Для истории используется сам регистр, а не срез.
-- [ ] `Записать(Истина)` используется с установленным `Отбор`.
-- [ ] Режим `ОбменДанными.Загрузка = Истина` применён только там, где уникальность
-      гарантирована.
-- [ ] Периодичность «По позиции регистратора» не используется без необходимости.
-- [ ] Порядок измерений соответствует частым запросам.
+- [ ] Dimension filters are in the parameters of `СрезПоследних`/`СрезПервых`.
+- [ ] If the slice is always by date, the slice totals table is not enabled without a reason.
+- [ ] For history the register itself is used, not a slice.
+- [ ] `Записать(Истина)` is used with `Отбор` set.
+- [ ] The `ОбменДанными.Загрузка = Истина` mode is applied only where uniqueness
+      is guaranteed.
+- [ ] Periodicity "By recorder position" is not used without necessity.
+- [ ] Dimension order matches frequent queries.

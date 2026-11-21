@@ -1,4 +1,4 @@
-# Dev-зависимости навыков: нужны только для прогона юнит-тестов скиллов
-# и .claude/tools/run-tests.py. В рантайме не требуются.
+# Dev dependencies of the skills: needed only to run skill unit tests
+# and .claude/tools/run-tests.py. Not required at runtime.
 -r requirements.txt
 pytest>=7.0

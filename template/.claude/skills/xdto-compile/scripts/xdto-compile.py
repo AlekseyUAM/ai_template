@@ -1,4 +1,4 @@
-# xdto-compile v1.16 — Build a 1C XDTO package from an XML Schema (XSD) (Python port) (+support-guard: общая реализация вместо урезанной)
+# xdto-compile v1.16 - Build a 1C XDTO package from an XML Schema (XSD) (Python port) (+support-guard: common implementation instead of a trimmed one)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import json
@@ -10,8 +10,8 @@ import xml.etree.ElementTree as ET
 
 from lxml import etree
 
-# Эти пространства имён предоставляет сама платформа — пакетов в конфигурации
-# для них нет и быть не должно (выведено по корпусу)
+# These namespaces are provided by the platform itself - there are no packages in the
+# configuration for them and there should not be (derived from the corpus)
 PLATFORM_NS = {
     "http://v8.1c.ru/8.1/data/core",
     "http://v8.1c.ru/8.1/data/enterprise",
@@ -25,16 +25,16 @@ PLATFORM_NS = {
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
-# Регистронезависимый ввод: имена параметров и значения choices принимаются
-# в любом регистре (в argparse по умолчанию совпадение точное).
+# Case-insensitive input: parameter names and choices values are accepted
+# in any case (argparse matches exactly by default).
 def ci_parse_args(parser, argv=None):
-    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
+    """parse_args: parameter names and choices values are accepted in any case."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
         if tok.startswith('-') and tok.lower() in names:
             argv[i] = names[tok.lower()]
-    # choices — зеркало [ValidateSet]; канонизируем ДО разбора, иначе argparse отвергнет регистр
+    # choices - mirror of [ValidateSet]; canonicalize BEFORE parsing, otherwise argparse rejects the case
     choice_map = {}
     for a in parser._actions:
         if a.choices:
@@ -64,12 +64,12 @@ args = ci_parse_args(parser)
 
 
 def _parse_xml(source, from_string=False):
-    """Разбор с узким отступлением для не-URI пространств имён.
+    """Parsing with a narrow fallback for non-URI namespaces.
 
-    Платформа допускает в targetNamespace произвольную строку (в выгрузке БП есть
-    пакет с кириллическим «ДопФайлУниверсальный»), .NET такое принимает, а libxml2
-    отвергает. Откатываемся на восстанавливающий разбор ТОЛЬКО на этой ошибке,
-    иначе по-настоящему битый XML перестал бы отличаться от корректного.
+    The platform allows an arbitrary string in targetNamespace (the BSP dump has a
+    package with the Cyrillic «ДопФайлУниверсальный»), .NET accepts this, while libxml2
+    rejects it. We fall back to recovering parsing ONLY on this error, otherwise truly
+    broken XML would stop being distinguishable from valid XML.
     """
     try:
         return (etree.fromstring(source) if from_string else etree.parse(source))
@@ -257,8 +257,8 @@ def assert_edit_allowed(target_path, require):
 
 def detect_format_version(d):
     while d:
-        # Автономная внешняя обработка/отчёт: своего Configuration.xml у неё нет, версию несёт
-        # корень самой обработки. Без этого форма и макет внутри обработки 2.21 писались бы 2.17.
+        # Standalone external data processor/report: it has no Configuration.xml of its own; the version is carried by
+        # the root of the processor itself. Without this, a form and a template inside a 2.21 processor would be written as 2.17.
         ext_path = d + ".xml"
         if os.path.isfile(ext_path):
             with open(ext_path, "r", encoding="utf-8-sig") as f:
@@ -282,7 +282,7 @@ def detect_format_version(d):
 
 
 def format_rank(ver):
-    """"2.20" → 220, "2.9" → 209. Строковое сравнение неверно ("2.9" > "2.17")."""
+    """"2.20" -> 220, "2.9" -> 209. String comparison is wrong ("2.9" > "2.17")."""
     m = re.match(r'^(\d+)\.(\d+)$', ver or '')
     return int(m.group(1)) * 100 + int(m.group(2)) if m else 0
 
@@ -328,7 +328,7 @@ class Node:
 
     def __init__(self, tag):
         self.tag = tag
-        self.attrs = []       # список dict: name, value | (ns, local) | list
+        self.attrs = []       # list of dict: name, value | (ns, local) | list
         self.children = []
         self.text = None
         self.prefix = None
@@ -353,8 +353,8 @@ def add_qlist_attr(node, name, pairs, clark):
     node.attrs.append({"name": name, "list": pairs, "clark": clark})
 
 
-# Канонический порядок атрибутов — топологическая сортировка по корпусу 8.3.24
-# (acc + erp, 760 пакетов), см. docs/1c-xdto-spec.md.
+# Canonical attribute order - topological sort over the 8.3.24 corpus
+# (acc + erp, 760 packages), see docs/1c-xdto-spec.md.
 ATTR_ORDER = {
     "package": ["targetNamespace", "elementFormQualified", "attributeFormQualified"],
     "import": ["namespace"],
@@ -404,9 +404,9 @@ def serialize_node(node, depth, inherited):
     indent = "\t" * (depth - 1)
     attrs_sorted = sort_attrs(node)
 
-    # Объявляем здесь только те ns, которых ещё нет в области видимости:
-    # сериализатор платформы объявляет префикс на первом нуждающемся узле,
-    # а потомки переиспользуют — отсюда d2p1 у property внутри objectType.
+    # Declare here only the namespaces not yet in scope:
+    # the platform serializer declares a prefix on the first node that needs it,
+    # and descendants reuse it - hence d2p1 on a property inside objectType.
     local_ns = []
 
     def need_prefix(ns):
@@ -419,7 +419,7 @@ def serialize_node(node, depth, inherited):
 
     for a in attrs_sorted:
         if "list" in a:
-            # Нотация Кларка несёт ns в значении и префикса не требует
+            # Clark notation carries the ns in the value and requires no prefix
             if not a["clark"]:
                 for p in a["list"]:
                     need_prefix(p[0])
@@ -435,7 +435,7 @@ def serialize_node(node, depth, inherited):
     prefix_of = dict(inherited)
     ns_decls = ""
     for i, ns in enumerate(local_ns):
-        # Осмысленный префикс из исходника (зеркало xdto:prefix) имеет приоритет
+        # A meaningful prefix from the source (xdto:prefix mirror) has priority
         px = node.prefix if (i == 0 and node.prefix) else f"d{depth}p{i + 1}"
         prefix_of[ns] = px
         ns_decls += f' xmlns:{px}="{esc(ns)}"'
@@ -466,7 +466,7 @@ def serialize_node(node, depth, inherited):
     tag_name = f"{prefix_of[XDTO_NS]}:{node.tag}" if has_qualified else node.tag
 
     has_children = bool(node.children)
-    # Пустое значение пишется самозакрывающимся тегом: <enumeration/>
+    # An empty value is written as a self-closing tag: <enumeration/>
     has_text = node.text is not None and node.text != ""
 
     if not has_children and not has_text:
@@ -483,8 +483,8 @@ def serialize_node(node, depth, inherited):
 
 # ── XSD reading helpers ──────────────────────────────────────
 
-# Предупреждения о том, что XSD выражает, а модель XDTO — нет. Молча ронять
-# такие конструкции нельзя: пакет соберётся, а половина свойств исчезнет.
+# Warnings about what XSD expresses but the XDTO model does not. Silently dropping
+# such constructs is not allowed: the package will build, but half the properties will disappear.
 warnings_list = []
 
 
@@ -498,8 +498,8 @@ ATTR_GROUPS = {}
 
 
 def MA(el, name):
-    # xdto: mirror attribute — литеральное значение для Package.bin.
-    # Ищем по namespace, а не по строке префикса.
+    # xdto: mirror attribute - literal value for Package.bin.
+    # We search by namespace, not by the prefix string.
     return el.get(f"{{{XDTO_NS}}}{name}")
 
 
@@ -521,7 +521,7 @@ def split_qname(el, qname):
         ns = el.nsmap.get(parts[0])
         loc = parts[1]
     else:
-        # Прощающий ввод: голое имя типа — тип целевого пространства имён
+        # Forgiving input: a bare type name - a type of the target namespace
         ns = el.nsmap.get(None) or target_ns
         loc = parts[0]
     return (ns, loc)
@@ -555,13 +555,13 @@ def fill_simple_type(node, st):
         mv = MA(union, "variety")
         set_attr_value(node, "variety", mv if mv is not None else "Union")
         members = split_qname_list(union, union.get("memberTypes"))
-        # По умолчанию нотация Кларка — так записано 125 из 135 memberTypes корпуса
+        # By default Clark notation - 125 of 135 memberTypes in the corpus are written this way
         use_clark = MA(union, "memberTypesForm") != "prefixed"
         if members:
             add_qlist_attr(node, "memberTypes", members, use_clark)
         node.declare_ns = MA(union, "declareNs")
         for anon in xchildren(union, "simpleType"):
-            # typeDef в контексте простого типа xsi:type не несёт (40 узлов корпуса)
+            # typeDef in the context of a simple type carries no xsi:type (40 corpus nodes)
             td = Node("typeDef")
             fill_simple_type(td, anon)
             node.children.append(td)
@@ -573,7 +573,7 @@ def fill_simple_type(node, st):
         mv = MA(restriction, "variety")
         if mv is not None:
             add_attr(node, "variety", mv)
-        # Анонимный базовый тип внутри xs:restriction — typeDef без xsi:type
+        # Anonymous base type inside xs:restriction - typeDef without xsi:type
         anon_base = xfirst(restriction, "simpleType")
         if anon_base is not None:
             td = Node("typeDef")
@@ -667,8 +667,8 @@ def build_property(el, is_attribute):
             add_attr(p, "upperBound", "-1" if max_occ == "unbounded" else max_occ)
         add_attr(p, "nillable", el.get("nillable"))
 
-    # XSD-шный fixed="V" несёт значение, в модели это fixed="true" + default="V".
-    # Прощающий ввод: модельная форма через зеркало xdto:fixed тоже принимается.
+    # XSD fixed="V" carries the value; in the model it is fixed="true" + default="V".
+    # Forgiving input: the model form via the xdto:fixed mirror is accepted too.
     m_fixed = MA(el, "fixed")
     if m_fixed is not None:
         add_attr(p, "fixed", m_fixed)
@@ -721,8 +721,8 @@ def resolve_group(el, kind):
     return m.get(q[1])
 
 
-# Модель XDTO знает только плоский список свойств: вложенные частицы уплощаются.
-# Каждое уплощение — предупреждение, потому что меняется смысл схемы.
+# The XDTO model knows only a flat property list: nested particles are flattened.
+# Every flattening is a warning, because the meaning of the schema changes.
 def collect_particle(particle, elem_list, open_flag, type_name, depth, optionalize=False):
     if depth > 20:
         return
@@ -732,8 +732,8 @@ def collect_particle(particle, elem_list, open_flag, type_name, depth, optionali
         ln = local(c)
         if ln == "element":
             prop = build_property(c, False)
-            # Ветка уплощённого xs:choice обязана стать необязательной: иначе
-            # «одно из двух» превращается в «оба сразу», и тип нельзя заполнить
+            # A branch of a flattened xs:choice must become optional: otherwise
+            # "one of the two" turns into "both at once", and the type cannot be filled
             if optionalize:
                 set_attr_value(prop, "lowerBound", "0")
             elem_list.append(prop)
@@ -809,7 +809,7 @@ def fill_complex_type(node, ct):
                 add_qattr(node, "base", b[0], b[1])
             body = ext
 
-    # xs:simpleContent -> свойство "Text", хранящее значение самого элемента
+    # xs:simpleContent -> property "Text" storing the value of the element itself
     simple = xfirst(ct, "simpleContent")
     if simple is not None:
         ext = xfirst(simple, "extension")
@@ -827,7 +827,7 @@ def fill_complex_type(node, ct):
             add_attr(tp, "nillable", MA(ext, "textnillable"))
             add_attr(tp, "form", "Text")
             node.children.append(tp)
-            # xs:simpleContent не отменяет флаги самого xs:complexType
+            # xs:simpleContent does not cancel the flags of the xs:complexType itself
             set_type_flags(node, ct, False, None)
             return
 
@@ -838,14 +838,14 @@ def fill_complex_type(node, ct):
     particle = seq if seq is not None else (cho if cho is not None else (all_ if all_ is not None else grp))
     open_flag = [False]
 
-    # Порядок в XDTO: сначала form="Attribute", потом остальные (96.5% типов корпуса)
+    # Order in XDTO: form="Attribute" first, then the rest (96.5% of corpus types)
     elem_props = []
     type_name = ct.get("name") or "(анонимный тип)"
     if particle is not None:
         if all_ is not None:
             warn(type_name + " : xs:all трактуется как последовательность")
         if grp is not None and seq is None and cho is None and all_ is None:
-            # Корневая частица задана ссылкой на группу — раскрываем её содержимое
+            # The root particle is given by a group reference - expand its contents
             g = resolve_group(grp, "group")
             if g is not None:
                 for gc in g:
@@ -859,7 +859,7 @@ def fill_complex_type(node, ct):
     is_open = open_flag[0]
     for a in xchildren(body, "attribute"):
         node.children.append(build_property(a, True))
-    # xs:attributeGroup раскрываем по ссылке
+    # expand xs:attributeGroup by reference
     for ag in xchildren(body, "attributeGroup"):
         g = resolve_group(ag, "attributeGroup")
         if g is not None:
@@ -916,7 +916,7 @@ if ann is not None:
                 elif ln == "synonym":
                     meta_synonym.append({"Lang": f.get("lang") or "", "Content": f.text or ""})
 
-# Реестр глобальных групп — нужен до обхода, чтобы раскрывать ссылки
+# Registry of global groups - needed before the walk to expand references
 for node in schema:
     if not isinstance(node.tag, str) or etree.QName(node).namespace != XS_NS:
         continue
@@ -926,7 +926,7 @@ for node in schema:
     if local(node) == "attributeGroup" and nm:
         ATTR_GROUPS[nm] = node
 
-# Конструкции XSD, которым в модели XDTO нет соответствия
+# XSD constructs with no counterpart in the XDTO model
 for sg in schema.iter():
     if isinstance(sg.tag, str) and local(sg) == "element" and sg.get("substitutionGroup"):
         warn("Подстановочные группы (substitutionGroup) не поддерживаются моделью XDTO — объявление "
@@ -967,10 +967,10 @@ for node in schema:
 
 # ── serialize Package.bin ────────────────────────────────────
 
-# Модель XDTO требует строгой последовательности элементов верхнего уровня:
-# import → property → valueType → objectType. Порядок объявлений в XSD произвольный,
-# поэтому пересортировываем — иначе платформа отвергает пакет с «Ошибка преобразования
-# данных XDTO». Все 760 пакетов корпуса этому порядку удовлетворяют.
+# The XDTO model requires a strict order of top-level elements:
+# import -> property -> valueType -> objectType. The declaration order in XSD is arbitrary,
+# so we re-sort - otherwise the platform rejects the package with «Ошибка преобразования
+# данных XDTO». All 760 corpus packages satisfy this order.
 TOP_ORDER = ["import", "property", "valueType", "objectType"]
 pkg_node.children = (
     [c for t in TOP_ORDER for c in pkg_node.children if c.tag == t]
@@ -996,8 +996,8 @@ assert_edit_allowed(args.OutputDir, "editable")
 
 format_version = detect_format_version(os.path.abspath(args.OutputDir))
 
-# Объявления пространств имён — одной переменной: место эмиссии её только подставляет.
-# Правки шапки (как xmlns:pal в формате 2.21) делаются здесь, в одном месте.
+# Namespace declarations - in a single variable: the emission site only substitutes it.
+# Header edits (like xmlns:pal in format 2.21) are made here, in one place.
 xmlns_decl = (
     'xmlns="http://v8.1c.ru/8.3/MDClasses"'
     ' xmlns:app="http://v8.1c.ru/8.2/managed-application/core"'
@@ -1018,9 +1018,9 @@ xmlns_decl = (
     ' xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"'
 )
 
-# 2.21 (8.5) добавила в шапку пространство палитры — ради <Color> у значений перечисления.
-# Вставляем НА МЕСТО (после lf, перед style): платформа держит объявления по алфавиту,
-# дописать в конец нельзя.
+# 2.21 (8.5) added the palette namespace to the header - for <Color> in enum values.
+# We insert it IN PLACE (after lf, before style): the platform keeps declarations alphabetically,
+# appending at the end is not allowed.
 if format_rank(format_version) >= 221:
     xmlns_decl = xmlns_decl.replace(
         ' xmlns:style=',
@@ -1075,7 +1075,7 @@ with open(md_file, "wb") as f:
 
 # ── register in Configuration.xml ────────────────────────────
 
-# Ранняя диагностика: отказ платформы при db-update дешевле поймать на сборке
+# Early diagnostics: it is cheaper to catch the platform refusal on build than at db-update
 xdto_root_dir = os.path.join(args.OutputDir, "XDTOPackages")
 declared_imports = [a["value"] for c in pkg_node.children if c.tag == "import"
                     for a in c.attrs if a["name"] == "namespace"]
@@ -1095,28 +1095,28 @@ if declared_imports and os.path.isdir(xdto_root_dir):
                  "Платформа отвергнет пакет при обновлении — соберите зависимость первой")
 
 def esc_xml_text(s):
-    # Эскейп ТЕКСТА элемента: только & < > (кавычки в тексте 1С держит raw).
+    # Escape element TEXT: only & < > (1C keeps quotes in text raw).
     return s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
 
 
 def write_utf8_bom(path, content):
-    # newline='' — без трансляции: иначе текстовый режим Python дал бы CRLF на Windows
-    # и LF на macOS, то есть вывод навыка зависел бы от ОС.
+    # newline='' - no translation: otherwise Python text mode would give CRLF on Windows
+    # and LF on macOS, that is, the skill output would depend on the OS.
     with open(path, 'w', encoding='utf-8-sig', newline='') as f:
         f.write(content)
 
 
 def get_new_object_position(cfg_dir):
-    """Куда навык ставит новую запись в <ChildObjects> — настройка newObjectPosition.
+    """Where the skill places a new entry in <ChildObjects> - the newObjectPosition setting.
 
-    databases[].newObjectPosition базы, чей configSrc охватывает каталог родительского XML,
-    иначе корневое поле, иначе end. Значения: end — после последнего объекта того же вида
-    (так дописывает Конфигуратор); byName — по имени среди объектов того же вида.
-    Файл ищем от рабочего каталога вверх, каталог конфигурации — запасной путь: так же
-    его ищут support-guard и группа db-*, а скрипт навыка зовут по абсолютному пути, и cwd
-    остаётся рабочим каталогом проекта.
-    configSrc считается от каталога .v8-project.json, как задокументировано в
-    docs/v8-project-guide.md. Реестр семьи: tests/skills/check-inline-drift.mjs.
+    databases[].newObjectPosition of the database whose configSrc covers the parent XML directory,
+    otherwise the root field, otherwise end. Values: end - after the last object of the same kind
+    (that is how the Configurator appends); byName - by name among objects of the same kind.
+    We search the file from the working directory upward, the configuration directory - as a fallback: the same way
+    support-guard and the db-* group search it, and the skill script is called by an absolute path, and cwd
+    remains the project working directory.
+    configSrc is counted from the .v8-project.json directory, as documented in
+    docs/v8-project-guide.md. Family registry: tests/skills/check-inline-drift.mjs.
     """
     try:
         pj = _sg_find_v8project(os.getcwd()) or _sg_find_v8project(os.path.abspath(cfg_dir or "."))
@@ -1139,28 +1139,28 @@ def get_new_object_position(cfg_dir):
 
 
 def is_order_sensitive_type(type_name):
-    """Виды, у которых порядок в дереве несёт смысл: автоматически их не упорядочиваем.
+    """Kinds whose order in the tree carries meaning: we do not sort them automatically.
 
-    CommonAttribute — исключение самого стандарта (#std467): у общих реквизитов-разделителей
-    порядок в дереве задаёт порядок установки параметров сеанса. Subsystem и CommandGroup:
-    пока они не перечислены в <SubsystemsOrder> / <GroupsOrder> файла Ext/CommandInterface.xml,
-    порядок дерева задаёт порядок в интерфейсе, а платформа эти списки сама не заводит
-    (в выгрузке ACC вне GroupsOrder 15 живых групп из 39). Language исключён из осторожности,
-    без замера: языков обычно один-два, и в типовых их порядок не алфавитный.
-    Явно названный вид сортируется в любом случае.
-    Реестр семьи: tests/skills/check-inline-drift.mjs.
+    CommonAttribute is an exception from the standard itself (#std467): for common divider attributes
+    the order in the tree sets the order of session parameter assignment. Subsystem and CommandGroup:
+    until they are listed in <SubsystemsOrder> / <GroupsOrder> of the Ext/CommandInterface.xml file,
+    the tree order sets the interface order, and the platform does not create these lists itself
+    (in the ACC dump, outside GroupsOrder there are 15 live groups out of 39). Language is excluded out of caution,
+    without measurement: there are usually one or two languages, and in typical configurations their order is not alphabetical.
+    An explicitly named kind is sorted in any case.
+    Family registry: tests/skills/check-inline-drift.mjs.
     """
     return type_name in ("CommonAttribute", "Subsystem", "CommandGroup", "Language")
 
 
 def compare_metadata_names(a, b):
-    """Порядок имён объектов метаданных, как в дереве Конфигуратора.
+    """Order of metadata object names, as in the Configurator tree.
 
-    Ключ — пары «ранг+символ»: регистр не учитывается, подчёркивание раньше цифр, цифры раньше
-    букв, буквы по кодам (латиница раньше кириллицы), ё на месте е. Культурные таблицы не
-    используются — они разные на разных ОС и в разных рантаймах, а так оба порта сравнивают
-    одинаково везде. Равные ключи разводит ordinal-сравнение исходных строк.
-    Возвращает -1 | 0 | 1. Реестр семьи: tests/skills/check-inline-drift.mjs.
+    The key is "rank+char" pairs: case is ignored, underscore before digits, digits before
+    letters, letters by code (Latin before Cyrillic), ё in place of е. Cultural tables are not
+    used - they differ across OSes and runtimes, while this way both ports compare
+    identically everywhere. Equal keys are separated by ordinal comparison of the source strings.
+    Returns -1 | 0 | 1. Family registry: tests/skills/check-inline-drift.mjs.
     """
     keys = []
     for name in (a, b):
@@ -1182,10 +1182,10 @@ def compare_metadata_names(a, b):
     return 0
 
 
-# Канонический порядок видов в <ChildObjects> — эталон в docs/1c-configuration-spec.md,
-# таблица «Порядок типов в ChildObjects». Нужен, чтобы новая группа вида вставала на своё
-# место: иначе платформа переставит её при первой же выгрузке и даст диф на ровном месте.
-# Реестр карт: tests/skills/check-type-maps.mjs.
+# Canonical kind order in <ChildObjects> - the reference is docs/1c-configuration-spec.md,
+# table "Order of types in ChildObjects". Needed so a new kind group takes its
+# place: otherwise the platform will reorder it on the first dump and produce a diff out of nowhere.
+# Map registry: tests/skills/check-type-maps.mjs.
 CHILD_OBJECT_TYPES = [
     'Language', 'Subsystem', 'StyleItem', 'Style',
     'CommonPicture', 'SessionParameter', 'Role', 'CommonTemplate',
@@ -1203,11 +1203,11 @@ CHILD_OBJECT_TYPES = [
 
 
 def register_in_childobjects(parent_xml_path, parent_tag, child_tag, child_name):
-    """Регистрация объекта в <ChildObjects> родительского XML.
+    """Register an object in <ChildObjects> of the parent XML.
 
-    Общая реализация: эталон — meta-compile, копии — role-compile, xdto-compile.
-    Реестр семьи: tests/skills/check-inline-drift.mjs.
-    Возвращает исход: added | already | no-childobj | no-config.
+    Common implementation: the reference is meta-compile, copies - role-compile, xdto-compile.
+    Family registry: tests/skills/check-inline-drift.mjs.
+    Returns the outcome: added | already | no-childobj | no-config.
     """
     if not os.path.isfile(parent_xml_path):
         return 'no-config'
@@ -1256,8 +1256,8 @@ def register_in_childobjects(parent_xml_path, parent_tag, child_tag, child_name)
         write_utf8_bom(parent_xml_path, new_content)
         return 'added'
 
-    # byName: перед первым объектом того же вида, чьё имя больше нового.
-    # Виды с осмысленным порядком в дереве пропускаем — см. is_order_sensitive_type.
+    # byName: before the first object of the same kind whose name is greater than the new one.
+    # Skip kinds with meaningful tree order - see is_order_sensitive_type.
     if (not is_order_sensitive_type(child_tag)
             and get_new_object_position(os.path.dirname(os.path.abspath(parent_xml_path))) == 'byName'):
         line_rx = re.compile(rf'(?m)^([ \t]*)<{child_tag}>([^<]*)</{child_tag}>')
@@ -1278,9 +1278,9 @@ def register_in_childobjects(parent_xml_path, parent_tag, child_tag, child_name)
                        + f'{eol}\t\t\t{entry}'
                        + config_content[insert_at:])
     else:
-        # Группы своего вида ещё нет: ставим её в канонический порядок видов — перед первой
-        # группой вида старше по CHILD_OBJECT_TYPES. Дописать в конец блока нельзя: платформа
-        # переставит группу при первой же выгрузке и даст диф на ровном месте.
+        # There is no group of this kind yet: put it into the canonical kind order - before the first
+        # group of a kind older in CHILD_OBJECT_TYPES. Appending to the end of the block is not allowed: the platform
+        # would reorder the group on the first dump and produce a diff out of nowhere.
         anchor = None
         if child_tag in CHILD_OBJECT_TYPES:
             own_idx = CHILD_OBJECT_TYPES.index(child_tag)
@@ -1295,8 +1295,8 @@ def register_in_childobjects(parent_xml_path, parent_tag, child_tag, child_name)
                            + f'{anchor.group(1)}{entry}{eol}'
                            + config_content[anchor.start():])
         else:
-            # Видов старше в файле нет — новая строка перед </ChildObjects>,
-            # отступ закрывающего тега переиспользуется.
+            # There are no older kinds in the file - the new line goes before </ChildObjects>,
+            # the closing tag indent is reused.
             close_at = config_content.rfind('</ChildObjects>', block.start(), block.end())
             new_content = (config_content[:close_at]
                            + f'\t{entry}{eol}\t\t'

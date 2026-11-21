@@ -1,7 +1,7 @@
-"""Решения для Read / Grep / Glob (порт code-index-guard main.rs v1.15.4).
+"""Decisions for Read / Grep / Glob (port of code-index-guard main.rs v1.15.4).
 
-None — воздержание (хук молчит, нативный инструмент работает). `в сомнении —
-пропустить`: блокируем только когда доказано, что MCP отдаст то же самое.
+None - abstain (the hook stays silent, the native tool works). `when in doubt -
+skip`: block only when it is proven that MCP returns the same thing.
 """
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,8 +15,8 @@ class Decision:
     reason: str | None = None
 
 
-# Бинарные / не-индексируемые расширения. Их нет в `files`; в Glob —
-# маркер «трогаем не индексированное» → воздержаться.
+# Binary / non-indexed extensions. They are absent from `files`; in Glob -
+# the marker "we touch non-indexed" -> abstain.
 BINARY_EXT = (".epf", ".erf", ".cf", ".cfe", ".png", ".jpg", ".jpeg", ".gif",
               ".ico", ".bmp", ".zip", ".7z", ".gz", ".rar", ".exe", ".dll",
               ".bin", ".pdf", ".mxl", ".grs")
@@ -29,12 +29,12 @@ def _str(ti: dict, key: str) -> str:
 
 def _int(ti: dict, key: str) -> int | None:
     v = ti.get(key)
-    # JSON-число; bool — не число (в Python isinstance(True, int) истинно).
+    # JSON number; bool is not a number (in Python isinstance(True, int) is true).
     return v if isinstance(v, int) and not isinstance(v, bool) else None
 
 
 def decide_read(ti: dict, ctx) -> Decision | None:
-    """Чтение файла — основная ветка с точной проверкой членства."""
+    """File reading - the main branch with an exact membership check."""
     fp = _str(ti, "file_path")
     if not fp:
         return None
@@ -43,73 +43,73 @@ def decide_read(ti: dict, ctx) -> Decision | None:
         return None
     alias, rel, root = m
 
-    # Ритуальный Read РОВНО одной первой строки для снятия гейта Edit — пропускаем.
-    # Любое другое чтение (даже 2-5 строк, и строка из середины файла) идёт через
-    # индекс/кеш. Гейту Edit достаточно Read(offset=1, limit=1).
+    # Ritual Read of EXACTLY one first line to clear the Edit gate - skip it.
+    # Any other read (even 2-5 lines, and a line from the middle of the file) goes through
+    # the index/cache. The Edit gate only needs Read(offset=1, limit=1).
     if _int(ti, "limit") == 1 and _int(ti, "offset") in (None, 0, 1):
         return Decision(True)
 
     if not index_db.read_is_blockable(root, rel, case_insensitive=ctx.case_insensitive):
-        return None  # не доказано, что MCP отдаст → воздержаться (нативный Read)
+        return None  # not proven that MCP will return it -> abstain (native Read)
 
     read_file = tools.tool("read_file")
     get_function = tools.tool("get_function")
     get_file_summary = tools.tool("get_file_summary")
     reason = (
-        f"Read запрещён на индексированном пути (repo='{alias}'). Файл в индексе — "
-        "MCP отдаёт его в 3-10× дешевле по токенам. Возьми инструменты code-index "
-        "(как назван сервер в этой сессии — видно по списку инструментов): "
+        f"Read is denied on an indexed path (repo='{alias}'). The file is in the index - "
+        "MCP returns it 3-10x cheaper in tokens. Use the code-index tools "
+        "(named as the server is named in this session - see the tool list): "
         f'{read_file}(repo="{alias}", path="{rel}", line_start=N, line_end=M). '
-        f"Функцию целиком: {get_function}(repo=\"{alias}\", function_name=\"...\"). "
-        f'Карту файла: {get_file_summary}(repo="{alias}", path="{rel}"). '
-        f'Для гейта Edit допустим Read(file_path="{fp}", offset=1, limit=1). '
-        f'Правило только для индексированного src/cf/**; src/cfe/**, tasks/**, '
-        f'logs/**, tmp/**, configs/**, docs/** не индексированы — там Read/Grep/'
-        f'cat разрешены.'
+        f"Full function: {get_function}(repo=\"{alias}\", function_name=\"...\"). "
+        f'File map: {get_file_summary}(repo="{alias}", path="{rel}"). '
+        f'For the Edit gate, Read(file_path="{fp}", offset=1, limit=1) is allowed. '
+        f'The rule applies only to indexed src/cf/**; src/cfe/**, tasks/**, '
+        f'logs/**, tmp/**, configs/**, docs/** are not indexed - Read/Grep/'
+        f'cat are allowed there.'
     )
     return Decision(False, reason)
 
 
 def decide_grep(ti: dict, cwd: str | None, ctx) -> Decision | None:
-    """Grep по всему репо: блокируем, только если MCP-поиск даст тот же результат."""
+    """Grep over the whole repo: block only if the MCP search gives the same result."""
     path = _str(ti, "path")
     glob = _str(ti, "glob")
     ci = ctx.case_insensitive
     if path:
         norm = path.replace("\\", "/")
         if not Path(norm).exists():
-            return None  # явный путь не существует → не блокируем
+            return None  # explicit path does not exist -> do not block
         m = paths.match_indexed(path, ctx.paths, case_insensitive=ci)
     else:
-        # path не задан → Grep идёт от cwd сессии
+        # path not set -> Grep starts from the session cwd
         m = paths.match_indexed(cwd or "", ctx.paths, case_insensitive=ci)
     if m is None:
         return None
     alias, rel, root = m
-    # Исключения проекта смотрим И по пути, И по образцу: `Grep(glob=".env")` из
-    # корня репо указывает на неиндексируемый файл ровно так же, как явным путём.
+    # Project exclusions are checked BOTH by path AND by pattern: `Grep(glob=".env")` from
+    # the repo root points to a non-indexed file just like an explicit path.
     if (index_db.excluded_from_index(root, rel, case_insensitive=ci)
             or (glob and index_db.excluded_from_index(root, glob, case_insensitive=ci))):
         return None
     reason = (
-        f"Grep запрещён на индексированном пути (repo='{alias}'). Используй инструменты code-index: "
-        f'{tools.tool("grep_code")}(repo="{alias}", regex="...", language="...") по коду или '
-        f'{tools.tool("grep_text")}(repo="{alias}", regex="...", path_glob="...") по yaml/md/json.'
+        f"Grep is denied on an indexed path (repo='{alias}'). Use code-index tools: "
+        f'{tools.tool("grep_code")}(repo="{alias}", regex="...", language="...") for code or '
+        f'{tools.tool("grep_text")}(repo="{alias}", regex="...", path_glob="...") for yaml/md/json.'
     )
     return Decision(False, reason)
 
 
 def decide_glob(ti: dict, cwd: str | None, ctx) -> Decision | None:
-    """Glob по каталогу: list_files отдаёт только индексируемое."""
+    """Glob over a directory: list_files returns only indexed content."""
     path = _str(ti, "path")
     pattern = _str(ti, "pattern")
-    # Glob по бинарному расширению — list_files его не вернёт (не индексируется).
+    # Glob by binary extension - list_files will not return it (not indexed).
     if any(pattern.lower().endswith(e) for e in BINARY_EXT):
         return None
     ci = ctx.case_insensitive
-    # cwd — кандидат ВСЕГДА, когда явного пути нет: самый частый вызов агента —
-    # `Glob(pattern="services/**/*.py")` из корня репо: относительный образец путём
-    # не является, поэтому без cwd он проходил бы мимо.
+    # cwd is ALWAYS a candidate when there is no explicit path: the most common agent call -
+    # `Glob(pattern="services/**/*.py")` from the repo root: a relative pattern is not a path,
+    # so without cwd it would slip through.
     candidates = [path, pattern]
     if not path:
         candidates.append(cwd or "")
@@ -126,8 +126,8 @@ def decide_glob(ti: dict, cwd: str | None, ctx) -> Decision | None:
                                                              case_insensitive=ci))):
             return None
         reason = (
-            f"Glob запрещён на индексированном пути (repo='{alias}'). Используй инструмент "
-            f'code-index {tools.tool("list_files")}(repo="{alias}", pattern="...", language="...").'
+            f"Glob is denied on an indexed path (repo='{alias}'). Use the code-index tool "
+            f'{tools.tool("list_files")}(repo="{alias}", pattern="...", language="...").'
         )
         return Decision(False, reason)
     return None

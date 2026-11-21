@@ -1,7 +1,7 @@
-# Примечания к ячейкам
+# Cell notes
 
-Всплывающая подсказка, которую платформа показывает при наведении. Задаётся ключом `note` —
-строкой, объектом «язык → текст» или полной формой:
+A tooltip that the platform shows on hover. Set with the `note` key -
+a string, a "language -> text" object or the full form:
 
 ```json
 { "col": 1, "text": "Итого", "note": "Сумма без НДС" }
@@ -11,16 +11,16 @@
                       "box": { "top": 58, "left": -175, "bottom": 362, "right": 478 } } }
 ```
 
-Объект трактуется по ключам — так же, как текст ячейки в короткой форме строки: есть ключ
-примечания (`text`, `style`, `box`, `autoSize`) → это описание примечания, иначе ключи
-считаются идентификаторами языков.
+The object is interpreted by its keys - just like cell text in the short row form: if a note
+key is present (`text`, `style`, `box`, `autoSize`) -> this is a note description, otherwise the keys
+are treated as language identifiers.
 
-| Поле | По умолч. | Описание |
+| Field | Default | Description |
 |------|-----------|----------|
-| `text` | — | Текст подсказки: строка или объект «язык → текст» |
-| `style` | стиль подсказки | Имя стиля из `styles`; без него — оформление, которое даёт Конфигуратор |
-| `autoSize` | `true` | Подгонять ли размер окошка под текст |
-| `box` | — | Смещения окошка: `top`, `left` — положение, `bottom`, `right` — размер. Без ключа окошко встаёт стандартно |
+| `text` | - | Tooltip text: a string or a "language -> text" object |
+| `style` | tooltip style | Style name from `styles`; without it - the formatting that Configurator provides |
+| `autoSize` | `true` | Whether to fit the window size to the text |
+| `box` | - | Window offsets: `top`, `left` - position, `bottom`, `right` - size. Without the key the window is placed in the standard way |
 
-Координаты ячейки в примечании не задаются. `autoSize` и `box` независимы: при автоподгоне
-размера положение окошка всё равно хранится.
+Cell coordinates are not set in a note. `autoSize` and `box` are independent: with automatic
+size fitting the window position is still stored.

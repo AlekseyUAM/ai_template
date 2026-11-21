@@ -24,7 +24,7 @@ import {
 } from '../spreadsheet/spreadsheet.mjs';
 
 /** Click a button/hyperlink/tab on the current form. Use {dblclick: true} to double-click (open items from lists).
- *  First argument can also be an object { row, column } to click a cell in a SpreadsheetDocument (отчёт) or a form grid (таблица/табчасть). */
+ *  First argument can also be an object { row, column } to click a cell in a SpreadsheetDocument (report) or a form grid (table/tabular section). */
 export async function clickElement(text, { dblclick, table, toggle, expand, modifier, scroll, timeout } = {}) {
   ensureConnected();
 

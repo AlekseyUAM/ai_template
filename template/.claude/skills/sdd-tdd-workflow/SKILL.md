@@ -1,23 +1,23 @@
 ---
 name: sdd-tdd-workflow
-description: Методология разработки через спецификацию и тесты (SDD+TDD). Читай при планировании этапов задачи.
+description: Development methodology through specification and tests (SDD+TDD). Read when planning task stages.
 allowed-tools: []
 ---
 
 # SDD + TDD
 
-## Спецификация до кода (SDD)
-Для новой функциональности и значимых изменений сначала спека (цель, требования,
-критерии приёмки), затем техдизайн, только потом код.
+## Specification before code (SDD)
+For new functionality and significant changes, first the spec (goal, requirements,
+acceptance criteria), then the technical design, and only then the code.
 
-## Тесты до реализации (TDD)
-1. **Red** — по чеклисту `developer-tests` исполнитель пишет юнит-тесты средствами, принятыми в проекте, по критериям приёмки; они падают (этап «написание тестов»).
-2. **Green** — по чеклисту `developer` исполнитель пишет минимальный код, доводит тесты до прохождения.
-3. **Проверка** — на этапе «тестирование» исполнитель сам прогоняет тесты и выносит вердикт (отдельного чеклиста-тестировщика нет); при падении возвращает задачу на разработку, где по чеклисту `developer` разбирает лог прогона и чинит код.
+## Tests before implementation (TDD)
+1. **Red** - per the `developer-tests` checklist the executor writes unit tests with the tools accepted in the project, by the acceptance criteria; they fail (the "writing tests" stage).
+2. **Green** - per the `developer` checklist the executor writes minimal code and brings the tests to passing.
+3. **Check** - at the "testing" stage the executor runs the tests and gives the verdict (there is no separate tester checklist); on failure they return the task to development, where per the `developer` checklist they analyze the run log and fix the code.
 
-## Слои тестов
-- Выбор тест-раннера — на усмотрение проекта/задачи.
-- Прогоняй статический анализ (MCP `bsl_ls`, инструмент `mcp__bsl_ls__check`) на каждом шаге.
+## Test layers
+- The choice of test runner is at the discretion of the project/task.
+- Run static analysis (the `bsl_ls` MCP, the `mcp__bsl_ls__check` tool) at every step.
 
-## Цикл задачи
-анализ → план → написание тестов → разработка → тестирование → ревью → документация.
+## Task cycle
+analysis → plan → writing tests → development → testing → review → documentation.

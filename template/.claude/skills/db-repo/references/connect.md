@@ -1,39 +1,39 @@
-# Подключение базы к хранилищу
+# Connecting a database to the repository
 
-## connect — подключить
+## connect - connect
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/db-repo.py" -Command connect -InfoBasePath "C:\Bases\MyDB" -RepositoryPath "\\srv01\repo\MyApp" -RepositoryUser "Ivanov" -RepositoryPassword "…"
 ```
 
-| Параметр | Описание |
+| Parameter | Description |
 |----------|----------|
-| `-ForceReplaceCfg` | Конфигурация базы непустая — подтвердить замену её конфигурацией из хранилища. **Спроси подтверждение у пользователя** |
-| `-ForceBindAlreadyBindedUser` | Подключить, даже если у этого пользователя уже есть конфигурация, связанная с хранилищем |
+| `-ForceReplaceCfg` | The database configuration is not empty - confirm replacing it with the configuration from the repository. **Ask the user for confirmation** |
+| `-ForceBindAlreadyBindedUser` | Connect even if this user already has a configuration bound to the repository |
 
-На пустой базе `-ForceReplaceCfg` не нужен.
+On an empty database `-ForceReplaceCfg` is not needed.
 
-**Переподключение** базы, которая уже была подключена, требует обоих флагов: конфигурация в базе
-не пустая (`-ForceReplaceCfg`), а за пользователем хранилища всё ещё числится эта база
+**Reconnecting** a database that was already connected requires both flags: the configuration in the
+database is not empty (`-ForceReplaceCfg`), and this database is still assigned to the repository user
 (`-ForceBindAlreadyBindedUser`).
 
-После подключения добавь `repository` в запись базы в `.v8-project.json` — иначе остальные
-подкоманды придётся каждый раз звать с явными реквизитами, а `update` откажется работать.
+After connecting, add `repository` to the database record in `.v8-project.json` - otherwise the other
+subcommands will have to be called with explicit credentials every time, and `update` will refuse to work.
 
-## disconnect — отключить
+## disconnect - disconnect
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/db-repo.py" -Command disconnect -InfoBasePath "C:\Bases\MyDB"
 ```
 
-**Спроси подтверждение у пользователя.** Отключение снимает связь и на стороне самого хранилища:
-запись о подключении удаляется. Подключить базу обратно можно, но это уже не рядовая операция —
-понадобятся оба флага `connect` из раздела выше.
+**Ask the user for confirmation.** Disconnecting removes the binding on the repository side too:
+the connection record is deleted. The database can be connected back, but this is no longer a routine
+operation - both `connect` flags from the section above will be needed.
 
-Если в базе есть захваченные и изменённые объекты, операция не выполнится. `-Force` выполняет её
-всё равно, и эти изменения теряются.
+If the database has locked and modified objects, the operation will not run. `-Force` performs it
+anyway, and those changes are lost.
 
-## Расширения
+## Extensions
 
-У расширения своё хранилище: `-Extension "<Имя>"` указывай вместе с путём именно к нему, а не
-к хранилищу основной конфигурации.
+An extension has its own repository: specify `-Extension "<Имя>"` together with the path to that
+repository, not to the main configuration repository.

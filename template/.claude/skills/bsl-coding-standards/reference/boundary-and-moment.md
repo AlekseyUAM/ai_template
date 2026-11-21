@@ -1,53 +1,53 @@
-# Граница и момент времени
+# Boundary and point in time
 
-## Зачем нужны
+## Why they are needed
 
-- **Момент времени** (`МоментВремени`) — точная точка во времени = `Дата` + ссылка на
-  регистратор. Позволяет однозначно упорядочить документы, попавшие в одну и ту же секунду.
-  `Объект.МоментВремени()` возвращает момент времени документа.
-- **Граница** (`Новый Граница(Момент, ВидГраницы)`) — задаёт границу интервала с указанием,
-  входит ли сама точка в интервал: `ВидГраницы.Включая` / `ВидГраницы.Исключая`.
+- **Point in time** (`МоментВремени`) - the exact point in time = `Дата` + a ref to the
+  recorder. It allows unambiguous ordering of documents that fall into the same second.
+  `Объект.МоментВремени()` returns the document's point in time.
+- **Boundary** (`Новый Граница(Момент, ВидГраницы)`) - defines an interval boundary with an indication of
+  whether the point itself is included in the interval: `ВидГраницы.Включая` / `ВидГраницы.Исключая`.
 
-Передача в параметры виртуальных таблиц обычной `Дата` вместо `МоментВремени`/`Граница`
-теряет упорядочивание внутри секунды и захватывает «чужие» документы той же датой — ошибка.
+Passing a plain `Дата` instead of `МоментВремени`/`Граница` to virtual table parameters
+loses ordering within a second and captures "foreign" documents with the same date - an error.
 
-## Применение в документах (проведение)
+## Use in documents (posting)
 
-- **Контроль остатков своего документа после записи движений** — читать остатки на
-  `Новый Граница(МоментВремени(), ВидГраницы.Включая)`, чтобы учесть собственные движения
-  документа (иначе контроль «не видит» только что записанные движения).
-- **Чтение остатков до своих движений** (старая методика — см.
-  [Методика контроля остатков](balance-control-methodology.md); списание по текущим остаткам) —
-  на `МоментВремени()` или `Новый Граница(МоментВремени(), ВидГраницы.Исключая)`, чтобы НЕ
-  учитывать собственные движения.
-- **Оперативное проведение** — поведение зависит от `РежимПроведенияДокумента.Оперативный`;
-  при оперативном проведении актуальна текущая оперативная отметка времени. Логику контроля
-  ветвить по режиму проведения.
-- В `СрезПоследних()`/`СрезПервых()`/`Остатки()` внутри проведения передавать момент/границу
-  явно, а не оставлять параметр пустым.
+- **Control of your own document's balances after writing movements** - read balances at
+  `Новый Граница(МоментВремени(), ВидГраницы.Включая)` to account for the document's own movements
+  (otherwise the control "does not see" the just written movements).
+- **Reading balances before your own movements** (old methodology - see
+  [Balance control methodology](balance-control-methodology.md); write-off by current balances) -
+  at `МоментВремени()` or `Новый Граница(МоментВремени(), ВидГраницы.Исключая)` so as NOT to
+  account for your own movements.
+- **Real-time posting** - behavior depends on `РежимПроведенияДокумента.Оперативный`;
+  during real-time posting the current real-time timestamp is relevant. Branch the control logic
+  by posting mode.
+- In `СрезПоследних()`/`СрезПервых()`/`Остатки()` inside posting pass the moment/boundary
+  explicitly rather than leaving the parameter empty.
 
-## Применение в отчётах
+## Use in reports
 
-- **Остатки на дату**: «на конец дня» — `Новый Граница(КонецДня(ДатаОтчёта), ВидГраницы.Включая)`;
-  «на начало дня» — `Новый Граница(НачалоДня(ДатаОтчёта), ВидГраницы.Исключая)`.
-- В отчётах обычно достаточно границы по `Дате` (без ссылки-регистратора) — упорядочивание
-  внутри секунды, как правило, не требуется.
-- **Обороты за период** (`Обороты(НачалоПериода, КонецПериода)`): конечную дату периода
-  задавать через `КонецДня(...)`, иначе в период не попадут документы последнего дня.
-- **Зеркальность границ**: начальная и конечная границы интервала интерпретируют
-  Включая/Исключая по-разному — следить, чтобы граничный документ не задвоился и не потерялся.
+- **Balances on a date**: "at the end of the day" - `Новый Граница(КонецДня(ДатаОтчёта), ВидГраницы.Включая)`;
+  "at the start of the day" - `Новый Граница(НачалоДня(ДатаОтчёта), ВидГраницы.Исключая)`.
+- In reports a boundary by `Дате` is usually enough (without a recorder ref) - ordering
+  within a second is generally not required.
+- **Turnovers for a period** (`Обороты(НачалоПериода, КонецПериода)`): set the period end date
+  via `КонецДня(...)`, otherwise documents of the last day do not fall into the period.
+- **Boundary mirroring**: the start and end boundaries of an interval interpret
+  Inclusively/Exclusively differently - make sure the boundary document is neither doubled nor lost.
 
-## Момент времени как поле ссылки в запросе
+## Point in time as a ref field in a query
 
-- У поля типа `ДокументСсылка.<Документ>` в запросе доступно виртуальное поле
-  `МоментВремени`: `ВЫРАЗИТЬ(Остатки.Партия КАК Документ.Поступление).МоментВремени` — момент времени (дата + ссылка) документа/
-- `МоментВремени` — не агрегатное поле: в `СУММА`/`МАКСИМУМ`/`МИНИМУМ` не использовать.
+- For a field of type `ДокументСсылка.<Документ>` the virtual field
+  `МоментВремени` is available in a query: `ВЫРАЗИТЬ(Остатки.Партия КАК Документ.Поступление).МоментВремени` - the point in time (date + ref) of the document/
+- `МоментВремени` is not an aggregate field: do not use it in `СУММА`/`МАКСИМУМ`/`МИНИМУМ`.
 
-## Типичные ошибки (сигналы для ревью)
+## Typical errors (review signals)
 
-- [критичная] `Остатки(Документ)` / `Остатки(Док.Дата)` — передана ссылка/дата вместо `МоментВремени`.
-- [критичная] `УстановитьПараметр("МоментВремени", <Дата или ссылка>)` без `МоментВремени()`/`Граница`.
-- [важная] `Новый Граница(...)` без явного `ВидГраницы` (неясно, включается ли точка).
-- [критичная] Контроль остатков своего документа с `ВидГраницы.Исключая` (собственные движения не учтены).
-- [критичная] `СрезПоследних()`/`Остатки()` с пустым параметром момента внутри проведения.
-- [критичная] Конечная дата периода в отчёте без `КонецДня`.
+- [critical] `Остатки(Документ)` / `Остатки(Док.Дата)` - a ref/date passed instead of `МоментВремени`.
+- [critical] `УстановитьПараметр("МоментВремени", <Дата или ссылка>)` without `МоментВремени()`/`Граница`.
+- [important] `Новый Граница(...)` without an explicit `ВидГраницы` (unclear whether the point is included).
+- [critical] Control of your own document's balances with `ВидГраницы.Исключая` (own movements not accounted for).
+- [critical] `СрезПоследних()`/`Остатки()` with an empty moment parameter inside posting.
+- [critical] Period end date in a report without `КонецДня`.

@@ -1,6 +1,6 @@
 ---
 name: cfe-patch-method
-description: Генерация и актуализация перехватчика метода в расширении 1С (CFE). Используй когда нужно перехватить метод заимствованного объекта — вставить код до, после, вместо оригинала, изменить его тело (ИзменениеИКонтроль) — или актуализировать перехватчик после изменения оригинала
+description: Generation and actualization of a method interceptor in a 1C extension (CFE). Use when you need to intercept a borrowed object method - insert code before, after, instead of the original, change its body (ИзменениеИКонтроль) - or actualize the interceptor after the original changes
 argument-hint: -ExtensionPath <path> -ConfigPath <path> -ModulePath "Catalog.X.ObjectModule" -MethodName "ПриЗаписи" -InterceptorType Before
 allowed-tools:
   - Bash
@@ -8,37 +8,37 @@ allowed-tools:
   - Glob
 ---
 
-# /cfe-patch-method — Генерация перехватчика метода
+# /cfe-patch-method - Method interceptor generation
 
-Читает оригинал метода из конфигурации-источника и генерирует `.bsl`-перехватчик заимствованного объекта: с правильной директивой контекста, полной сигнатурой, обрамляющими инструкциями препроцессора и областями. Для `ИзменениеИКонтроль` копирует всё тело оригинала. Создаёт файл модуля, дописывает в существующий или актуализирует уже заимствованный метод.
+Reads the method original from the source configuration and generates a `.bsl` interceptor of the borrowed object: with the correct context directive, a full signature, surrounding preprocessor instructions and regions. For `ИзменениеИКонтроль` copies the whole body of the original. Creates a module file, appends to an existing one or actualizes an already borrowed method.
 
-## Предусловие
+## Precondition
 
-Объект должен быть заимствован в расширение (`/cfe-borrow`). Нужен доступ к исходникам базовой конфигурации (`-ConfigPath`) — оттуда читается оригинал метода. `NamePrefix` берётся из `Configuration.xml` расширения.
+The object must be borrowed into the extension (`/cfe-borrow`). Access to the base configuration sources is needed (`-ConfigPath`) - the method original is read from there. `NamePrefix` is taken from the extension `Configuration.xml`.
 
-### Авто-определение ConfigPath
+### ConfigPath auto-detection
 
-Если пользователь не указал `-ConfigPath` — попробуй определить автоматически:
-1. Прочитай `.v8-project.json` из корня проекта
-2. Разреши целевую базу (по имени, ветке или `default` — алгоритм из `/db-list`)
-3. Если у базы есть поле `configSrc` — используй как `-ConfigPath`
-4. Если `configSrc` нет — спроси у пользователя
+If the user did not specify `-ConfigPath` - try to detect it automatically:
+1. Read `.v8-project.json` from the project root
+2. Resolve the target infobase (by name, branch or `default` - the algorithm from `/db-list`)
+3. If the infobase has a `configSrc` field - use it as `-ConfigPath`
+4. If there is no `configSrc` - ask the user
 
-## Параметры
+## Parameters
 
-| Параметр | Описание | По умолчанию |
+| Parameter | Description | Default |
 |----------|----------|--------------|
-| `ExtensionPath` | Путь к расширению (обязат.) | — |
-| `ConfigPath` | Путь к конфигурации-источнику | обязат., кроме случая, когда `ModulePath` — путь к файлу |
-| `ModulePath` | Логическое имя (`Тип.Имя.Модуль`) **или** путь к файлу модуля `.bsl` | обязат. для генерации |
-| `MethodName` | Имя перехватываемого метода | обязат. для генерации |
-| `InterceptorType` | `Before` / `After` / `Instead` / `ModificationAndControl` | обязат. для генерации |
-| `Check` | Проверить контролируемые методы на дрейф (только отчёт) | — |
-| `Actualize` | Актуализировать дрейфнувшие контролируемые методы | — |
+| `ExtensionPath` | Path to the extension (required) | - |
+| `ConfigPath` | Path to the source configuration | required, except when `ModulePath` is a file path |
+| `ModulePath` | Logical name (`Тип.Имя.Модуль`) **or** path to a `.bsl` module file | required for generation |
+| `MethodName` | Name of the method to intercept | required for generation |
+| `InterceptorType` | `Before` / `After` / `Instead` / `ModificationAndControl` | required for generation |
+| `Check` | Check controlled methods for drift (report only) | - |
+| `Actualize` | Actualize drifted controlled methods | - |
 
-## Формат ModulePath
+## ModulePath format
 
-| ModulePath | Файл |
+| ModulePath | File |
 |------------|------|
 | `Catalog.X.ObjectModule` | `Catalogs/X/Ext/ObjectModule.bsl` |
 | `Catalog.X.ManagerModule` | `Catalogs/X/Ext/ManagerModule.bsl` |
@@ -48,28 +48,28 @@ allowed-tools:
 | `Document.X.ObjectModule` | `Documents/X/Ext/ObjectModule.bsl` |
 | `Document.X.Form.Y` | `Documents/X/Forms/Y/Ext/Form/Module.bsl` |
 
-Аналогично для Report, DataProcessor, InformationRegister и других типов.
+Similarly for Report, DataProcessor, InformationRegister and other types.
 
-Вместо логического имени в `ModulePath` можно передать **путь к файлу** модуля-источника `.bsl` — тогда `-ConfigPath` указывать не нужно (оригинал читается прямо из этого файла). Путь модуля расширения определяется от типовой папки в пути автоматически.
+Instead of a logical name in `ModulePath` you can pass a **path to the file** of the source module `.bsl` - then `-ConfigPath` does not need to be specified (the original is read directly from this file). The extension module path is determined automatically from the standard folder in the path.
 
-## Типы перехвата
+## Interception types
 
-| InterceptorType | Декоратор | Назначение | Применим к |
+| InterceptorType | Decorator | Purpose | Applicable to |
 |-----------------|-----------|------------|------------|
-| `Before` | `&Перед` | Код до вызова оригинального метода | процедуры |
-| `After` | `&После` | Код после вызова оригинального метода | процедуры |
-| `Instead` | `&Вместо` | Замена метода; в теле — скаффолд `ПродолжитьВызов(...)` | процедуры и функции |
-| `ModificationAndControl` | `&ИзменениеИКонтроль` | Копия тела оригинала для правки маркерами `#Вставка`/`#Удаление` | процедуры и функции |
+| `Before` | `&Перед` | Code before the original method call | procedures |
+| `After` | `&После` | Code after the original method call | procedures |
+| `Instead` | `&Вместо` | Method replacement; the body contains the `ПродолжитьВызов(...)` scaffold | procedures and functions |
+| `ModificationAndControl` | `&ИзменениеИКонтроль` | Copy of the original body for editing with `#Вставка`/`#Удаление` markers | procedures and functions |
 
-## Маркеры `#Вставка` / `#Удаление` (для `ModificationAndControl`)
+## Markers `#Вставка` / `#Удаление` (for `ModificationAndControl`)
 
-`&ИзменениеИКонтроль` вставляет в перехватчик **копию тела оригинала**. Дальше отредактируй тело под свою доработку, **помечая каждое изменение** — платформа так отличает твою правку от неизменного оригинала:
+`&ИзменениеИКонтроль` inserts into the interceptor a **copy of the original body**. Then edit the body for your rework, **marking every change** - this is how the platform distinguishes your edit from the unchanged original:
 
-- **Добавляешь код** → оберни его `#Вставка` … `#КонецВставки`.
-- **Удаляешь код оригинала** → оберни удаляемые строки `#Удаление` … `#КонецУдаления`, но сами строки **оставь между маркерами** (платформа сверяет их с оригиналом).
-- **Заменяешь** → `#Удаление` старое `#КонецУдаления` сразу за ним `#Вставка` новое `#КонецВставки`.
+- **Adding code** -> wrap it in `#Вставка` ... `#КонецВставки`.
+- **Deleting original code** -> wrap the deleted lines in `#Удаление` ... `#КонецУдаления`, but **leave the lines themselves between the markers** (the platform compares them with the original).
+- **Replacing** -> `#Удаление` old `#КонецУдаления` immediately after it `#Вставка` new `#КонецВставки`.
 
-Пример:
+Example:
 ```bsl
 &ИзменениеИКонтроль("ПриЗаписи")
 Процедура Расш_ПриЗаписи(Отказ)
@@ -87,36 +87,36 @@ allowed-tools:
 КонецПроцедуры
 ```
 
-Правила:
-- Маркеры — на **отдельной строке с 0-й колонки** (без отступа), даже внутри отступов и текста запроса (`|…`).
-- **Незамеченные (unmarked) строки должны совпадать с оригиналом дословно** — это и есть «контроль». Дословно — включая комментарии, регистр и пробелы внутри строки (`Х = Х + 1` ≠ `Х=Х+1`); свободны только отступ и пустые строки. Если оригинал в конфигурации-источнике изменится, unmarked-контекст разойдётся → метод потребует актуализации (см. ниже; проверить пачкой — `-Check`).
-- Меняешь только свои `#Вставка`/`#Удаление`; чужой оригинал не трогай.
+Rules:
+- Markers go on a **separate line from column 0** (no indent), even inside indents and query text (`|…`).
+- **Unmarked lines must match the original verbatim** - that is the "control". Verbatim - including comments, case and spaces inside a line (`Х = Х + 1` ≠ `Х=Х+1`); only indentation and empty lines are free. If the original in the source configuration changes, the unmarked context will diverge -> the method will need actualization (see below; check in batch with `-Check`).
+- Change only your own `#Вставка`/`#Удаление`; do not touch other people's original.
 
-## Актуализация
+## Actualization
 
-После изменения оригинала в конфигурации-источнике перехватчик `&ИзменениеИКонтроль` может рассинхронизироваться — unmarked-контекст разойдётся с новым оригиналом. Платформа при загрузке об этом молчит, поэтому актуализируй сам:
+After the original changes in the source configuration, the `&ИзменениеИКонтроль` interceptor may get out of sync - the unmarked context will diverge from the new original. The platform stays silent about this on load, so actualize yourself:
 
-- **Проверить** — `-Check`: отчёт по всем контролируемым методам расширения, ничего не пишет (`exit 1`, если есть дрейф или конфликт).
-- **Актуализировать** — `-Actualize`: переносит правки (`#Вставка`/`#Удаление`) на новый оригинал по всему расширению. Сузить область: `-ModulePath` — один модуль, `+ -MethodName` — один метод. Для одного метода то же делает повторный вызов с `-InterceptorType ModificationAndControl`.
+- **Check** - `-Check`: a report on all controlled methods of the extension, writes nothing (`exit 1` if there is drift or a conflict).
+- **Actualize** - `-Actualize`: transfers edits (`#Вставка`/`#Удаление`) onto the new original across the whole extension. Narrow the scope: `-ModulePath` - one module, `+ -MethodName` - one method. For one method the same is done by a repeated call with `-InterceptorType ModificationAndControl`.
 
-Статусы в выводе:
+Statuses in the output:
 
-- `[АКТУАЛЕН]` — оригинал не менялся, правок нет;
-- `[АКТУАЛИЗИРОВАН]` — тело обновлено по новому оригиналу, правки сохранены (в выводе — сводка);
-- `[АКТУАЛИЗИРОВАН-ЧАСТИЧНО]` — часть правок не удалось разместить (якорь изменился в новом оригинале). Они помечены `// [РЕСИНК-КОНФЛИКТ]` в модуле и не потеряны; путь к merge-воркспейсу — в выводе (начни с `index.md`, дальше по каждому конфликту его `conflict.md`, размести блоки вручную в `.bsl` расширения);
-- `[ПЕРЕНЕСЕНО В ОСНОВНУЮ]` — правка уже есть в новом оригинале (вставленный код внесён вендором) или удаляемый блок уже вырезан. Правка неактуальна — убирается из тела, дублировать/конфликтовать не нужно. Если так со всеми правками метода — перехватчик можно удалить. `-Check` этим не роняет `exit`.
+- `[АКТУАЛЕН]` - the original has not changed, no edits;
+- `[АКТУАЛИЗИРОВАН]` - the body was updated to the new original, edits preserved (the output has a summary);
+- `[АКТУАЛИЗИРОВАН-ЧАСТИЧНО]` - some edits could not be placed (the anchor changed in the new original). They are marked `// [РЕСИНК-КОНФЛИКТ]` in the module and are not lost; the merge workspace path is in the output (start with `index.md`, then for each conflict its `conflict.md`, place the blocks manually in the extension `.bsl`);
+- `[ПЕРЕНЕСЕНО В ОСНОВНУЮ]` - the edit is already in the new original (the inserted code was added by the vendor) or the deleted block is already cut out. The edit is not relevant - it is removed from the body, no need to duplicate/conflict. If this is so with all edits of the method - the interceptor can be deleted. `-Check` does not fail `exit` because of this.
 
-Повторный вызов `Before`/`After`/`Instead` для уже перехваченного метода дубль не создаёт (`[ПРОПУЩЕН]`).
+A repeated `Before`/`After`/`Instead` call for an already intercepted method does not create a duplicate (`[ПРОПУЩЕН]`).
 
-`-Check` смотрит исходники. Вердикт платформы — уже после загрузки в базу: `/db-cfe-admin check`.
+`-Check` looks at the sources. The platform verdict is after loading into the infobase: `/db-cfe-admin check`.
 
-## Команда
+## Command
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/cfe-patch-method.py" -ExtensionPath src\cfe\extname -ConfigPath src\cf -ModulePath "Catalog.Контрагенты.ObjectModule" -MethodName "ПриЗаписи" -InterceptorType Before
 ```
 
-## Примеры
+## Examples
 
 ```bash
 # Код перед записью
@@ -141,7 +141,7 @@ python "${CLAUDE_SKILL_DIR}/scripts/cfe-patch-method.py" -ExtensionPath src\cfe\
 ... -ExtensionPath src\cfe\extname -ConfigPath src\cf -Actualize
 ```
 
-## Верификация
+## Verification
 
 ```
 /cfe-validate <ExtensionPath> -ConfigPath <ConfigPath>

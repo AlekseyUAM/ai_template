@@ -1,6 +1,6 @@
 ---
 name: help-add
-description: Добавить встроенную справку к объекту 1С (обработка, отчёт, справочник, документ и др.). Используй когда пользователь просит добавить справку, help, встроенную помощь к объекту
+description: Add built-in help to a 1C object (data processor, report, catalog, document, etc.). Use when the user asks to add help, built-in help to an object
 argument-hint: <ObjectName>
 allowed-tools:
   - Bash
@@ -11,9 +11,9 @@ allowed-tools:
   - Grep
 ---
 
-# /help-add — Добавление справки
+# /help-add - Add help
 
-Добавляет встроенную справку к объекту: файл метаданных `Help.xml`, HTML-страницу и при необходимости обновляет метаданные форм.
+Adds built-in help to an object: metadata file `Help.xml`, HTML page, and if needed updates form metadata.
 
 ## Usage
 
@@ -21,24 +21,24 @@ allowed-tools:
 /help-add <ObjectName> [Lang] [SrcDir]
 ```
 
-| Параметр   | Обязательный | По умолчанию | Описание                            |
-|------------|:------------:|--------------|-------------------------------------|
-| ObjectName | да           | —            | Путь объекта относительно SrcDir (например `Catalogs/МойСправочник`, `DataProcessors/МояОбработка`) |
-| Lang       | нет          | `ru`         | Код языка справки                   |
-| SrcDir     | нет          | `src`        | Каталог исходников                  |
+| Parameter  | Required | Default | Description                         |
+|------------|:--------:|---------|-------------------------------------|
+| ObjectName | yes      | -       | Object path relative to SrcDir (for example `Catalogs/МойСправочник`, `DataProcessors/МояОбработка`) |
+| Lang       | no       | `ru`    | Help language code                  |
+| SrcDir     | no       | `src`   | Source directory                    |
 
-## Команда
+## Command
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/help-add.py" -ObjectName "<ObjectName>" [-Lang "<Lang>"] [-SrcDir "<SrcDir>"]
 ```
 
-## Что делает скрипт
+## What the script does
 
-- Создаёт `Ext/Help.xml` и `Ext/Help/ru.html` — шаблон справки
-- Если у объекта есть формы — добавляет `<IncludeHelpInContents>` в метаданные форм (если отсутствует)
-- Справка **не регистрируется** в `ChildObjects` — достаточно наличия файлов
+- Creates `Ext/Help.xml` and `Ext/Help/ru.html` - the help template
+- If the object has forms - adds `<IncludeHelpInContents>` to form metadata (if missing)
+- Help is **not registered** in `ChildObjects` - the presence of files is enough
 
-## После запуска
+## After the run
 
-Отредактируй `Ext/Help/ru.html` — наполни содержимым справки (стандартный HTML: `<h1>`..`<h4>`, `<p>`, `<ul>`, `<table>` и т.д.). Кнопка справки появится автоматически через `Autofill` в AutoCommandBar формы.
+Edit `Ext/Help/ru.html` - fill it with help content (standard HTML: `<h1>`..`<h4>`, `<p>`, `<ul>`, `<table>`, etc.). The help button appears automatically via `Autofill` in the form's AutoCommandBar.

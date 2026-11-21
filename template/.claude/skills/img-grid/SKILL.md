@@ -1,62 +1,62 @@
 ---
 name: img-grid
-description: Наложить пронумерованную сетку на изображение. Используй при анализе скриншота макета или печатной формы — измерить пропорции колонок перед генерацией табличного документа
+description: Overlay a numbered grid on an image. Use when analyzing a screenshot of a template or print form - measure column proportions before generating a spreadsheet document
 argument-hint: <ImagePath> [-c COLS]
 allowed-tools:
   - Bash
   - Read
 ---
 
-# /img-grid — Сетка для анализа макета
+# /img-grid - Grid for template analysis
 
-Накладывает пронумерованную сетку на изображение печатной формы. Позволяет точно определить границы колонок, их пропорции и span-ы для генерации макета табличного документа.
+Overlays a numbered grid on a print form image. Lets you precisely determine column boundaries, their proportions and spans for generating a spreadsheet document template.
 
-## Использование
+## Usage
 
 ```
 /img-grid <ImagePath> [-c COLS] [-o OUTPUT]
 ```
 
-## Параметры
+## Parameters
 
-| Параметр  | Обязательный | По умолчанию | Описание                                      |
+| Parameter | Required | Default | Description |
 |-----------|:------------:|--------------|-----------------------------------------------|
-| ImagePath | да           | —            | Путь к изображению (PNG, JPG)                 |
-| -c COLS   | нет          | 50           | Количество вертикальных делений               |
-| -r ROWS   | нет          | авто         | Количество горизонтальных делений (авто = квадратные ячейки) |
-| -o OUTPUT | нет          | `<name>-grid.<ext>` | Путь для результата                |
+| ImagePath | yes          | -            | Path to the image (PNG, JPG)                  |
+| -c COLS   | no           | 50           | Number of vertical divisions                  |
+| -r ROWS   | no           | auto         | Number of horizontal divisions (auto = square cells) |
+| -o OUTPUT | no           | `<name>-grid.<ext>` | Path for the result                 |
 
-## Команда
+## Command
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/overlay-grid.py" "<ImagePath>" [-c 50] [-o "<OutputPath>"]
 ```
 
-Требуется Python 3 с библиотекой Pillow (`pip install Pillow`).
+Requires Python 3 with the Pillow library (`pip install Pillow`).
 
-## Что делает
+## What it does
 
-1. Рисует полупрозрачные вертикальные (красные) и горизонтальные (синие) линии
-2. Нумерует линии в отдельных полях сверху и слева (не перекрывает содержимое)
-3. Каждая 5-я и 10-я линия выделены ярче для удобства счёта
+1. Draws semi-transparent vertical (red) and horizontal (blue) lines
+2. Numbers the lines in separate margins at the top and left (does not overlap the content)
+3. Every 5th and 10th line is highlighted brighter for easier counting
 
-## Как использовать результат
+## How to use the result
 
-### 1. Определить границы колонок
+### 1. Determine column boundaries
 
-Посмотреть на изображение с сеткой и записать координаты вертикальных границ каждой колонки таблицы (в номерах grid-линий).
+Look at the image with the grid and record the coordinates of the vertical boundaries of each table column (in grid-line numbers).
 
-### 2. Найти базовую решётку
+### 2. Find the base grid
 
-Если на форме несколько таблиц с разной раскладкой (например, шапка документа и основная таблица), объединить все граничные точки. Каждый сегмент между соседними границами — одна колонка MXL.
+If the form has several tables with different layouts (for example, the document header and the main table), merge all boundary points. Each segment between adjacent boundaries is one MXL column.
 
-Пример для М-11:
-- Шапка: границы 0, 2, 4, 9, 14, 21, 28, 34, 40, 48
-- Таблица: границы 0, 2, 4, 11, 16, 19, 23, 28, 32, 36, 42, 48
-- Объединение: 0, 2, 4, 9, 11, 14, 16, 19, 21, 23, 28, 32, 34, 36, 40, 42, 48
-- Результат: **16 базовых колонок** с пропорциями 2, 2, 5, 2, 3, 2, 3, 2, 2, 5, 4, 2, 2, 4, 2, 6
+Example for M-11:
+- Header: boundaries 0, 2, 4, 9, 14, 21, 28, 34, 40, 48
+- Table: boundaries 0, 2, 4, 11, 16, 19, 23, 28, 32, 36, 42, 48
+- Union: 0, 2, 4, 9, 11, 14, 16, 19, 21, 23, 28, 32, 34, 36, 40, 42, 48
+- Result: **16 base columns** with proportions 2, 2, 5, 2, 3, 2, 3, 2, 2, 5, 4, 2, 2, 4, 2, 6
 
-### 3. Записать в JSON DSL
+### 3. Write to the JSON DSL
 
 ```json
 {
@@ -70,8 +70,8 @@ python "${CLAUDE_SKILL_DIR}/scripts/overlay-grid.py" "<ImagePath>" [-c 50] [-o "
 }
 ```
 
-Поле `"page"` позволяет компилятору автоматически вычислить абсолютные ширины из пропорций.
+The `"page"` field lets the compiler automatically calculate absolute widths from the proportions.
 
-### 4. Скомпилировать
+### 4. Compile
 
-`/mxl-compile` → `/mxl-validate` → `/mxl-info`
+`/mxl-compile` -> `/mxl-validate` -> `/mxl-info`

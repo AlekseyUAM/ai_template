@@ -1,6 +1,6 @@
 ---
 name: meta-validate
-description: Валидация объекта метаданных 1С. Используй после создания или модификации объекта конфигурации для проверки корректности
+description: Validate a 1C metadata object. Use after creating or modifying a configuration object to check correctness
 argument-hint: <ObjectPath> [-Detailed] [-MaxErrors 30] — pipe-separated paths for batch
 allowed-tools:
   - Bash
@@ -8,20 +8,20 @@ allowed-tools:
   - Glob
 ---
 
-# /meta-validate — валидация объекта метаданных 1С
+# /meta-validate - 1C metadata object validation
 
-Проверяет XML объекта метаданных из выгрузки конфигурации на структурные ошибки.
+Checks metadata object XML from a configuration dump for structural errors.
 
-## Параметры
+## Parameters
 
-| Параметр   | Обяз. | Умолч. | Описание                                      |
+| Parameter   | Required | Default | Description                                      |
 |------------|:-----:|---------|-------------------------------------------------|
-| ObjectPath | да    | —       | Путь к XML-файлу или каталогу. Через `\|` для batch |
-| Detailed   | нет   | —       | Подробный вывод (все проверки, включая успешные) |
-| MaxErrors  | нет   | 30      | Остановиться после N ошибок (per object)        |
-| OutFile    | нет   | —       | Записать результат в файл (UTF-8 BOM)           |
+| ObjectPath | yes    | -       | Path to the XML file or directory. Via `\|` for batch |
+| Detailed   | no   | -       | Detailed output (all checks, including successful ones) |
+| MaxErrors  | no   | 30      | Stop after N errors (per object)        |
+| OutFile    | no   | -       | Write the result to a file (UTF-8 BOM)           |
 
-## Команда
+## Command
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/meta-validate.py" -ObjectPath "Catalogs/Номенклатура/Номенклатура.xml"

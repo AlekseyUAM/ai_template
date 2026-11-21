@@ -1,21 +1,21 @@
-# Спец-поля «документ/датчик»
+# Special "document/sensor" fields
 
-Поля для отображения специальных данных: табличный документ, HTML, текст, форматированный документ, индикатор, ползунок. Каждое привязывается к реквизиту своего платформенного типа.
+Fields for displaying special data: spreadsheet document, HTML, text, formatted document, progress indicator, slider. Each is bound to an attribute of its own platform type.
 
-Структурно это обычные поля — поддерживают общий скелет поля (`path`, `title`, `titleLocation`, флаги `readOnly`/`enabled`/`visible`, `layout`, оформление, события). Ниже — только ключ `type` (имя элемента задаётся значением ключа) и собственные скаляры каждого семейства. Все скаляры необязательны.
+Structurally these are regular fields - they support the common field skeleton (`path`, `title`, `titleLocation`, `readOnly`/`enabled`/`visible` flags, `layout`, appearance, events). Below are only the `type` key (the element name is set by the key value) and the own scalars of each family. All scalars are optional.
 
-| Ключ типа | Тип реквизита |
+| Type key | Attribute type |
 |-----------|---------------|
 | `spreadsheet` | `mxl:SpreadsheetDocument` (ТабличныйДокумент) |
 | `html` | `string` |
 | `textDoc` | `d5p1:TextDocument` (ТекстовыйДокумент) |
 | `formattedDoc` | `fd:FormattedDocument` (ФорматированныйДокумент) |
-| `progressBar` | число |
-| `trackBar` | число |
+| `progressBar` | number |
+| `trackBar` | number |
 
-## spreadsheet — поле табличного документа
+## spreadsheet - spreadsheet document field
 
-Просмотр/редактирование табличного документа (отчёт, печатная форма).
+Viewing/editing a spreadsheet document (report, print form).
 
 ```json
 { "spreadsheet": "ТаблицаОтчета", "path": "ТаблицаОтчета",
@@ -23,87 +23,87 @@
   "output": "Disable", "protection": true }
 ```
 
-| Ключ | Тип | Назначение |
+| Key | Type | Purpose |
 |------|-----|-----------|
-| `output` | string | Использование вывода: `Enable` / `Disable` |
-| `protection` | bool | Защита от изменений |
-| `edit` | bool | Разрешить редактирование |
-| `showGrid` | bool | Показывать сетку |
-| `showHeaders` | bool | Показывать заголовки строк/колонок |
-| `showGroups` | bool | Показывать группировки |
-| `showRowAndColumnNames` | bool | Показывать имена строк и колонок |
-| `showCellNames` | bool | Показывать имена ячеек |
-| `verticalScrollBar` / `horizontalScrollBar` | string | Режим полос прокрутки |
-| `viewScalingMode` | string | Режим масштабирования просмотра |
-| `selectionShowMode` | string | Режим отображения выделения |
-| `pointerType` | string | Тип указателя |
-| `enableDrag` / `enableStartDrag` | bool | Разрешить перетаскивание / начало перетаскивания |
+| `output` | string | Output usage: `Enable` / `Disable` |
+| `protection` | bool | Protection against changes |
+| `edit` | bool | Allow editing |
+| `showGrid` | bool | Show the grid |
+| `showHeaders` | bool | Show row/column headers |
+| `showGroups` | bool | Show groupings |
+| `showRowAndColumnNames` | bool | Show row and column names |
+| `showCellNames` | bool | Show cell names |
+| `verticalScrollBar` / `horizontalScrollBar` | string | Scroll bar mode |
+| `viewScalingMode` | string | View scaling mode |
+| `selectionShowMode` | string | Selection display mode |
+| `pointerType` | string | Pointer type |
+| `enableDrag` / `enableStartDrag` | bool | Allow dragging / starting a drag |
 
-## html — поле HTML-документа
+## html - HTML document field
 
-Просмотр HTML. Реквизит — строка (содержит HTML-текст или адрес).
+HTML viewing. The attribute is a string (contains HTML text or an address).
 
 ```json
 { "html": "Просмотр", "path": "СодержимоеHTML", "titleLocation": "none",
   "output": "Enable", "warningOnEditRepresentation": false }
 ```
 
-| Ключ | Тип | Назначение |
+| Key | Type | Purpose |
 |------|-----|-----------|
-| `output` | string | Использование вывода: `Enable` / `Disable` |
-| `warningOnEditRepresentation` | bool | Предупреждать при изменении представления |
+| `output` | string | Output usage: `Enable` / `Disable` |
+| `warningOnEditRepresentation` | bool | Warn when the presentation changes |
 
-## textDoc — поле текстового документа
+## textDoc - text document field
 
-Просмотр/редактирование текстового документа.
+Viewing/editing a text document.
 
 ```json
 { "textDoc": "Текст", "path": "ТекстДокумента", "editMode": "Edit" }
 ```
 
-| Ключ | Тип | Назначение |
+| Key | Type | Purpose |
 |------|-----|-----------|
-| `editMode` | string | Режим редактирования (напр. `Edit` / `View`) |
+| `editMode` | string | Edit mode (e.g. `Edit` / `View`) |
 
-## formattedDoc — поле форматированного документа
+## formattedDoc - formatted document field
 
-Просмотр/редактирование форматированного документа.
+Viewing/editing a formatted document.
 
 ```json
 { "formattedDoc": "Описание", "path": "ФорматированноеОписание", "editMode": "Edit" }
 ```
 
-| Ключ | Тип | Назначение |
+| Key | Type | Purpose |
 |------|-----|-----------|
-| `editMode` | string | Режим редактирования (напр. `Edit` / `View`) |
+| `editMode` | string | Edit mode (e.g. `Edit` / `View`) |
 
-## progressBar — поле индикатора
+## progressBar - progress indicator field
 
-Индикатор прогресса. Реквизит — числовой.
+Progress indicator. The attribute is numeric.
 
 ```json
 { "progressBar": "Прогресс", "path": "Прогресс",
   "minValue": 0, "maxValue": 100, "showPercent": true }
 ```
 
-| Ключ | Тип | Назначение |
+| Key | Type | Purpose |
 |------|-----|-----------|
-| `minValue` / `maxValue` | число | Минимальное / максимальное значение |
-| `showPercent` | bool | Показывать проценты |
+| `minValue` / `maxValue` | number | Minimum / maximum value |
+| `showPercent` | bool | Show percentages |
 
-## trackBar — поле ползунка
+## trackBar - slider field
 
-Регулятор-ползунок. Реквизит — числовой.
+Slider control. The attribute is numeric.
 
 ```json
 { "trackBar": "Масштаб", "path": "Масштаб",
   "minValue": 20, "maxValue": 400, "markingStep": 20 }
 ```
 
-| Ключ | Тип | Назначение |
+| Key | Type | Purpose |
 |------|-----|-----------|
-| `minValue` / `maxValue` | число | Минимальное / максимальное значение |
-| `step` | число | Шаг изменения |
-| `largeStep` | число | Крупный шаг |
-| `markingStep` | число | Шаг разметки |
-| `markingAppearance` | string | Оформление разметки |
+| `minValue` / `maxValue` | number | Minimum / maximum value |
+| `step` | number | Change step |
+| `largeStep` | number | Large step |
+| `markingStep` | number | Marking step |
+| `markingAppearance` | string | Marking appearance |

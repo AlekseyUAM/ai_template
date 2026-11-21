@@ -1,6 +1,6 @@
 ---
 name: form-edit
-description: Добавление элементов, реквизитов и команд в существующую управляемую форму 1С. Используй когда нужно точечно модифицировать готовую форму
+description: Add elements, attributes and commands to an existing 1C managed form. Use when you need to modify a ready form pointwise
 argument-hint: <FormPath> <JsonPath>
 allowed-tools:
   - Bash
@@ -9,30 +9,30 @@ allowed-tools:
   - Glob
 ---
 
-# /form-edit — Редактирование формы
+# /form-edit - Editing a form
 
-Добавляет элементы, реквизиты и/или команды в существующий Form.xml. Автоматически выделяет ID из правильного пула, генерирует companion-элементы (ContextMenu, ExtendedTooltip, и др.) и обработчики событий.
+Adds elements, attributes and/or commands to an existing Form.xml. Automatically allocates IDs from the correct pool, generates companion elements (ContextMenu, ExtendedTooltip, etc.) and event handlers.
 
-## Использование
+## Usage
 
 ```
 /form-edit <FormPath> <JsonPath>
 ```
 
-## Параметры
+## Parameters
 
-| Параметр  | Обязательный | Описание                         |
+| Parameter | Required     | Description                      |
 |-----------|:------------:|----------------------------------|
-| FormPath  | да           | Путь к существующему Form.xml    |
-| JsonPath  | да           | Путь к JSON с описанием добавлений |
+| FormPath  | yes          | Path to the existing Form.xml    |
+| JsonPath  | yes          | Path to the JSON with the additions |
 
-## Команда
+## Command
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/form-edit.py" -FormPath "<путь>" -JsonPath "<путь>"
 ```
 
-## JSON формат
+## JSON format
 
 ```json
 {
@@ -50,9 +50,9 @@ python "${CLAUDE_SKILL_DIR}/scripts/form-edit.py" -FormPath "<путь>" -JsonPa
 }
 ```
 
-### Расширения (extension-формы)
+### Extensions (extension forms)
 
-Для заимствованных форм (с `<BaseForm>`) автоматически активируется extension-режим: ID начинаются с 1000000+. Доступны дополнительные секции:
+For borrowed forms (with `<BaseForm>`) extension mode is activated automatically: IDs start at 1000000+. Additional sections are available:
 
 ```json
 {
@@ -76,18 +76,18 @@ python "${CLAUDE_SKILL_DIR}/scripts/form-edit.py" -FormPath "<путь>" -JsonPa
 }
 ```
 
-### Позиционирование элементов
+### Element positioning
 
-| Ключ | По умолчанию | Описание |
+| Key | Default | Description |
 |------|-------------|----------|
-| `into` | корневой ChildItems | Имя группы/таблицы/страницы, куда вставлять |
-| `after` | в конец | Имя элемента, после которого вставлять |
+| `into` | root ChildItems | Name of the group/table/page to insert into |
+| `after` | at the end | Name of the element to insert after |
 
-### Типы элементов
+### Element types
 
-Те же DSL-ключи, что в `/form-compile`:
+Same DSL keys as in `/form-compile`:
 
-| Ключ | XML тег | Companions |
+| Key | XML tag | Companions |
 |------|---------|------------|
 | `input` | InputField | ContextMenu, ExtendedTooltip |
 | `check` | CheckBoxField | ContextMenu, ExtendedTooltip |
@@ -99,17 +99,17 @@ python "${CLAUDE_SKILL_DIR}/scripts/form-edit.py" -FormPath "<путь>" -JsonPa
 | `page` | Page | ExtendedTooltip |
 | `button` | Button | ExtendedTooltip |
 
-Группы и таблицы поддерживают `children`/`columns` для вложенных элементов.
+Groups and tables support `children`/`columns` for nested elements.
 
-### Кнопки: command и stdCommand
+### Buttons: command and stdCommand
 
-- `"command": "ИмяКоманды"` → `Form.Command.ИмяКоманды`
-- `"stdCommand": "Close"` → `Form.StandardCommand.Close`
-- `"stdCommand": "Товары.Add"` → `Form.Item.Товары.StandardCommand.Add` (стандартная команда элемента)
+- `"command": "ИмяКоманды"` -> `Form.Command.ИмяКоманды`
+- `"stdCommand": "Close"` -> `Form.StandardCommand.Close`
+- `"stdCommand": "Товары.Add"` -> `Form.Item.Товары.StandardCommand.Add` (standard command of the element)
 
-### Допустимые события (`on`)
+### Valid events (`on`)
 
-Компилятор предупреждает об ошибках в именах событий. Основные:
+The compiler warns about errors in event names. Main ones:
 
 - **input**: `OnChange`, `StartChoice`, `ChoiceProcessing`, `Clearing`, `AutoComplete`, `TextEditEnd`
 - **check**: `OnChange`
@@ -118,25 +118,25 @@ python "${CLAUDE_SKILL_DIR}/scripts/form-edit.py" -FormPath "<путь>" -JsonPa
 - **pages**: `OnCurrentPageChange`
 - **button**: `Click`
 
-### Система типов (для attributes)
+### Type system (for attributes)
 
-`string`, `string(100)`, `decimal(15,2)`, `boolean`, `date`, `dateTime`, `CatalogRef.XXX`, `DocumentObject.XXX`, `ValueTable`, `DynamicList`, `Type1 | Type2` (составной).
+`string`, `string(100)`, `decimal(15,2)`, `boolean`, `date`, `dateTime`, `CatalogRef.XXX`, `DocumentObject.XXX`, `ValueTable`, `DynamicList`, `Type1 | Type2` (composite).
 
-### Секции расширений
+### Extension sections
 
-| Секция | Назначение |
+| Section | Purpose |
 |--------|-----------|
-| `formEvents` | События уровня формы с `callType` (Before/After/Override) |
-| `elementEvents` | События на существующих элементах заимствованной формы |
-| `callType` на `commands` | callType на Action команды |
-| `callType` на `on` | callType на событиях новых элементов (объектный формат) |
+| `formEvents` | Form-level events with `callType` (Before/After/Override) |
+| `elementEvents` | Events on existing elements of the borrowed form |
+| `callType` on `commands` | callType on the command's Action |
+| `callType` on `on` | callType on events of new elements (object format) |
 
-Все extension-секции опциональны — без них навык работает как с обычными формами.
+All extension sections are optional - without them the skill works as with regular forms.
 
 ## Workflow
 
-1. `/form-info` — посмотреть текущую структуру формы
-2. Создать JSON с описанием добавлений
-3. `/form-edit` — добавить в форму
-4. `/form-validate` — проверить корректность
-5. `/form-info` — убедиться что добавилось правильно
+1. `/form-info` - view the current form structure
+2. Create a JSON with the additions
+3. `/form-edit` - add to the form
+4. `/form-validate` - check correctness
+5. `/form-info` - make sure the additions are correct

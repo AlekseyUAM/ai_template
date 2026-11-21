@@ -1,6 +1,6 @@
 ---
 name: interface-validate
-description: Валидация командного интерфейса 1С. Используй после настройки командного интерфейса подсистемы для проверки корректности
+description: Validate the 1C command interface. Use after setting up a subsystem command interface to verify correctness
 argument-hint: <CIPath> [-Detailed] [-MaxErrors 30]
 allowed-tools:
   - Bash
@@ -8,20 +8,20 @@ allowed-tools:
   - Glob
 ---
 
-# /interface-validate — валидация CommandInterface.xml
+# /interface-validate - validation of CommandInterface.xml
 
-Проверяет XML командного интерфейса на структурные ошибки: корневой элемент, допустимые секции, порядок, формат ссылок на команды, дубликаты.
+Checks the command interface XML for structural errors: root element, allowed sections, order, command reference format, duplicates.
 
-## Параметры
+## Parameters
 
-| Параметр  | Обяз. | Умолч. | Описание                                |
+| Parameter | Req. | Default | Description                             |
 |-----------|:-----:|---------|-----------------------------------------|
-| CIPath    | да    | —       | Путь к CommandInterface.xml             |
-| Detailed  | нет   | —       | Подробный вывод (все проверки, включая успешные) |
-| MaxErrors | нет   | 30      | Остановиться после N ошибок              |
-| OutFile   | нет   | —       | Записать результат в файл (UTF-8 BOM)   |
+| CIPath    | yes   | -       | Path to CommandInterface.xml            |
+| Detailed  | no    | -       | Verbose output (all checks, including successful ones) |
+| MaxErrors | no    | 30      | Stop after N errors                     |
+| OutFile   | no    | -       | Write the result to a file (UTF-8 BOM)  |
 
-## Команда
+## Command
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/interface-validate.py" -CIPath "Subsystems/Продажи"

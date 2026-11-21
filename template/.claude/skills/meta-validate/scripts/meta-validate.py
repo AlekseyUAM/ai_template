@@ -7,24 +7,24 @@ import sys
 
 from lxml import etree
 
-# В batch скрипт выполняется повторно в том же процессе, и поток может оказаться подменённым
-# (у StringIO нет reconfigure) — кодировка к этому моменту уже выставлена первым прогоном.
+# In batch the script runs again in the same process, and the stream may already be replaced
+# (StringIO has no reconfigure) - the encoding was already set by the first run.
 try:
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
 except AttributeError:
     pass
 
-# Регистронезависимый ввод: имена параметров и значения choices принимаются
-# в любом регистре (в argparse по умолчанию совпадение точное).
+# Case-insensitive input: parameter names and choices values are accepted
+# in any case (argparse matches exactly by default).
 def ci_parse_args(parser, argv=None):
-    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
+    """parse_args: parameter names and choices values are accepted in any case."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
         if tok.startswith('-') and tok.lower() in names:
             argv[i] = names[tok.lower()]
-    # choices — зеркало [ValidateSet]; канонизируем ДО разбора, иначе argparse отвергнет регистр
+    # choices mirrors [ValidateSet]; canonicalize BEFORE parsing, otherwise argparse rejects the case
     choice_map = {}
     for a in parser._actions:
         if a.choices:
@@ -54,10 +54,10 @@ out_file = args.OutFile
 
 path_list = [p.strip() for p in args.ObjectPath.split('|') if p.strip()]
 if len(path_list) > 1:
-    # Каждый объект проверяется этим же скриптом в СВЕЖЕМ globals() (тот же процесс, чистое
-    # пространство имён на объект). Отдельный процесс на объект стоил бы
-    # старта интерпретатора с импортом lxml (~146 мс) при разборе в единицы миллисекунд; здесь и
-    # старт, и компиляция файла платятся один раз на весь батч.
+    # Each object is checked by this same script in a FRESH globals() (same process, clean
+    # namespace per object). A separate process per object would cost
+    # interpreter startup with lxml import (~146 ms) against parsing in a few milliseconds; here both
+    # startup and file compilation are paid once for the whole batch.
     batch_ok = 0
     batch_fail = 0
     with open(__file__, encoding="utf-8") as _f:
@@ -78,8 +78,8 @@ if len(path_list) > 1:
         except SystemExit as e:
             rc = e.code if isinstance(e.code, int) else 0
         except Exception as e:
-            # Падение одного объекта не должно рвать батч — в варианте с отдельным процессом
-            # это обеспечивалось изоляцией процессов.
+            # A failure of one object must not break the batch - in the separate-process variant
+            # this was ensured by process isolation.
             print(f"[ERROR] {single_path}: {type(e).__name__}: {e}")
             rc = 1
         finally:
@@ -115,8 +115,8 @@ if os.path.isdir(object_path):
             print(f"[ERROR] No XML file found in directory: {object_path}")
             sys.exit(1)
 
-# File not found -- прощающий ввод для плоских объектов (SessionParameter, CommonAttribute,
-# DefinedType, WSReference, ... -- один .xml без папки): дописать .xml к голому имени
+# File not found -- forgiving input for flat objects (SessionParameter, CommonAttribute,
+# DefinedType, WSReference, ... -- a single .xml without a folder): append .xml to a bare name
 if not os.path.exists(object_path) and not os.path.splitext(object_path)[1]:
     if os.path.exists(object_path + ".xml"):
         object_path = object_path + ".xml"
@@ -199,22 +199,22 @@ def finalize():
 
 
 # ── Format version ───────────────────────────────────────────
-# Проверенный диапазон версий формата выгрузки: 2.17 (8.3.24) … 2.21 (8.5). Полная лестница —
-# docs/1c-configuration-spec.md, «Лестница версий». Версию задаёт платформа ВЫГРУЗКИ, а не режим
-# совместимости конфигурации. Версии ниже 2.17 (платформы 8.3.23 и старше) существуют, но навыки
-# на них не проверялись — это предупреждение о непокрытии, а не о некорректности файла.
+# Verified dump format version range: 2.17 (8.3.24) ... 2.21 (8.5). The full ladder is in
+# docs/1c-configuration-spec.md, "Лестница версий". The version is set by the DUMP platform, not by the
+# configuration compatibility mode. Versions below 2.17 (platforms 8.3.23 and older) exist, but the skills
+# were not tested on them - this is a warning about lack of coverage, not about file incorrectness.
 FORMAT_VERIFIED_MIN = "2.17"
 FORMAT_VERIFIED_MAX = "2.21"
 
 
 def format_rank(ver):
-    """"2.20" → 220, "2.9" → 209. Строковое сравнение неверно ("2.9" > "2.17")."""
+    """"2.20" -> 220, "2.9" -> 209. String comparison is wrong ("2.9" > "2.17")."""
     m = re.match(r'^(\d+)\.(\d+)$', ver or '')
     return int(m.group(1)) * 100 + int(m.group(2)) if m else 0
 
 
-# Штамп версии формата — атрибут version КОРНЕВОГО элемента файла. Именно корневого: в Form.xml
-# расширения ниже стоит <BaseForm version=…>. Читается только заголовок, без разбора файла.
+# The format version stamp is the version attribute of the ROOT element of the file. The root one specifically: in the extension
+# Form.xml below there is <BaseForm version=...>. Only the header is read, without parsing the file.
 def root_version(xml_path):
     if not os.path.isfile(xml_path):
         return None
@@ -229,8 +229,8 @@ def root_version(xml_path):
     return None
 
 
-# Корень автономной внешней обработки/отчёта. Копия общего эталона (семья is_external_root,
-# авторитет — cf-edit).
+# Root of an autonomous external data processor/report. Copy of the shared reference (is_external_root family,
+# authority - cf-edit).
 def _sg_is_external_root(xml_path):
     if not os.path.isfile(xml_path):
         return False
@@ -244,9 +244,9 @@ def _sg_is_external_root(xml_path):
     return False
 
 
-# Якорь выгрузки, в чьём дереве лежит файл: корень автономной EPF/ERF либо Configuration.xml,
-# ближайший вверх. Корень обработки проверяется первым — иначе обработка, лежащая в дереве
-# конфигурации, сверялась бы с конфигурацией. Нет якоря — сверять не с чем.
+# Dump anchor in whose tree the file lies: the root of an autonomous EPF/ERF or Configuration.xml,
+# nearest upwards. The data processor root is checked first - otherwise a data processor lying in the configuration
+# tree would be compared against the configuration. No anchor - nothing to compare against.
 def find_dump_anchor(start_dir):
     d = start_dir
     for _ in range(15):
@@ -277,12 +277,12 @@ valid_types = (
     "Report", "DataProcessor",
     "CommonModule", "ScheduledJob", "EventSubscription",
     "HTTPService", "WebService", "DefinedType",
-    # Внешний источник данных и его таблица (корень файла таблицы — <Table>).
+    # External data source and its table (the table file root is <Table>).
     "ExternalDataSource", "Table",
 )
 
-# Валидные типы метаданных без глубоких правил валидации — раньше падали как "Unrecognized"
-# (ложная ошибка на валидном объекте). Для них выполняется базовая структурная проверка (root/uuid/Name).
+# Valid metadata types without deep validation rules - previously failed as "Unrecognized"
+# (a false error on a valid object). For them a basic structural check is performed (root/uuid/Name).
 structural_only_types = (
     "Subsystem", "Role", "CommonForm", "CommonCommand", "CommandGroup", "CommonAttribute",
     "CommonTemplate", "CommonPicture", "SessionParameter", "SettingsStorage", "FilterCriterion",
@@ -291,14 +291,14 @@ structural_only_types = (
     "WSReference", "XDTOPackage", "DocumentNumerator", "Sequence",
 )
 
-# Вложенные дескрипторы объекта: Forms/<Имя>.xml и Templates/<Имя>.xml. Корень тот же MetaDataObject,
-# но в ChildObjects конфигурации они не регистрируются и первым сегментом MDObjectRef не бывают —
-# в known_roots проверки 17 их не добавлять. Принимаются, чтобы пакетный прогон по списку изменённых
-# файлов не падал на них «Unrecognized».
+# Nested object descriptors: Forms/<Имя>.xml and Templates/<Имя>.xml. The root is the same MetaDataObject,
+# but they are not registered in the configuration ChildObjects and are never the first segment of MDObjectRef -
+# do not add them to known_roots of check 17. They are accepted so that a batch run over the list of changed
+# files does not fall on them with "Unrecognized".
 nested_descriptor_types = ("Form", "Template")
-# Вид формы/макета — по нему платформа выбирает читателя тела. Значения — docs/1c-configuration-spec.md,
-# свойства FormType и TemplateType. Список отдельный от valid_property_values: у авторитета meta-compile
-# этих ключей нет (формы и макеты создают form-add и template-add).
+# Form/template kind - the platform uses it to choose the body reader. Values - docs/1c-configuration-spec.md,
+# properties FormType and TemplateType. The list is separate from valid_property_values: the meta-compile authority
+# has no these keys (forms and templates are created by form-add and template-add).
 descriptor_kind_values = {
     "FormType": ("Managed", "Ordinary"),
     "TemplateType": ("SpreadsheetDocument", "BinaryData", "HTMLDocument", "TextDocument", "ActiveDocument",
@@ -326,8 +326,8 @@ generated_type_categories = {
     "DataProcessor":              ["Object", "Manager"],
     "DefinedType":                ["DefinedType"],
     "ExternalDataSource":         ["Manager", "TablesManager", "CubesManager"],
-    # Таблица внешнего источника: имя элемента трёхчастное (Префикс.Источник.Таблица),
-    # но проверка «имя оканчивается на .ИмяОбъекта» на нём работает как есть.
+    # External data source table: the element name is three-part (Префикс.Источник.Таблица),
+    # but the "name ends with .ИмяОбъекта" check works on it as is.
     "Table":                      ["Manager", "Object", "Ref", "List", "Record", "RecordSet", "RecordKey", "RecordManager"],
 }
 
@@ -352,13 +352,13 @@ standard_attributes_by_type = {
     "DocumentJournal":            ["Type", "Ref", "Date", "Posted", "DeletionMark", "Number"],
 }
 
-# Стандартные реквизиты, присутствие которых зависит от свойств объекта: у бухрегистра
-# PeriodAdjustment — от длины периода корректировки, RecordType — от корреспонденции; у регистра
-# накопления RecordType — от вида регистра. Их отсутствие законно, в «Missing» не попадают.
+# Standard attributes whose presence depends on object properties: for an accounting register
+# PeriodAdjustment - on the adjustment period length, RecordType - on correspondence; for an accumulation
+# register RecordType - on the register type. Their absence is legal, they do not fall into "Missing".
 std_attr_conditional_names = {
     "AccountingRegister":   ("PeriodAdjustment", "RecordType"),
     "AccumulationRegister": ("RecordType",),
-    # ExchangeDate — легаси-реквизит, объявлен лишь у части планов обмена: допустим, но не обязателен.
+    # ExchangeDate - a legacy attribute declared only on some exchange plans: allowed, but not required.
     "ExchangePlan":         ("ExchangeDate",),
 }
 
@@ -390,7 +390,7 @@ child_object_rules = {
     "DocumentJournal":            ["Column", "Form", "Template", "Command"],
     "HTTPService":                ["URLTemplate"],
     "WebService":                 ["Operation"],
-    # Внешний источник: таблицы перечислены именами, функции лежат полными узлами.
+    # External source: tables are listed by names, functions are stored as full nodes.
     "ExternalDataSource":         ["Table", "Function", "Cube"],
     "Table":                      ["Field", "Form", "Template", "Command"],
     "Constant":                   ["Form"],
@@ -400,7 +400,7 @@ child_object_rules = {
     "EventSubscription":          [],
 }
 
-# Группы командного интерфейса (зеркало meta-compile): раздела — без commandParameterType; формы — с параметром.
+# Command interface groups (mirror of meta-compile): sections - without commandParameterType; forms - with the parameter.
 SECTION_COMMAND_GROUPS = ["NavigationPanelImportant", "NavigationPanelOrdinary", "NavigationPanelSeeAlso",
                           "ActionsPanelCreate", "ActionsPanelReports", "ActionsPanelTools"]
 FORM_COMMAND_GROUPS = ["FormCommandBarImportant", "FormCommandBarCreateBasedOn",
@@ -417,12 +417,12 @@ valid_property_values = {
     "RealTimePosting":              ["Allow", "Deny"],
     "RegisterRecordsDeletion":      ["AutoDelete", "AutoDeleteOnUnpost", "AutoDeleteOff"],
     "RegisterRecordsWritingOnPost": ["WriteModified", "WriteSelected"],
-    # AutomaticAndManaged — только у внешнего источника данных и его таблиц.
+    # AutomaticAndManaged - only on an external data source and its tables.
     "DataLockControlMode":          ["Automatic", "Managed", "AutomaticAndManaged"],
     "FullTextSearch":               ["Use", "DontUse"],
     "DefaultPresentation":          ["AsDescription", "AsCode"],
-    # Уточнение по виду объекта («Вид.Свойство») — раньше общего списка. AsNumber («в виде номера»)
-    # есть только у задачи: у справочника и прочих платформа его отвергает (8.3.24 и 8.5.1).
+    # Refinement by object kind ("Вид.Свойство") - before the common list. AsNumber ("в виде номера")
+    # exists only on a task: the platform rejects it on a catalog and others (8.3.24 and 8.5.1).
     "Task.DefaultPresentation":     ["AsDescription", "AsNumber"],
     "HierarchyType":                ["HierarchyFoldersAndItems", "HierarchyOfItems"],
     "EditType":                     ["InDialog", "InList", "BothWays"],
@@ -575,13 +575,13 @@ output_lines.insert(0, f"=== Validation: {md_type}.{obj_name} ===")
 if check1_ok:
     report_ok(f"1. Root structure: MetaDataObject/{md_type}, version {version}")
 
-# ── Check 24: версия формата согласована внутри объекта; сверка с выгрузкой ──
-# Части объекта — дескриптор X.xml и штампованные тела X/Ext/*.xml — платформа загружает только в одной
-# версии: «Версия формата загружаемого файла … отличается от версии формата ранее загруженных файлов».
-# Формы и макеты объекта (Forms/F.xml + F/Ext/Form.xml, Templates/T.xml + T/Ext/Template.xml) — такие же
-# пары, проверяются вместе с объектом. Объекты разных версий между собой платформа грузит, это лишь неоднородность выгрузки (типично после
-# мержа веток, выгруженных разными платформами) — поэтому сверка с выгрузкой только предупреждает.
-# Стоит до ранних выходов: нужна каждому корню, включая structural-only и вложенные дескрипторы.
+# ── Check 24: format version is consistent within the object; comparison with the dump ──
+# Parts of an object - the descriptor X.xml and stamped bodies X/Ext/*.xml - the platform loads in only one
+# version: "Версия формата загружаемого файла … отличается от версии формата ранее загруженных файлов".
+# Forms and templates of the object (Forms/F.xml + F/Ext/Form.xml, Templates/T.xml + T/Ext/Template.xml) are the same
+# pairs, checked together with the object. The platform loads objects of different versions together, this is only dump heterogeneity (typical after
+# merging branches dumped by different platforms) - so the comparison with the dump only warns.
+# Placed before early exits: needed by every root, including structural-only and nested descriptors.
 obj_base_dir = os.path.dirname(resolved_path)
 obj_dir = os.path.join(obj_base_dir, os.path.splitext(os.path.basename(resolved_path))[0])
 ver_descriptors = [resolved_path]
@@ -617,8 +617,8 @@ for desc in ver_descriptors:
         body_ver = root_version(body)
         if not body_ver:
             continue
-        # У заимствованной формы расширения второй штамп — <BaseForm version=…>; платформа сверяет с
-        # дескриптором и его.
+        # For an adopted extension form the second stamp is <BaseForm version=...>; the platform compares
+        # the descriptor against it too.
         if bn == "Form.xml":
             with open(body, "r", encoding="utf-8-sig") as f:
                 body_text = f.read()
@@ -656,7 +656,7 @@ if dump_ver:
     else:
         report_ok(f"24. Format version: matches the dump ({dump_ver})")
 
-# ── Structural-only types: базовая проверка (Name), без type-specific правил ──
+# ── Structural-only types: basic check (Name), without type-specific rules ──
 if md_type in structural_only_types:
     if obj_name == "(unknown)":
         report_error("3. Properties: missing or empty Name")
@@ -667,7 +667,7 @@ if md_type in structural_only_types:
     finalize()
     sys.exit(1 if errors > 0 else 0)
 
-# ── Вложенные дескрипторы Form/Template: Name и вид формы/макета ──
+# ── Nested Form/Template descriptors: Name and form/template kind ──
 if md_type in nested_descriptor_types:
     if obj_name == "(unknown)":
         report_error("3. Properties: missing or empty Name")
@@ -805,7 +805,7 @@ if props_node is not None:
     check4_ok = True
 
     for prop_name, allowed in valid_property_values.items():
-        if "." in prop_name:   # «Вид.Свойство» — уточнение, не отдельное свойство
+        if "." in prop_name:   # "Вид.Свойство" is a refinement, not a separate property
             continue
         prop_node = find(props_node, f"md:{prop_name}")
         if prop_node is not None and inner_text(prop_node):
@@ -816,9 +816,9 @@ if props_node is not None:
                 check4_ok = False
             enum_checked += 1
 
-    # Корневой <Type> (дескриптор типа значения — Константа, ПВХ) должен быть структурным:
-    # <v8:Type>/<v8:TypeSet>, а не скалярный текст. Скаляр = повреждённый тип (напр. после
-    # старого meta-edit modify-property Type). См. issue #42.
+    # The root <Type> (value type descriptor - Константа, ПВХ) must be structural:
+    # <v8:Type>/<v8:TypeSet>, not scalar text. Scalar = corrupted type (e.g. after
+    # an old meta-edit modify-property Type). See issue #42.
     root_type_el = find(props_node, "md:Type")
     if root_type_el is not None:
         scalar_text = inner_text(root_type_el).strip()
@@ -854,7 +854,7 @@ if md_type in types_with_std_attrs:
             if sa_name:
                 found_names.append(sa_name)
                 if sa_name not in expected_std_attrs:
-                    # AccountingRegister: пары субконто, число которых задаётся планом счетов
+                    # AccountingRegister: pairs of subaccounts, the number of which is set by the chart of accounts
                     is_dynamic = (md_type == "AccountingRegister" and
                                   (re.match(r'^ExtDimension\d+$', sa_name) or
                                    re.match(r'^ExtDimensionType\d+$', sa_name)))
@@ -941,12 +941,12 @@ def check_child_element(node, kind, require_type):
 
     if require_type:
         type_el = find(el_props, "md:Type")
-        # Пустой <Type/> — это тип «Произвольный», штатная конструкция: в типовых так описаны
-        # служебные реквизиты обработок, платформа принимает и сохраняет её без изменений
-        # (проверено round-trip). Ошибкой здесь был бы отказ там, где платформа не отказывает.
+        # An empty <Type/> means the "Произвольный" type, a standard construct: in typical configurations this is how
+        # service attributes of data processors are described, the platform accepts and saves it unchanged
+        # (verified by round-trip). An error here would be a refusal where the platform does not refuse.
         if type_el is None:
-            # Блока Type нет вовсе: загрузка проходит, но платформа молча подставляет тип нового
-            # реквизита — Строка(10). Загрузку это не рвёт, а замысел теряет, отсюда WARN.
+            # There is no Type block at all: loading succeeds, but the platform silently substitutes the new
+            # attribute type - Строка(10). This does not break loading but loses the intent, hence WARN.
             report_warn(f"7. {kind} '{name_val}' — блок Type не задан; при загрузке платформа подставит Строка(10)")
 
     return True
@@ -977,8 +977,8 @@ if stopped:
     finalize()
     sys.exit(1)
 
-# ── Check 7b: Reserved attribute names (типозависимо: стандартные ДАННОГО типа, EN+RU) ───────
-# Совпадение имени собственного реквизита со стандартным (англ. или рус.) платформа не примет → ошибка.
+# ── Check 7b: Reserved attribute names (type-dependent: standard ones of THIS type, EN+RU) ───────
+# The platform will not accept a custom attribute name matching a standard one (English or Russian) -> error.
 
 RESERVED_EN_RU = {
     'Ref': 'Ссылка', 'DeletionMark': 'ПометкаУдаления', 'Code': 'Код', 'Description': 'Наименование',
@@ -1185,19 +1185,19 @@ if props_node is not None:
     # HierarchyType set but Hierarchical = false
     hierarchical = find(props_node, "md:Hierarchical")
     hierarchy_type = find(props_node, "md:HierarchyType")
-    # HierarchyType платформа пишет всегда, независимо от Hierarchical, и при выключенной иерархии
-    # просто его игнорирует (проверено: значение переживает round-trip). Дефолтное значение поэтому
-    # ни о чём не говорит — предупреждаем только о явно заданном другом типе иерархии: это похоже
-    # на "тип иерархии выбрали, а саму иерархию включить забыли".
+    # The platform always writes HierarchyType, regardless of Hierarchical, and with hierarchy disabled
+    # simply ignores it (verified: the value survives round-trip). The default value therefore says
+    # nothing - we warn only about an explicitly set different hierarchy type: this looks like
+    # "a hierarchy type was chosen but enabling the hierarchy itself was forgotten".
     if (hierarchical is not None and hierarchy_type is not None and
             inner_text(hierarchical) == "false" and inner_text(hierarchy_type)
             and inner_text(hierarchy_type) != "HierarchyFoldersAndItems"):
         report_warn(f"10. HierarchyType='{inner_text(hierarchy_type)}' but Hierarchical=false")
         check10_issues += 1
 
-    # Код/номер нулевой длины во вводе по строке: платформа отвергает загрузку — «Указано неверное
-    # поле для ввода по строке: Код/Номер» (8.3.24, 8.5.1). Бывает после правки длины в 0 без чистки
-    # InputByString (meta-edit так больше не делает, но ручную правку это не страхует).
+    # Zero-length code/number in input by string: the platform rejects loading - "Указано неверное
+    # поле для ввода по строке: Код/Номер" (8.3.24, 8.5.1). Happens after changing the length to 0 without cleaning
+    # InputByString (meta-edit no longer does this, but that does not protect against manual edits).
     ibs_fields = [inner_text(f).strip() for f in find_all(props_node, "md:InputByString/xr:Field")]
     for len_prop, std_attr in (("CodeLength", "Code"), ("NumberLength", "Number")):
         len_node = find(props_node, f"md:{len_prop}")
@@ -1233,9 +1233,9 @@ if props_node is not None:
 
         # Empty Source
         source = find(props_node, "md:Source")
-        # Источник задают и наборами типов (<v8:TypeSet>cfg:CatalogObject</v8:TypeSet>) — в типовых
-        # так описана каждая четвёртая подписка. Реально пустой источник платформа отвергает:
-        # «ПодпискаНаСобытие.X - Источник событий должен быть задан», поэтому это ошибка.
+        # Sources are also set by type sets (<v8:TypeSet>cfg:CatalogObject</v8:TypeSet>) - in typical configurations
+        # every fourth subscription is described this way. A really empty source is rejected by the platform:
+        # "ПодпискаНаСобытие.X - Источник событий должен быть задан", so this is an error.
         has_source = False
         if source is not None:
             source_types = find_all(source, "v8:Type")
@@ -1292,9 +1292,9 @@ if props_node is not None:
     # DocumentJournal: RegisteredDocuments should not be empty
     if md_type == 'DocumentJournal':
         reg_docs = find(props_node, 'md:RegisteredDocuments')
-        # Регистрируемые документы платформа перечисляет как <xr:Item xsi:type="xr:MDObjectRef">,
-        # так же их пишет meta-compile; форма с <v8:Type> сохранена на случай иных выгрузок.
-        # Пустой состав платформа отвергает: «Для журнала не заданы регистрируемые документы».
+        # The platform lists registered documents as <xr:Item xsi:type="xr:MDObjectRef">,
+        # meta-compile writes them the same way; the <v8:Type> form is kept for other kinds of dumps.
+        # An empty composition is rejected by the platform: "Для журнала не заданы регистрируемые документы".
         has_reg_docs = False
         if reg_docs is not None:
             items = find_all(reg_docs, 'v8:Type')
@@ -1536,16 +1536,16 @@ if props_node is not None and md_type in ("EventSubscription", "ScheduledJob") a
                 if os.path.exists(bsl_path):
                     with open(bsl_path, "r", encoding="utf-8-sig") as f:
                         bsl_content = f.read()
-                    # Список параметров переносится на следующие строки, и Экспорт оказывается не на
-                    # строке с именем — в типовых так объявлена каждая обработчик-процедура с длинной
-                    # сигнатурой. Отсюда (?s) для содержимого скобок и \s (а не пробел) перед Экспорт.
+                    # The parameter list wraps to following lines, and Экспорт ends up not on
+                    # the line with the name - in typical configurations this is how every handler procedure with a long
+                    # signature is declared. Hence (?s) for the parenthesis content and \s (not a space) before Экспорт.
                     export_pattern = rf"(?smi)^[ 	]*(Procedure|Function|Процедура|Функция)[ 	]+{re.escape(proc_name)}[ 	]*\([^)]*\)\s+(Export|Экспорт)"
                     if not re.search(export_pattern, bsl_content):
                         report_warn(f"13. {md_type}.{prop_label}: procedure '{proc_name}' not found as exported in CommonModule '{cm_name}'")
                         check13_ok = False
                 elif os.path.exists(os.path.splitext(bsl_path)[0] + ".bin"):
-                    # Модуль поставщика выгружен в двоичном виде (Module.bin) — текста нет by design,
-                    # проверять нечего. Предупреждать здесь значило бы шуметь о норме.
+                    # The vendor module is dumped in binary form (Module.bin) - there is no text by design,
+                    # nothing to check. Warning here would mean making noise about the norm.
                     pass
                 else:
                     report_warn(f"13. {md_type}.{prop_label}: BSL file not found ({bsl_path}), cannot verify procedure")
@@ -1591,7 +1591,7 @@ if stopped:
     finalize()
     sys.exit(1)
 
-# ── Check 15: Commands — Group обязателен/валиден; секц.группа несовместима с CommandParameterType ──
+# ── Check 15: Commands - Group required/valid; a section group is incompatible with CommandParameterType ──
 
 if child_obj_node is not None:
     commands = find_all(child_obj_node, "md:Command")
@@ -1630,16 +1630,16 @@ if child_obj_node is not None:
     if check15_ok and cmd_count > 0:
         report_ok(f"15. Commands: {cmd_count} command(s), groups valid")
 
-# ── Состав конфигурации (ChildObjects из Configuration.xml) ──
-# Платформа судит о существовании объекта по СОСТАВУ, а не по наличию файла. Файла может не быть
-# в частичной выгрузке: такой фрагмент грузится через /LoadConfigFromFiles -listFile слиянием с базой,
-# и ссылка на невыгруженный объект остаётся рабочей. Отсюда два разных исхода:
-#   нет в составе        -> платформа отвергнет загрузку всегда -> ERROR
-#   в составе, файла нет -> полная загрузка упадёт, частичная пройдёт -> WARN
-# ChildObjects конфигурации — плоский список <Вид>Имя</Вид>, поэтому ищем подстроку в границах секции
-# без копирования и без разбора XML. Кэш живёт только в пределах одного объекта: в batch-режиме
-# каждый следующий разбирается заново (новый процесс / чистое пространство имён),
-# так что полная карта (~100 мс) оплачивалась бы каждым объектом.
+# ── Configuration composition (ChildObjects from Configuration.xml) ──
+# The platform judges object existence by COMPOSITION, not by file presence. The file may be absent
+# in a partial dump: such a fragment is loaded via /LoadConfigFromFiles -listFile merged with the database,
+# and a reference to a non-dumped object remains valid. Hence two different outcomes:
+#   not in composition       -> the platform will always reject loading -> ERROR
+#   in composition, no file  -> full load fails, partial passes -> WARN
+# Configuration ChildObjects is a flat list <Вид>Имя</Вид>, so we search for a substring within section boundaries
+# without copying and without parsing XML. The cache lives only within one object: in batch mode
+# each next one is parsed anew (new process / clean namespace),
+# so the full map (~100 ms) would be paid by every object.
 
 _cfg_text = None
 _cfg_child_lower = None
@@ -1677,8 +1677,8 @@ def config_is_extension():
 
 
 def in_config_composition(kind, name):
-    """True — объект есть в составе; False — нет; None — состав неизвестен
-    (нет Configuration.xml или в нём нет ChildObjects), тогда вызывающий оставляет мягкий уровень."""
+    """True - the object is in the composition; False - not; None - the composition is unknown
+    (no Configuration.xml or no ChildObjects in it), then the caller keeps the soft level."""
     global _cfg_child_lower
     _init_config_text()
     if _cfg_child_start < 0:
@@ -1686,19 +1686,19 @@ def in_config_composition(kind, name):
     needle = "<{0}>{1}</{0}>".format(kind, name)
     if _cfg_text.find(needle, _cfg_child_start, _cfg_child_end) >= 0:
         return True
-    # Промах по точному совпадению — сверяем без учёта регистра, как это делает платформа.
-    # Порядок именно такой: точный поиск на порядок дешевле, а промахи редки. Нижний регистр
-    # берём от СРЕЗА и проверяем факт вхождения: смещения в lower() совпадать с оригиналом не обязаны.
+    # On an exact match miss - compare case-insensitively, as the platform does.
+    # The order is exactly this: exact search is an order of magnitude cheaper, and misses are rare. Lower case
+    # is taken from the SLICE and we check the fact of occurrence: offsets in lower() need not match the original.
     if _cfg_child_lower is None:
         _cfg_child_lower = _cfg_text[_cfg_child_start:_cfg_child_end].lower()
     return needle.lower() in _cfg_child_lower
 
 
-# ── Check 16: Reference type existence — типы вида CatalogRef.X должны разрешаться в объекты конфигурации ──
-# Уровень выбирается по составу конфигурации: типа нет в ChildObjects — «Неизвестное имя типа» при
-# загрузке (ERROR); объект в составе есть, а файла в выгрузке нет — частичная выгрузка (WARN).
-# Расширения (CFE) пропускаем — их типы ссылаются на объекты базовой конфигурации, которых в выгрузке
-# расширения нет.
+# ── Check 16: Reference type existence - types like CatalogRef.X must resolve to configuration objects ──
+# The level is chosen by configuration composition: the type is not in ChildObjects - "Неизвестное имя типа" on
+# load (ERROR); the object is in the composition but there is no file in the dump - partial dump (WARN).
+# We skip extensions (CFE) - their types reference base configuration objects that are absent from the extension
+# dump.
 
 if config_dir:
     is_extension = config_is_extension()
@@ -1709,10 +1709,10 @@ if config_dir:
             "ChartOfCalculationTypesRef": "ChartsOfCalculationTypes", "BusinessProcessRef": "BusinessProcesses",
             "ExchangePlanRef": "ExchangePlans", "TaskRef": "Tasks", "DefinedType": "DefinedTypes",
         }
-        checked_refs = {}   # ref_key -> найден ли; для условия OK
-        missing_refs = {}   # ref_key -> ref_dir; объект есть в составе, файла в выгрузке нет
-        absent_refs = {}    # ref_key -> ref_dir; объекта нет в составе конфигурации
-        unknown_refs = {}   # ref_key -> ref_dir; состав неизвестен (Configuration.xml без ChildObjects)
+        checked_refs = {}   # ref_key -> whether found; for the OK condition
+        missing_refs = {}   # ref_key -> ref_dir; the object is in the composition, no file in the dump
+        absent_refs = {}    # ref_key -> ref_dir; the object is not in the configuration composition
+        unknown_refs = {}   # ref_key -> ref_dir; composition unknown (Configuration.xml without ChildObjects)
         for tn in find_all(root, ".//v8:Type"):
             tv = inner_text(tn).strip()
             if not tv:
@@ -1737,8 +1737,8 @@ if config_dir:
                 checked_refs[ref_key] = True
             else:
                 checked_refs[ref_key] = False
-                # Вид метаданных в ChildObjects — это тип без суффикса Ref (CatalogRef -> Catalog);
-                # DefinedType суффикса не имеет и пишется в состав как есть.
+                # The metadata kind in ChildObjects is the type without the Ref suffix (CatalogRef -> Catalog);
+                # DefinedType has no suffix and is written to the composition as is.
                 ref_kind_tag = ref_cat[:-3] if ref_cat.endswith("Ref") else ref_cat
                 in_composition = in_config_composition(ref_kind_tag, ref_name)
                 if in_composition is False:
@@ -1756,28 +1756,28 @@ if config_dir:
         if not absent_refs and not missing_refs and not unknown_refs and checked_refs:
             report_ok(f"16. Reference types: {len(checked_refs)} resolved")
 
-# ── Check 22: имя типа — грамматика (уровень 1) и словарь по контексту владельца (уровень 2) ──
-# УРОВЕНЬ 1 не зависит ни от версии платформы, ни от состава конфигурации: содержимое <v8:Type>
-# всегда несёт префикс пространства имён (xs:/v8:/cfg:/dNpM:/ent:/…). Голое имя платформа не примет
-# никогда — так выглядит и тип СУБД («varchar(150)»), и опечатка («Srting(20)»).
-# УРОВЕНЬ 2 — словарь: у хранимого объекта набор типов у́же, чем у обработки или отчёта, где
-# доступны ТаблицаЗначений, ОписаниеТипов, Картинка и прочие рантайм-типы. Здесь только
-# предупреждение: список конечен, но пополняется с версиями платформы.
+# ── Check 22: type name - grammar (level 1) and dictionary by owner context (level 2) ──
+# LEVEL 1 depends neither on the platform version nor on the configuration composition: the content of <v8:Type>
+# always carries a namespace prefix (xs:/v8:/cfg:/dNpM:/ent:/...). The platform will never accept a bare name -
+# that is how a DBMS type ("varchar(150)") and a typo ("Srting(20)") look.
+# LEVEL 2 is the dictionary: a stored object has a narrower set of types than a data processor or report, where
+# ТаблицаЗначений, ОписаниеТипов, Картинка and other runtime types are available. Here it is only
+# a warning: the list is finite but grows with platform versions.
 KNOWN_XS_TYPES = {"xs:string", "xs:decimal", "xs:boolean", "xs:dateTime", "xs:base64Binary"}
 KNOWN_V8_TYPES = {
     "ValueStorage", "UUID", "Null", "Type", "ValueTable", "ValueTree", "ValueList",
     "ValueListType", "StandardPeriod", "StandardBeginningDate", "PointInTime", "TypeDescription",
     "FixedArray", "FixedMap", "FixedStructure", "FillChecking", "Universal",
 }
-# Ссылочные метатипы: с именем объекта (<Метатип>.<Имя>) — конкретный тип, без имени — множество.
+# Reference metatypes: with an object name (<Метатип>.<Имя>) - a concrete type, without a name - a set.
 REF_META_TYPES = {
     "CatalogRef", "DocumentRef", "EnumRef", "ChartOfAccountsRef",
     "ChartOfCharacteristicTypesRef", "ChartOfCalculationTypesRef", "ExchangePlanRef",
     "BusinessProcessRef", "BusinessProcessRoutePointRef", "TaskRef", "AnyRef", "AnyIBRef",
 }
-# Прочие имена пространства current-config без точки — платформенные, состав конфигурации их не меняет.
+# Other current-config namespace names without a dot are platform ones, the configuration composition does not change them.
 CFG_BARE_NAMES = {"ConstantsSet", "ReportBuilder", "FilterCriterion", "DynamicList"}
-# Виды, чьи реквизиты ХРАНЯТСЯ в базе: там рантайм-типы недопустимы. У обработки и отчёта — наоборот.
+# Kinds whose attributes are STORED in the database: runtime types are not allowed there. For a data processor and report it is the opposite.
 STORED_OWNER_TYPES = {
     "Catalog", "Document", "DocumentJournal", "InformationRegister", "AccumulationRegister",
     "AccountingRegister", "CalculationRegister", "ChartOfAccounts", "ChartOfCharacteristicTypes",
@@ -1825,14 +1825,14 @@ for tn in type_nodes_22:
         if local not in KNOWN_V8_TYPES:
             unknown_vocab[t] = True
     elif prefix == "cfg" or re.match(r"^d\d+p\d+$", prefix):
-        # Имя объекта конфигурации проверяет Check 16; здесь — только форма и платформенная часть.
+        # The configuration object name is checked by Check 16; here - only the form and the platform part.
         if "." not in local:
             if (local not in REF_META_TYPES and local not in CFG_BARE_NAMES
                     and not re.match(r"^[A-Za-z][A-Za-z0-9]*(Object|Manager|List|Selection|RecordSet|RecordKey|RecordManager)$", local)):
                 unknown_vocab[t] = True
         elif not re.match(r"^[A-Za-z][A-Za-z0-9]*\.[^.]+(\.[^.]+)?$", local):
             bad_grammar[t] = True
-    # Прочие пространства (ent:, v8ui:, dcs*:, mxl: …) — форму имени не навязываем: там свои словари.
+    # Other namespaces (ent:, v8ui:, dcs*:, mxl: ...) - we do not impose a name form: they have their own dictionaries.
 
     if md_type in STORED_OWNER_TYPES:
         owner = tn.getparent()                                  # <Type>
@@ -1853,17 +1853,17 @@ for uk in sorted(unknown_vocab):
 if not bad_grammar and not not_storable and not unknown_vocab and types_seen:
     report_ok(f"22. Type names: {types_seen} checked")
 
-# ── Check 23: тип-множество там, где его не принимают ──
-# Три уровня строгости, все замерены загрузкой в базу на 8.3.24.1691:
-#  ERROR — множество в составе определяемого типа: платформа отвергает файл целиком
-#          («ОпределяемыйТип.<Имя> - Недопустимый тип»), проверено на ОпределяемыйТип,
-#          Характеристика, ЛюбаяСсылка и голых ссылках;
-#  WARN  — голый метатип в типе значения ПВХ: загрузка проходит, но Конфигуратор такой тип не
-#          предлагает (в дереве выбора это папка без флажка), а ЛюбаяСсылка на выгрузке
-#          возвращается как ЛюбаяСсылкаИБ;
-#  WARN  — определяемый тип или характеристика одним из составного: Конфигуратор даёт
-#          выбрать их только единственными (характеристику — даже с другой характеристикой). В корпусе erp+acc 6500 единственных против 1 составного — и этот один
-#          лежит в типовой ERP (Документ.НачислениеИСписаниеБонусныхБаллов.Баллы), поэтому не ошибка.
+# ── Check 23: type set where it is not accepted ──
+# Three strictness levels, all measured by loading into a database on 8.3.24.1691:
+#  ERROR - a set inside a defined type composition: the platform rejects the file entirely
+#          ("ОпределяемыйТип.<Имя> - Недопустимый тип"), checked on ОпределяемыйТип,
+#          Характеристика, ЛюбаяСсылка and bare references;
+#  WARN  - a bare metatype in the value type of a ПВХ: loading succeeds, but Configurator does not
+#          offer such a type (in the chooser tree it is a folder without a checkbox), and ЛюбаяСсылка in a dump
+#          comes back as ЛюбаяСсылкаИБ;
+#  WARN  - a defined type or characteristic as one of a composite: Configurator allows
+#          choosing them only as the sole type (a characteristic - even with another characteristic). In the erp+acc corpus 6500 sole ones against 1 composite - and this one
+#          lies in the typical ERP (Документ.НачислениеИСписаниеБонусныхБаллов.Баллы), so it is not an error.
 dt_sets_seen = 0
 dt_sets_bad = False
 for tb in root.xpath("//md:Type | //md:ValueType", namespaces=NS):
@@ -1889,18 +1889,18 @@ for tb in root.xpath("//md:Type | //md:ValueType", namespaces=NS):
 if dt_sets_seen and not dt_sets_bad:
     report_ok(f"23. Type sets: {dt_sets_seen} block(s) checked")
 
-# ── Check 18: свойства, появившиеся в новых версиях формата ──
-# Реестр «тег → минимальная версия формата». Служит двум целям: (1) поймать свойство в файле со
-# слишком старым штампом — при сборке на старой платформе оно будет молча отброшено (платформа
-# рапортует успех, а свойство теряется); (2) подсказать, что конструкция требует более нового
-# формата. Расширяется одной строкой на свойство — задел под 2.21 (8.5) и последующие.
+# ── Check 18: properties introduced in new format versions ──
+# Registry "tag -> minimum format version". Serves two purposes: (1) catch a property in a file with
+# too old a stamp - when assembled on an old platform it will be silently discarded (the platform
+# reports success while the property is lost); (2) hint that a construct requires a newer
+# format. Extended with one line per property - headroom for 2.21 (8.5) and later.
 versioned_props = {
-    "TypeReductionMode": "2.18",   # режим приведения типов (стандартные реквизиты, измерения РС)
-    "LineNumberLength": "2.20",    # длина номера строки ТЧ (5..9)
-    # 2.21 (8.5): подтверждено синтетикой — одни исходники, выгрузка с 8.3.27 и с 8.5.1.
-    "Color": "2.21",                            # цвет значения перечисления
-    "AuxiliaryVariantForm": "2.21",             # вспомогательная форма варианта отчёта
-    "UseInInterfaceCompatibilityMode": "2.21",  # использование общей формы в режиме совместимости интерфейса
+    "TypeReductionMode": "2.18",   # type reduction mode (standard attributes, information register dimensions)
+    "LineNumberLength": "2.20",    # tabular section line number length (5..9)
+    # 2.21 (8.5): confirmed by synthetic tests - same sources, dumps from 8.3.27 and 8.5.1.
+    "Color": "2.21",                            # enum value color
+    "AuxiliaryVariantForm": "2.21",             # auxiliary report variant form
+    "UseInInterfaceCompatibilityMode": "2.21",  # use of a common form in interface compatibility mode
 }
 
 file_rank = version_rank
@@ -1910,8 +1910,8 @@ if file_rank > 0:
         if nodes and file_rank < format_rank(versioned_props[vp]):
             report_error(f"18. <{vp}> появился в формате {versioned_props[vp]}, а файл объявлен как {version} — на платформе этой версии свойство будет отброшено при загрузке")
 
-# ── Check 19: LineNumberLength — допустимый диапазон 5..9 ──
-# Длина номера строки ТЧ: 5 (до 99 999 строк) … 9 (до 999 999 999). Границы — из документации 1С.
+# ── Check 19: LineNumberLength - allowed range 5..9 ──
+# Tabular section line number length: 5 (up to 99 999 lines) ... 9 (up to 999 999 999). Bounds are from the 1C documentation.
 for lnl in find_all(root, "//md:LineNumberLength"):
     raw = inner_text(lnl).strip()
     if not re.match(r'^\d+$', raw):
@@ -1919,17 +1919,17 @@ for lnl in find_all(root, "//md:LineNumberLength"):
     elif int(raw) < 5 or int(raw) > 9:
         report_error(f"19. LineNumberLength={raw} вне допустимого диапазона 5..9")
 
-# ── Check 17: MDObjectRef form — ссылка на ОБЪЕКТ метаданных, а не на тип ссылки ──
-# Owners/BasedOn/RegisterRecords/RegisteredDocuments/References содержат путь вида "Catalog.Валюты".
-# "CatalogRef.Валюты" — частая ошибка (тип ссылки вместо объекта): платформа отвечает
-# «Неизвестный объект метаданных». Вида метаданных, оканчивающегося на Ref, не существует → ERROR.
-# Неизвестный первый сегмент без Ref — только WARN (список видов может быть неполон).
+# ── Check 17: MDObjectRef form - a reference to a metadata OBJECT, not to a reference type ──
+# Owners/BasedOn/RegisterRecords/RegisteredDocuments/References contain a path like "Catalog.Валюты".
+# "CatalogRef.Валюты" is a common mistake (a reference type instead of an object): the platform responds
+# "Неизвестный объект метаданных". A metadata kind ending in Ref does not exist -> ERROR.
+# An unknown first segment without Ref - only WARN (the list of kinds may be incomplete).
 
 md_ref_nodes = find_all(root, "//*[@xsi:type='xr:MDObjectRef']")
 if md_ref_nodes:
     known_roots = tuple(valid_types) + tuple(structural_only_types)
-    bad_ref_form = {}    # значение -> True (ссылочная форма, гарантированно нерабочая)
-    unknown_root = {}    # значение -> корень
+    bad_ref_form = {}    # value -> True (reference form, guaranteed not to work)
+    unknown_root = {}    # value -> root
     for rn in md_ref_nodes:
         rv = inner_text(rn).strip()
         if not rv:
@@ -1949,18 +1949,18 @@ if md_ref_nodes:
     if not bad_ref_form and not unknown_root:
         report_ok(f"17. MDObjectRef form: {len(md_ref_nodes)} checked")
 
-# ── Check 20: Default*Form / Auxiliary*Form / ChoiceForm — ссылка на существующую форму ──
-# Платформа отвергает загрузку: «Неизвестный объект метаданных - Catalog.Товары.Form.НетТакойФормы».
-# Две формы записи: "CommonForm.Имя" и "<Вид>.<Объект>.Form.<Форма>", причём объект может быть чужим
-# (DefaultChoiceForm документа указывает на форму журнала документов). Для СВОЕГО объекта проверяем
-# регистрацию формы в ChildObjects — работает и на одиночном файле; для чужого и общей формы нужна
-# конфигурация. Заимствованные объекты расширения (ObjectBelonging=Adopted) пропускаем: их формы
-# живут в основной конфигурации, в выгрузке расширения их нет.
+# ── Check 20: Default*Form / Auxiliary*Form / ChoiceForm - reference to an existing form ──
+# The platform rejects loading: "Неизвестный объект метаданных - Catalog.Товары.Form.НетТакойФормы".
+# Two notation forms: "CommonForm.Имя" and "<Вид>.<Объект>.Form.<Форма>", and the object may be foreign
+# (a document DefaultChoiceForm points to a document journal form). For its OWN object we check
+# form registration in ChildObjects - works even on a single file; for a foreign object and a common form the
+# configuration is needed. We skip adopted extension objects (ObjectBelonging=Adopted): their forms
+# live in the main configuration, they are absent from the extension dump.
 #
-# Уровень везде выбирается по составу, а не по наличию файла (см. in_config_composition):
-# нет в ChildObjects — платформа откажет и при полной, и при частичной загрузке (ERROR);
-# в составе есть, а файла в выгрузке нет — это фрагмент частичной выгрузки, и загрузится он или нет,
-# зависит от состояния конфигурации БД, которого валидатору не видно (WARN).
+# The level is everywhere chosen by composition, not by file presence (see in_config_composition):
+# not in ChildObjects - the platform will refuse both full and partial loading (ERROR);
+# in the composition but no file in the dump - this is a partial dump fragment, and whether it loads
+# depends on the DB configuration state, which the validator cannot see (WARN).
 
 form_owner_dir_map = {
     "Catalog": "Catalogs", "Document": "Documents", "DocumentJournal": "DocumentJournals",
@@ -1990,7 +1990,7 @@ def _form_file_exists_20(base_dir, form_name):
 if not is_adopted:
     is_extension_20 = config_is_extension()
 
-    # формы своего объекта: имена из ChildObjects (сравнение регистронезависимое — как у платформы)
+    # forms of its own object: names from ChildObjects (case-insensitive comparison, like in the platform)
     own_forms = {}
     if child_obj_node is not None:
         for child in child_obj_node:
@@ -2006,14 +2006,14 @@ if not is_adopted:
         if not isinstance(frn.tag, str):
             continue
         tag = local_name(frn)
-        # ChoiceForm — «форма выбора» реквизита, ссылка того же вида, что и Default*Form.
+        # ChoiceForm - the attribute "choice form", a reference of the same kind as Default*Form.
         if not TAG_RE_20.match(tag) and tag != "ChoiceForm":
             continue
         ref = inner_text(frn).strip()
         if not ref:
             continue
-        # Значением бывает GUID (erp: Report.СверкаДанныхОУиБУ, DefaultVariantForm) — проверить
-        # его без обхода всех форм нельзя; cf-validate (Check 9) такие тоже пропускает.
+        # The value is sometimes a GUID (erp: Report.СверкаДанныхОУиБУ, DefaultVariantForm) - it cannot
+        # be checked without walking all forms; cf-validate (Check 9) skips these too.
         if GUID_RE_20.match(ref):
             continue
         parts = ref.split(".")
@@ -2036,9 +2036,9 @@ if not is_adopted:
                     form_ref_bad = True
             continue
 
-        # Ссылка на форму таблицы внешнего источника — шестичастная:
-        # ExternalDataSource.<Источник>.Table.<Таблица>.Form.<Форма>. Сводим её к четырём частям
-        # (вид = Table, объект = имя таблицы), дальше проверка общая.
+        # The form reference of an external data source table is six-part:
+        # ExternalDataSource.<Источник>.Table.<Таблица>.Form.<Форма>. We reduce it to four parts
+        # (kind = Table, object = table name), then the check is common.
         if (len(parts) == 6 and parts[0] == "ExternalDataSource"
                 and parts[2] == "Table" and parts[4] == "Form"):
             parts = ["Table", parts[3], "Form", parts[5]]
@@ -2057,10 +2057,10 @@ if not is_adopted:
                              f"ChildObjects объекта (есть: {known}) — «Неизвестный объект метаданных» при загрузке")
                 form_ref_bad = True
             elif os.path.isdir(own_dir) and not _form_file_exists_20(own_dir, ref_form):
-                # Форма в составе объекта есть, файла нет. Для дерева, претендующего на полноту
-                # (рядом лежит Configuration.xml), это ошибка целостности — полная загрузка упадёт
-                # на «Файл объекта не существует». Для фрагмента частичной выгрузки — норма:
-                # такой файл грузится через -listFile слиянием с конфигурацией БД.
+                # The form is in the object composition, there is no file. For a tree claiming completeness
+                # (Configuration.xml lies nearby) this is an integrity error - a full load will fail
+                # on "Файл объекта не существует". For a partial dump fragment it is the norm:
+                # such a file is loaded via -listFile merged with the DB configuration.
                 if config_dir:
                     report_error(f"20. {tag} '{ref}' — форма зарегистрирована в ChildObjects, но файл "
                                  f"формы отсутствует ({obj_name}/Forms/{ref_form})")
@@ -2070,7 +2070,7 @@ if not is_adopted:
                                 f"в выгрузке нет ({obj_name}/Forms/{ref_form})")
             continue
 
-        # чужой объект (например журнал документов) — нужна конфигурация
+        # a foreign object (e.g. a document journal) - the configuration is needed
         if is_extension_20 or not config_dir:
             continue
         ref_dir_20 = form_owner_dir_map.get(ref_kind)
@@ -2098,9 +2098,9 @@ if not is_adopted:
     if form_refs_checked > 0 and not form_ref_bad:
         report_ok(f"20. Form refs: {form_refs_checked} resolved")
 
-# ── Check 21: таблица внешнего источника — ссылки на поля и наличие ключа ──
-# Свойства таблицы ссылаются на её же поля полным путём. Опечатка в имени поля даёт
-# «Неизвестный объект метаданных» при загрузке, а найти её глазами в шестичастном пути трудно.
+# ── Check 21: external data source table - field references and key presence ──
+# Table properties reference its own fields by full path. A typo in a field name gives
+# "Неизвестный объект метаданных" on load, and finding it by eye in a six-part path is hard.
 if md_type == "Table":
     field_names = set()
     if child_obj_node is not None:
@@ -2118,7 +2118,7 @@ if md_type == "Table":
         for ref in refs:
             eds_refs_checked += 1
             parts = ref.split(".")
-            # Ожидается ExternalDataSource.<Источник>.Table.<Таблица>.Field.<Поле>
+            # Expected: ExternalDataSource.<Источник>.Table.<Таблица>.Field.<Поле>
             if len(parts) != 6 or parts[0] != "ExternalDataSource" or parts[2] != "Table" or parts[4] != "Field":
                 report_error(f"21. {tag} '{ref}' — ожидается ExternalDataSource.<Источник>.Table.<Таблица>.Field.<Поле>")
                 eds_refs_bad = True
@@ -2134,8 +2134,8 @@ if md_type == "Table":
     if eds_refs_checked > 0 and not eds_refs_bad:
         report_ok(f"21. Field refs: {eds_refs_checked} resolved")
 
-    # Ключ: загрузка XML таблицу без ключа принимает (проверено на платформе), а Конфигуратор
-    # интерактивно требует. Отсюда предупреждение, а не ошибка: рабочие конфигурации без ключа есть.
+    # Key: XML loading accepts a table without a key (verified on the platform), while Configurator
+    # requires it interactively. Hence a warning, not an error: working configurations without a key exist.
     if not find_all(props_node, "md:KeyFields/xr:Field"):
         report_warn("21. KeyFields пуст — платформа такую таблицу загрузит, но форма записи и набор записей будут недоступны")
 

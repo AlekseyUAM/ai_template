@@ -1,4 +1,4 @@
-# extract_queries.py — порт src/cli/extractQueries.ts (query_console_vscode).
+# extract_queries.py - port of src/cli/extractQueries.ts (query_console_vscode).
 import argparse
 import os
 import re
@@ -19,8 +19,8 @@ _NEW_QUERY_RE = re.compile(r"\bНовый\s+Запрос\b", re.IGNORECASE)
 
 
 def _strip_leading_comments(text: str) -> str:
-    """Убрать ведущие пустые строки и строки-комментарии //..., а также
-    отступ первой строки (после `|`-снятия он остаётся от `Запрос.Текст = "`)."""
+    """Remove leading empty lines and //... comment lines, as well as
+    the indent of the first line (after `|` removal it remains from `Запрос.Текст = "`)."""
     lines = text.split("\n")
     i = 0
     while i < len(lines):
@@ -36,7 +36,7 @@ def _strip_leading_comments(text: str) -> str:
 
 
 def _sanitize_bsl(source: str) -> str:
-    """Заменить строки и комментарии пробелами, сохранив переводы строк."""
+    """Replace strings and comments with spaces, keeping line breaks."""
     out = []
     i, n = 0, len(source)
     while i < n:

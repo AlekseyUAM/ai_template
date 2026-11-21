@@ -1,48 +1,48 @@
-# Доступ по ролям
+# Role-based access
 
-Единый механизм платформы для разграничения по ролям: задаётся общее значение для всех ролей плюс исключения для конкретных ролей. Один и тот же формат значения у четырёх ключей — каждый на своём владельце:
+A single platform mechanism for role-based differentiation: a common value for all roles plus exceptions for specific roles. The same value format for four keys - each on its own owner:
 
-| Ключ | Владелец | Смысл |
+| Key | Owner | Meaning |
 |------|----------|-------|
-| `userVisible` | элемент формы | пользовательская видимость элемента |
-| `view` | реквизит формы | право просмотра |
-| `edit` | реквизит формы | право редактирования |
-| `use` | команда формы | доступность команды |
+| `userVisible` | form element | custom visibility of the element |
+| `view` | form attribute | view right |
+| `edit` | form attribute | edit right |
+| `use` | form command | command availability |
 
-Ключ необязателен: его отсутствие = полный доступ для всех ролей.
+The key is optional: its absence = full access for all roles.
 
-## Значение
+## Value
 
-Две формы (одинаковы для всех четырёх ключей):
+Two forms (the same for all four keys):
 
-**Скаляр** `true` / `false` — общее значение для всех ролей, без исключений:
+**Scalar** `true` / `false` - a common value for all roles, without exceptions:
 
 ```json
 { "input": "Поле", "userVisible": false }
 ```
 
-**Объект** `{ "common": <bool>, "roles": { "ИмяРоли": <bool>, … } }` — общее значение `common` плюс явные исключения по ролям:
+**Object** `{ "common": <bool>, "roles": { "ИмяРоли": <bool>, … } }` - the common value `common` plus explicit role exceptions:
 
 ```json
 { "name": "Реквизит",
   "edit": { "common": false, "roles": { "ПолныеПрава": true } } }
 ```
 
-Роль, **не указанная** в `roles`, наследует `common`. Указанная — задаёт явный `true`/`false` (может и совпадать с `common`).
+A role **not specified** in `roles` inherits `common`. A specified one sets an explicit `true`/`false` (may also coincide with `common`).
 
-## Имя роли
+## Role name
 
-Ключи в `roles` — имена ролей конфигурации (`ПолныеПрава`, `Бухгалтер`, …).
+The keys in `roles` are configuration role names (`ПолныеПрава`, `Бухгалтер`, …).
 
-## Примеры
+## Examples
 
-Элемент скрыт у всех пользователей:
+The element is hidden from all users:
 
 ```json
 { "input": "Комментарий", "userVisible": false }
 ```
 
-Реквизит не виден никому и редактируется только одной ролью:
+The attribute is visible to no one and is editable only by one role:
 
 ```json
 { "name": "СуммаБонуса",
@@ -50,7 +50,7 @@
   "edit": { "common": false, "roles": { "ПолныеПрава": true } } }
 ```
 
-Поле доступно для просмотра всем, но редактируемо только администратору:
+The field is viewable by everyone, but editable only by the administrator:
 
 ```json
 { "name": "Статус",
@@ -58,14 +58,14 @@
   "edit": { "common": false, "roles": { "Администратор": true } } }
 ```
 
-Команда недоступна по умолчанию, разрешена только бухгалтеру:
+The command is unavailable by default, allowed only to the accountant:
 
 ```json
 { "name": "ПровестиЗакрытие",
   "use": { "common": false, "roles": { "Бухгалтер": true } } }
 ```
 
-Обратный случай — доступно всем, кроме одной роли:
+The reverse case - available to everyone except one role:
 
 ```json
 { "name": "РедактироватьЦену",

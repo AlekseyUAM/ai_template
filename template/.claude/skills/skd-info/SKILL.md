@@ -1,6 +1,6 @@
 ---
 name: skd-info
-description: Анализ структуры схемы компоновки данных 1С (СКД) — наборы, поля, параметры, варианты. Используй для понимания отчёта — источник данных (запрос), доступные поля, параметры
+description: Analyze the structure of a 1C data composition schema (DCS) - data sets, fields, parameters, variants. Use to understand a report - data source (query), available fields, parameters
 argument-hint: <TemplatePath> [-Mode overview|query|fields|links|calculated|resources|params|variant|templates|trace|full] [-Name <dataset|variant|field|group>] [-Raw]
 allowed-tools:
   - Bash
@@ -8,27 +8,27 @@ allowed-tools:
   - Glob
 ---
 
-# /skd-info — Анализ схемы компоновки данных
+# /skd-info - Data composition schema analysis
 
-Читает Template.xml схемы компоновки данных (СКД) и выводит компактную сводку. Заменяет необходимость читать тысячи строк XML.
+Reads Template.xml of a data composition schema (DCS) and outputs a compact summary. Replaces the need to read thousands of lines of XML.
 
-## Параметры и команда
+## Parameters and command
 
-| Параметр | Описание |
+| Parameter | Description |
 |----------|----------|
-| `TemplatePath` | Путь к Template.xml или каталогу макета (авто-резолв в `Ext/Template.xml`) |
-| `Mode` | Режим анализа (по умолчанию `overview`) |
-| `Name` | Имя набора (query), поля (fields/calculated/resources/trace), варианта (variant) или группировки/поля (templates) |
-| `Batch` | Номер пакета запроса, 0 = все (только query) |
-| `Raw` | (только query) сырой текст запроса целиком, без заголовков/оглавления/разделителей пакетов. Для выгрузки в `.sql` и возврата через `skd-edit set-query @file` |
-| `Limit` / `Offset` | Пагинация (по умолчанию 150 строк; `-Raw` не усекается) |
-| `OutFile` | Записать результат в файл (UTF-8 BOM) |
+| `TemplatePath` | Path to Template.xml or the template directory (auto-resolved to `Ext/Template.xml`) |
+| `Mode` | Analysis mode (default `overview`) |
+| `Name` | Name of the data set (query), field (fields/calculated/resources/trace), variant (variant) or grouping/field (templates) |
+| `Batch` | Query batch number, 0 = all (query only) |
+| `Raw` | (query only) the raw query text in full, without headings/table of contents/batch separators. For dumping to `.sql` and returning via `skd-edit set-query @file` |
+| `Limit` / `Offset` | Pagination (150 lines by default; `-Raw` is not truncated) |
+| `OutFile` | Write the result to a file (UTF-8 BOM) |
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/skd-info.py" -TemplatePath "<путь>"
 ```
 
-С указанием режима:
+With a mode specified:
 ```bash
 ... -Mode query -Name НоменклатураСЦенами
 ... -Mode query -Name ДанныеТ13 -Batch 3
@@ -42,49 +42,49 @@ python "${CLAUDE_SKILL_DIR}/scripts/skd-info.py" -TemplatePath "<путь>"
 ... -Mode templates -Name ВидНалоговойБазы
 ```
 
-## Режимы
+## Modes
 
-| Режим | Без `-Name` | С `-Name` |
+| Mode | Without `-Name` | With `-Name` |
 |-------|-------------|-----------|
-| `overview` | Навигационная карта схемы + подсказки Next | — |
-| `query` | — | Текст запроса набора (с оглавлением батчей); `-Raw` — чистая выгрузка для правки |
-| `fields` | Карта: имена полей по наборам | Деталь поля: набор, тип, роль, формат |
-| `links` | Все связи наборов | — |
-| `calculated` | Карта: имена вычисляемых полей | Выражение + заголовок + ограничения |
-| `resources` | Карта: имена ресурсов (`*` = групповые формулы) | Формулы агрегации по группировкам |
-| `params` | Таблица параметров: тип, значение, видимость | — |
-| `variant` | Список вариантов | Структура группировок + фильтры + вывод |
-| `templates` | Карта привязок шаблонов (field/group) | Содержимое шаблона: строки, ячейки, выражения |
-| `trace` | — | Полная цепочка: набор → вычисление → ресурс |
-| `full` | Полная сводка: overview + query + fields + resources + params + variant | — |
+| `overview` | Navigation map of the schema + Next hints | - |
+| `query` | - | Set query text (with a batch table of contents); `-Raw` - a clean dump for editing |
+| `fields` | Map: field names by data set | Field detail: data set, type, role, format |
+| `links` | All data set links | - |
+| `calculated` | Map: calculated field names | Expression + title + restrictions |
+| `resources` | Map: resource names (`*` = group formulas) | Aggregation formulas by grouping |
+| `params` | Parameter table: type, value, visibility | - |
+| `variant` | List of variants | Grouping structure + filters + output |
+| `templates` | Map of template bindings (field/group) | Template content: rows, cells, expressions |
+| `trace` | - | Full chain: data set -> calculation -> resource |
+| `full` | Full summary: overview + query + fields + resources + params + variant | - |
 
-Паттерн: без `-Name` — карта/индекс, с `-Name` — деталь конкретного элемента. Режим `full` объединяет 6 ключевых режимов в один вызов.
+Pattern: without `-Name` - a map/index, with `-Name` - details of a specific element. The `full` mode combines 6 key modes in one call.
 
-## Типичный workflow
+## Typical workflow
 
-1. `overview` — понять структуру, увидеть подсказки
-2. `trace -Name <поле>` — узнать как считается колонка отчёта (от заголовка до запроса за один вызов)
-3. `query -Name <набор>` — посмотреть текст SQL-запроса
-4. `variant -Name <N>` — посмотреть группировки и фильтры варианта
+1. `overview` - understand the structure, see hints
+2. `trace -Name <поле>` - find out how a report column is calculated (from the title to the query in one call)
+3. `query -Name <набор>` - view the SQL query text
+4. `variant -Name <N>` - view the variant groupings and filters
 
-Переработка запроса (round-trip): `query -Name <набор> -Raw -OutFile q.sql` →
-правка `q.sql` → `/skd-edit <tpl> -Operation set-query -Value "@q.sql"`. Флаг
-`-Raw` отдаёт запрос целиком без декораций, поэтому выгрузка ↔ возврат
-точны (включая многопакетные запросы с временными таблицами).
+Query rework (round-trip): `query -Name <набор> -Raw -OutFile q.sql` ->
+edit `q.sql` -> `/skd-edit <tpl> -Operation set-query -Value "@q.sql"`. The
+`-Raw` flag returns the query in full without decorations, so dump <-> return
+are exact (including multi-batch queries with temporary tables).
 
-## Проверка соответствия ТЗ
+## Compliance check against the specification
 
-Перед сдачей отчёта сравни вывод с колонками ТЗ:
+Before submitting the report, compare the output with the specification columns:
 
-1. `variant -Name <вариант>` — выборка и группировки варианта. Каждое поле выборки должно
-   быть колонкой ТЗ; лишнее/недостающее — дефект. Если выбрано вычисляемое поле с
-   заголовком, равным имени другой колонки, — это подмена поля (см. `trace`).
-2. `query -Name <набор>` — текст запроса: не должно быть `СГРУППИРОВАТЬ ПО` по
-   виртуальной таблице регистра накопления (ВТ уже агрегирует) и полей сверх ТЗ.
-3. `fields` / `calculated` / `resources` — точные имена и заголовки полей.
-4. Для автоматической сверки — `skd-validate <tpl> -ExpectedFields "<колонки ТЗ>"`.
+1. `variant -Name <вариант>` - the variant selection and groupings. Every selection field must
+   be a specification column; an extra/missing one is a defect. If a calculated field is selected with
+   a title equal to the name of another column - this is a field substitution (see `trace`).
+2. `query -Name <набор>` - the query text: there must be no `СГРУППИРОВАТЬ ПО` over
+   a virtual table of an accumulation register (the VT already aggregates) and no fields beyond the specification.
+3. `fields` / `calculated` / `resources` - exact field names and titles.
+4. For automatic comparison - `skd-validate <tpl> -ExpectedFields "<колонки ТЗ>"`.
 
-## Верификация
+## Verification
 
 ```
 /skd-info <path>                            — overview (точка входа)

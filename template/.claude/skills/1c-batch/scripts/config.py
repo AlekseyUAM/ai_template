@@ -1,4 +1,4 @@
-"""Загрузка конфигурации проекта (.1c-devbase.json) и автоопределение платформы 1С."""
+"""Load the project configuration (.1c-devbase.json) and auto-detect the 1C platform."""
 
 import json
 import platform
@@ -10,7 +10,7 @@ import click
 
 CONFIG_FILENAME = ".1c-devbase.json"
 
-# Стандартные пути поиска платформы 1С по ОС
+# Standard 1C platform search paths per OS
 PLATFORM_SEARCH_PATHS = {
     "Linux": [
         Path("/opt/1cv8/x86_64"),
@@ -28,13 +28,13 @@ PLATFORM_SEARCH_PATHS = {
 
 @dataclass
 class Config:
-    """Конфигурация подключения к 1С."""
+    """1C connection configuration."""
 
     platform_path: str = ""
-    connection_type: str = "file"  # "file" или "server"
-    connection_path: str = ""      # путь к файловой базе
-    server: str = ""               # хост сервера
-    base: str = ""                 # имя базы на сервере
+    connection_type: str = "file"  # "file" or "server"
+    connection_path: str = ""      # path to the file infobase
+    server: str = ""               # server host
+    base: str = ""                 # infobase name on the server
     user: str = ""
     password: str = ""
     cf_dir: str = "src/cf"
@@ -42,7 +42,7 @@ class Config:
     log_dir: str = "logs"
 
     def validate(self) -> list[str]:
-        """Проверка корректности конфигурации. Возвращает список ошибок."""
+        """Validate the configuration. Returns a list of errors."""
         errors: list[str] = []
 
         if not self.platform_path:
@@ -67,14 +67,14 @@ class Config:
 
 
 def find_platform_binary() -> str | None:
-    """Автоопределение пути к исполняемому файлу 1cv8."""
+    """Auto-detect the path to the 1cv8 executable."""
     system = platform.system()
     search_dirs = PLATFORM_SEARCH_PATHS.get(system, [])
 
     for base_dir in search_dirs:
         if not base_dir.is_dir():
             continue
-        # Ищем самую свежую версию (сортировка по имени каталога — по версии)
+        # Find the newest version (directory-name sort follows version order)
         versions = sorted(base_dir.iterdir(), reverse=True)
         for version_dir in versions:
             if system == "Windows":
@@ -89,9 +89,9 @@ def find_platform_binary() -> str | None:
 
 
 def load_config(start_dir: Path | None = None) -> Config:
-    """Загрузка конфигурации из .1c-devbase.json.
+    """Load the configuration from .1c-devbase.json.
 
-    Ищет файл конфигурации вверх от start_dir (по умолчанию — cwd).
+    Searches for the config file upward from start_dir (cwd by default).
     """
     if start_dir is None:
         start_dir = Path.cwd()
@@ -118,7 +118,7 @@ def load_config(start_dir: Path | None = None) -> Config:
     else:
         click.echo("Файл .1c-devbase.json не найден, используются значения по умолчанию.", err=True)
 
-    # Автоопределение платформы, если не указана явно
+    # Auto-detect the platform if not set explicitly
     if not cfg.platform_path:
         auto = find_platform_binary()
         if auto:
@@ -129,7 +129,7 @@ def load_config(start_dir: Path | None = None) -> Config:
 
 
 def _find_config_file(start_dir: Path) -> Path | None:
-    """Поиск .1c-devbase.json вверх по дереву каталогов."""
+    """Search for .1c-devbase.json upward through the directory tree."""
     current = start_dir.resolve()
     while True:
         candidate = current / CONFIG_FILENAME

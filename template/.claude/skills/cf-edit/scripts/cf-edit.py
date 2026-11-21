@@ -13,18 +13,18 @@ import uuid as _uuid
 from html import escape as html_escape
 from lxml import etree
 
-# Регистронезависимый ввод: имена параметров и значения choices принимаются
-# в любом регистре (в argparse по умолчанию совпадение точное).
+# Case-insensitive input: parameter names and choices values are accepted
+# in any case (in argparse exact match is the default).
 
 def parse_json_input(text, source, expected=None, inline=False):
-    """Разбор пользовательского JSON: одна строка в stderr вместо traceback (issue #80).
+    """Parse user JSON: one line on stderr instead of a traceback (issue #80).
 
-    expected заполняем только для полиморфного входа: у файла подсказка
-    была бы наполнителем — имя файла и текст парсера самодостаточны. inline печатает ещё и то,
-    что доехало: у файла такого вопроса нет, он лежит на диске и его видно целиком.
+    We fill expected only for polymorphic input: for a file the hint
+    would be filler - the file name and the parser text are self-sufficient. inline also prints
+    what arrived: a file has no such question, it lies on disk and is visible in full.
 
-    Импорты внутри тела: копия функции живёт в навыках с разными именами модулей
-    (skd-decompile импортирует json локально как _json), а тело обязано быть одинаковым.
+    Imports inside the body: a copy of the function lives in skills with different module names
+    (skd-decompile imports json locally as _json), and the body must stay identical.
     """
     import json as _pj
     import sys as _psys
@@ -48,10 +48,10 @@ def parse_json_input(text, source, expected=None, inline=False):
 
 
 def read_json_file(path):
-    """Чтение входного JSON-файла с кодировкой из BOM (issue #80).
+    """Read the input JSON file with encoding from BOM (issue #80).
 
-    BOM — объявление самого файла, поэтому ему верим; без BOM ждём строгий UTF-8. Кодовую
-    страницу не подбираем: угаданное имя уехало бы в метаданные молча.
+    BOM is a declaration of the file itself, so we trust it; without BOM we expect strict UTF-8. We do not guess
+    the code page: a guessed name would travel into metadata silently.
     """
     import os as _pos
     import sys as _psys
@@ -78,9 +78,9 @@ def read_json_file(path):
 
 
 class CIDict(dict):
-    # Ключи храним КАК ЕСТЬ: часть из них — имена объектов (табличные части, стандартные
-    # реквизиты), они попадают в XML. Регистронезависим только поиск. Порядок вставки
-    # сохраняется — от него зависит порядок эмиссии.
+    # We keep keys AS IS: some of them are object names (tabular sections, standard
+    # attributes), they get into XML. Only lookup is case-insensitive. Insertion order
+    # is preserved - the emission order depends on it.
     def _actual(self, key):
         if not isinstance(key, str) or dict.__contains__(self, key):
             return key
@@ -103,11 +103,11 @@ class CIDict(dict):
         return dict.pop(self, self._actual(key), *default)
 
     def __setitem__(self, key, value):
-        # запись по ключу, отличающемуся регистром, обновляет существующий, а не плодит дубль
+        # writing by a key with different case updates the existing one rather than creating a duplicate
         dict.__setitem__(self, self._actual(key), value)
 
 def ci_json(obj):
-    """Рекурсивно оборачивает разобранный JSON: словари → CIDict, списки обходятся."""
+    """Recursively wraps parsed JSON: dicts -> CIDict, lists are traversed."""
     if isinstance(obj, dict):
         return CIDict((k, ci_json(v)) for k, v in obj.items())
     if isinstance(obj, list):
@@ -115,13 +115,13 @@ def ci_json(obj):
     return obj
 
 def ci_parse_args(parser, argv=None):
-    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
+    """parse_args: parameter names and choices values are accepted in any case."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
         if tok.startswith('-') and tok.lower() in names:
             argv[i] = names[tok.lower()]
-    # choices — зеркало [ValidateSet]; канонизируем ДО разбора, иначе argparse отвергнет регистр
+    # choices - a mirror of [ValidateSet]; we canonicalize BEFORE parsing, otherwise argparse rejects the case
     choice_map = {}
     for a in parser._actions:
         if a.choices:
@@ -137,7 +137,7 @@ def ci_parse_args(parser, argv=None):
 
 # ============================================================
 # Support guard (Ext/ParentConfigurations.bin) — see docs/1c-support-state-spec.md
-# Blocks edits of vendor objects "на замке" / read-only configs. Trigger = bin
+# Blocks edits of vendor objects on support lock / read-only configs. Trigger = bin
 # present; reaction from .v8-project.json editingAllowedCheck (deny|warn|off,
 # default deny). Never throws (except sys.exit on deny) — errors degrade to allow.
 # ============================================================
@@ -355,16 +355,16 @@ REF_PROPS = ["DefaultLanguage"]
 
 
 def get_new_object_position(cfg_dir):
-    """Куда навык ставит новую запись в <ChildObjects> — настройка newObjectPosition.
+    """Where the skill places a new entry in <ChildObjects> - the newObjectPosition setting.
 
-    databases[].newObjectPosition базы, чей configSrc охватывает каталог родительского XML,
-    иначе корневое поле, иначе end. Значения: end — после последнего объекта того же вида
-    (так дописывает Конфигуратор); byName — по имени среди объектов того же вида.
-    Файл ищем от рабочего каталога вверх, каталог конфигурации — запасной путь: так же
-    его ищут support-guard и группа db-*, а скрипт навыка зовут по абсолютному пути, и cwd
-    остаётся рабочим каталогом проекта.
-    configSrc считается от каталога .v8-project.json, как задокументировано в
-    docs/v8-project-guide.md. Реестр семьи: tests/skills/check-inline-drift.mjs.
+    databases[].newObjectPosition of the base whose configSrc covers the parent XML directory,
+    otherwise the root field, otherwise end. Values: end - after the last object of the same kind
+    (this is how Configurator appends); byName - by name among objects of the same kind.
+    We look for the file upwards from the working directory, the configuration directory is a fallback:
+    support-guard and the db-* group look for it the same way, and the skill script is called by absolute path, and cwd
+    remains the project working directory.
+    configSrc is counted from the .v8-project.json directory, as documented in
+    docs/v8-project-guide.md. Family registry: tests/skills/check-inline-drift.mjs.
     """
     try:
         pj = _sg_find_v8project(os.getcwd()) or _sg_find_v8project(os.path.abspath(cfg_dir or "."))
@@ -387,28 +387,28 @@ def get_new_object_position(cfg_dir):
 
 
 def is_order_sensitive_type(type_name):
-    """Виды, у которых порядок в дереве несёт смысл: автоматически их не упорядочиваем.
+    """Kinds whose order in the tree is meaningful: we do not order them automatically.
 
-    CommonAttribute — исключение самого стандарта (#std467): у общих реквизитов-разделителей
-    порядок в дереве задаёт порядок установки параметров сеанса. Subsystem и CommandGroup:
-    пока они не перечислены в <SubsystemsOrder> / <GroupsOrder> файла Ext/CommandInterface.xml,
-    порядок дерева задаёт порядок в интерфейсе, а платформа эти списки сама не заводит
-    (в выгрузке ACC вне GroupsOrder 15 живых групп из 39). Language исключён из осторожности,
-    без замера: языков обычно один-два, и в типовых их порядок не алфавитный.
-    Явно названный вид сортируется в любом случае.
-    Реестр семьи: tests/skills/check-inline-drift.mjs.
+    CommonAttribute - an exception of the standard itself (#std467): for common separator attributes
+    the order in the tree sets the order in which session parameters are set. Subsystem and CommandGroup:
+    until they are listed in <SubsystemsOrder> / <GroupsOrder> of Ext/CommandInterface.xml,
+    the tree order sets the interface order, and the platform does not create these lists itself
+    (in the ACC export, outside GroupsOrder there are 15 live groups out of 39). Language is excluded out of caution,
+    without measurement: there are usually one or two languages, and in typical configurations their order is not alphabetical.
+    An explicitly named kind is sorted in any case.
+    Family registry: tests/skills/check-inline-drift.mjs.
     """
     return type_name in ("CommonAttribute", "Subsystem", "CommandGroup", "Language")
 
 
 def compare_metadata_names(a, b):
-    """Порядок имён объектов метаданных, как в дереве Конфигуратора.
+    """Order of metadata object names, as in the Configurator tree.
 
-    Ключ — пары «ранг+символ»: регистр не учитывается, подчёркивание раньше цифр, цифры раньше
-    букв, буквы по кодам (латиница раньше кириллицы), ё на месте е. Культурные таблицы не
-    используются — они разные на разных ОС и в разных рантаймах, а так оба порта сравнивают
-    одинаково везде. Равные ключи разводит ordinal-сравнение исходных строк.
-    Возвращает -1 | 0 | 1. Реестр семьи: tests/skills/check-inline-drift.mjs.
+    Key - "rank+char" pairs: case is ignored, underscore before digits, digits before
+    letters, letters by code (Latin before Cyrillic), ё in place of е. Cultural tables are not
+    used - they differ on different OSes and in different runtimes, and this way both ports compare
+    identically everywhere. Equal keys are separated by ordinal comparison of the source strings.
+    Returns -1 | 0 | 1. Family registry: tests/skills/check-inline-drift.mjs.
     """
     keys = []
     for name in (a, b):
@@ -447,7 +447,7 @@ RU_TYPE_MAP = {
     "бот": "Bot",
     "задача": "Task", "планобмена": "ExchangePlan",
     "хранилищенастроек": "SettingsStorage",
-    # Множественное число: в дереве конфигурации виды подписаны именно так.
+    # Plural: in the configuration tree the kinds are labeled exactly like this.
     "справочники": "Catalog", "документы": "Document", "перечисления": "Enum",
     "отчёты": "Report", "отчеты": "Report", "обработки": "DataProcessor",
     "общиеформы": "CommonForm", "журналыдокументов": "DocumentJournal",
@@ -468,10 +468,10 @@ RU_TYPE_MAP = {
 
 
 def resolve_type_name(token):
-    """Имя вида из пользовательского ввода → каноническое имя или None.
+    """Kind name from user input -> canonical name or None.
 
-    Ввод прощающий: регистр не важен, принимается имя каталога выгрузки
-    (Catalogs → Catalog) и русское имя вида в единственном и множественном числе.
+    Input is forgiving: case does not matter, the export directory name
+    (Catalogs -> Catalog) and the Russian kind name in singular and plural are accepted.
     """
     key = (token or "").strip().lower()
     if not key:
@@ -578,8 +578,8 @@ def parse_batch_value(val):
 
 
 def _detect_xml_style(path):
-    """Стиль существующего файла для round-trip-сохранения: BOM / EOL / регистр encoding /
-    финальный перенос. None → файл новый (сохранить текущее поведение)."""
+    """Style of an existing file for round-trip saving: BOM / EOL / encoding case /
+    final newline. None -> the file is new (keep the current behavior)."""
     try:
         raw = open(path, "rb").read()
     except OSError:
@@ -594,21 +594,21 @@ def _detect_xml_style(path):
 
 
 def _finalize_xml_bytes(xml_bytes, style):
-    """Привести байты к стилю оригинала; для НОВОГО файла (style is None) — к канону
-    выгрузки Конфигуратора: encoding="UTF-8", CRLF в разделителях, без перевода в конце."""
+    """Bring bytes to the style of the original; for a NEW file (style is None) - to the Configurator
+    export canon: encoding="UTF-8", CRLF in separators, no trailing newline translation."""
     enc_decl = style["enc"] if style else "UTF-8"
     xml_bytes = xml_bytes.replace(
         b"<?xml version='1.0' encoding='UTF-8'?>",
         b'<?xml version="1.0" encoding="' + enc_decl.encode("ascii") + b'"?>')
-    # Канонизировать переносы к LF (убирает &#13; от \r в tail'ах)
+    # Canonicalize line breaks to LF (removes &#13; from \r in tails)
     xml_bytes = (xml_bytes.replace(b"&#13;\n", b"\n").replace(b"&#13;", b"")
                  .replace(b"\r\n", b"\n").replace(b"\r", b"\n"))
-    # Финальный перенос — как в оригинале (новый файл → нет, канон #57)
+    # Final newline - as in the original (new file -> none, canon #57)
     want_final_nl = style["final_nl"] if style else False
     xml_bytes = xml_bytes.rstrip(b"\n")
     if want_final_nl:
         xml_bytes += b"\n"
-    # EOL — как в оригинале (новый файл → CRLF, канон #57)
+    # EOL - as in the original (new file -> CRLF, canon #57)
     if (style["crlf"] if style else True):
         xml_bytes = xml_bytes.replace(b"\n", b"\r\n")
     return xml_bytes
@@ -664,8 +664,8 @@ def main():
     tree = etree.parse(resolved_path, xml_parser)
     xml_root = tree.getroot()
 
-    # Версия формата редактируемой конфигурации — создаваемые рядом файлы (Ext/HomePageWorkArea.xml)
-    # должны нести ту же версию, иначе в проекте окажутся файлы разных версий формата.
+    # Format version of the configuration being edited - files created alongside (Ext/HomePageWorkArea.xml)
+    # must carry the same version, otherwise the project will end up with files of different format versions.
     format_version = xml_root.get('version') or '2.17'
 
     add_count = 0
@@ -806,10 +806,10 @@ def main():
                 warn(f"Already exists: {type_name}.{obj_name_val}")
                 continue
 
-            # Место вставки. Вид — по TYPE_ORDER; внутри вида — по newObjectPosition:
-            # end (по умолчанию) кладёт после последнего объекта того же вида, byName — по имени.
-            # Subsystem по имени не упорядочиваем никогда: порядок подсистем в дереве задаёт
-            # порядок разделов в панели, пока их не перечислили в <SubsystemsOrder>.
+            # Insertion point. Kind - by TYPE_ORDER; within a kind - by newObjectPosition:
+            # end (default) puts it after the last object of the same kind, byName - by name.
+            # We never order Subsystem by name: the order of subsystems in the tree sets
+            # the order of sections in the panel, until they are listed in <SubsystemsOrder>.
             by_name = (not is_order_sensitive_type(type_name)
                        and get_new_object_position(config_dir) == "byName")
             insert_before = None
@@ -832,10 +832,10 @@ def main():
                     first_later = child
 
             if insert_before is None:
-                # Место не выбрано именем — ставим сразу за последним объектом того же вида,
-                # то есть перед его следующим соседом. Через first_later этого не сделать:
-                # если видов старше в файле нет, запись уехала бы в самый конец блока,
-                # за пределы своей группы.
+                # The place is not chosen by name - we put it right after the last object of the same kind,
+                # that is, before its next neighbor. first_later cannot do this:
+                # if there are no older kinds in the file, the entry would go to the very end of the block,
+                # outside its own group.
                 if last_same is not None:
                     siblings = [c for c in child_objs_el if isinstance(c.tag, str)]
                     pos = siblings.index(last_same)
@@ -855,13 +855,13 @@ def main():
             info(f"Added: {type_name}.{obj_name_val}")
 
     def do_sort_child_objects(batch_val):
-        """Упорядочить <ChildObjects>: имена внутри вида, а без аргумента — и группы видов.
+        """Order <ChildObjects>: names within a kind, and without an argument - kind groups as well.
 
-        Виды из is_order_sensitive_type по имени не сортируются, пока не названы явно.
-        Вызов без значения дополнительно ставит группы видов в канонический порядок: платформа
-        починила бы его только при загрузке-выгрузке, то есть неканоничный файл даёт диф на
-        ровном месте. Переставляем ЗНАЧЕНИЯ узлов, а не сами узлы — отступы и структура файла
-        остаются как были, в дифе только перестановка строк.
+        Kinds from is_order_sensitive_type are not sorted by name until named explicitly.
+        A call without a value additionally puts kind groups into canonical order: the platform
+        would fix it only on load-export, that is, a non-canonical file produces a diff
+        for no reason. We reorder node VALUES, not the nodes themselves - file indentation and structure
+        stay as they were, the diff contains only line reordering.
         """
         nonlocal modify_count
         if child_objs_el is None:
@@ -897,13 +897,13 @@ def main():
             info(f"Sorted: {type_name} ({len(els)})")
 
         if requested:
-            # Вид назван явно — точечная операция: взаимный порядок групп не трогаем.
+            # The kind is named explicitly - a point operation: we do not touch the mutual order of groups.
             return
 
-        # Без аргумента приводим в порядок и сами группы видов: собранная навыками
-        # конфигурация может держать их не в каноне, и первая же выгрузка платформы даст
-        # диф. Переставляем содержимое существующих узлов, а не узлы, поэтому отступы и
-        # структура файла не меняются — в дифе только перестановка строк.
+        # Without an argument we also put the kind groups themselves in order: a configuration
+        # assembled by skills may keep them non-canonical, and the first platform export will give
+        # a diff. We reorder the contents of existing nodes, not the nodes, so indentation and
+        # file structure do not change - the diff contains only line reordering.
         elems = [c for c in child_objs_el if isinstance(c.tag, str)]
         pairs = [(localname(c), c.text or "") for c in elems]
         ranked = sorted(range(len(pairs)),
@@ -1308,7 +1308,7 @@ def main():
 
     for op in operations:
         op_name = op.get("operation", args.Operation or "")
-        # Имя операции сравниваем регистронезависимо.
+        # We compare the operation name case-insensitively.
         op_key = str(op_name).lower()
         op_value = op.get("value", args.Value or "")
 

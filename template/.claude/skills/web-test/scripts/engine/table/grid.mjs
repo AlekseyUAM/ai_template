@@ -1,9 +1,9 @@
 // web-test table/grid v1.20 — Form-grid operations: read table rows, fill rows, delete rows.
 // Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 //
-// "Grid" в терминах 1С — таблица на форме (.gridLine/.gridBody/.grid в DOM):
-// табличные части документов, формы списков, ТЧ настроек и т.п.
-// Отдельно от SpreadsheetDocument (engine/spreadsheet/spreadsheet.mjs).
+// "Grid" in 1C terms is a table on a form (.gridLine/.gridBody/.grid in the DOM):
+// tabular sections of documents, list forms, settings tabular sections, etc.
+// Separate from SpreadsheetDocument (engine/spreadsheet/spreadsheet.mjs).
 
 import { page, ensureConnected } from '../core/state.mjs';
 import { detectFormScript, readTableScript, resolveGridScript } from '../../dom.mjs';

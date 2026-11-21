@@ -1,43 +1,43 @@
-# Блоки объекта
+# Object blocks
 
-Кросс-типовые блоки уровня объекта (применимы к ссылочным типам — Catalog, Document, ChartOf*, ExchangePlan,
-BusinessProcess, Task и др.).
+Cross-type object-level blocks (applicable to reference types - Catalog, Document, ChartOf*, ExchangePlan,
+BusinessProcess, Task, etc.).
 
-## Представления
+## Presentations
 
-Тексты представления объекта в интерфейсе (ML — строка или `{ru,en}`, по умолчанию пусто):
+Object presentation texts in the UI (ML - string or `{ru,en}`, empty by default):
 
-| Ключ | Смысл |
+| Key | Meaning |
 |------|-------|
-| `objectPresentation` | представление объекта |
-| `extendedObjectPresentation` | расширенное представление объекта |
-| `listPresentation` | представление списка |
-| `extendedListPresentation` | расширенное представление списка |
-| `explanation` | пояснение |
+| `objectPresentation` | object presentation |
+| `extendedObjectPresentation` | extended object presentation |
+| `listPresentation` | list presentation |
+| `extendedListPresentation` | extended list presentation |
+| `explanation` | explanation |
 
-Набор доступных ключей зависит от типа (у списочных без формы объекта нет `objectPresentation` и т.п.).
+The set of available keys depends on the type (list-only objects without an object form have no `objectPresentation`, etc.).
 
 ```json
 "listPresentation": "Организации", "objectPresentation": { "ru": "Организация", "en": "Company" }
 ```
 
-## Команды
+## Commands
 
-Команды объекта. Ключ — имя команды, значение — объект свойств (map `имя → объект` или массив `[{name, …}]`).
-Для каждой команды создаётся заготовка модуля с обработчиком `ОбработкаКоманды`.
+Object commands. The key is the command name, the value is a properties object (map `имя → объект` or array `[{name, …}]`).
+For each command a module stub with the `ОбработкаКоманды` handler is created.
 
-| Ключ | Умолчание | Значения |
+| Key | Default | Values |
 |------|-----------|----------|
-| `synonym` | из имени | ML |
-| `tooltip` | пусто | ML |
-| `comment` | пусто | строка |
-| `group` | **обязательно** | группа размещения (см. ниже) |
-| `commandParameterType` | пусто | тип параметра (напр. `CatalogRef.Номенклатура`) — **только для групп формы** |
+| `synonym` | from name | ML |
+| `tooltip` | empty | ML |
+| `comment` | empty | string |
+| `group` | **required** | placement group (see below) |
+| `commandParameterType` | empty | parameter type (e.g. `CatalogRef.Номенклатура`) - **only for form groups** |
 | `parameterUseMode` | `Single` | `Single` / `Multiple` |
 | `modifiesData` | `false` | bool |
-| `representation` | `Auto` | вид отображения |
-| `picture` | пусто | ссылка на картинку (`StdPicture.Print`, `CommonPicture.Загрузка`) |
-| `shortcut` | пусто | сочетание клавиш |
+| `representation` | `Auto` | representation kind |
+| `picture` | empty | picture reference (`StdPicture.Print`, `CommonPicture.Загрузка`) |
+| `shortcut` | empty | key combination |
 
 ```json
 "commands": {
@@ -46,43 +46,43 @@ BusinessProcess, Task и др.).
 }
 ```
 
-**Группа (`group`) обязательна** — каждая команда размещается в группе командного интерфейса:
+**The group (`group`) is required** - every command is placed in a command interface group:
 
-- **Командный интерфейс раздела** (панель навигации / панель действий; `commandParameterType` **недоступен**):
+- **Section command interface** (navigation panel / actions panel; `commandParameterType` is **not available**):
   `NavigationPanelImportant` / `NavigationPanelOrdinary` / `NavigationPanelSeeAlso`,
   `ActionsPanelCreate` / `ActionsPanelReports` / `ActionsPanelTools`.
-- **Командный интерфейс формы** (`commandParameterType` допустим): `FormCommandBarImportant` /
+- **Form command interface** (`commandParameterType` is allowed): `FormCommandBarImportant` /
   `FormCommandBarCreateBasedOn`, `FormNavigationPanelImportant` / `FormNavigationPanelGoTo` / `FormNavigationPanelSeeAlso`.
-- **Кастомная группа:** `CommandGroup.<Имя>` (параметр допустим).
+- **Custom group:** `CommandGroup.<Имя>` (parameter is allowed).
 
-Группа раздела вместе с `commandParameterType` → ошибка.
+A section group together with `commandParameterType` -> error.
 
 ## `inputByString` / `dataLockFields` / `basedOn`
 
-Списки полей/объектов уровня объекта. Поля — по имени реквизита объекта (обычного или стандартного).
+Object-level field/object lists. Fields are by object attribute name (regular or standard).
 
-- **`inputByString`** — поля быстрого ввода по строке. По умолчанию выводятся из Кода/Наименования — ключ не нужен;
-  задать при другом наборе/порядке, либо `[]` для отключения.
+- **`inputByString`** - quick input by string fields. By default they are derived from Code/Description - the key is not needed;
+  set it for a different set/order, or `[]` to disable.
   ```json
   "inputByString": ["Код", "Наименование", "Контрагент"]
   ```
-- **`dataLockFields`** — поля управляемой блокировки данных (по умолчанию пусто).
+- **`dataLockFields`** - managed data lock fields (empty by default).
   ```json
   "dataLockFields": ["Организация", "Контрагент"]
   ```
-- **`basedOn`** — «ввод на основании»: список ссылок на объекты метаданных (по умолчанию пусто).
+- **`basedOn`** - "based on" input: a list of references to metadata objects (empty by default).
   ```json
   "basedOn": ["Catalog.Контрагенты", "Document.ЗаказПоставщику"]
   ```
 
-## `standardAttributes` — кастомизация стандартных реквизитов
+## `standardAttributes` - standard attribute customization
 
-Стандартные реквизиты объекта (Наименование, Код, Владелец, …) переопределяются блоком
-`standardAttributes` — объект `{ ИмяРеквизита: { переопределения } }`. Имена — как в 1С: `Description`, `Code`,
-`Owner`, `Parent`, `DeletionMark`, `Ref` и т.д. (для Document — `Date`, `Number`, `Posted`).
+Standard object attributes (Description, Code, Owner, ...) are overridden by the
+`standardAttributes` block - an object `{ ИмяРеквизита: { переопределения } }`. Names are as in 1C: `Description`, `Code`,
+`Owner`, `Parent`, `DeletionMark`, `Ref`, etc. (for Document - `Date`, `Number`, `Posted`).
 
-Переопределяемые поля — как у обычного реквизита (`synonym`, `tooltip`, `fillChecking`, `fillValue`,
-`choiceParameters`, `comment`, `mask`, `choiceForm`; полный набор — `attributes.md`).
+Overridable fields are as for a regular attribute (`synonym`, `tooltip`, `fillChecking`, `fillValue`,
+`choiceParameters`, `comment`, `mask`, `choiceForm`; the full set is in `attributes.md`).
 
 ```json
 "standardAttributes": {
@@ -91,10 +91,10 @@ BusinessProcess, Task и др.).
 }
 ```
 
-## `characteristics` — «Дополнительные реквизиты и сведения»
+## `characteristics` - "Additional attributes and information"
 
-Привязка плана видов характеристик. Массив; каждый элемент связывает **источник типов** (где определены
-характеристики) и **источник значений** (где хранятся значения).
+Binding of a chart of characteristic types. An array; each element links a **type source** (where
+characteristics are defined) and a **value source** (where values are stored).
 
 ```json
 "characteristics": [{
@@ -105,5 +105,5 @@ BusinessProcess, Task и др.).
 }]
 ```
 
-- `from` — таблица-источник; `key`/`filterField`/`object`/`type`/`value` — поля источника (по имени реквизита).
-- `filterValue` — значение фильтра типов: имя предопределённого набора (строка) или путь к элементу.
+- `from` - source table; `key`/`filterField`/`object`/`type`/`value` - source fields (by attribute name).
+- `filterValue` - type filter value: the name of a predefined set (string) or a path to an item.

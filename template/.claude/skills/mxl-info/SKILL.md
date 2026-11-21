@@ -1,52 +1,52 @@
 ---
 name: mxl-info
-description: Анализ структуры макета табличного документа (MXL) — области, параметры, наборы колонок. Используй при разработке печати — получить области и заполняемые параметры макета
-argument-hint: <TemplatePath> или <ProcessorName> <TemplateName>
+description: Analyze the structure of a spreadsheet document (MXL) template - areas, parameters, column sets. Use in print development - to get the template areas and fillable parameters
+argument-hint: <TemplatePath> or <ProcessorName> <TemplateName>
 allowed-tools:
   - Bash
   - Read
   - Glob
 ---
 
-# /mxl-info — Анализ структуры макета
+# /mxl-info - Template structure analysis
 
-Читает Template.xml табличного документа и выводит компактную сводку: именованные области, параметры, наборы колонок. Заменяет необходимость читать тысячи строк XML.
+Reads Template.xml of a spreadsheet document and outputs a compact summary: named areas, parameters, column sets. Replaces the need to read thousands of lines of XML.
 
-## Использование
+## Usage
 
 ```
 /mxl-info <TemplatePath>
 /mxl-info <ProcessorName> <TemplateName>
 ```
 
-## Параметры
+## Parameters
 
-| Параметр      | Обязательный | По умолчанию | Описание                                 |
+| Parameter     | Required     | Default      | Description                              |
 |---------------|:------------:|--------------|------------------------------------------|
-| TemplatePath  | нет          | —            | Прямой путь к Template.xml               |
-| ProcessorName | нет          | —            | Имя обработки (альтернатива пути)        |
-| TemplateName  | нет          | —            | Имя макета (альтернатива пути)           |
-| SrcDir        | нет          | `src`        | Каталог исходников                       |
-| Format        | нет          | `text`       | Формат вывода: `text` или `json`         |
-| WithText      | нет          | false        | Включить статический текст и шаблоны     |
-| MaxParams     | нет          | 10           | Макс. параметров в списке на область     |
-| Limit         | нет          | 150          | Макс. строк вывода (защита от переполнения) |
-| Offset        | нет          | 0            | Пропустить N строк (для пагинации)       |
+| TemplatePath  | no           | -            | Direct path to Template.xml              |
+| ProcessorName | no           | -            | Data processor name (alternative to a path) |
+| TemplateName  | no           | -            | Template name (alternative to a path)    |
+| SrcDir        | no           | `src`        | Source directory                         |
+| Format        | no           | `text`       | Output format: `text` or `json`          |
+| WithText      | no           | false        | Include static text and templates        |
+| MaxParams     | no           | 10           | Max parameters in the list per area      |
+| Limit         | no           | 150          | Max output lines (overflow protection)   |
+| Offset        | no           | 0            | Skip N lines (for pagination)            |
 
-Укажите либо `-TemplatePath`, либо оба `-ProcessorName` и `-TemplateName`.
+Specify either `-TemplatePath`, or both `-ProcessorName` and `-TemplateName`.
 
-## Команда
+## Command
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/mxl-info.py" -TemplatePath "<путь>"
 ```
 
-Или по имени обработки/макета:
+Or by data processor/template name:
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/mxl-info.py" -ProcessorName "<Имя>" -TemplateName "<Макет>" [-SrcDir "<каталог>"]
 ```
 
-Дополнительные флаги:
+Additional flags:
 ```bash
 ... -WithText              # включить текстовое содержимое ячеек
 ... -Format json           # JSON-вывод для программной обработки
@@ -54,11 +54,11 @@ python "${CLAUDE_SKILL_DIR}/scripts/mxl-info.py" -ProcessorName "<Имя>" -Temp
 ... -Offset 150            # пагинация: пропустить первые 150 строк
 ```
 
-## Чтение вывода
+## Reading the output
 
-### Области — сортировка сверху вниз
+### Areas - sorted top to bottom
 
-Области перечислены в порядке документа (по позиции строки), а не по алфавиту. Это соответствует порядку вывода областей в коде заполнения — сверху вниз.
+Areas are listed in document order (by row position), not alphabetically. This matches the order of outputting areas in fill code - top to bottom.
 
 ```
 --- Named areas ---
@@ -68,26 +68,26 @@ python "${CLAUDE_SKILL_DIR}/scripts/mxl-info.py" -ProcessorName "<Имя>" -Temp
   Итого              Rows     rows 16-17   (1 params)
 ```
 
-Типы областей:
-- **Rows** — горизонтальная область (диапазон строк). Получение: `Макет.ПолучитьОбласть("Имя")`
-- **Columns** — вертикальная область (диапазон колонок). Получение: `Макет.ПолучитьОбласть("Имя")`
-- **Rectangle** — фиксированная область (строки + колонки). Обычно использует отдельный набор колонок.
-- **Drawing** — именованный рисунок/штрихкод.
+Area types:
+- **Rows** - horizontal area (row range). Retrieval: `Макет.ПолучитьОбласть("Имя")`
+- **Columns** - vertical area (column range). Retrieval: `Макет.ПолучитьОбласть("Имя")`
+- **Rectangle** - fixed area (rows + columns). Usually uses a separate column set.
+- **Drawing** - named drawing/barcode.
 
-### Пересечения
+### Intersections
 
-Когда есть области и Rows, и Columns (этикетки, ценники), скрипт выводит пары пересечений:
+When there are both Rows and Columns areas (labels, price tags), the script outputs intersection pairs:
 
 ```
 --- Intersections (use with GetArea) ---
   ВысотаЭтикетки|ШиринаЭтикетки
 ```
 
-В BSL: `Макет.ПолучитьОбласть("ВысотаЭтикетки|ШиринаЭтикетки")`
+In BSL: `Макет.ПолучитьОбласть("ВысотаЭтикетки|ШиринаЭтикетки")`
 
-### Параметры и detailParameter
+### Parameters and detailParameter
 
-Параметры перечислены по областям. Если у параметра есть `detailParameter` (расшифровка), он показан ниже:
+Parameters are listed by area. If a parameter has a `detailParameter` (decryption), it is shown below:
 
 ```
 --- Parameters by area ---
@@ -97,27 +97,27 @@ python "${CLAUDE_SKILL_DIR}/scripts/mxl-info.py" -ProcessorName "<Имя>" -Temp
     detail: Товар->Номенклатура
 ```
 
-Это означает: параметр `Товар` отображает значение, а при клике открывает `Номенклатура` (объект расшифровки).
+This means: the `Товар` parameter displays a value, and on click opens `Номенклатура` (the decryption object).
 
-### Параметры из шаблонов (суффикс `[tpl]`)
+### Parameters from templates (suffix `[tpl]`)
 
-Некоторые параметры встроены в шаблонный текст: `"Инв № [ИнвентарныйНомер]"`. Они заполняются через fillType=Template, а не fillType=Parameter. Скрипт всегда извлекает их и помечает суффиксом `[tpl]`:
+Some parameters are embedded in template text: `"Инв № [ИнвентарныйНомер]"`. They are filled via fillType=Template, not fillType=Parameter. The script always extracts them and marks them with the `[tpl]` suffix:
 
 ```
   НумерацияЛистов: Номер [tpl], Дата [tpl], НомерЛиста [tpl]
 ```
 
-В BSL шаблонные параметры заполняются так же, как обычные:
+In BSL template parameters are filled the same way as regular ones:
 ```bsl
 Область.Параметры.Номер = НомерДокумента;
 Область.Параметры.Дата = ДатаДокумента;
 ```
 
-Числовые подстановки вроде `[5]`, `[6]` (ссылки на сноски в официальных формах) игнорируются.
+Numeric substitutions like `[5]`, `[6]` (references to footnotes in official forms) are ignored.
 
-### Текстовое содержимое (`-WithText`)
+### Text content (`-WithText`)
 
-Показывает статический текст (надписи, заголовки) и шаблонные строки с подстановками `[Параметр]`:
+Shows static text (labels, headings) and template strings with `[Параметр]` substitutions:
 
 ```
 --- Text content ---
@@ -127,6 +127,5 @@ python "${CLAUDE_SKILL_DIR}/scripts/mxl-info.py" -ProcessorName "<Имя>" -Temp
     Templates: "Инв № [ИнвентарныйНомер]"
 ```
 
-- **Text** — статические надписи (fillType=Text). Полезно для понимания назначения колонок.
-- **Templates** — текст с подстановками `[ИмяПараметра]` (fillType=Template). Параметр внутри `[]` заполняется программно.
-
+- **Text** - static labels (fillType=Text). Useful for understanding the purpose of columns.
+- **Templates** - text with `[ИмяПараметра]` substitutions (fillType=Template). The parameter inside `[]` is filled programmatically.

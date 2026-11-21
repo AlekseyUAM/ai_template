@@ -1,58 +1,58 @@
-# Таблица — продвинутые возможности
+# Table - advanced capabilities
 
-Базовый элемент таблицы (`type: "table"`, колонки, основные свойства) описан в основной инструкции, раздел «Таблица (table)». Здесь — продвинутые возможности: дополнения командной панели, специфика таблицы динамического списка и неочевидные свойства/режимы.
+The basic table element (`type: "table"`, columns, main properties) is described in the main instruction, section "Table (table)". Here are advanced capabilities: command bar additions, specifics of a dynamic list table and non-obvious properties/modes.
 
-## Представление (`representation`)
+## Representation (`representation`)
 
-Как таблица рисует строки:
+How the table draws rows:
 
 ```json
 { "table": "Список", "path": "Список", "representation": "Tree" }
 ```
 
-`List` — плоский список (по умолчанию), `Tree` — дерево, `HierarchicalList` — иерархический список (группы + элементы на одном уровне).
+`List` - a flat list (default), `Tree` - a tree, `HierarchicalList` - a hierarchical list (groups + items on one level).
 
-Для дерева/иерархии управляйте раскрытием уровней через `initialTreeView` (`ExpandTopLevel` / `ExpandAllLevels` / `NoExpand`).
+For a tree/hierarchy, control level expansion via `initialTreeView` (`ExpandTopLevel` / `ExpandAllLevels` / `NoExpand`).
 
-## Выделение и текущая строка
+## Selection and current row
 
-| Ключ | Значения | Назначение |
+| Key | Values | Purpose |
 |------|----------|-----------|
-| `selectionMode` | `SingleRow` / `MultiRow` | Режим выделения строк |
-| `multipleChoice` | bool | Разрешить множественный выбор (для форм выбора) |
-| `currentRowUse` | `DontUse` / `Use` / `SelectionPresentation` / `SelectionPresentationAndChoice` / `Choice` | Использование текущей строки таблицы |
+| `selectionMode` | `SingleRow` / `MultiRow` | Row selection mode |
+| `multipleChoice` | bool | Allow multiple choice (for choice forms) |
+| `currentRowUse` | `DontUse` / `Use` / `SelectionPresentation` / `SelectionPresentationAndChoice` / `Choice` | Use of the table's current row |
 
 ```json
 { "table": "Список", "path": "Список", "selectionMode": "MultiRow", "multipleChoice": true }
 ```
 
-## Поиск при вводе (`searchOnInput`)
+## Search on input (`searchOnInput`)
 
-Поведение встроенного поиска при наборе текста в таблице:
+Behavior of the built-in search when typing text in the table:
 
 ```json
 { "table": "Список", "path": "Список", "searchOnInput": "Use" }
 ```
 
-`Auto` (по умолчанию) / `Use` (искать) / `DontUse` (не искать).
+`Auto` (default) / `Use` (search) / `DontUse` (do not search).
 
-Где располагать сами элементы поиска — управляется `searchStringLocation` / `viewStatusLocation` / `searchControlLocation` (`None` / `Top` / `Bottom` / `CommandBar` / `Auto`).
+Where to place the search elements themselves is controlled by `searchStringLocation` / `viewStatusLocation` / `searchControlLocation` (`None` / `Top` / `Bottom` / `CommandBar` / `Auto`).
 
-## Прочие свойства таблицы
+## Other table properties
 
-| Ключ | Тип | Назначение |
+| Key | Type | Purpose |
 |------|-----|-----------|
-| `useAlternationRowColor` | bool | Чередование цвета строк |
-| `verticalLines` / `horizontalLines` | bool | Линии сетки (укажите `false`, чтобы скрыть) |
-| `markIncomplete` | bool | Автоотметка незаполненных ячеек |
-| `heightInTableRows` | int | Высота элемента в строках (отдельно от `height`) |
-| `autoInsertNewRow` | bool | Автодобавление новой строки при вводе в последнюю |
-| `rowsPicture` | string \| object | Картинка строк. Ссылка (`"CommonPicture.X"`, `"abs:..."`) либо объект `{ src, loadTransparent?, transparentPixel? }` |
-| `tooltipRepresentation` | string | Режим показа подсказки таблицы: `None`, `Button`, `ShowBottom`, `ShowTop`, `ShowLeft`, `ShowRight`, `ShowAuto`, `Balloon` |
+| `useAlternationRowColor` | bool | Alternating row color |
+| `verticalLines` / `horizontalLines` | bool | Grid lines (set `false` to hide) |
+| `markIncomplete` | bool | Auto-mark incomplete cells |
+| `heightInTableRows` | int | Element height in rows (separate from `height`) |
+| `autoInsertNewRow` | bool | Auto-add a new row when typing into the last one |
+| `rowsPicture` | string \| object | Row picture. A reference (`"CommonPicture.X"`, `"abs:..."`) or an object `{ src, loadTransparent?, transparentPixel? }` |
+| `tooltipRepresentation` | string | Table tooltip display mode: `None`, `Button`, `ShowBottom`, `ShowTop`, `ShowLeft`, `ShowRight`, `ShowAuto`, `Balloon` |
 
-## Фиксация колонки (`fixingInTable`)
+## Column fixing (`fixingInTable`)
 
-Свойство **колонки** (на `input` / `labelField` / `check` / `picField` внутри `columns`), а не самой таблицы. Закрепляет колонку у края при горизонтальной прокрутке:
+A **column** property (on `input` / `labelField` / `check` / `picField` inside `columns`), not of the table itself. Fixes the column to an edge on horizontal scrolling:
 
 ```json
 { "table": "Товары", "path": "Объект.Товары", "columns": [
@@ -63,35 +63,35 @@
 
 `Left` / `Right` / `None`.
 
-## Исключённые команды (`excludedCommands`)
+## Excluded commands (`excludedCommands`)
 
-Убрать стандартные команды редактора таблицы (кнопки добавления/перемещения/сортировки):
+Remove the standard table editor commands (add/move/sort buttons):
 
 ```json
 { "table": "Товары", "path": "Объект.Товары",
   "excludedCommands": [ "Add", "Delete", "MoveUp", "SortListAsc" ] }
 ```
 
-Свойство работает на любом поле и на уровне формы; для таблицы значимы команды вида `Add` / `Delete` / `MoveUp` / `MoveDown` / `SortListAsc` / `SortListDesc`.
+The property works on any field and at the form level; for a table the relevant commands are `Add` / `Delete` / `MoveUp` / `MoveDown` / `SortListAsc` / `SortListDesc`.
 
-## Дополнения командной панели (`additions`)
+## Command bar additions (`additions`)
 
-Дополнения — это «представления» встроенного поиска таблицы:
+Additions are "presentations" of the table's built-in search:
 
-- `searchString` — отображение строки поиска,
-- `viewStatus` — состояние просмотра,
-- `searchControl` — управление поиском.
+- `searchString` - display of the search string,
+- `viewStatus` - view state,
+- `searchControl` - search control.
 
-Каждое дополнение — полноценный элемент (полный набор свойств поля). Размещать их можно двумя способами.
+Each addition is a full-fledged element (the full field property set). They can be placed in two ways.
 
-**(1) Стандартные дополнения** генерирует платформа на уровне таблицы. В DSL указывайте **только отклонения** от стандартного вида — через карту `additions` (ключ = тип дополнения):
+**(1) Standard additions** are generated by the platform at the table level. In the DSL specify **only deviations** from the standard look - via the `additions` map (key = addition type):
 
 ```json
 { "table": "Список", "path": "Список",
   "additions": { "viewStatus": { "horizontalLocation": "left" } } }
 ```
 
-**(2) Кастомное дополнение**, размещённое прямо в командной панели — обычный элемент в `commandBar` с ключом-типом:
+**(2) A custom addition** placed directly in the command bar - a regular element in `commandBar` with a type key:
 
 ```json
 { "table": "Список", "path": "Список", "commandBar": [
@@ -99,28 +99,28 @@
 ]}
 ```
 
-- Тип-ключ: `searchString` / `viewStatus` / `searchControl`.
-- `source` — имя таблицы-источника; необязательно, по умолчанию = имя родительской таблицы.
-- `horizontalLocation`: `auto` (по умолчанию) / `left` / `right`. Применимо и к обычным элементам командных панелей.
-- Прочие свойства как у поля: `title`, `visible`, `userVisible`, `enabled`, `tooltip`, оформление, `width` / `maxWidth` / `autoMaxWidth` / `horizontalStretch` / `groupHorizontalAlign` и др.
+- Type key: `searchString` / `viewStatus` / `searchControl`.
+- `source` - source table name; optional, by default = the parent table name.
+- `horizontalLocation`: `auto` (default) / `left` / `right`. Also applies to regular command bar elements.
+- Other properties as for a field: `title`, `visible`, `userVisible`, `enabled`, `tooltip`, appearance, `width` / `maxWidth` / `autoMaxWidth` / `horizontalStretch` / `groupHorizontalAlign` and others.
 
-## Таблица динамического списка
+## Dynamic list table
 
-Когда `path` таблицы указывает на реквизит `type: "DynamicList"` (см. `references/dynamic-list.md`), доступен блок специфичных свойств. Указывайте **только отличия** от умолчания.
+When the table `path` points to an attribute of `type: "DynamicList"` (see `references/dynamic-list.md`), a block of specific properties is available. Specify **only differences** from the default.
 
-| Ключ | Тип | Умолчание | Назначение |
+| Key | Type | Default | Purpose |
 |------|-----|-----------|-----------|
-| `rowPictureDataPath` | string | картинка осн. таблицы | Путь к картинке строки. `""` — подавить картинку |
-| `rowsPicture` | string | — | Картинка строк (`"CommonPicture.X"`) |
-| `autoRefresh` | bool | `false` | Автообновление списка |
-| `autoRefreshPeriod` | int | `60` | Период автообновления, сек |
-| `updateOnDataChange` | string | `Auto` | Обновлять при изменении данных: `Auto` / `DontUpdate` |
-| `choiceFoldersAndItems` | string | `Items` | Что выбирать: `Items` / `Folders` / `FoldersAndItems` |
-| `restoreCurrentRow` | bool | `false` | Восстанавливать текущую строку при обновлении |
-| `showRoot` | bool | `true` | Показывать корень |
-| `allowRootChoice` | bool | `false` | Разрешить выбор корня |
-| `allowGettingCurrentRowURL` | bool | `true` | Разрешить получение URL текущей строки |
-| `userSettingsGroup` | string | — | Группа пользовательских настроек (привязка к одноимённой группе настроек) |
+| `rowPictureDataPath` | string | main table picture | Path to the row picture. `""` - suppress the picture |
+| `rowsPicture` | string | - | Row picture (`"CommonPicture.X"`) |
+| `autoRefresh` | bool | `false` | List auto-refresh |
+| `autoRefreshPeriod` | int | `60` | Auto-refresh period, sec |
+| `updateOnDataChange` | string | `Auto` | Update on data change: `Auto` / `DontUpdate` |
+| `choiceFoldersAndItems` | string | `Items` | What to choose: `Items` / `Folders` / `FoldersAndItems` |
+| `restoreCurrentRow` | bool | `false` | Restore the current row on refresh |
+| `showRoot` | bool | `true` | Show the root |
+| `allowRootChoice` | bool | `false` | Allow choosing the root |
+| `allowGettingCurrentRowURL` | bool | `true` | Allow getting the current row URL |
+| `userSettingsGroup` | string | - | Custom settings group (binding to the settings group of the same name) |
 
 ```json
 { "table": "Список", "path": "Список",

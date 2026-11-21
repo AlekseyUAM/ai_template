@@ -1,4 +1,4 @@
-// web-test cli/server v1.0 — HTTP server для exec/shot/stop/status в процессе start
+// web-test cli/server v1.0 - HTTP server for exec/shot/stop/status in the start process
 // Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import * as browser from '../browser.mjs';
 import { json, readBody } from './util.mjs';

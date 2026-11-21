@@ -1,6 +1,6 @@
 ---
 name: subsystem-validate
-description: Валидация подсистемы 1С. Используй после создания или модификации подсистемы для проверки корректности
+description: Validate a 1C subsystem. Use after creating or modifying a subsystem to verify correctness
 argument-hint: <SubsystemPath> [-Detailed] [-MaxErrors 30]
 allowed-tools:
   - Bash
@@ -8,20 +8,20 @@ allowed-tools:
   - Glob
 ---
 
-# /subsystem-validate — валидация подсистемы 1С
+# /subsystem-validate - validation of a 1C subsystem
 
-Проверяет структурную корректность XML-файла подсистемы из выгрузки конфигурации.
+Checks structural correctness of the subsystem XML file from a configuration dump.
 
-## Параметры
+## Parameters
 
-| Параметр      | Обяз. | Умолч. | Описание                                  |
-|---------------|:-----:|---------|--------------------------------------------|
-| SubsystemPath | да    | —       | Путь к XML-файлу подсистемы                |
-| Detailed      | нет   | —       | Подробный вывод (все проверки, включая успешные) |
-| MaxErrors     | нет   | 30      | Остановиться после N ошибок                |
-| OutFile       | нет   | —       | Записать результат в файл                  |
+| Parameter     | Req. | Default | Description                               |
+|---------------|:-----:|---------|-------------------------------------------|
+| SubsystemPath | yes   | -       | Path to the subsystem XML file            |
+| Detailed      | no    | -       | Verbose output (all checks, including successful ones) |
+| MaxErrors     | no    | 30      | Stop after N errors                       |
+| OutFile       | no    | -       | Write the result to a file                |
 
-## Команда
+## Command
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/subsystem-validate.py" -SubsystemPath "Subsystems/Продажи"

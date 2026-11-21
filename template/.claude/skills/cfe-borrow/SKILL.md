@@ -1,6 +1,6 @@
 ---
 name: cfe-borrow
-description: Заимствование объектов из конфигурации 1С в расширение (CFE). Используй когда нужно перехватить метод, изменить форму или добавить реквизит к существующему объекту конфигурации
+description: Borrowing objects from a 1C configuration into an extension (CFE). Use when you need to intercept a method, change a form or add an attribute to an existing configuration object
 argument-hint: -ExtensionPath <path> -ConfigPath <path> -Object "Catalog.Контрагенты.Form.ФормаЭлемента" -BorrowMainAttribute
 allowed-tools:
   - Bash
@@ -8,74 +8,74 @@ allowed-tools:
   - Glob
 ---
 
-# /cfe-borrow — Заимствование объектов из конфигурации
+# /cfe-borrow - Borrowing objects from a configuration
 
-Заимствует объекты из основной конфигурации в расширение. Создаёт XML-файлы с `ObjectBelonging=Adopted` и `ExtendedConfigurationObject`, добавляет запись в ChildObjects расширения.
+Borrows objects from the main configuration into the extension. Creates XML files with `ObjectBelonging=Adopted` and `ExtendedConfigurationObject`, adds an entry to the extension ChildObjects.
 
-## Предусловие
+## Precondition
 
-Расширение должно быть создано (`/cfe-init`) и содержать валидный `Configuration.xml`.
+The extension must be created (`/cfe-init`) and contain a valid `Configuration.xml`.
 
-### Авто-определение ConfigPath
+### ConfigPath auto-detection
 
-Если пользователь не указал `-ConfigPath` — попробуй определить автоматически:
-1. Прочитай `.v8-project.json` из корня проекта
-2. Разреши целевую базу (по имени, ветке или `default` — алгоритм из `/db-list`)
-3. Если у базы есть поле `configSrc` — используй как `-ConfigPath`
-4. Если `configSrc` нет — спроси у пользователя
+If the user did not specify `-ConfigPath` - try to detect it automatically:
+1. Read `.v8-project.json` from the project root
+2. Resolve the target infobase (by name, branch or `default` - the algorithm from `/db-list`)
+3. If the infobase has a `configSrc` field - use it as `-ConfigPath`
+4. If there is no `configSrc` - ask the user
 
-## Параметры
+## Parameters
 
-| Параметр | Описание |
+| Parameter | Description |
 |----------|----------|
-| `ExtensionPath` | Путь к каталогу расширения (обязат.) |
-| `ConfigPath` | Путь к конфигурации-источнику (обязат.) |
-| `Object` | Что заимствовать (обязат.), batch через `;;` |
-| `Module` | Создать пустые модули объекта: `ObjectModule`, `ManagerModule`, `RecordSetModule`, `ValueManagerModule` (через запятую) или `None`. У типов с единственным модулем (`CommonModule`, `HTTPService`, `WebService`) он создаётся и без параметра |
-| `BorrowMainAttribute` | Заимствовать основной реквизит формы. Без параметра — не заимствует. `Form` — реквизиты, используемые на форме. `All` — все реквизиты объекта. Требует форму в -Object |
+| `ExtensionPath` | Path to the extension directory (required) |
+| `ConfigPath` | Path to the source configuration (required) |
+| `Object` | What to borrow (required), batch via `;;` |
+| `Module` | Create empty object modules: `ObjectModule`, `ManagerModule`, `RecordSetModule`, `ValueManagerModule` (comma-separated) or `None`. For types with a single module (`CommonModule`, `HTTPService`, `WebService`) it is created even without the parameter |
+| `BorrowMainAttribute` | Borrow the main form attribute. Without the parameter - does not borrow. `Form` - attributes used on the form. `All` - all object attributes. Requires a form in -Object |
 
-## Формат -Object
+## -Object format
 
-- `Catalog.Контрагенты` — справочник
-- `CommonModule.РаботаСФайлами` — общий модуль
-- `Document.РеализацияТоваров` — документ
-- `Enum.ВидыОплат` — перечисление
-- `Catalog.Контрагенты.Form.ФормаЭлемента` — форма объекта (заимствование формы)
-- `CommonForm.ВыборПериода` — общая форма, вместе с содержимым (как форма объекта). С `-BorrowMainAttribute` владелец берётся из типа основного реквизита: объект (`DataProcessorObject.X` и т.п.), основная таблица динамического списка или константы набора констант
-- `Catalog.X ;; CommonModule.Y ;; Enum.Z` — несколько объектов
+- `Catalog.Контрагенты` - catalog
+- `CommonModule.РаботаСФайлами` - common module
+- `Document.РеализацияТоваров` - document
+- `Enum.ВидыОплат` - enum
+- `Catalog.Контрагенты.Form.ФормаЭлемента` - object form (form borrowing)
+- `CommonForm.ВыборПериода` - common form, together with its content (like an object form). With `-BorrowMainAttribute` the owner is taken from the main attribute type: object (`DataProcessorObject.X` etc.), the main dynamic list table or the constants of a constants set
+- `Catalog.X ;; CommonModule.Y ;; Enum.Z` - several objects
 
-### Заимствование форм
+### Borrowing forms
 
-Формат `Тип.Имя.Form.ИмяФормы` заимствует форму конкретного объекта. Если родительский объект ещё не заимствован — он будет заимствован автоматически.
+The format `Тип.Имя.Form.ИмяФормы` borrows the form of a specific object. If the parent object is not borrowed yet - it will be borrowed automatically.
 
-Создаётся:
-1. **Метаданные формы** — `Forms/ИмяФормы.xml` с `ObjectBelonging=Adopted`, `FormType=Managed`
-2. **Form.xml** — `Forms/ИмяФормы/Ext/Form.xml` с копией исходной формы + `<BaseForm>` (начальное состояние)
-3. **Module.bsl** — пустой файл `Forms/ИмяФормы/Ext/Form/Module.bsl`
-4. **Регистрация** — `<Form>` в ChildObjects родительского объекта
+Created:
+1. **Form metadata** - `Forms/ИмяФормы.xml` with `ObjectBelonging=Adopted`, `FormType=Managed`
+2. **Form.xml** - `Forms/ИмяФормы/Ext/Form.xml` with a copy of the source form + `<BaseForm>` (initial state)
+3. **Module.bsl** - an empty file `Forms/ИмяФормы/Ext/Form/Module.bsl`
+4. **Registration** - `<Form>` in the ChildObjects of the parent object
 
-### Заимствование основного реквизита формы (-BorrowMainAttribute)
+### Borrowing the main form attribute (-BorrowMainAttribute)
 
-**Когда нужно**: пользователь хочет добавить новый реквизит в существующий объект конфигурации и вывести его на заимствованную форму. Без `-BorrowMainAttribute` форма заимствуется "пустой" — только визуальные элементы, без привязки к данным объекта. С `-BorrowMainAttribute` форма сохраняет привязки к реквизитам объекта (DataPath), что позволяет затем добавить на неё новые элементы через `/form-edit`.
+**When needed**: the user wants to add a new attribute to an existing configuration object and display it on a borrowed form. Without `-BorrowMainAttribute` the form is borrowed "empty" - only visual elements, without binding to object data. With `-BorrowMainAttribute` the form keeps bindings to object attributes (DataPath), which then allows adding new elements to it via `/form-edit`.
 
-**Два режима**:
-- `Form` (по умолчанию) — заимствует только те реквизиты объекта, которые уже выведены на форму. Оптимальный выбор для большинства случаев
-- `All` — заимствует все реквизиты и табличные части объекта. Используй если планируешь выводить на форму реквизиты, которых на ней ещё нет
+**Two modes**:
+- `Form` (default) - borrows only object attributes already displayed on the form. The optimal choice for most cases
+- `All` - borrows all attributes and tabular sections of the object. Use if you plan to display attributes on the form that are not there yet
 
-**Типовой сценарий** (добавление реквизита + вывод на форму):
-1. `/cfe-borrow` с `-BorrowMainAttribute` — заимствовать форму с реквизитами
-2. `/meta-edit` — добавить новый реквизит в объект расширения
-3. `/form-edit` — вывести реквизит на заимствованную форму
+**Typical scenario** (adding an attribute + displaying it on the form):
+1. `/cfe-borrow` with `-BorrowMainAttribute` - borrow the form with attributes
+2. `/meta-edit` - add a new attribute to the extension object
+3. `/form-edit` - display the attribute on the borrowed form
 
-**Защита существующих данных**: уже заимствованный объект не перезаписывается — добавляется только недостающее. Повторный вызов безопасен: собственные реквизиты расширения, заимствованные подобъекты и код в модулях сохраняются.
+**Protection of existing data**: an already borrowed object is not overwritten - only the missing parts are added. A repeated call is safe: the extension's own attributes, borrowed subobjects and code in modules are preserved.
 
-## Команда
+## Command
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/cfe-borrow.py" -ExtensionPath src\cfe\extname -ConfigPath src\cf -Object "Catalog.Контрагенты"
 ```
 
-## Примеры
+## Examples
 
 ```bash
 # Заимствовать один объект
@@ -100,11 +100,10 @@ python "${CLAUDE_SKILL_DIR}/scripts/cfe-borrow.py" -ExtensionPath src\cfe\extnam
 ... -ExtensionPath src\cfe\extname -ConfigPath src\cf -Object "Catalog.Номенклатура.Form.ФормаЭлемента" -BorrowMainAttribute All
 ```
 
-## Верификация
+## Verification
 
 ```
 /cfe-validate <ExtensionPath> -ConfigPath <ConfigPath>
 ```
 
-Конфигурацию-источник передавай и валидатору: заимствованные формы он проверяет по ней.
-
+Pass the source configuration to the validator too: it checks borrowed forms against it.

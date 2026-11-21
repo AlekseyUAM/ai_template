@@ -5,16 +5,16 @@
 import sys, os, argparse
 from lxml import etree
 
-# Регистронезависимый ввод: имена параметров и значения choices принимаются
-# в любом регистре (в argparse по умолчанию совпадение точное).
+# Case-insensitive input: parameter names and choices values are accepted
+# in any case (in argparse exact match is the default).
 def ci_parse_args(parser, argv=None):
-    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
+    """parse_args: parameter names and choices values are accepted in any case."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
         if tok.startswith('-') and tok.lower() in names:
             argv[i] = names[tok.lower()]
-    # choices — зеркало [ValidateSet]; канонизируем ДО разбора, иначе argparse отвергнет регистр
+    # choices - a mirror of [ValidateSet]; we canonicalize BEFORE parsing, otherwise argparse rejects the case
     choice_map = {}
     for a in parser._actions:
         if a.choices:
@@ -224,9 +224,9 @@ def main():
     elif max_font_ref > 0:
         r.error(f'Font index {max_font_ref} referenced but no fonts defined')
     else:
-        # Макет без единого шрифта — норма (ячейки-поля ввода, макеты без оформления).
-        # Строку печатаем явно: раньше вывод молчал, и на таком макете число проверок
-        # у портов расходилось.
+        # A template without a single font is normal (input field cells, templates without decoration).
+        # We print the line explicitly: previously the output was silent, and on such a template the number of checks
+        # differed between ports.
         r.ok('No font references')
 
     # --- Check 11: line/border indices in formats ---
@@ -303,7 +303,7 @@ def main():
                         max_cell_format_ref = val
                     if val > format_count:
                         r.error(f'Row {row_index}: cell format index {val} > format palette size ({format_count})')
-                # Примечание — четвёртый владелец формата, и его ссылка тоже бывает битой.
+                # A note is the fourth format owner, and its reference can also be broken.
                 note = cell.find(f'{{{NS_D}}}note')
                 if note is not None:
                     nf = note.find(f'{{{NS_D}}}formatIndex')
@@ -405,8 +405,8 @@ def main():
                 draw_id = draw_id_node.text if draw_id_node is not None else '?'
                 r.error(f'Drawing id={draw_id}: pictureIndex={pic_idx} > picture count ({picture_count})')
 
-        # Оформление рисунка — такая же запись палитры форматов, как у ячейки, и висячая
-        # ссылка на неё так же валит загрузку макета.
+        # Figure decoration is the same format palette entry as for a cell, and a dangling
+        # reference to it likewise fails template loading.
         fmt_idx_node = drawing.find(f'{{{NS_D}}}formatIndex')
         if fmt_idx_node is not None and fmt_idx_node.text:
             fmt_idx = int(fmt_idx_node.text)
@@ -416,9 +416,9 @@ def main():
                 r.error(f'Drawing id={draw_id}: formatIndex={fmt_idx} > format palette size ({format_count})')
 
     # --- Check 13: value cells (input fields) ---
-    # Свойства containsValue/valueType/controlType принадлежат ЯЧЕЙКЕ: на корпусе ERP
-    # (370 197 ссылок) на такие записи палитры ссылаются только <f>, ни строка, ни колонка,
-    # ни defaultFormatIndex. Ячейка со значением текста не несёт — ни одна из 370 197.
+    # The containsValue/valueType/controlType properties belong to the CELL: on the ERP corpus
+    # (370 197 references) only <f> refers to such palette entries, neither row, nor column,
+    # nor defaultFormatIndex. A cell with a value does not carry text - none of the 370 197.
     value_format_idx = set()
     control_guids = ('381ed624-9217-4e63-85db-c4c3cb87daae', '35af3d93-d7c7-4a2e-a8eb-bac87a1a3f26')
     for i, fmt in enumerate(format_nodes, start=1):
@@ -439,9 +439,9 @@ def main():
         ctl = fmt.find(f'{{{NS_D}}}controlType')
         if ctl is not None and (ctl.text or '').strip().lower() not in control_guids:
             r.warn(f'Format {i}: unknown controlType {(ctl.text or "").strip()}')
-        # Флажок Конфигуратор предлагает только для булева и числа. Движок принимает его на
-        # любом типе (проверено сборкой EPF и обратной выгрузкой), поэтому это предупреждение,
-        # а не ошибка: собрать такую ячейку в Конфигураторе нельзя, и почти наверняка это описка.
+        # Configurator offers the checkbox only for boolean and number. The engine accepts it on
+        # any type (verified by EPF assembly and reverse export), so this is a warning,
+        # not an error: such a cell cannot be assembled in Configurator, and it is almost certainly a typo.
         if ctl is not None and (ctl.text or '').strip().lower() == control_guids[1] and vt is not None:
             kinds = [(t.text or '').strip() for t in vt if t.tag.endswith('}Type')]
             if kinds != ['xs:boolean'] and kinds != ['xs:decimal']:
@@ -467,8 +467,8 @@ def main():
                 continue
             if cell.find(f'{{{NS_D}}}tl') is not None:
                 r.error(f'Row {rn}: cell contains a value and text at the same time')
-    # Значение и настройки элемента управления бывают только у ячейки-поля ввода: на корпусе
-    # ни одного <v> и ни одного <control> в обычной ячейке.
+    # The value and control settings exist only for an input field cell: on the corpus
+    # not a single <v> and not a single <control> in an ordinary cell.
     for ri in root.findall(f'{{{NS_D}}}rowsItem'):
         if r.stopped:
             break
@@ -504,9 +504,9 @@ def main():
     if value_format_idx:
         r.ok(f'Value cells: {len(value_format_idx)} value formats')
 
-    # --- Check 14: группировки строк и колонок ---
-    # Диапазоны группировок либо вложены, либо не пересекаются: на корпусе 40 620 886 пар
-    # непересекающихся и 599 958 вложенных, частичных пересечений нет ни одного.
+    # --- Check 14: row and column groupings ---
+    # Grouping ranges are either nested or do not intersect: on the corpus, 40 620 886 non-intersecting
+    # pairs and 599 958 nested ones, there is not a single partial intersection.
     for tag in ('vg', 'hg'):
         ranges = []
         for g in root.findall(f'{{{NS_D}}}{tag}'):

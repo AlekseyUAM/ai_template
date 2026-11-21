@@ -1,132 +1,132 @@
 ---
 name: bsp-reuse
-description: Ревью BSL-кода на «изобретение велосипеда» — своя реализация там, где есть готовая публичная функция БСП (ОбщегоНазначения, СтроковыеФункции, ФайловаяСистема, Пользователи и др.). Используй при код-ревью, чтобы предложить замену ручного кода на вызов БСП.
+description: Review of BSL code for "reinventing the wheel" - a custom implementation where a ready public BSP function exists (ОбщегоНазначения, СтроковыеФункции, ФайловаяСистема, Пользователи etc.). Use during code review to suggest replacing manual code with a BSP call.
 allowed-tools:
   - Read
   - Grep
   - Glob
 ---
 
-# /bsp-reuse — ревью на «изобретение велосипеда» вместо функций БСП
+# /bsp-reuse - review for "reinventing the wheel" instead of BSP functions
 
-Подсказывает ревьюеру, что разработчик написал **свою** реализацию там, где
-в Библиотеке стандартных подсистем (БСП) уже есть готовая **публичная**
-функция. Пример: вместо `ОбщегоНазначения.ЗначениеРеквизитаОбъекта(Ссылка,
-"Склад")` написан отдельный запрос за одним реквизитом или обращение
-`Ссылка.Склад` в цикле.
+Tells the reviewer that the developer wrote a **custom** implementation where
+the Standard Subsystems Library (BSP) already has a ready **public**
+function. Example: instead of `ОбщегоНазначения.ЗначениеРеквизитаОбъекта(Ссылка,
+"Склад")` a separate query for one attribute is written, or `Ссылка.Склад` is accessed
+in a loop.
 
-Это навык ручного ревью: скрипт не определит «велосипед» надёжно (это
-семантика). Навык даёт каталог публичного API БСП по темам и методику, как по
-коду разработчика найти готовую замену.
+This is a manual review skill: a script cannot reliably detect a "wheel" (this is
+semantics). The skill provides a catalog of the public BSP API by topic and
+a method for finding a ready replacement from the developer's code.
 
-## Severity находок
+## Finding severity
 
-Единая шкала (как в `bsl_ls`: критичная/важная/минорная). Находка bsp-reuse по
-умолчанию **минорная** — дублирование/читаемость, формулируй как «рассмотрите
-замену». Находка **важная**, если ручная реализация бьёт по производительности —
-лишние запросы к СУБД: чтение реквизитов/представлений в цикле по ссылкам, свой
-запрос за 1–2 реквизитами по одной ссылке вместо списочной функции
-(`ЗначенияРеквизитовОбъектов`), запись в журнал/создание объектов в цикле. Вызов
-**устаревшей** функции БСП — минорная (предложи актуальную замену). Правило
-вердикта (критичная|важная → на доработку) — в чеклисте `reviewer`.
+A single scale (as in `bsl_ls`: critical/important/minor). A bsp-reuse finding is
+**minor** by default - duplication/readability, phrase it as "consider
+replacing". A finding is **important** if the manual implementation hurts performance -
+extra DBMS queries: reading attributes/presentations in a loop over refs, a custom
+query for 1-2 attributes by one ref instead of a list function
+(`ЗначенияРеквизитовОбъектов`), writing to the log/creating objects in a loop. Calling
+an **obsolete** BSP function is minor (suggest the current replacement). The verdict
+rule (critical|important → rework) is in the `reviewer` checklist.
 
-## Как применять при ревью
+## How to apply during review
 
-1. Пройди по diff и выдели два вида кандидатов:
-   - **Собственные helper-функции** разработчика (`Функция МойРазбор...`,
-     `ЗначениеПоСсылке`, `РазбитьСтроку`, `УдалитьДубли`, копирование структур
-     и т.п.) — проверь, нет ли их уже в БСП.
-   - **Inline-конструкции**: циклы, накопление в массив/строку, ручные запросы
-     за одним реквизитом, разбор строк, работа с файлами/датами — для многих
-     есть одна функция БСП.
-2. Определи **тему** кода (реквизиты объекта, коллекции, строки, файлы,
-   пользователи, даты запрета и т.д.) и открой нужный раздел каталога:
-   - `reference/obshego.md` — модуль **ОбщегоНазначения** и его клиент-серверные
-     варианты (основной источник «велосипедов», смотри в первую очередь).
-   - `reference/modules.md` — остальные 15 групп модулей.
-3. Для найденного совпадения выдай замечание: что написано вручную → какую
-   функцию БСП вызвать. **Указывай точную сигнатуру** из каталога.
+1. Walk the diff and pick out two kinds of candidates:
+   - **Developer's own helper functions** (`Функция МойРазбор...`,
+     `ЗначениеПоСсылке`, `РазбитьСтроку`, `УдалитьДубли`, structure copying
+     etc.) - check whether they already exist in BSP.
+   - **Inline constructs**: loops, accumulation into an array/string, manual queries
+     for one attribute, string parsing, work with files/dates - for many of these
+     there is a single BSP function.
+2. Determine the **topic** of the code (object attributes, collections, strings, files,
+   users, prohibition dates etc.) and open the needed catalog section:
+   - `reference/obshego.md` - the **ОбщегоНазначения** module and its client-server
+     variants (the main source of "wheels", look here first).
+   - `reference/modules.md` - the remaining 15 module groups.
+3. For a match found, issue a finding: what is written manually → which
+   BSP function to call. **Specify the exact signature** from the catalog.
 
-Читай каталоги **по требованию** (только нужный раздел), чтобы не раздувать
-контекст.
+Read the catalogs **on demand** (only the needed section) so as not to inflate the
+context.
 
-## Три правила, без которых будет ложное замечание
+## Three rules without which the finding will be false
 
-1. **Только публичный интерфейс.** Рекомендуй функции из модулей вида
-   `ОбщегоНазначения`, `СтроковыеФункцииКлиентСервер`, `ФайловаяСистема` и т.п.
-   **Никогда** не рекомендуй модули `*Служебный*`, `*СлужебныйКлиент*`,
+1. **Public interface only.** Recommend functions from modules like
+   `ОбщегоНазначения`, `СтроковыеФункцииКлиентСервер`, `ФайловаяСистема` etc.
+   **Never** recommend `*Служебный*`, `*СлужебныйКлиент*`,
    `*ВызовСервера*`, `*ПовтИсп`, `*Локализация`, `*Переопределяемый`,
-   `*Глобальный` — это внутренняя кухня БСП, вызывать их из прикладного кода
-   нельзя. В каталоге перечислены только публичные функции.
+   `*Глобальный` modules - this is BSP internal kitchen, they must not be called from application code.
+   The catalog lists only public functions.
 
-2. **Контекст клиент/сервер.** У многих функций есть серверный и клиентский
-   модуль с одинаковым именем (`ОбщегоНазначения` / `ОбщегоНазначенияКлиент`,
-   `ФайловаяСистема` / `ФайловаяСистемаКлиент`). Рекомендуй тот, что доступен
-   в контексте кода: серверный модуль из `&НаКлиенте` не виден, и наоборот.
-   Модули `*КлиентСервер` доступны везде.
+2. **Client/server context.** Many functions have a server and a client
+   module with the same name (`ОбщегоНазначения` / `ОбщегоНазначенияКлиент`,
+   `ФайловаяСистема` / `ФайловаяСистемаКлиент`). Recommend the one available
+   in the code context: a server module is not visible from `&НаКлиенте`, and vice versa.
+   `*КлиентСервер` modules are available everywhere.
 
-3. **Не предлагай устаревшее.** Функции, помеченные в каталоге `⚠ устар.`,
-   рекомендовать нельзя — у них указана актуальная замена. Если разработчик сам
-   вызывает устаревшую функцию БСП — это тоже замечание: предложи переход на
-   актуальную.
+3. **Do not suggest obsolete functions.** Functions marked in the catalog `⚠ устар.`
+   must not be recommended - the current replacement is given for them. If the developer
+   calls an obsolete BSP function themselves, that is also a finding: suggest switching to the
+   current one.
 
-## Как ищется совпадение
+## How a match is found
 
-- По **имени helper-функции** разработчика: прикинь назначение и найди тему в
-  каталоге. `ПолучитьЗначениеРеквизита`, `РеквизитПоСсылке` → реквизиты объекта;
-  `РазбитьСтроку`, `СтрокаВМассив` → строки; `КопияТаблицы` → коллекции.
-- По **inline-паттерну**. Частые маркеры «велосипеда» (детектируемые в т.ч.
-  навыком `code-analyze`):
+- By the **name of the developer's helper function**: estimate the purpose and find the topic in
+  the catalog. `ПолучитьЗначениеРеквизита`, `РеквизитПоСсылке` → object attributes;
+  `РазбитьСтроку`, `СтрокаВМассив` → strings; `КопияТаблицы` → collections.
+- By an **inline pattern**. Common "wheel" markers (detectable among others
+  by the `code-analyze` skill):
 
-| Паттерн в коде | Вероятная замена БСП |
+| Pattern in code | Probable BSP replacement |
 |---|---|
-| `Запрос` с выбором 1–2 реквизитов по одной ссылке | `ОбщегоНазначения.ЗначениеРеквизитаОбъекта` / `ЗначенияРеквизитовОбъекта` |
-| `Ссылка.Реквизит` в цикле по массиву ссылок | `ОбщегоНазначения.ЗначенияРеквизитовОбъектов` (один запрос) |
+| `Запрос` selecting 1-2 attributes by one ref | `ОбщегоНазначения.ЗначениеРеквизитаОбъекта` / `ЗначенияРеквизитовОбъекта` |
+| `Ссылка.Реквизит` in a loop over an array of refs | `ОбщегоНазначения.ЗначенияРеквизитовОбъектов` (one query) |
 | `Если Структура.Свойство("К") Тогда Знач = Структура.К …` | `ОбщегоНазначенияКлиентСервер.СвойствоСтруктуры` |
-| `М = Новый Массив; М.Добавить(Знач)` ради одного значения | `ОбщегоНазначенияКлиентСервер.ЗначениеВМассиве` |
-| ручное удаление дублей из массива циклом | `ОбщегоНазначенияКлиентСервер.СвернутьМассив` |
-| цикл по ТЗ со сбором колонки в массив | `ОбщегоНазначения.ВыгрузитьКолонку` |
-| ручное рекурсивное копирование структуры/ТЗ | `ОбщегоНазначения.СкопироватьРекурсивно` |
-| разбиение строки по разделителю через `СтрНайти`/`Сред` | платформенная `СтрРазделить` (не БСП) |
-| конкатенация `"" + А + " из " + Б` для шаблона | платформенная `СтрШаблон` (не БСП) |
-| `Метаданные().Имя = "Документ…"` для определения вида | `ОбщегоНазначения.ЭтоДокумент` / `ЭтоСправочник` / … |
-| `Лев(СтрокаСоединения…)`, свой разбор пути файла | `ОбщегоНазначенияКлиентСервер.РазложитьПолноеИмяФайла` и смежные |
-| `ПолучитьИмяВременногоФайла` + ручное удаление | `ФайловаяСистема.СоздатьВременныйКаталог` / `УдалитьВременныйФайл` |
-| свой `HTTPСоединение` ради скачивания файла | `ПолучениеФайловИзИнтернета.СкачатьФайлНаСервере` |
-| `ЗаписьЖурналаРегистрации(...)` в цикле | `ЖурналРегистрации.ЗаписатьСобытияВЖурналРегистрации` (пакет) |
+| `М = Новый Массив; М.Добавить(Знач)` for a single value | `ОбщегоНазначенияКлиентСервер.ЗначениеВМассиве` |
+| manual removal of duplicates from an array by a loop | `ОбщегоНазначенияКлиентСервер.СвернутьМассив` |
+| loop over a VT collecting a column into an array | `ОбщегоНазначения.ВыгрузитьКолонку` |
+| manual recursive copying of a structure/VT | `ОбщегоНазначения.СкопироватьРекурсивно` |
+| string splitting by a delimiter via `СтрНайти`/`Сред` | platform `СтрРазделить` (not BSP) |
+| concatenation `"" + А + " из " + Б` for a template | platform `СтрШаблон` (not BSP) |
+| `Метаданные().Имя = "Документ…"` to determine the kind | `ОбщегоНазначения.ЭтоДокумент` / `ЭтоСправочник` / … |
+| `Лев(СтрокаСоединения…)`, custom file path parsing | `ОбщегоНазначенияКлиентСервер.РазложитьПолноеИмяФайла` and related |
+| `ПолучитьИмяВременногоФайла` + manual deletion | `ФайловаяСистема.СоздатьВременныйКаталог` / `УдалитьВременныйФайл` |
+| custom `HTTPСоединение` for downloading a file | `ПолучениеФайловИзИнтернета.СкачатьФайлНаСервере` |
+| `ЗаписьЖурналаРегистрации(...)` in a loop | `ЖурналРегистрации.ЗаписатьСобытияВЖурналРегистрации` (batch) |
 | `Пользователи.НайтиПоИмени(ИмяПользователя())` | `Пользователи.ТекущийПользователь` / `АвторизованныйПользователь` |
-| ручная проверка роли «ПолныеПрава» | `Пользователи.ЭтоПолноправныйПользователь` / `РолиДоступны` |
-| свой `ФоновыеЗадания.Выполнить` + опрос состояния | `ДлительныеОперации.ВыполнитьФункцию` / `ВыполнитьПроцедуру` |
-| ручной замер `ТекущаяУниверсальнаяДатаВМиллисекундах` | `ОценкаПроизводительности.НачатьЗамерВремени` / `ЗакончитьЗамерВремени` |
-| ручное распределение суммы с «копейками» | `ОбщегоНазначения.РаспределитьСуммуПропорциональноКоэффициентам` |
-| свой разбор/проверка email | `ОбщегоНазначенияКлиентСервер.АдресЭлектроннойПочтыСоответствуетТребованиям` |
-| сравнение версий `"1.2.3"` разбором на части | `ОбщегоНазначенияКлиентСервер.СравнитьВерсии` |
+| manual check of the "Full rights" role | `Пользователи.ЭтоПолноправныйПользователь` / `РолиДоступны` |
+| custom `ФоновыеЗадания.Выполнить` + state polling | `ДлительныеОперации.ВыполнитьФункцию` / `ВыполнитьПроцедуру` |
+| manual timing with `ТекущаяУниверсальнаяДатаВМиллисекундах` | `ОценкаПроизводительности.НачатьЗамерВремени` / `ЗакончитьЗамерВремени` |
+| manual amount allocation with "cents" | `ОбщегоНазначения.РаспределитьСуммуПропорциональноКоэффициентам` |
+| custom email parsing/validation | `ОбщегоНазначенияКлиентСервер.АдресЭлектроннойПочтыСоответствуетТребованиям` |
+| comparing versions `"1.2.3"` by parsing into parts | `ОбщегоНазначенияКлиентСервер.СравнитьВерсии` |
 
-Полные списки и сигнатуры — в каталогах `reference/`.
+Full lists and signatures - in the `reference/` catalogs.
 
-## Границы и ложные срабатывания
+## Boundaries and false positives
 
-- **Не всякое совпадение — велосипед.** Если функция разработчика делает
-  больше/меньше, чем функция БСП, замечание необязательно. Описывай как
-  «рассмотрите замену», а не как ошибку.
-- **Производительность.** Чтение реквизитов в цикле по ссылкам — не только
-  дублирование, но и лишние запросы к СУБД; подчёркивай это (оптимальность).
-- **Доступность подсистемы.** Функции тем «Файлы», «Контактная информация»,
-  «Курсы валют», «Банки», «Оценка производительности» доступны только если
-  соответствующая подсистема БСП внедрена. Если сомневаешься — формулируй
-  условно.
-- **Платформа важнее БСП-обёртки.** Часть функций БСП — лишь обёртки над
-  методами платформы. Там, где платформенный метод закрывает задачу полностью,
-  рекомендуй **платформенный** метод, а БСП-обёртку **не** предлагай (и помечай
-  как лишнюю, если её вызывает разработчик):
-  - разбиение строки → `СтрРазделить` (не `РазложитьСтрокуВМассивПодстрок`);
-  - подстановка в шаблон → `СтрШаблон` (не `ПодставитьПараметрыВСтроку`).
-- Навык смотрит только 16 групп модулей из каталога; другие подсистемы БСП
-  (почта, ЭДО, печать и т.д.) здесь не покрыты.
+- **Not every match is a wheel.** If the developer's function does
+  more/less than the BSP function, the finding is optional. Describe it as
+  "consider replacing", not as an error.
+- **Performance.** Reading attributes in a loop over refs is not only
+  duplication but also extra DBMS queries; emphasize this (optimality).
+- **Subsystem availability.** Functions of the "Files", "Contact information",
+  "Currency rates", "Banks", "Performance measurement" topics are available only if
+  the corresponding BSP subsystem is deployed. If in doubt, phrase it
+  conditionally.
+- **The platform is more important than the BSP wrapper.** Some BSP functions are
+  merely wrappers over platform methods. Where the platform method fully covers the task,
+  recommend the **platform** method, and do **not** suggest the BSP wrapper (and mark it
+  as redundant if the developer calls it):
+  - string splitting → `СтрРазделить` (not `РазложитьСтрокуВМассивПодстрок`);
+  - template substitution → `СтрШаблон` (not `ПодставитьПараметрыВСтроку`).
+- The skill covers only 16 module groups from the catalog; other BSP subsystems
+  (mail, EDI, printing etc.) are not covered here.
 
-## Связанные навыки
+## Related skills
 
-- `code-analyze` — находит часть inline-паттернов автоматически (тип через имя
-  метаданных, копирование колонок циклом и др.).
-- `query-review` — ревью запросов; пересекается по
-  `СформироватьСтрокуДляПоискаВЗапросе` (экранирование `ПОДОБНО`).
+- `code-analyze` - finds some inline patterns automatically (type via metadata
+  name, column copying by loop etc.).
+- `query-review` - query review; overlaps on
+  `СформироватьСтрокуДляПоискаВЗапросе` (escaping `ПОДОБНО`).

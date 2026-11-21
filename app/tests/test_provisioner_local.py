@@ -1,3 +1,4 @@
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -60,7 +61,13 @@ def test_run_survives_undecodable_output():
     assert isinstance(res.stdout, str)
 
 
-def test_which_finds_python():
+def test_which_finds_python(monkeypatch):
+    # The running interpreter's directory is not necessarily on PATH (e.g.
+    # pytest invoked as /venv/bin/python). Put it there so the bare name is
+    # resolvable on both POSIX and Windows.
+    monkeypatch.setenv(
+        "PATH",
+        str(Path(sys.executable).parent) + os.pathsep + os.environ.get("PATH", ""))
     prov = LocalProvisioner()
     assert prov.which(Path(sys.executable).name) is not None
 

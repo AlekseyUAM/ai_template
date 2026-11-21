@@ -1,4 +1,4 @@
-// web-test spreadsheet v1.20 — readSpreadsheet + helpers for SpreadsheetDocument (отчёты, печатные формы).
+// web-test spreadsheet v1.20 - readSpreadsheet + helpers for SpreadsheetDocument (reports, print forms).
 // Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 
 import { page, ensureConnected } from '../core/state.mjs';
@@ -189,8 +189,8 @@ function buildSpreadsheetMapping(allCells) {
   };
 
   // --- Level 1: DCS-code row anchor ---
-  // ФСД / СКД-отчёты всегда содержат строку "К1, К2, ..." — rock-solid structural marker.
-  // Якорение через неё — детерминированное, работает даже если все данные — голые целые (отчёт в "тыс.руб").
+  // FSD / DCS reports always contain a "К1, К2, ..." row - rock-solid structural marker.
+  // Anchoring through it is deterministic and works even if all data are bare integers (report in "тыс.руб").
   for (let i = 0; i < rows.length; i++) {
     const detailNonEmpty = rows[i].filter(c => c);
     if (detailNonEmpty.length >= 2 && detailNonEmpty.every(c => /^К\d+$/.test(c))) {

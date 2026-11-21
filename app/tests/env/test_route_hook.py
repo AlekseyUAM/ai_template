@@ -69,7 +69,7 @@ def test_missing_task_json_falls_back(tmp_path):
     m = _load()
     out = m.build_output({"prompt": "tasks/task#100001", "cwd": str(tmp_path)})
     context = out["hookSpecificOutput"]["additionalContext"]
-    assert "Не удалось прочитать task.json" in context
+    assert "Failed to read task.json" in context
 
 
 def test_other_prompt_silent():

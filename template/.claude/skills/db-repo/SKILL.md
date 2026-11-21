@@ -1,7 +1,7 @@
 ---
 name: db-repo
-description: Работа с хранилищем конфигурации 1С. Используй когда нужно захватить объекты, поместить изменения в хранилище конфигурации, получить изменения из него, подключить базу к хранилищу
-argument-hint: <lock|unlock|commit|update> [database] -Objects "<объекты>"
+description: Working with a 1C configuration repository. Use when you need to lock objects, commit changes to the configuration repository, get changes from it, connect a database to the repository
+argument-hint: <lock|unlock|commit|update> [database] -Objects "<objects>"
 allowed-tools:
   - Bash
   - Read
@@ -9,12 +9,12 @@ allowed-tools:
   - AskUserQuestion
 ---
 
-# /db-repo — Хранилище конфигурации 1С
+# /db-repo - 1C configuration repository
 
-Захват и помещение объектов, получение изменений, подключение базы, история версий,
-администрирование хранилища.
+Locking and committing objects, getting changes, connecting a database, version history,
+repository administration.
 
-> Хранилище конфигурации 1С, а не Git-репозиторий.
+> A 1C configuration repository, not a Git repository.
 
 ## Usage
 
@@ -25,10 +25,10 @@ allowed-tools:
 /db-repo update [database]
 ```
 
-## Порядок работы
+## Workflow
 
-В базу, подключённую к хранилищу, исходники грузятся **только частично** и **только по захваченным**
-объектам. Выполняй строго по шагам:
+In a database connected to a repository, sources are loaded **only partially** and **only for locked**
+objects. Follow the steps strictly:
 
 ```
 0. /db-repo update <база>                      — начать с актуального состояния
@@ -40,139 +40,138 @@ allowed-tools:
 5. /db-repo commit <база> -Objects "Справочник.Номенклатура" -Comment "…"
 ```
 
-Шаг 0 стоит делать всегда, когда работа не продолжается сразу после предыдущего цикла: правки
-должны опираться на актуальное состояние — в том числе тех объектов, которые ты не меняешь, но
-используешь.
+Do step 0 whenever work does not continue immediately after the previous cycle: edits
+must rely on the current state - including objects you do not change but use.
 
-Шаг 2 пропускать нельзя: захват и обновление подтягивают из хранилища свежие версии, и загрузка
-исходников, снятых раньше, откатит чужие изменения — молча, без ошибки.
+Step 2 cannot be skipped: locking and updating pull fresh versions from the repository, and loading
+sources taken earlier will roll back someone else's changes - silently, without an error.
 
-**Что вообще захватывается.** Отдельные объекты хранилища — сам объект, а также его **формы,
-макеты и команды**. Реквизиты, табличные части, измерения и ресурсы отдельными объектами **не
-являются**: они правятся в составе владельца.
+**What can be locked at all.** Individual repository objects - the object itself, as well as its
+**forms, templates, and commands**. Attributes, tabular sections, dimensions, and resources are **not**
+separate objects: they are edited as part of the owner.
 
-| Что правишь | Что захватывать |
+| What you edit | What to lock |
 |-------------|-----------------|
-| Реквизит, табличную часть, измерение, ресурс, модуль объекта | сам объект: `Справочник.Контрагенты` |
-| Существующую форму, макет, команду | её саму: `Справочник.Контрагенты.Форма.ФормаЭлемента` |
-| Добавляешь новую форму, макет, команду | объект-владельца; при помещении назови и новый объект |
-| Добавляешь новый объект конфигурации | только корень: `Конфигурация`. Самого объекта ещё нет — захватить его нельзя; при помещении назови и его |
+| An attribute, tabular section, dimension, resource, object module | the object itself: `Справочник.Контрагенты` |
+| An existing form, template, command | that object itself: `Справочник.Контрагенты.Форма.ФормаЭлемента` |
+| Adding a new form, template, command | the owner object; when committing, name the new object too |
+| Adding a new configuration object | only the root: `Конфигурация`. The object itself does not exist yet - it cannot be locked; when committing, name it too |
 
-Захватывай минимум того, что правишь: чем шире захват, тем больше конфликтов с коллегами.
-Захват объекта его формы и макеты не захватывает — для этого есть `-WithChildren`.
+Lock the minimum of what you edit: the wider the lock, the more conflicts with colleagues.
+Locking an object does not lock its forms and templates - use `-WithChildren` for that.
 
-## Параметры подключения
+## Connection parameters
 
-Прочитай `.v8-project.json` из корня проекта и разреши базу:
-1. Если пользователь указал параметры подключения — используй напрямую
-2. Если указал базу по имени — ищи по id / alias / name
-3. Если не указал — сопоставь текущую ветку Git с `databases[].branches`
-4. Если ветка не совпала — используй `default`
+Read `.v8-project.json` from the project root and resolve the database:
+1. If the user specified connection parameters - use them directly
+2. If the user specified a database by name - search by id / alias / name
+3. If not specified - match the current Git branch against `databases[].branches`
+4. If the branch did not match - use `default`
 
-Платформа — `v8path` найденной записи базы, иначе корневой `v8path`. Не задан ни там, ни там — `-V8Path` не передавай.
+Platform - `v8path` of the found database record, otherwise the root `v8path`. If neither is set - do not pass `-V8Path`.
 
-Реквизиты хранилища передавать не нужно: запись базы находится по переданным параметрам
-соединения (`-InfoBasePath` либо `-InfoBaseServer` + `-InfoBaseRef`), реквизиты берутся из её
-`repository`. Задать их явно можно параметрами `-Repository*`.
+There is no need to pass repository credentials: the database record is found by the passed
+connection parameters (`-InfoBasePath` or `-InfoBaseServer` + `-InfoBaseRef`), and credentials are taken
+from its `repository`. They can be set explicitly with the `-Repository*` parameters.
 
-## Команда
+## Command
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/db-repo.py" -Command <подкоманда> <параметры>
 ```
 
-### Рабочий цикл
+### Work cycle
 
-| Подкоманда | Что делает |
+| Subcommand | What it does |
 |------------|------------|
-| `lock` | Захватить объекты |
-| `unlock` | Отменить захват |
-| `commit` | Поместить изменения в хранилище |
-| `update` | Получить изменения из хранилища |
+| `lock` | Lock objects |
+| `unlock` | Cancel the lock |
+| `commit` | Commit changes to the repository |
+| `update` | Get changes from the repository |
 
-### Параметры
+### Parameters
 
-| Параметр | Обязательный | Описание |
+| Parameter | Required | Description |
 |----------|:------------:|----------|
-| `-InfoBasePath <путь>` | * | Файловая база |
-| `-InfoBaseServer <сервер>` | * | Сервер 1С |
-| `-InfoBaseRef <имя>` | * | Имя базы на сервере |
-| `-UserName <имя>` | нет | Пользователь базы |
-| `-Password <пароль>` | нет | Пароль пользователя базы |
-| `-Objects <список>` | усл. | Объекты через запятую. Для `lock`, `unlock`, `commit` обязателен, если не задан `-All` |
-| `-ObjectsFile <путь>` | нет | Файл со списком объектов, одно имя на строку |
-| `-All` | нет | Операция над всей конфигурацией — вместо `-Objects`, а не вместе с ним |
-| `-WithChildren` | нет | Вместе с подчинёнными объектами на полную глубину |
-| `-Comment <текст>` | нет | Комментарий к помещению (`commit`). Многострочный — как есть, с переводами строк |
-| `-KeepLocked` | нет | Оставить объекты захваченными после помещения |
-| `-Revised` | нет | Получать захваченные объекты, если потребуется |
-| `-Force` | нет | Разное по подкомандам — см. ниже |
-| `-Extension <имя>` | нет | Работать с хранилищем расширения |
-| `-RepositoryPath <путь>` | нет | Хранилище явно, вместо реестра |
-| `-RepositoryUser <имя>` | нет | Пользователь хранилища явно |
-| `-RepositoryPassword <пароль>` | нет | Пароль пользователя хранилища явно |
-| `-AdditionalV8Arguments <список>` | нет | Доп. аргументы `1cv8.exe` через запятую |
+| `-InfoBasePath <путь>` | * | File infobase |
+| `-InfoBaseServer <сервер>` | * | 1C server |
+| `-InfoBaseRef <имя>` | * | Database name on the server |
+| `-UserName <имя>` | no | Database user |
+| `-Password <пароль>` | no | Database user password |
+| `-Objects <список>` | cond. | Comma-separated objects. For `lock`, `unlock`, `commit` it is required unless `-All` is set |
+| `-ObjectsFile <путь>` | no | File with the object list, one name per line |
+| `-All` | no | Operation on the whole configuration - instead of `-Objects`, not together with it |
+| `-WithChildren` | no | Together with subordinate objects to full depth |
+| `-Comment <текст>` | no | Commit comment (`commit`). Multi-line - as is, with line breaks |
+| `-KeepLocked` | no | Keep objects locked after committing |
+| `-Revised` | no | Get locked objects if required |
+| `-Force` | no | Varies by subcommand - see below |
+| `-Extension <имя>` | no | Work with the extension's repository |
+| `-RepositoryPath <путь>` | no | Repository explicitly, instead of the registry |
+| `-RepositoryUser <имя>` | no | Repository user explicitly |
+| `-RepositoryPassword <пароль>` | no | Repository user password explicitly |
+| `-AdditionalV8Arguments <список>` | no | Additional `1cv8.exe` arguments, comma-separated |
 
-> `*` — нужен либо `-InfoBasePath`, либо пара `-InfoBaseServer` + `-InfoBaseRef`
+> `*` - either `-InfoBasePath` is needed, or the pair `-InfoBaseServer` + `-InfoBaseRef`
 
 ### `-Force`
 
-| Подкоманда | Что делает |
+| Subcommand | What it does |
 |------------|------------|
-| `unlock` | **Теряет локальные правки**: объекты перезаписываются версией из хранилища |
-| `commit` | Пытается очистить ссылки на удалённые объекты вместо ошибки |
-| `update` | Подтверждает добавление и удаление объектов конфигурации |
+| `unlock` | **Loses local edits**: objects are overwritten by the version from the repository |
+| `commit` | Tries to clear references to deleted objects instead of failing |
+| `update` | Confirms adding and deleting configuration objects |
 
-### Имена объектов
+### Object names
 
-Объект — `Справочник.Номенклатура`. Форма, макет, команда — полным путём:
+An object is `Справочник.Номенклатура`. A form, template, command - by full path:
 `Документ.ЗаказПокупателя.Форма.ФормаДокумента`, `Справочник.Номенклатура.Макет.Печать`.
-Корень конфигурации — `Конфигурация`.
+The configuration root is `Конфигурация`.
 
-Если объект «не найден», это не всегда опечатка: он мог появиться в хранилище позже, чем
-обновлялась база (`/db-repo update`), либо это вовсе не объект хранилища — реквизит или
-табличная часть.
+If an object is "not found", this is not always a typo: it may have appeared in the repository later
+than the database was updated (`/db-repo update`), or it is not a repository object at all - an
+attribute or tabular section.
 
-## Результат
+## Result
 
-Нулевой код не означает, что что-то изменилось. Под нулём приходят «уже захвачено», «обновлять
-нечего», «помещать нечего» и частичный захват — когда часть объектов занята другими, а остальное
-захвачено и его можно править.
+A zero exit code does not mean something changed. A zero code also covers "already locked", "nothing to
+update", "nothing to commit", and a partial lock - when some objects are taken by others while the rest
+are locked and can be edited.
 
-**Читай текст вывода, а не только код.** Там же приходит список полученных из хранилища объектов,
-который требует перевыгрузки перед правкой.
+**Read the output text, not just the code.** It also contains the list of objects received from the
+repository, which requires re-dumping before editing.
 
-## Требуют подтверждения пользователя
+## Operations requiring user confirmation
 
-Перед этими операциями **спроси подтверждение**:
+Before these operations **ask for confirmation**:
 
-| Операция | Почему |
+| Operation | Why |
 |----------|--------|
-| `lock -All` | Захватывает **всю конфигурацию**: на большой базе идёт долго и блокирует работу всей команде |
-| `unlock -Force` | Теряются локальные правки захваченных объектов |
-| `disconnect` | Теряется подключение базы к хранилищу, в том числе на стороне хранилища |
-| `connect -ForceReplaceCfg` | Конфигурация базы заменяется конфигурацией из хранилища |
+| `lock -All` | Locks **the whole configuration**: on a large database it takes long and blocks the whole team |
+| `unlock -Force` | Local edits of locked objects are lost |
+| `disconnect` | The database loses its connection to the repository, including on the repository side |
+| `connect -ForceReplaceCfg` | The database configuration is replaced by the configuration from the repository |
 
-`update` не выполнится, если у базы в реестре не объявлено `repository`, а реквизиты не заданы
-явно: на неподключённой к хранилищу базе эта команда заменяет всю конфигурацию его содержимым и
-рапортует успех.
+`update` will not run if the database record does not declare `repository` and credentials are not set
+explicitly: on a database not connected to a repository this command replaces the whole configuration
+with its contents and reports success.
 
-## Расширения
+## Extensions
 
-У расширения своё хранилище со своим путём. Укажи `-Extension "<Имя>"` — реквизиты возьмутся из
-`extensions[].repository` записи базы. Подкоманды работают одинаково для основной конфигурации и
-для расширения.
+An extension has its own repository with its own path. Specify `-Extension "<Имя>"` - credentials are
+taken from the database record's `extensions[].repository`. Subcommands work the same for the main
+configuration and for an extension.
 
-## Остальные задачи
+## Other tasks
 
-| Файл | Про что |
+| File | About |
 |------|---------|
-| [connect.md](references/connect.md) | Подключение и отключение базы от хранилища |
-| [history.md](references/history.md) | История версий, отчёт, выгрузка версии в CF |
-| [admin.md](references/admin.md) | Создание хранилища, пользователи и права |
-| [service.md](references/service.md) | Метки версий, оптимизация, очистка кеша |
+| [connect.md](references/connect.md) | Connecting and disconnecting a database to/from the repository |
+| [history.md](references/history.md) | Version history, report, dumping a version to CF |
+| [admin.md](references/admin.md) | Creating a repository, users and rights |
+| [service.md](references/service.md) | Version labels, optimization, cache clearing |
 
-## Примеры
+## Examples
 
 ```bash
 # Захватить справочник вместе с подчинёнными объектами
@@ -194,9 +193,9 @@ python "${CLAUDE_SKILL_DIR}/scripts/db-repo.py" -Command update -InfoBasePath "C
 python "${CLAUDE_SKILL_DIR}/scripts/db-repo.py" -Command lock -InfoBaseServer "srv01" -InfoBaseRef "MyApp_Dev" -UserName "Admin" -Extension "МоёРасширение" -Objects "Справочник.Номенклатура"
 ```
 
-## После выполнения
+## After execution
 
-- `lock` или `update` сообщил о полученных объектах — выполни `/db-dump-xml -Mode Partial` с
-  указанным в выводе файлом, и только потом правь исходники
-- после `lock` правки идут через `/db-load-xml -Mode Partial` и `/db-update`
-- изменения готовы — предложи `/db-repo commit` с комментарием
+- `lock` or `update` reported received objects - run `/db-dump-xml -Mode Partial` with the
+  file named in the output, and only then edit the sources
+- after `lock` edits go through `/db-load-xml -Mode Partial` and `/db-update`
+- changes are ready - offer `/db-repo commit` with a comment

@@ -1,5 +1,6 @@
 """Monitor запускает ssh/docker-агентов через локальные ssh/docker CLI."""
 import tempfile
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -43,13 +44,16 @@ def make_monitor(tmp_path, monkeypatch, project, check_error=None):
 
 
 def test_local_launch_keeps_project_cwd(tmp_path, monkeypatch):
-    p = make_project("local", "/srv/p")
+    project_path = str(tmp_path / "p")
+    Path(project_path).mkdir()
+    p = make_project("local", project_path)
     mon, runner, store, _ = make_monitor(tmp_path, monkeypatch, p)
     mon.start(p, "привет", task_id=3)
     _, pid, cmd, cwd = runner.calls[0]
     assert cmd[:2] == ["claude", "--dangerously-skip-permissions"]
-    assert cwd == "/srv/p"
-    assert store.runs[0]["log_file"].startswith("/srv/p/.agentmon/runs/")
+    assert cwd == project_path
+    assert store.runs[0]["log_file"].startswith(
+        str(Path(project_path) / ".agentmon" / "runs"))
 
 
 def test_ssh_launch_uses_remote_shell_and_local_logs(tmp_path, monkeypatch):

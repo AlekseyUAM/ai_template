@@ -1,37 +1,37 @@
-# vendor/ — автономный SDBL-парсер запросов 1С
+# vendor/ - standalone SDBL parser for 1C queries
 
-`sdbl_parse.js` — самодостаточный бандл боевого парсера языка запросов 1С из
-проекта [`query_console_vscode`](https://github.com/Nikolay-Shirokov) (модуль
-`src/core/query/sdblParser.ts`, функция `parseBatch`). Протестирован на большом
-корпусе запросов. Метаданные конфигурации не требуются.
+`sdbl_parse.js` is a self-contained bundle of the production 1C query language parser from the
+[`query_console_vscode`](https://github.com/Nikolay-Shirokov) project (module
+`src/core/query/sdblParser.ts`, function `parseBatch`). Tested on a large query
+corpus. Configuration metadata is not required.
 
-## Использование
+## Usage
 
 ```bash
 printf 'ВЫБРАТЬ Т.Код ИЗ Справочник.Товары КАК Т' | node sdbl_parse.js
 ```
 
-Читает текст запроса (в т.ч. пакет из нескольких операторов через `;`) из stdin,
-печатает JSON-модель. При ошибке разбора — `{"error": "<текст>"}` (код выхода 0).
+Reads query text (including a batch of several statements separated by `;`) from stdin,
+prints a JSON model. On parse error - `{"error": "<текст>"}` (exit code 0).
 
-## Пересборка
+## Rebuild
 
 ```bash
 QUERY_CONSOLE_REPO=/путь/к/query_console_vscode ./build-parser.sh
 ```
 
-Требует `node` + `esbuild` (есть в `query_console_vscode`). Рантайм использования —
-только `node` (бандл самодостаточен, `npm install` не нужен).
+Requires `node` + `esbuild` (available in `query_console_vscode`). At runtime
+only `node` is needed (the bundle is self-contained, `npm install` is not required).
 
-## Форма модели (справочник для правил)
+## Model shape (reference for rules)
 
-Верхний уровень — `BatchDocument`:
+Top level is `BatchDocument`:
 
 ```
 { "members": [ <BatchStatement>, ... ] }        // операторы пакета (разделены ;)
 ```
 
-Каждый `BatchStatement` — объединение (`ОБЪЕДИНИТЬ`):
+Each `BatchStatement` is a union (`ОБЪЕДИНИТЬ`):
 
 ```
 { "members": [ <UnionMember>, ... ] }            // участники объединения
@@ -49,7 +49,7 @@ QUERY_CONSOLE_REPO=/путь/к/query_console_vscode ./build-parser.sh
 }
 ```
 
-`QueryModel` (ключи присутствуют по мере наличия в запросе):
+`QueryModel` (keys are present as they occur in the query):
 
 ```
 {
@@ -77,11 +77,11 @@ QUERY_CONSOLE_REPO=/путь/к/query_console_vscode ./build-parser.sh
 }
 ```
 
-Параметры виртуальной таблицы лежат в `virtual` (`period`, `condition`,
-`startPeriod`, …). Аргументы, переданные сверх сигнатуры ВТ (ошибка платформы —
-запрос не компилируется), складываются в `virtual.extraArgs`; их флагует правило
-`vt-too-many-params`.
+Virtual table parameters are stored in `virtual` (`period`, `condition`,
+`startPeriod`, …). Arguments passed beyond the VT signature (a platform error -
+the query does not compile) are collected in `virtual.extraArgs`; they are flagged by the
+`vt-too-many-params` rule.
 
-Правила навыка `query-analyze` читают эту модель через `QueryContext.model`
-(см. `../rules.py`). Если `node`/бандл недоступны или разбор упал — модель равна
-`None`, и правила по модели корректно пропускаются (текстовые правила работают).
+The rules of the `query-analyze` skill read this model via `QueryContext.model`
+(see `../rules.py`). If `node`/the bundle are unavailable or parsing fails, the model is
+`None`, and model-based rules are correctly skipped (text rules still work).

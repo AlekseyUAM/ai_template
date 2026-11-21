@@ -103,7 +103,7 @@ def test_deploy_1c_md_adds_validate_query_to_mcp_usage(tmp_path):
         LocalProvisioner(), cfg(tmp_path, [sel("1c-md")]), update=False)
     text = skill_text(tmp_path, "mcp-usage")
     assert "validate_query" in text
-    assert "метаданные, загруженные в БД" in text
+    assert "metadata loaded into the DB" in text
     assert "<!-- @if " not in text and "<!-- @endif -->" not in text
 
 
@@ -115,7 +115,7 @@ def test_deploy_1c_md_queries_also_adds_section(tmp_path):
         update=False)
     text = skill_text(tmp_path, "mcp-usage")
     assert "validate_query" in text
-    assert "метаданные, загруженные в БД" in text
+    assert "metadata loaded into the DB" in text
     assert "<!-- @if " not in text and "<!-- @endif -->" not in text
 
 

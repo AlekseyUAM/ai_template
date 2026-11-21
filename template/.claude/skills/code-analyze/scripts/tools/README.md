@@ -1,17 +1,17 @@
-# Обновление данных о системных перечислениях
+# Updating system enum data
 
-`../system_enums.json` — снапшот справки платформы для правил
-`system-enum-value` и `reserved-system-name`: 664 системных перечисления
-(2914 значений) и 8 наборов значений (517 значений), русские и английские имена.
-**Модели этот файл читать не нужно** — его читает `rules.py`.
+`../system_enums.json` is a snapshot of platform help for the
+`system-enum-value` and `reserved-system-name` rules: 664 system enums
+(2914 values) and 8 value sets (517 values), Russian and English names.
+**Models do not need to read this file** - `rules.py` reads it.
 
-## Источник
+## Source
 
-Данные снимаются из `shcntx_ru.hbk` установленной платформы 1С через
-`bsl-ctx` (тот же разбор справки, что используют MCP-серверы платформенного
-контекста). Установленный `1c_platform` MCP (`mcp-bsl-context`) отдаёт методы,
-свойства и типы, но не список системных перечислений/наборов, поэтому
-снапшот обновляется генератором.
+Data is captured from `shcntx_ru.hbk` of the installed 1C platform via
+`bsl-ctx` (the same help parsing used by platform-context MCP servers). The
+installed `1c_platform` MCP (`mcp-bsl-context`) exposes methods, properties and
+types, but not the list of system enums/sets, so the snapshot is updated by the
+generator.
 
 ```bash
 bsl-ctx capture "<каталог платформы 1С>" -o corpus.sqlite
@@ -20,11 +20,11 @@ python tools/update_system_names.py --corpus corpus.sqlite --parsed parsed.jsonl
     --out system_enums.json --platform 8.3.27.2170
 ```
 
-Команды выполняются из каталога `scripts/`. После обновления:
+Commands are run from the `scripts/` directory. After updating:
 
 ```bash
 python -m pytest tests/ -q
 ```
 
-Генератор использует только стандартную библиотеку Python; `bsl-ctx` нужен
-только для обновления снапшота.
+The generator uses only the Python standard library; `bsl-ctx` is needed only
+to update the snapshot.

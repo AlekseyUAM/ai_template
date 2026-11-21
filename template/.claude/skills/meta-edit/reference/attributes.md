@@ -1,34 +1,34 @@
-# Реквизиты, измерения, ресурсы, графы
+# Attributes, dimensions, resources, columns
 
-Операции над «плоскими» дочерними элементами объекта: реквизит (`attribute`), измерение (`dimension`),
-ресурс (`resource`), графа журнала (`column`). Синтаксис у всех один.
+Operations on "flat" child elements of an object: attribute (`attribute`), dimension (`dimension`),
+resource (`resource`), journal column (`column`). The syntax is the same for all.
 
-## Общие правила
+## General rules
 
-**Batch-режим** — несколько элементов через `;;`:
+**Batch mode** - several elements via `;;`:
 ```
 -Value "Комментарий: Строка(200) ;; Сумма: Число(15,2) | index"
 ```
 
-**Shorthand-формат**: `ИмяРеквизита: Тип | флаги`
+**Shorthand format**: `ИмяРеквизита: Тип | флаги`
 
-Флаги: `req` — обязательное заполнение; `index` — индексировать; `master` — ведущее измерение (только
-измерения); `mainFilter` — основной отбор (только измерения).
+Flags: `req` - required filling; `index` - index; `master` - leading dimension (dimensions
+only); `mainFilter` - main filter (dimensions only).
 
-**Позиционная вставка**: `>> after ИмяЭлемента` или `<< before ИмяЭлемента`:
+**Positional insert**: `>> after ИмяЭлемента` or `<< before ИмяЭлемента`:
 ```bash
 -Operation add-attribute -Value "Склад: CatalogRef.Склады >> after Организация"
 ```
 
-## Составные типы
+## Composite types
 
-Разделитель `+`:
+Separator `+`:
 ```bash
 -Operation add-attribute -Value "Значение: Строка + Число(15,2) + Дата + CatalogRef.Контрагенты"
 -Operation add-attribute -Value "Значение: Строка + Число(15,2) | req"
 ```
 
-В JSON DSL — массив в `type`:
+In JSON DSL - an array in `type`:
 ```json
 { "name": "Значение", "type": ["Строка", "Число(15,2)", "Дата", "CatalogRef.Контрагенты"] }
 ```
@@ -46,7 +46,7 @@
 
 ## remove-*
 
-Имя элемента (или несколько через `;;`):
+Element name (or several via `;;`):
 ```bash
 -Operation remove-attribute -Value "СтарыйРеквизит ;; ЕщёОдин"
 -Operation remove-enumValue -Value "НеиспользуемоеЗначение"
@@ -54,13 +54,13 @@
 
 ## modify-attribute / modify-dimension / modify-resource / modify-enumValue / modify-column
 
-Формат: `ИмяЭлемента: ключ=значение, ключ=значение`
+Format: `ИмяЭлемента: ключ=значение, ключ=значение`
 
-**Спец-операции** (строчные ключи): `name` (переименование), `type` (смена типа), `synonym`.
+**Special operations** (lowercase keys): `name` (rename), `type` (type change), `synonym`.
 
-**Свойства** задавайте по имени свойства 1С (PascalCase, как в конфигураторе): `Indexing`, `FillChecking`,
-`Use`, `FullTextSearch`, `DataHistory`, `PasswordMode`, `MultiLine`, `Mask`, `CreateOnInput`, `QuickChoice` и др.
-Свойство можно задать, даже если у реквизита оно ещё не выставлено.
+**Properties** are set by the 1C property name (PascalCase, as in the Configurator): `Indexing`, `FillChecking`,
+`Use`, `FullTextSearch`, `DataHistory`, `PasswordMode`, `MultiLine`, `Mask`, `CreateOnInput`, `QuickChoice`, etc.
+A property can be set even if it is not yet set on the attribute.
 
 ```bash
 -Operation modify-attribute -Value "СтароеИмя: name=НовоеИмя, type=Строка(500)"
@@ -68,21 +68,21 @@
 -Operation modify-enumValue -Value "СтароеЗначение: name=НовоеЗначение"
 ```
 
-## Структурные свойства реквизита
+## Structural attribute properties
 
-Свойства со сложным значением задавайте через JSON DSL (`{ "modify": { "attributes": { "Имя": { ... } } } }`):
+Set properties with a complex value via JSON DSL (`{ "modify": { "attributes": { "Имя": { ... } } } }`):
 
-| Ключ | Значение | Пример (JSON) |
+| Key | Value | Example (JSON) |
 |------|----------|---------------|
-| `Format` / `EditFormat` / `ToolTip` | строка (мультиязычная) | `"Format": "ДФ=dd.MM.yyyy"` |
-| `ChoiceForm` | путь формы выбора | `"ChoiceForm": "Catalog.Товары.Form.ФормаВыбора"` |
-| `MinValue` / `MaxValue` | число или строка | `"MinValue": 0, "MaxValue": 100` |
-| `FillValue` | значение заполнения | `"FillValue": "EmptyRef"` · `true` · `10` · `{"nil": true}` |
+| `Format` / `EditFormat` / `ToolTip` | string (multilingual) | `"Format": "ДФ=dd.MM.yyyy"` |
+| `ChoiceForm` | choice form path | `"ChoiceForm": "Catalog.Товары.Form.ФормаВыбора"` |
+| `MinValue` / `MaxValue` | number or string | `"MinValue": 0, "MaxValue": 100` |
+| `FillValue` | fill value | `"FillValue": "EmptyRef"` · `true` · `10` · `{"nil": true}` |
 | `LinkByType` | `{dataPath, linkItem?}` | `"LinkByType": {"dataPath": "Вид", "linkItem": 0}` |
 | `ChoiceParameterLinks` | `[{name, dataPath, valueChange?}]` | `["Отбор.Организация=Организация"]` |
 | `ChoiceParameters` | `[{name, type?, value?}]` | `[{"name": "Отбор.ЭтоГруппа", "value": false}]` |
 
-- `FillValue`: `"EmptyRef"` — пустая ссылка по типу реквизита; `{"emptyRef": true}` / `{"nil": true}` — явные маркеры.
-- `ChoiceParameters` value — булево/число/строка/ссылочный путь или массив; укажите `type` (напр.
-  `EnumRef.СтавкиНДС`), чтобы задавать значения короткими именами (`"Оптовая"` вместо полного пути).
-- В путях данных (`LinkByType`/`ChoiceParameterLinks`) можно писать короткое имя реквизита вместо полного пути.
+- `FillValue`: `"EmptyRef"` - an empty reference by attribute type; `{"emptyRef": true}` / `{"nil": true}` - explicit markers.
+- `ChoiceParameters` value - bool/number/string/reference path or array; specify `type` (e.g.
+  `EnumRef.СтавкиНДС`) to set values by short names (`"Оптовая"` instead of the full path).
+- In data paths (`LinkByType`/`ChoiceParameterLinks`) you can write a short attribute name instead of the full path.

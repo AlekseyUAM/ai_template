@@ -1,11 +1,11 @@
-# .v8-xsd — XSD-схемы платформы 1С:Предприятие 8
+# .v8-xsd - XSD schemas of the 1C:Enterprise 8 platform
 
-Каталог для XSD-схем формата XML-выгрузки конфигурации. По ним навыки проверяют выгрузку
-без базы: порядок элементов, типы значений, допустимые значения перечислений.
+Directory for XSD schemas of the configuration XML dump format. Skills use them to validate a dump
+without a database: element order, value types, allowed enum values.
 
-Схем нет — проверки нет, остальное работает как обычно.
+No schemas - no validation; everything else works as usual.
 
-## Раскладка
+## Layout
 
 ```
 .v8-xsd/
@@ -15,25 +15,25 @@
 └── source.json  откуда и когда загружено
 ```
 
-Имена файлов значения не имеют: схема находится по `targetNamespace`. Подойдут и схемы,
-выгруженные из своей платформы (`ФабрикаXDTO.ЭкспортСхемыXML`).
+File names do not matter: a schema is found by `targetNamespace`. Schemas dumped from your own
+platform (`ФабрикаXDTO.ЭкспортСхемыXML`) work too.
 
-## Как наполнить
+## How to populate
 
-Навыком `/v8-xsd-fetch` — он скачивает схемы из репозитория
+With the `/v8-xsd-fetch` skill - it downloads schemas from the
 [yellow-hammer/namespace-forest](https://github.com/yellow-hammer/namespace-forest)
-(каталог `schemas/designer/<версия формата>/`).
+repository (directory `schemas/designer/<версия формата>/`).
 
-Или вручную: скопировать нужные каталоги версий из `schemas/designer/` того же репозитория.
+Or manually: copy the needed version directories from `schemas/designer/` of the same repository.
 
-Другой каталог задаётся ключом `xsdPath` в `.v8-project.json`.
+Another directory is set by the `xsdPath` key in `.v8-project.json`.
 
-## Лицензия
+## License
 
-Схемы (`*.xsd`) — часть продукта «1С:Предприятие 8», правообладатель ООО «1С-Софт».
-Использование регулируется лицензионным соглашением 1С. В репозиторий их не включаем.
+The schemas (`*.xsd`) are part of the "1С:Предприятие 8" product, owned by ООО "1С-Софт".
+Use is governed by the 1C license agreement. Do not include them in the repository.
 
-## Благодарность
+## Credits
 
-Спасибо Ivan Karlo за [namespace-forest](https://github.com/yellow-hammer/namespace-forest) —
-собранные и разложенные по версиям формата схемы, обновляемые автоматически.
+Thanks to Ivan Karlo for [namespace-forest](https://github.com/yellow-hammer/namespace-forest) -
+schemas collected and arranged by format version, updated automatically.

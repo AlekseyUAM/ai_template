@@ -1,7 +1,7 @@
-# Группы строк и колонок
+# Row and column groups
 
-Диапазон строк или колонок, который сворачивается кнопкой на полях. Задаются плоским списком;
-вложенность выражена вхождением одного диапазона в другой:
+A range of rows or columns that collapses with a button in the margins. Set as a flat list;
+nesting is expressed by one range being contained in another:
 
 ```json
 "rowGroups": [
@@ -15,12 +15,12 @@
 ]
 ```
 
-| Поле | Обяз. | По умолч. | Описание |
+| Field | Required | Default | Description |
 |------|:-----:|-----------|----------|
-| `rows` / `cols` | да | — | Диапазон 1-based: число или `"N-M"` |
-| `name` | нет | — | Имя группы: строка или объект «язык → текст» |
-| `collapsed` | нет | `false` | Свёрнута ли группа при открытии |
-| `titleLocation` | нет | `auto` | Расположение заголовка: `begin`, `end`, `auto` |
+| `rows` / `cols` | yes | - | Range, 1-based: a number or `"N-M"` |
+| `name` | no | - | Group name: a string or a "language -> text" object |
+| `collapsed` | no | `false` | Whether the group is collapsed on open |
+| `titleLocation` | no | `auto` | Title position: `begin`, `end`, `auto` |
 
-Диапазоны либо вложены, либо не пересекаются: частичное пересечение — ошибка. Порядок в списке
-не важен, число уровней вложенности считается само.
+Ranges are either nested or non-overlapping: partial overlap is an error. Order in the list
+does not matter; the number of nesting levels is calculated automatically.

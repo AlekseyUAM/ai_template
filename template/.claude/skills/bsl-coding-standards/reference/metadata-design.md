@@ -1,106 +1,106 @@
-# Чеклист дизайна метаданных (свойства создаваемых объектов)
+# Metadata design checklist (properties of created objects)
 
-Свойства, которые надо задать **на этапе проектирования метаданных** и проверить до
-написания кода. Проверяет архитектор (проектирование) и ревьюер (детекция).
+Properties that must be set **at the metadata design stage** and checked before
+writing code. Checked by the architect (design) and the reviewer (detection).
 
-`meta-validate` ловит только структурную корректность XML. **Семантику свойств
-(обязательность заполнения, вид регистра, разрядность ресурсов, режим проведения)
-не проверяет никто, кроме этого чеклиста** — потому дефект уровня метаданных (например,
-пустое измерение регистра в движении) доходит до продакшена незамеченным.
+`meta-validate` catches only structural XML correctness. **No one checks the semantics of
+properties (fill requirement, register type, resource precision, posting mode)
+except this checklist** - that is why a metadata-level defect (e.g., an empty register
+dimension in a movement) reaches production unnoticed.
 
-Severity как в остальных справках: `[критичная]` = error, `[важная]` = warning,
-`[минорная]` = info (см. reviewer «Шкала severity и вердикт»). **Каждый проверяемый
-пункт ниже помечен тегом severity** — находка наследует severity своего пункта.
+Severity as in the other references: `[critical]` = error, `[important]` = warning,
+`[minor]` = info (see reviewer "Severity scale and verdict"). **Every check
+item below is tagged with its severity** - a finding inherits the severity of its item.
 
-Свойства делятся на **базовые платформенные** (применимы к любой конфигурации) и
-**интеграцию с БСП/типовой** (применять ТОЛЬКО если конфигурация построена на БСП —
-проверь через `code_index`, что соответствующие подсистемы/подписки существуют; иначе
-пункт неприменим и находкой не считается).
+Properties are divided into **basic platform** (applicable to any configuration) and
+**BSP/standard configuration integration** (apply ONLY if the configuration is built on BSP -
+check via `code_index` that the corresponding subsystems/subscriptions exist; otherwise the item
+is not applicable and does not count as a finding).
 
-## Общие свойства (любой объект)
-- **Синоним** заполнен и осмысленно описывает объект — участвует в UI [важная].
-- **Имя** по стандарту именования: документ — в единственном числе; без слов-пустышек
-  («Документ…»), от удаления которых смысл не меняется [минорная].
-- **Комментарий** не заполнять — служебное поле разработки [минорная].
-- **Представление объекта/записи** — ед. число; **Представление списка** — мн. число;
-  не задавать, если совпадает с синонимом [минорная].
+## General properties (any object)
+- **Synonym** is filled and meaningfully describes the object - participates in the UI [important].
+- **Name** follows the naming standard: document - singular; without filler words
+  ("Документ…") whose removal does not change the meaning [minor].
+- **Comment** - do not fill; it is a development service field [minor].
+- **Object/record presentation** - singular; **List presentation** - plural;
+  do not set if it matches the synonym [minor].
 
-## Проверка заполнения (ключевой пункт)
-Для **любого** реквизита, измерения, ресурса или табличной части, который по логике
-задачи обязателен во всех сценариях — свойство **«Проверка заполнения» =
-«Выдавать ошибку»** [важная].
-- Для регистров это относится и к **измерениям, и к ресурсам**: пустое измерение
-  (Организация / Номенклатура / Партия) в движении —
-  почти всегда ошибка данных, которую метаданные обязаны отсечь [важная].
-- Обратная схема («Не проверять» + ручные проверки в `ОбработкаПроверкиЗаполнения`)
-  не рекомендуется — ограничения должны быть описаны в метаданных [минорная].
+## Fill check (key item)
+For **any** attribute, dimension, resource or tabular section that is mandatory in all
+scenarios by task logic - the property **"Fill check" =
+"Raise error"** [important].
+- For registers this applies to both **dimensions and resources**: an empty dimension
+  (Organization / Nomenclature / Batch) in a movement is
+  almost always a data error that metadata must cut off [important].
+- The reverse scheme ("Do not check" + manual checks in `ОбработкаПроверкиЗаполнения`)
+  is not recommended - constraints must be described in metadata [minor].
 
-## Справочник
-- **Длина наименования** — по задаче; **длина кода** — 0, если код не несёт
-  прикладного смысла [минорная].
-- **Иерархия**, **владельцы**, **предопределённые элементы** — задать по смыслу и ТЗ;
-  несоответствие ТЗ ломает модель данных [важная].
-- Реквизиты: **значение заполнения** для известных значений по умолчанию; **параметры
-  выбора** / **связи параметров выбора**, если выбор значения ограничен или зависит от
-  других реквизитов (обязательность заполнения — см. «Проверка заполнения») [минорная].
+## Catalog
+- **Name length** - by task; **code length** - 0 if the code carries no
+  application meaning [minor].
+- **Hierarchy**, **owners**, **predefined items** - set by meaning and specification;
+  mismatch with the specification breaks the data model [important].
+- Attributes: **fill value** for known default values; **choice
+  parameters** / **choice parameter links** if value selection is constrained or depends on
+  other attributes (fill requirement - see "Fill check") [minor].
 
-## Документ
-- **Нумерация**: осознанно задать тип и длину номера, допустимую длину, периодичность,
-  контроль уникальности, автонумерацию (конкретные значения — по задаче и конвенции
-  конфигурации) [минорная].
-- **Проведение**:
-  - **Проведение** = Разрешить, если документ формирует движения; иначе Запретить [важная].
-  - **Оперативное проведение** — задать осознанно (обычно Запретить, если контроль
-    остатков в реальном времени не требуется) [важная].
-  - **Удаление движений** — выбрать режим по сценарию задачи: см.
-    [движения](movements-deletion.md). Режим обязан соответствовать логике
-    проведения/очистки движений; несоответствие — [критичная].
-  - **Запись движений при проведении** = «Записывать выбранные» (не «Записывать все») [важная].
-- **Состав движений (регистраторы)**: каждый регистр, в который документ пишет,
-  назначен регистратором; лишних регистраторов нет [важная].
-- Реквизиты шапки и ТЧ: проверка заполнения обязательных (см. «Проверка заполнения»);
-  типы ссылок — на существующие объекты (сверь `code_index`) [важная].
-- **Служебные данные проведения — не реквизиты.** Признаки/флаги, которые вычисляются
-  в `ПередЗаписью` и нужны только в `ОбработкаПроведения`/`ПриЗаписи` в рамках одной
-  транзакции записи (сдвиг даты, необходимость очистки движений и т.п.), передавать
-  через структуру `ДокументОбъект.ДополнительныеСвойства`. Заводить для них **реквизиты
-  документа запрещено** [важная]: реквизит — это постоянная сущность в структуре
-  хранения, форме и отчётах, хотя значение живёт только во время записи; переменные
-  модуля для такой передачи тоже не использовать [важная].
+## Document
+- **Numbering**: deliberately set the number type and length, allowed length, periodicity,
+  uniqueness control, auto-numbering (specific values - by task and configuration
+  convention) [minor].
+- **Posting**:
+  - **Posting** = Allow if the document forms movements; otherwise Deny [important].
+  - **Real-time posting** - set deliberately (usually Deny if real-time
+    balance control is not required) [important].
+  - **Movement deletion** - choose the mode by the task scenario: see
+    [movements](movements-deletion.md). The mode must match the posting/clearing
+    logic; mismatch - [critical].
+  - **Movement writing on posting** = "Write selected" (not "Write all") [important].
+- **Movement composition (recorders)**: every register the document writes to
+  is assigned as a recorder; there are no extra recorders [important].
+- Header and tabular section attributes: fill check of mandatory ones (see "Fill check");
+  ref types - to existing objects (verify with `code_index`) [important].
+- **Posting service data are not attributes.** Flags/markers that are computed
+  in `ПередЗаписью` and needed only in `ОбработкаПроведения`/`ПриЗаписи` within one
+  write transaction (date shift, need to clear movements etc.) must be passed
+  via the `ДокументОбъект.ДополнительныеСвойства` structure. Creating **document
+  attributes for them is forbidden** [important]: an attribute is a permanent entity in the storage
+  structure, form and reports, while the value lives only during the write; do not use module
+  variables for such passing either [important].
 
-## Регистр накопления
-- **Вид регистра** — **Остатки** или **Обороты** — соответствует характеру учёта;
-  неверный вид ломает семантику учёта [критичная].
-- **Измерения**: полный состав ключа учёта; обязательные → проверка заполнения
-  «Выдавать ошибку» [важная]. **Ведущее** измерение — для измерений-ссылок, при удалении
-  которых запись регистра теряет смысл [минорная].
-- **Ресурсы**: тип Число с **осознанной разрядностью и точностью** (количество и суммы —
-  разная точность); недостаточная разрядность = потеря копеек или переполнение [важная].
-- **Реквизиты** (необязательные измерения) — только если нужны для отбора/расшифровки;
-  не раздувать ими ключ учёта [минорная].
+## Accumulation register
+- **Register type** - **Balances** or **Turnovers** - matches the accounting nature;
+  a wrong type breaks accounting semantics [critical].
+- **Dimensions**: the full accounting key composition; mandatory ones → fill check
+  "Raise error" [important]. A **leading** dimension - for ref dimensions whose deletion
+  makes the register record meaningless [minor].
+- **Resources**: Number type with **deliberate precision and scale** (quantity and amounts -
+  different scale); insufficient precision = lost cents or overflow [important].
+- **Attributes** (optional dimensions) - only if needed for filtering/decryption;
+  do not bloat the accounting key with them [minor].
 
-## Регистр сведений
-- **Периодичность** и **режим записи** (независимый / подчинён регистратору) — по задаче [важная].
-- **Ведущее** измерение, **основной отбор**, запрет дублирования (ключ уникальности) — по
-  смыслу; отсутствие уникальности ключа даёт дубли записей [важная].
-- Измерения / ресурсы / реквизиты: проверка заполнения обязательных (см. «Проверка
-  заполнения») [важная].
+## Information register
+- **Periodicity** and **write mode** (independent / subordinate to recorder) - by task [important].
+- **Leading** dimension, **main filter**, duplicate prohibition (uniqueness key) - by
+  meaning; lack of key uniqueness produces duplicate records [important].
+- Dimensions / resources / attributes: fill check of mandatory ones (see "Fill
+  check") [important].
 
-## Отчёт на СКД
-- **Основная схема компоновки** задана (`mainDataCompositionSchema`), макет СКД создан и
-  проверен [критичная].
-- **Состав полей отчёта** — строго по ТЗ; служебные поля/соединения не добавлять без
-  обоснования. Подробнее — [особенности СКД](skd-specifics.md) [критичная].
-- **Собственная форма отчёта** (`defaultForm` / `ФормаОтчета`) не создаётся, если этого нет
-  в ТЗ: платформа строит автоформу по СКД. Собственная форма — лишний объект и риск
-  неработоспособности [важная].
+## DCS report
+- **Main data composition schema** is set (`mainDataCompositionSchema`), the DCS template is created and
+  checked [critical].
+- **Report field composition** - strictly per the specification; do not add service fields/joins without
+  justification. More - [DCS specifics](skd-specifics.md) [critical].
+- **A custom report form** (`defaultForm` / `ФормаОтчета`) is not created unless the specification
+  requires it: the platform builds an auto form from the DCS. A custom form is an extra object and a risk
+  of malfunction [important].
 
-## Интеграция с БСП/типовой (условно — только если конфигурация на БСП)
-Проверь через `code_index`, что соответствующие подсистемы/подписки/роли существуют.
-Если конфигурация не на БСП — раздел неприменим (находкой не считается).
-- **Роли и права** на новый объект [важная].
-- **Привилегированный режим при проведении/отмене** — если в конфигурации есть
-  ограничение прав доступа [важная].
-- **Нумерация** — подписки префикса/контроля номера [минорная].
-- **РИБ/планы обмена**, **функциональные опции**, **печать**, **версионирование**,
-  **даты запрета изменения** — по требованиям конфигурации [минорная].
+## BSP/standard configuration integration (conditional - only if the configuration is on BSP)
+Check via `code_index` that the corresponding subsystems/subscriptions/roles exist.
+If the configuration is not on BSP, the section is not applicable (does not count as a finding).
+- **Roles and rights** for the new object [important].
+- **Privileged mode on posting/unposting** - if the configuration has
+  access rights restrictions [important].
+- **Numbering** - prefix/number control subscriptions [minor].
+- **Distributed infobase/exchange plans**, **functional options**, **printing**, **versioning**,
+  **change prohibition dates** - per configuration requirements [minor].

@@ -1,19 +1,19 @@
-# Продвинутая раскладка
+# Advanced layout
 
-Тонкая настройка размещения элемента внутри родителя сверх базовой геометрии (`width`/`height`/`horizontalStretch`/`verticalStretch`/`visible`/`enabled` и ориентации групп/страниц — они в основной инструкции). Все ключи ниже задаются прямо на элементе и **необязательны** — без них действует поведение платформы по умолчанию.
+Fine-tuning of element placement inside a parent beyond the basic geometry (`width`/`height`/`horizontalStretch`/`verticalStretch`/`visible`/`enabled` and group/page orientations - they are in the main instruction). All keys below are set directly on the element and are **optional** - without them the platform's default behavior applies.
 
-## Выравнивание внутри родителя
+## Alignment inside a parent
 
-Различают **выравнивание самого элемента** в отведённой ему ячейке и **выравнивание содержимого** элемента.
+There is a distinction between **alignment of the element itself** in its allocated cell and **alignment of the element's content**.
 
-| Ключ | Значения | Что выравнивает |
+| Key | Values | What it aligns |
 |------|----------|-----------------|
-| `groupHorizontalAlign` | `Left` / `Center` / `Right` | Положение **элемента** по горизонтали в родительской группе (когда элемент у́же доступного места) |
-| `groupVerticalAlign` | `Top` / `Center` / `Bottom` | Положение **элемента** по вертикали в родительской группе |
-| `horizontalAlign` | `Left` / `Center` / `Right` | Выравнивание **содержимого** (текста/значения) внутри самого элемента |
-| `verticalAlign` | `Top` / `Center` / `Bottom` | Выравнивание содержимого по вертикали внутри элемента |
+| `groupHorizontalAlign` | `Left` / `Center` / `Right` | Horizontal position of the **element** in the parent group (when the element is narrower than the available space) |
+| `groupVerticalAlign` | `Top` / `Center` / `Bottom` | Vertical position of the **element** in the parent group |
+| `horizontalAlign` | `Left` / `Center` / `Right` | Alignment of the **content** (text/value) inside the element itself |
+| `verticalAlign` | `Top` / `Center` / `Bottom` | Vertical alignment of the content inside the element |
 
-`group*Align` отвечает на вопрос «куда сдвинуть нерастянутый элемент в его ячейке», `horizontalAlign`/`verticalAlign` — «как разместить текст внутри элемента». Это разные оси настройки, их часто комбинируют.
+`group*Align` answers the question "where to move a non-stretched element in its cell", `horizontalAlign`/`verticalAlign` - "how to place the text inside the element". These are different axes of adjustment, they are often combined.
 
 ```json
 { "button": "ОК", "groupHorizontalAlign": "Right" }
@@ -21,18 +21,18 @@
 { "label": "Итого", "groupHorizontalAlign": "Center", "horizontalAlign": "Center" }
 ```
 
-## Ограничение максимального размера
+## Maximum size limit
 
-По умолчанию растягивающийся элемент имеет авто-вычисляемый предел ширины/высоты. Чтобы задать жёсткий предел или вовсе снять авто-предел:
+By default a stretching element has an auto-computed width/height limit. To set a hard limit or remove the auto limit entirely:
 
-| Ключ | Значения | Назначение |
+| Key | Values | Purpose |
 |------|----------|-----------|
-| `maxWidth` | число | Жёсткий максимум ширины элемента |
-| `maxHeight` | число | Жёсткий максимум высоты элемента |
-| `autoMaxWidth` | `false` | Отключить авто-предел ширины (элемент тянется без ограничения сверху) |
-| `autoMaxHeight` | `false` | Отключить авто-предел высоты |
+| `maxWidth` | number | Hard maximum of the element width |
+| `maxHeight` | number | Hard maximum of the element height |
+| `autoMaxWidth` | `false` | Disable the auto width limit (the element stretches without an upper bound) |
+| `autoMaxHeight` | `false` | Disable the auto height limit |
 
-`autoMaxWidth: false` нужен, например, для широкого многострочного поля или растянутого по всей форме поля ввода, чтобы платформа не «прижимала» его к авто-пределу. Указывают именно отклонение от дефолта; обычное значение `true` писать не нужно.
+`autoMaxWidth: false` is needed, for example, for a wide multiline field or an input field stretched across the whole form, so that the platform does not "press" it against the auto limit. Specify only the deviation from the default; there is no need to write the usual value `true`.
 
 ```json
 { "input": "Комментарий", "path": "Объект.Комментарий", "multiLine": true,
@@ -40,35 +40,35 @@
 { "input": "Поиск", "path": "СтрокаПоиска", "horizontalStretch": true, "maxWidth": 600 }
 ```
 
-## Поведение при вводе и активации
+## Behavior on input and activation
 
-| Ключ | Значения | Назначение |
+| Key | Values | Purpose |
 |------|----------|-----------|
-| `skipOnInput` | `true` / `false` | Пропускать элемент при обходе по Enter/Tab (фокус через него не проходит). Указывают явно, в т.ч. `false` чтобы вернуть в обход поле, которое платформа пропустила бы |
-| `defaultItem` | `true` | Элемент получает фокус по умолчанию при открытии формы (поле/таблица для немедленного ввода) |
+| `skipOnInput` | `true` / `false` | Skip the element when traversing by Enter/Tab (focus does not pass through it). Specify explicitly, including `false` to return to the traversal a field that the platform would skip |
+| `defaultItem` | `true` | The element gets focus by default when the form opens (a field/table for immediate input) |
 
 ```json
 { "input": "Идентификатор", "path": "Объект.Идентификатор", "skipOnInput": true }
 { "input": "Штрихкод", "path": "Штрихкод", "defaultItem": true }
 ```
 
-`skipOnInput: true` — для служебных/расчётных полей, которые видны, но не редактируются вводом с клавиатуры в общем потоке. `defaultItem: true` ставят на одном элементе формы — точке, с которой пользователь начнёт работу.
+`skipOnInput: true` - for service/computed fields that are visible but not edited by keyboard input in the general flow. `defaultItem: true` is set on one form element - the point from which the user starts working.
 
-## Перетаскивание
+## Dragging
 
-| Ключ | Значения | Назначение |
+| Key | Values | Purpose |
 |------|----------|-----------|
-| `enableStartDrag` | `true` | Разрешить начинать перетаскивание из элемента (источник drag-n-drop) |
+| `enableStartDrag` | `true` | Allow starting a drag from the element (a drag-n-drop source) |
 
-Для таблиц приём/перемещение строк управляется ключами таблицы (`enableDrag`, `changeRowOrder`) — см. основную инструкцию; `enableStartDrag` — общий низкоуровневый флаг «этот элемент может быть источником перетаскивания».
+For tables, row acceptance/movement is controlled by table keys (`enableDrag`, `changeRowOrder`) - see the main instruction; `enableStartDrag` is a general low-level flag "this element can be a drag source".
 
-## Закрепление колонки в таблице (`fixingInTable`)
+## Fixing a column in a table (`fixingInTable`)
 
-Свойство поля-колонки внутри таблицы: закрепить колонку у края, чтобы она не уходила при горизонтальной прокрутке.
+A property of a column field inside a table: fix the column to an edge so that it does not go away on horizontal scrolling.
 
-| Значения |
+| Values |
 |----------|
-| `None` (по умолчанию — не закреплена) / `Left` / `Right` |
+| `None` (default - not fixed) / `Left` / `Right` |
 
 ```json
 { "table": "Товары", "path": "Объект.Товары", "columns": [
@@ -77,19 +77,19 @@
     { "input": "Сумма", "path": "Объект.Товары.Сумма", "fixingInTable": "Right" } ] }
 ```
 
-Закрепляют ключевые колонки (идентифицирующую слева, итоговую справа), чтобы они оставались видны при прокрутке широкой таблицы.
+Fix key columns (the identifying one on the left, the total one on the right) so that they stay visible when scrolling a wide table.
 
-## Ячейки колонок: шапка и подвал
+## Column cells: header and footer
 
-Для поля-колонки внутри таблицы (и `columnGroup`) — размещение в шапке/подвале и выравнивание текста ячеек. Применять только к элементам внутри `columns` таблицы.
+For a column field inside a table (and `columnGroup`) - placement in the header/footer and alignment of cell text. Apply only to elements inside table `columns`.
 
-| Ключ | Значения | Назначение |
+| Key | Values | Purpose |
 |------|----------|-----------|
-| `showInHeader` | `true` / `false` | Показывать колонку в шапке таблицы |
-| `showInFooter` | `true` / `false` | Показывать колонку в подвале (нужно для итогов; подвал самой таблицы включается `footer: true`) |
-| `headerHorizontalAlign` | `Left` / `Right` / `Center` / `Auto` | Выравнивание текста в шапке колонки |
-| `footerHorizontalAlign` | `Left` / `Right` / `Center` | Выравнивание текста в подвале колонки |
-| `autoCellHeight` | `true` / `false` | Авто-высота ячейки (перенос содержимого на несколько строк) |
+| `showInHeader` | `true` / `false` | Show the column in the table header |
+| `showInFooter` | `true` / `false` | Show the column in the footer (needed for totals; the table's own footer is enabled by `footer: true`) |
+| `headerHorizontalAlign` | `Left` / `Right` / `Center` / `Auto` | Alignment of the text in the column header |
+| `footerHorizontalAlign` | `Left` / `Right` / `Center` | Alignment of the text in the column footer |
+| `autoCellHeight` | `true` / `false` | Cell auto height (wrapping content to several lines) |
 
 ```json
 { "table": "Товары", "path": "Объект.Товары", "footer": true, "columns": [
@@ -98,13 +98,13 @@
       "headerHorizontalAlign": "Right", "showInFooter": true, "footerHorizontalAlign": "Right" } ] }
 ```
 
-## Адаптивная важность (`displayImportance`)
+## Adaptive importance (`displayImportance`)
 
-| Значения |
+| Values |
 |----------|
 | `VeryHigh` / `High` / `Usual` / `VeryLow` / `Low` |
 
-Приоритет элемента при адаптивной перекомпоновке формы на узких/мобильных экранах: элементы с меньшей важностью сворачиваются/прячутся первыми. Применимо к любому элементу.
+The element priority during adaptive form re-layout on narrow/mobile screens: elements with lower importance collapse/hide first. Applies to any element.
 
 ```json
 { "input": "Комментарий", "path": "Объект.Комментарий", "displayImportance": "Low" }

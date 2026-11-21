@@ -14,16 +14,16 @@ import subprocess
 import sys
 import tempfile
 
-# Регистронезависимый ввод: имена параметров и значения choices принимаются
-# в любом регистре (в argparse по умолчанию совпадение точное).
+# Case-insensitive input: parameter names and choices values are accepted
+# in any case (argparse matches exactly by default).
 def ci_parse_args(parser, argv=None):
-    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
+    """parse_args: parameter names and choices values are accepted in any case."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
         if tok.startswith('-') and tok.lower() in names:
             argv[i] = names[tok.lower()]
-    # choices — зеркало [ValidateSet]; канонизируем ДО разбора, иначе argparse отвергнет регистр
+    # choices mirrors [ValidateSet]; canonicalize BEFORE parsing, otherwise argparse rejects the case
     choice_map = {}
     for a in parser._actions:
         if a.choices:
@@ -40,8 +40,9 @@ def ci_parse_args(parser, argv=None):
 def _find_project_v8path(args):
     """Walk up from CWD to find .v8-project.json and read its v8path.
 
-    v8path записи базы сильнее корневого: в одном проекте базы живут на разных версиях
-    платформы, а версию формата выгрузки задаёт та платформа, которая выгружает.
+    The v8path of a database record is stronger than the root one: in one project databases
+    live on different platform versions, and the dump format version is set by the platform
+    that performs the dump.
     """
     db = find_project_database(args)
     if db and db.get("v8path"):
@@ -74,11 +75,11 @@ V8_OWNED_KEYS = [
     "/DumpConfigToFiles", "/LoadConfigFromFiles", "/UpdateDBCfg",
     "/DumpExternalDataProcessorOrReportToFiles", "/LoadExternalDataProcessorOrReportFromFiles",
 ]
-# Пакетные команды платформы. В одной командной строке DESIGNER выполняет ТОЛЬКО ПОСЛЕДНЮЮ,
-# остальные молча отбрасывает (проверено на 8.3.24: /LoadConfigFromFiles вместе с
-# /CheckCanApplyConfigurationExtensions завершились кодом 0 с пустым логом, и загрузка НЕ
-# состоялась). Такая команда в дополнительных аргументах подменяет собой операцию навыка, а навык
-# отчитывается успехом. Дополнительные аргументы — это опции, а не режимы.
+# Platform batch commands. In one command line DESIGNER runs ONLY THE LAST one,
+# silently discarding the rest (checked on 8.3.24: /LoadConfigFromFiles together with
+# /CheckCanApplyConfigurationExtensions exited with code 0 and an empty log, and the load did
+# NOT happen). Such a command in extra arguments replaces the skill's operation, and the skill
+# reports success. Extra arguments are options, not modes.
 V8_BATCH_KEYS = [
     "/CheckConfig", "/CheckModules", "/CheckCanApplyConfigurationExtensions",
     "/DumpDBCfgList", "/DeleteCfg", "/UpdateCfg", "/CompareCfg", "/MergeCfg",
@@ -94,10 +95,10 @@ V8_SECRET_KEYS = ["/P", "/UC", "/WSP", "/AWSP", "/ConfigurationRepositoryP"]
 IBCMD_SECRET_KEYS = ["--password", "--token", "--db-pwd"]
 
 
-# --- Запись базы в .v8-project.json ---
-# Модель не передаёт ни путь к платформе конкретной базы, ни реквизиты хранилища: скрипт
-# сопоставляет параметры соединения с записью в databases[] и берёт их оттуда. Тот же приём,
-# что в cf-edit.py (сопоставление по configSrc).
+# --- Database record in .v8-project.json ---
+# The model passes neither the platform path of a specific database nor the repository
+# credentials: the script matches the connection parameters against a record in databases[]
+# and takes them from there. The same technique as in cf-edit.py (matching by configSrc).
 def _sg_find_v8project(start_dir):
     d = start_dir
     for _ in range(20):
@@ -122,7 +123,7 @@ def same_path(a, b):
 
 
 def find_project_database(args):
-    """Запись базы в реестре, соответствующая переданному соединению. None, если не найдена."""
+    """The database record in the registry matching the given connection. None if not found."""
     pf = _sg_find_v8project(os.getcwd())
     if not pf:
         return None
@@ -142,12 +143,12 @@ def find_project_database(args):
 
 
 def resolve_repository_settings(args):
-    """Возвращает dict path/user/password/from_registry. Явные -Repository* сильнее реестра."""
+    """Returns a dict path/user/password/from_registry. Explicit -Repository* beats the registry."""
     db_rec = find_project_database(args)
     rec = None
     if db_rec:
         if args.Extension:
-            # У расширения СВОЁ хранилище со своим путём (проверено): выбирается парой
+            # An extension has ITS OWN repository with its own path (checked): selected by the pair
             # /ConfigurationRepositoryF"<путь расширения>" + -Extension "<Имя>".
             for ext in db_rec.get("extensions") or []:
                 if (ext.get("name") or "").lower() == args.Extension.lower():
@@ -157,7 +158,7 @@ def resolve_repository_settings(args):
             rec = db_rec.get("repository")
     path = args.RepositoryPath or ((rec or {}).get("path") or None)
     user = args.RepositoryUser or ((rec or {}).get("user") or None)
-    # Пустой пароль = отсутствующий: 1С требует опускать ключ целиком, а не передавать пустое значение.
+    # Empty password = absent: 1C requires omitting the key entirely, not passing an empty value.
     pwd = args.RepositoryPassword or ((rec or {}).get("password") or None)
     return {
         "path": path.strip().strip('"') if path else None,
@@ -168,7 +169,7 @@ def resolve_repository_settings(args):
 
 
 def repository_args(repo):
-    """Ключи доступа к хранилищу. Форма — кавычки ВНУТРИ токена, как у /N и /P."""
+    """Repository access keys. The form is quotes INSIDE the token, as with /N and /P."""
     a = []
     if not repo or not repo.get("path"):
         return a
@@ -180,8 +181,8 @@ def repository_args(repo):
     return a
 
 
-# Сообщения платформы про хранилище конфигурации называют причину, но не действие. Действие
-# дописываем сами: без него модель упирается в отказ и не знает, чем его лечить.
+# Platform messages about the configuration repository name the cause but not the action. We
+# append the action ourselves: without it the model hits a refusal and does not know how to fix it.
 def write_repository_hints(log_text):
     if not log_text:
         return
@@ -367,7 +368,7 @@ def resolve_v8path(v8path, args):
                 + glob.glob(r"C:\Program Files (x86)\1cv8\*\bin\1cv8.exe")
             )
         else:
-            # *nix-раскладка путей установки платформы 1С.
+            # *nix layout of 1C platform installation paths.
             candidates = glob.glob("/opt/1cv8/*/1cv8")
         if candidates:
             v8path = max(candidates, key=_version_key)
@@ -376,7 +377,7 @@ def resolve_v8path(v8path, args):
             print("Error: 1C executable not found. Specify -V8Path")
             sys.exit(1)
     if os.path.isdir(v8path):
-        # PY-only: на *nix исполняемый называется "1cv8" (без .exe); ibcmd — только явным путём.
+        # PY-only: on *nix the executable is named "1cv8" (no .exe); ibcmd - only by explicit path.
         exe = "1cv8.exe" if os.name == "nt" else "1cv8"
         v8path = os.path.join(v8path, exe)
     if not os.path.isfile(v8path):
@@ -448,29 +449,29 @@ def run_v8(v8path, arguments):
     1C's parser expects them, on Windows and on *nix alike. Windows list2cmdline would
     escape those quotes, so there the command line is handed over ready-made.
 
-    На POSIX аргументы уходят СПИСКОМ, и кавычки, нужные для склейки на Windows, стали бы
-    частью значения: путь с пробелом платформа не находит («Неопределена информационная
-    база»), многословный -comment теряет молча. Поэтому здесь снимается ОДИН слой
-    обрамляющих кавычек. Склеенные ключи (/N"user", /ConfigurationRepositoryF"путь",
-    File="…") не задеты: у них кавычки внутри токена, а не по краям.
+    On POSIX the arguments go as a LIST, and the quotes needed for joining on Windows would
+    become part of the value: the platform does not find a path with a space («Неопределена
+    информационная база»), and a multi-word -comment silently loses. Therefore ONE layer of
+    surrounding quotes is stripped here. Glued keys (/N"user", /ConfigurationRepositoryF"путь",
+    File="…") are untouched: their quotes are inside the token, not on the edges.
     """
     if os.name == "nt":
         cmd = '"' + v8path + '" ' + " ".join(arguments)
     else:
         def strip_framing_quotes(a):
-            # Кавычки, которыми мы обрамляем значения ради склейки на Windows, на POSIX
-            # становятся ЧАСТЬЮ значения. Проверено на darwin: путь с пробелом отдельным
-            # токеном даёт «Неопределена информационная база», а склеенный
-            # /ConfigurationRepositoryF"путь с пробелом" — «завершилось с ошибкой»;
-            # без кавычек обе формы работают.
+            # The quotes we wrap values with for joining on Windows become PART OF the
+            # value on POSIX. Checked on darwin: a path with a space as a separate
+            # token gives «Неопределена информационная база», and the glued
+            # /ConfigurationRepositoryF"путь с пробелом" - «завершилось с ошибкой»;
+            # without quotes both forms work.
             if len(a) > 1 and a[0] == '"' and a[-1] == '"':
-                return a[1:-1]                       # "значение" отдельным токеном
+                return a[1:-1]                       # "value" as a separate token
             if a[0:1] == "/" and a[-1:] == '"' and '"' in a[:-1]:
                 i = a.index('"')
                 return a[:i] + a[i + 1:-1]           # /N"имя" -> /Nимя
-            return a                                 # File="…" не трогаем: там кавычки —
-                                                     # часть синтаксиса строки соединения,
-                                                     # и с ними на POSIX всё работает
+            return a                                 # File="…" left untouched: there the quotes
+                                                     # are part of the connection string syntax,
+                                                     # and with them everything works on POSIX
         cmd = [v8path] + [strip_framing_quotes(a) for a in arguments]
     r = subprocess.run(cmd, input=b"", capture_output=True)
     r.stdout = decode_platform_bytes(r.stdout)
@@ -493,14 +494,14 @@ def print_platform_output(result):
 
 
 def find_silent_rejections(log_text):
-    """Строки лога, о которых платформа сообщает, НЕ поднимая код возврата.
+    """Log lines the platform reports WITHOUT raising the exit code.
 
-    Метаданные отброшены или конфигурация нерабочая, а операция при этом «успешна».
-    Возвращает подошедшие строки.
+    Metadata was discarded or the configuration is not working, yet the operation is considered
+    "successful". Returns the matching lines.
 
-    Копия этой функции есть в каждом навыке, который читает /Out-лог загрузки (навыки
-    автономны). Держать копии одинаковыми — сознательно: разошедшиеся копии сводят на нет
-    весь смысл.
+    A copy of this function exists in every skill that reads the load /Out log (skills are
+    self-contained). Keeping the copies identical is deliberate: diverged copies defeat
+    the whole point.
     """
     patterns = [
         "Неверное свойство объекта метаданных",
@@ -510,8 +511,8 @@ def find_silent_rejections(log_text):
         "Ни один из документов не является регистратором для регистра",
         "Неверное значение перечисления",
         "не может быть приведен к типу",
-        # Режим совместимости выше платформы: объекты в базу не попадают, отказ приходит в
-        # рантайме. Обрезано до инвариантной части — конкретная версия в сообщении меняется.
+        # Compatibility mode higher than the platform: objects do not get into the database,
+        # the refusal comes at runtime. Truncated to the invariant part - the specific version in the message changes.
         "Для работы с конфигурацией необходима версия платформы не меньше",
     ]
     found = []
@@ -525,17 +526,17 @@ def find_silent_rejections(log_text):
 
 
 def run_apply_check(exe, conn_args, extension, extra_args):
-    """Постусловие применимости расширения: платформа отчитывается успехом и о расширении,
-    которое не применит — отказ всплывает лениво, при первом вызове метода, записью в журнал
-    регистрации.
+    """Extension applicability postcondition: the platform reports success even for an extension
+    it will not apply - the refusal surfaces lazily, on the first method call, as an event log
+    entry.
 
-    Запуск ОБЯЗАТЕЛЬНО отдельный. Дописать эту команду в строку операции нельзя: в одной
-    командной строке DESIGNER выполняет только ПОСЛЕДНЮЮ пакетную команду, остальные молча
-    отбрасывает — проверено на 8.3.24, /LoadConfigFromFiles вместе с
-    /CheckCanApplyConfigurationExtensions завершились кодом 0 с пустым логом, и загрузка не
-    состоялась.
+    The run MUST be separate. This command cannot be appended to the operation line: in one
+    command line DESIGNER runs only the LAST batch command and silently discards the rest -
+    checked on 8.3.24, /LoadConfigFromFiles together with
+    /CheckCanApplyConfigurationExtensions exited with code 0 and an empty log, and the load did
+    not happen.
 
-    Проверку умеет только 1cv8; если навык работал через ibcmd, берём соседний файл.
+    Only 1cv8 can do this check; if the skill worked via ibcmd, take the neighboring file.
     """
     exe_dir = os.path.dirname(exe)
     leaf = os.path.basename(exe)
@@ -564,8 +565,8 @@ def run_apply_check(exe, conn_args, extension, extra_args):
 
 
 def apply_check_report(exe, conn_args, extension, extra_args):
-    """Проверить и напечатать. True, если платформа расширение не применит — вызывающий решает,
-    поднимать ли код возврата (строгий режим)."""
+    """Check and print. True if the platform will not apply the extension - the caller decides
+    whether to raise the exit code (strict mode)."""
     ac = run_apply_check(exe, conn_args, extension, extra_args)
     if ac["skipped"]:
         print(f"[note] applicability check skipped: {ac['reason']}")
@@ -579,7 +580,7 @@ def apply_check_report(exe, conn_args, extension, extra_args):
 
 
 def apply_check_enabled(disabled):
-    """Проверять ли применимость: -NoApplyCheck сильнее настройки проекта."""
+    """Whether to check applicability: -NoApplyCheck beats the project setting."""
     if disabled:
         return False
     pf = _sg_find_v8project(os.getcwd())
@@ -618,7 +619,7 @@ def get_object_xml_from_subfile(relative_path):
     return None
 
 
-# Каталоги выгрузки объектов верхнего уровня → элемент в <ChildObjects> конфигурации.
+# Top-level object dump directories -> element in the configuration's <ChildObjects>.
 TYPE_DIR_TAG = {
     "Languages": "Language", "Subsystems": "Subsystem", "StyleItems": "StyleItem", "Styles": "Style",
     "CommonPictures": "CommonPicture", "SessionParameters": "SessionParameter", "Roles": "Role",
@@ -642,12 +643,12 @@ _TYPE_DIR_TAG_CI = {k.lower(): v for k, v in TYPE_DIR_TAG.items()}
 
 
 def get_deletion_verdicts(deleted, loaded, root, fmt):
-    """Что загрузка частями сделает с путями, удалёнными в git. Удалённый ОБЪЕКТ (его XML-описание)
-    исчезнет из базы, только если в списке его владелец и в составе владельца (ChildObjects)
-    объекта уже нет. Удалённую ЧАСТЬ объекта (модуль, файлы Ext/) загрузка частями не удаляет
-    никогда — платформа молча пропускает отсутствующий файл, даже перечисленный явно.
-    Пути вне каталогов объектов (README, docs/…) — не конфигурация, их удаление не оценивается.
-    Возвращает вердикт по каждому удалению: {path, applied, reason}."""
+    """What a partial load will do with paths deleted in git. A deleted OBJECT (its XML description)
+    disappears from the database only if its owner is in the list and the object is no longer
+    in the owner's composition (ChildObjects). A deleted PART of an object (module, Ext/ files)
+    is never deleted by a partial load - the platform silently skips a missing file, even if
+    listed explicitly. Paths outside object directories (README, docs/…) are not configuration,
+    their deletion is not evaluated. Returns a verdict for each deletion: {path, applied, reason}."""
     ours = [d for d in deleted if len(d.split("/")) >= 2 and d.split("/")[0].lower() in _TYPE_DIR_TAG_CI]
     if fmt == "Plain":
         return [{"path": d, "applied": False,
@@ -659,8 +660,8 @@ def get_deletion_verdicts(deleted, loaded, root, fmt):
         segs = d.split("/")
         ext_idx = segs.index("Ext") if "Ext" in segs else -1
         if ext_idx < 0 and d.lower().endswith(".xml") and (len(segs) == 2 or len(segs) >= 4):
-            # Описание объекта: владелец — Configuration.xml или описание объекта двумя уровнями выше.
-            # Элемент состава — по каталогу: Catalogs → Catalog, Forms → Form.
+            # Object description: the owner is Configuration.xml or the object description two levels up.
+            # Composition element - by directory: Catalogs -> Catalog, Forms -> Form.
             if len(segs) == 2:
                 owner = "Configuration.xml"
                 tag = _TYPE_DIR_TAG_CI[segs[0].lower()]
@@ -686,7 +687,7 @@ def get_deletion_verdicts(deleted, loaded, root, fmt):
             continue
         if ext_idx < 0:
             continue
-        # Часть объекта: сам объект — сегменты до Ext. Удалён вместе с объектом — судьба объекта.
+        # Part of an object: the object itself is the segments before Ext. Deleted together with the object - the object's fate.
         if ("/".join(segs[:ext_idx]) + ".xml").lower() in deleted_set:
             continue
         result.append({"path": d, "applied": False,
@@ -697,8 +698,8 @@ def get_deletion_verdicts(deleted, loaded, root, fmt):
 
 def run_git(config_dir, git_args):
     """Run a git command in config_dir and return output lines on success.
-    diff вызывается с --no-renames: при переименовании иначе виден только новый путь, а старый —
-    это удаление, о котором надо предупредить."""
+    diff is called with --no-renames: on a rename otherwise only the new path is visible, while the old one
+    is a deletion that must be warned about."""
     result = subprocess.run(
         ["git", "-c", "core.quotePath=false"] + git_args,
         capture_output=True,
@@ -778,11 +779,11 @@ def main():
     )
     parser.add_argument("-DryRun", action="store_true", help="Only show what would be loaded (no actual load)")
     parser.add_argument("-UpdateDB", action="store_true", help="Also update database configuration after load")
-    # Ключ для регрессов и верификации снапшотов, не для повседневного вызова: в SKILL.md
-    # намеренно не выносится. Поднимает код возврата, если платформа отчиталась об успехе,
-    # но в логе есть отбраковка.
+    # A key for regressions and snapshot verification, not for everyday use: deliberately not
+    # exposed in SKILL.md. Raises the exit code if the platform reported success,
+    # but the log contains rejections.
     parser.add_argument("-StrictLog", action="store_true")
-    # Пропустить проверку применимости расширения после загрузки.
+    # Skip the extension applicability check after loading.
     parser.add_argument("-NoApplyCheck", action="store_true")
     parser.add_argument("-AdditionalV8Arguments", nargs="*", default=[],
                         help="Extra 1cv8 arguments, e.g. /UseHwLicenses+")
@@ -836,8 +837,8 @@ def main():
         print("Error: -CommitRange required for Source=Commit")
         sys.exit(1)
 
-    # --- -AllExtensions: загрузка частями идёт по одному расширению ---
-    # Конфигуратор сочетание -AllExtensions с -listFile отвергает сам, ibcmd его не поддерживает.
+    # --- -AllExtensions: a partial load goes one extension at a time ---
+    # Configurator rejects -AllExtensions combined with -listFile itself, ibcmd does not support it.
     if args.AllExtensions:
         print("Error: -AllExtensions cannot be combined with a partial load")
         print("  Загружайте расширения по одному: -Extension <имя>, -ConfigDir — каталог этого расширения.")
@@ -952,9 +953,9 @@ def main():
         print("No configuration files found in changes")
         sys.exit(0)
 
-    # Корневой Configuration.xml — это объект «Конфигурация»: вместе с объектом платформа грузит
-    # его дочерние объекты, а у конфигурации это весь состав. В список он попадает из диффа сам,
-    # поэтому предупреждаем — пользователь его не выбирал.
+    # The root Configuration.xml is the «Конфигурация» object: along with the object the platform loads
+    # its child objects, and for the configuration that is the whole composition. It gets into the
+    # list from the diff by itself, so we warn - the user did not choose it.
     if any(x.replace("\\", "/").lower() == "configuration.xml" for x in config_files):
         print("[ВНИМАНИЕ] В изменениях есть Configuration.xml: платформа выполнит ПОЛНУЮ загрузку")
         print("  конфигурации, а не только изменённых объектов.")
@@ -1014,7 +1015,7 @@ def main():
                 else:
                     print(f"Error updating database configuration (code: {exit_code}){describe_exit(exit_code)}")
                 print_platform_output(ar)
-            # Проверку применимости умеет только 1cv8 — соединение для неё собираем в его форме.
+            # Only 1cv8 can do the applicability check - we build the connection for it in its form.
             if (exit_code == 0 and args.Extension
                     and apply_check_enabled(args.NoApplyCheck)):
                 ac_conn = ["/F", f'"{args.InfoBasePath}"']
@@ -1033,7 +1034,7 @@ def main():
             f.write("\n".join(config_files))
 
         # --- Build arguments ---
-        # Аргументы соединения собираем отдельно: тем же набором пойдёт проверка применимости.
+        # Connection arguments are built separately: the applicability check will use the same set.
         conn_args = []
 
         if args.InfoBaseServer and args.InfoBaseRef:
@@ -1046,8 +1047,9 @@ def main():
         if args.Password:
             conn_args.append(f'/P"{args.Password}"')
 
-        # База под хранилищем не примет НИ ОДНОЙ операции конфигуратора без этих реквизитов, а для
-        # базы вне хранилища они безвредны — поэтому подставляем всегда, когда они известны.
+        # A database under a repository will not accept ANY Configurator operation without these
+        # credentials, while for a database outside a repository they are harmless - so we always
+        # substitute them when known.
         repo = resolve_repository_settings(args)
         conn_args.extend(repository_args(repo))
 
@@ -1103,12 +1105,13 @@ def main():
         print_platform_output(result)
         write_repository_hints(log_content)
 
-        # Причину не называем: строки лога печатаются следом и говорят за себя, а класс проблемы
-        # разный — от отброшенного свойства до нерабочей на этой платформе конфигурации. Подсказку
-        # про -StrictLog не даём: операция уже выполнена, повторять её ради того же текста незачем.
+        # We do not name the cause: the log lines are printed next and speak for themselves, and
+        # the class of problem differs - from a discarded property to a configuration that does
+        # not work on this platform. We do not hint at -StrictLog: the operation has already run,
+        # no point repeating it for the same text.
         silent_failures = find_silent_rejections(log_content)
-        # Только при успехе: при провале лог уже выведен целиком, а блок повторял бы его строки
-        # под заголовком «reported success» — неправдой рядом с «Error … (code: N)».
+        # Only on success: on failure the log is already printed in full, and the block would
+        # repeat its lines under the "reported success" heading - a lie next to "Error … (code: N)".
         if exit_code == 0 and silent_failures:
             print(
                 f"[warning] platform reported success, but the log contains "
@@ -1119,7 +1122,7 @@ def main():
             if args.StrictLog:
                 exit_code = 1
 
-        # Расширение могло загрузиться «успешно» и остаться неприменимым — спрашиваем платформу.
+        # The extension could load "successfully" and remain inapplicable - we ask the platform.
         if (exit_code == 0 and args.Extension
                 and apply_check_enabled(args.NoApplyCheck)):
             if apply_check_report(v8path, conn_args, args.Extension, extra_args) and args.StrictLog:

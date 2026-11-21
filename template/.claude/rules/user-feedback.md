@@ -1,17 +1,17 @@
 ---
 name: user-feedback
-description: Учитывай замечания пользователя из USER_FEEDBACK.md перед каждым этапом задачи.
+description: Take the user's feedback from USER_FEEDBACK.md into account before each task stage.
 ---
 
-# Замечания пользователя
+# User feedback
 
-Если в каталоге задачи `tasks/task#<id>/` есть файл `USER_FEEDBACK.md` — это
-замечания пользователя, оставленные через Telegram. Перед выполнением каждого
-этапа:
+If the task directory `tasks/task#<id>/` contains the file `USER_FEEDBACK.md` - this is
+user feedback left via Telegram. Before performing each
+stage:
 
-1. Прочитай `USER_FEEDBACK.md` целиком.
-2. Отработай открытые замечания в текущем и последующих этапах (аналитика,
-   план, тесты, реализация, ревью) — они имеют приоритет над догадками.
-3. В артефакте этапа кратко отметь, какие замечания учтены.
+1. Read `USER_FEEDBACK.md` in full.
+2. Address the open feedback in the current and subsequent stages (analysis,
+   plan, tests, implementation, review) - it takes priority over guesses.
+3. In the stage artifact briefly note which feedback was taken into account.
 
-Файл ведёт приложение (дозапись). Сам его не удаляй и не переписывай.
+The file is maintained by the application (append-only). Do not delete or rewrite it yourself.

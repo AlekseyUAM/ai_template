@@ -1,6 +1,6 @@
 ---
 name: web-stop
-description: Остановка Apache HTTP Server. Используй когда пользователь просит остановить веб-сервер, Apache, прекратить веб-публикацию
+description: Stopping Apache HTTP Server. Use when the user asks to stop the web server, Apache, terminate web publication
 argument-hint: ""
 allowed-tools:
   - Bash
@@ -8,9 +8,9 @@ allowed-tools:
   - Glob
 ---
 
-# /web-stop — Остановка Apache
+# /web-stop - Stopping Apache
 
-Останавливает Apache HTTP Server. Публикации сохраняются — при следующем `/web-publish` сервер запустится снова.
+Stops Apache HTTP Server. Publications are preserved - on the next `/web-publish` the server starts again.
 
 ## Usage
 
@@ -18,30 +18,30 @@ allowed-tools:
 /web-stop
 ```
 
-## Параметры подключения
+## Connection parameters
 
-Прочитай `.v8-project.json` из корня проекта. Если задан `webPath` — используй как `-ApachePath`.
-По умолчанию `tools/apache24` от корня проекта.
+Read `.v8-project.json` from the project root. If `webPath` is set - use it as `-ApachePath`.
+Default is `tools/apache24` from the project root.
 
-## Команда
+## Command
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/web-stop.py" <параметры>
 ```
 
-### Параметры скрипта
+### Script parameters
 
-| Параметр | Обязательный | Описание |
+| Parameter | Required | Description |
 |----------|:------------:|----------|
-| `-ApachePath <путь>` | нет | Корень Apache (по умолчанию `tools/apache24`) |
+| `-ApachePath <путь>` | no | Apache root (default `tools/apache24`) |
 
-## После выполнения
+## After execution
 
-Предложи пользователю:
-- **Перезапуск** — `/web-publish <база>` (повторный вызов поднимет Apache с существующими публикациями)
-- **Удаление публикаций** — `/web-unpublish <имя>` или `/web-unpublish --all`
+Offer the user:
+- **Restart** - `/web-publish <база>` (a repeated call brings Apache up with the existing publications)
+- **Removing publications** - `/web-unpublish <имя>` or `/web-unpublish --all`
 
-## Примеры
+## Examples
 
 ```bash
 # Остановить Apache

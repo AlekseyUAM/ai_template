@@ -1,11 +1,11 @@
-# Командный интерфейс формы
+# Form command interface
 
-Форменный ключ `commandInterface` управляет расстановкой команд по двум панелям формы:
+The form key `commandInterface` controls the placement of commands on two form panels:
 
-- `commandBar` — командная панель формы;
-- `navigationPanel` — панель навигации.
+- `commandBar` - form command bar;
+- `navigationPanel` - navigation panel.
 
-Указывать нужно **только команды, у которых меняется расстановка по умолчанию** (видимость, группа, порядок). Команды, которые платформа размещает автоматически и без изменений, в блок не включают.
+Specify **only commands whose default placement changes** (visibility, group, order). Commands that the platform places automatically and without changes are not included in the block.
 
 ```json
 "commandInterface": {
@@ -21,29 +21,29 @@
 }
 ```
 
-## Элемент-команда
+## Command element
 
-Каждый элемент панели — объект, либо строка-shorthand (= голый `command` со всеми остальными свойствами по умолчанию):
+Each panel element is an object, or a shorthand string (= a bare `command` with all other properties at defaults):
 
 ```json
 "CommonCommand.История"
 ```
 
-| Ключ | Тип | Назначение |
+| Key | Type | Purpose |
 |------|-----|-----------|
-| `command` | string | Ссылка на команду дословно: `CommonCommand.X`, `Document.X.StandardCommand.Y`, `Form.Command.X`, `Form.StandardCommand.OK`, `"0"` (пустой / разделитель) |
-| `type` | string | `Auto` (по умолчанию, необязательно) или `Added` |
-| `defaultVisible` | bool | Видимость по умолчанию. На практике задаётся только `false` — чтобы скрыть команду, которая иначе видна |
-| `visible` | bool / object | Видимость с исключениями по ролям: `bool` либо `{ "common": bool, "roles": { "Имя": bool } }` |
-| `group` | string | Группа размещения дословно: предопределённая (`FormCommandBarImportant`, `FormNavigationPanelGoTo`, …), именованная (`CommandGroup.X`) или GUID-группа расширения |
-| `index` | int | Порядок команды внутри группы |
-| `attribute` | string | Путь реквизита для элемента панели навигации |
+| `command` | string | Command reference verbatim: `CommonCommand.X`, `Document.X.StandardCommand.Y`, `Form.Command.X`, `Form.StandardCommand.OK`, `"0"` (empty / separator) |
+| `type` | string | `Auto` (default, optional) or `Added` |
+| `defaultVisible` | bool | Default visibility. In practice only `false` is set - to hide a command that is otherwise visible |
+| `visible` | bool / object | Visibility with role exceptions: `bool` or `{ "common": bool, "roles": { "Имя": bool } }` |
+| `group` | string | Placement group verbatim: predefined (`FormCommandBarImportant`, `FormNavigationPanelGoTo`, …), named (`CommandGroup.X`) or an extension GUID group |
+| `index` | int | Command order inside the group |
+| `attribute` | string | Attribute path for a navigation panel element |
 
-## Две формы записи панели
+## Two panel notation forms
 
-Панель можно описать **плоским массивом** или **деревом по группам** — выбирайте любую.
+A panel can be described as a **flat array** or a **tree by groups** - choose either.
 
-**Плоский массив** — каждый элемент при необходимости несёт собственный `group`:
+**Flat array** - each element optionally carries its own `group`:
 
 ```json
 "commandBar": [
@@ -52,7 +52,7 @@
 ]
 ```
 
-**Дерево** — объект `{ группа: [команды] }`; группа берётся из ключа, элементы её не повторяют:
+**Tree** - an object `{ группа: [команды] }`; the group is taken from the key, the elements do not repeat it:
 
 ```json
 "navigationPanel": {
@@ -62,15 +62,15 @@
 }
 ```
 
-Ключи-группы дерева зависят от панели:
+The tree group keys depend on the panel:
 
-- `navigationPanel`: `important`, `goTo`, `seeAlso` (можно по-русски — `важное`, `перейти`, `смТакже`);
+- `navigationPanel`: `important`, `goTo`, `seeAlso` (can be in Russian - `важное`, `перейти`, `смТакже`);
 - `commandBar`: `important`, `createBasedOn`;
-- любой другой ключ (`CommandGroup.X` или GUID) подставляется в группу дословно.
+- any other key (`CommandGroup.X` or a GUID) is substituted into the group verbatim.
 
-## Скрыть видимую команду
+## Hide a visible command
 
-Самый частый случай — убрать команду, которую платформа показывает по умолчанию:
+The most common case - remove a command that the platform shows by default:
 
 ```json
 "commandBar": [
@@ -78,7 +78,7 @@
 ]
 ```
 
-Показать команду только некоторым ролям:
+Show a command only to some roles:
 
 ```json
 { "command": "Form.Command.Печать", "defaultVisible": false,

@@ -11,16 +11,16 @@ import sys
 import uuid
 from lxml import etree
 
-# Регистронезависимый ввод: имена параметров и значения choices принимаются
-# в любом регистре (в argparse по умолчанию совпадение точное).
+# Case-insensitive input: parameter names and choice values are accepted
+# in any case (argparse defaults to exact matching).
 def ci_parse_args(parser, argv=None):
-    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
+    """parse_args: parameter names and choice values are accepted in any case."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
         if tok.startswith('-') and tok.lower() in names:
             argv[i] = names[tok.lower()]
-    # choices — зеркало [ValidateSet]; канонизируем ДО разбора, иначе argparse отвергнет регистр
+    # choices mirrors [ValidateSet]; canonicalize BEFORE parsing, otherwise argparse rejects the case
     choice_map = {}
     for a in parser._actions:
         if a.choices:
@@ -41,33 +41,33 @@ V8_NS = "http://v8.1c.ru/8.1/data/core"
 # Form data-binding tags (value = attribute path). A binding survives only if its root
 # attribute is borrowed into the form's <Attributes>; otherwise it must be stripped or the
 # platform rejects the form with "Неверный путь к данным" on load.
-# RowPictureDataPath тоже путь к данным («Объект.Товары.РасхождениеЗаказ», «Список.DefaultPicture»),
-# а не индекс картинки: эталон Конфигуратора сохраняет его с заимствованным основным реквизитом
-# и выбрасывает без него — то же правило, что у остальных путей.
+# RowPictureDataPath is also a data path («Объект.Товары.РасхождениеЗаказ», «Список.DefaultPicture»),
+# not a picture index: the Configurator reference keeps it with a borrowed main attribute
+# and drops it without one - the same rule as for other paths.
 FORM_BINDING_DATA_TAGS = ["DataPath", "TitleDataPath", "FooterDataPath", "HeaderDataPath", "MultipleValueDataPath", "MultipleValuePresentDataPath", "RowPictureDataPath"]
 # Picture-path binding tags (value = picture index path, never a data attribute) — always stripped in the skeleton.
 FORM_BINDING_PICTURE_TAGS = ["MultipleValuePictureDataPath"]
 
-# id основного реквизита в заимствованной форме — как у Конфигуратора
+# id of the main attribute in the borrowed form - same as in the Configurator
 MAIN_ATTR_ID = "1000001"
 
-# Виды дочерних объектов, которые заимствуются в оболочку поимённо (табличные части — отдельно)
+# Child object kinds borrowed into the wrapper by name (tabular sections - separately)
 CHILD_OBJECT_KINDS = ("Attribute", "Dimension", "Resource", "AddressingAttribute")
 
-# Прямые дети <Form>, которые в заимствованную форму не переносятся.
-# Структурные секции: AutoCommandBar и ChildItems забираются отдельно, остальные выбрасываются целиком.
+# Direct children of <Form> that are not carried into the borrowed form.
+# Structural sections: AutoCommandBar and ChildItems are taken separately, the rest are dropped entirely.
 FORM_STRUCTURAL_SECTIONS = ("Events", "Attributes", "Commands", "Parameters", "CommandInterface")
-# Свойства формы, значение которых — имя реквизита формы (реквизиты не заимствуются, ссылка повиснет).
+# Form properties whose value is a form attribute name (attributes are not borrowed, the reference will dangle).
 FORM_ATTRIBUTE_REF_PROPS = ("ReportResult", "DetailsData", "VariantAppearance", "GroupList")
 
 
 def strip_form_bindings(xml, main_attr_name):
     """Strip data-binding tags whose root attribute isn't borrowed.
-    main_attr_name задан (BorrowMainAttribute): оставить привязки от его имени, остальные снять.
-    Пусто (скелет без основного реквизита): снять все. Картиночные пути снимаются всегда."""
+    main_attr_name given (BorrowMainAttribute): keep bindings from its name, strip the rest.
+    Empty (skeleton without the main attribute): strip all. Picture paths are always stripped."""
     for tag in FORM_BINDING_DATA_TAGS:
         if main_attr_name:
-            # Оставить и «Список.Поле», и путь ровно на сам реквизит («Список» у таблицы формы)
+            # Keep both «Список.Поле» and a path exactly to the attribute itself («Список» on a form table)
             root = re.escape(main_attr_name)
             xml = re.sub(rf'\s*<{tag}>(?!{root}(\.|<))[^<]*</{tag}>', '', xml)
         else:
@@ -78,11 +78,11 @@ def strip_form_bindings(xml, main_attr_name):
 
 
 def indent_for_base_form(xml, first_indent):
-    """Сдвиг блока на уровень вглубь для <BaseForm>; first_indent — отступ первой строки.
-    Таб добавляется только в пробельные промежутки между тегами: строки продолжения многострочного
-    текста (<v8:content>, текст запроса) — часть значения. Со сдвигом снимок расходился с формой,
-    и Конфигуратор показывал такой текст изменённым в расширении. Пробельный промежуток между
-    открывающим и закрывающим тегом одного элемента — тоже значение, его не сдвигаем."""
+    """Shift a block one level deeper for <BaseForm>; first_indent - indent of the first line.
+    A tab is added only in whitespace gaps between tags: continuation lines of multiline
+    text (<v8:content>, query text) are part of the value. With a shift the reference diverged from the form,
+    and the Configurator showed such text as changed in the extension. The whitespace gap between
+    the opening and closing tags of one element is also a value, so it is not shifted."""
     parts = re.split(r'''(<(?:[^>"']|"[^"]*"|'[^']*')*>)''', xml)
     for i in range(0, len(parts), 2):
         seg = parts[i]
@@ -99,29 +99,30 @@ def indent_for_base_form(xml, first_indent):
 
 DROPPED_LINKS = []
 
-# Связи формы — параметров выбора (<ChoiceParameterLinks>/<xr:Link>) и по типу (<TypeLink>) —
-# хранят путь в <xr:DataPath>, обычным стриппингом он не снимается. Путь — внутренняя ссылка
-# платформы: в выгрузке она пишет имя, а если имя в контексте формы не разрешается — код.
-# Текстовое имя в расширении разрешается, только если его корень объявлен в <Attributes> самой
-# заимствованной формы; иначе платформа отвергает загрузку — «Неверный путь к полю - X».
-# Конфигуратор поэтому пишет текст там, где он разрешается, и код — где нет.
-# Грамматика кода (оракул «код в форму конфигурации → загрузка → выгрузка → имя», 8.3.27; эталоны
-# Конфигуратора УТ и Issue66Example4-7, JR2433, JR2976, JR49904):
-#   первый сегмент  <id>                — реквизит ИСХОДНОЙ формы (в расширении реквизиты
-#                                         перенумерованы в 1000000+, ссылка остаётся в нумерации базы);
-#                   <id>:<CurrentData>  — элемент-таблица исходной формы, её текущая строка;
-#   дальше          0:<uuid>            — реквизит/ТЧ/измерение/ресурс метаданных источника;
-#                   <id>                — колонка реквизита формы;
-#                   <id>:<AddColumn>    — колонка AdditionalColumns;
-#                   -<k>                — стандартный реквизит, код по виду объекта (STD_FIELD_CODES).
-# В расширении платформа код обратно в имя не переводит, а висячий код грузит молча — ошибка
-# кодирования не упадёт, а тихо не сработает. Поэтому кодируется только измеренное; прочее
-# вырезается с предупреждением: связь — удобство подбора, без неё форма работает, с неверной
-# текстовой — не грузится вовсе.
+# Form links - choice parameter links (<ChoiceParameterLinks>/<xr:Link>) and type links (<TypeLink>) -
+# store a path in <xr:DataPath>; regular stripping does not remove it. The path is an internal
+# platform reference: in the export it writes a name, and if the name does not resolve in the form
+# context - a code.
+# A text name in the extension resolves only if its root is declared in <Attributes> of the borrowed
+# form itself; otherwise the platform rejects the load - «Неверный путь к полю - X».
+# That is why the Configurator writes text where it resolves, and a code where it does not.
+# Code grammar (oracle "code into a configuration form → load → export → name", 8.3.27; Configurator
+# references UT and Issue66Example4-7, JR2433, JR2976, JR49904):
+#   first segment   <id>                - attribute of the ORIGINAL form (in the extension attributes
+#                                         are renumbered to 1000000+, the reference stays in base numbering);
+#                   <id>:<CurrentData>  - table element of the original form, its current row;
+#   then            0:<uuid>            - metadata attribute/tabular section/dimension/resource of the source;
+#                   <id>                - form attribute column;
+#                   <id>:<AddColumn>    - AdditionalColumns column;
+#                   -<k>                - standard attribute, code by object kind (STD_FIELD_CODES).
+# In the extension the platform does not translate a code back to a name, and loads a dangling code
+# silently - an encoding error does not fail but quietly does nothing. Therefore only measured paths
+# are encoded; the rest are cut with a warning: a link is a selection convenience, the form works
+# without it, but with an incorrect text one it does not load at all.
 LINK_CURRENT_DATA = '02023637-7868-4a5f-8576-835a76e0c9ba'
 LINK_ADD_COLUMN = '5bdad865-f2c5-434b-8041-ba4aad3b6687'
-# Коды стандартных реквизитов — свой порядок у каждого вида (оракул 8.3.27; в XML объекта
-# полного списка нет). Незамеренное (-1, скрытые поля, колонки ExtDimensionTypes) — не кодируем.
+# Standard attribute codes - each kind has its own order (oracle 8.3.27; there is no full list
+# in the object XML). Unmeasured ones (-1, hidden fields, ExtDimensionTypes columns) are not encoded.
 STD_FIELD_CODES = {
     'Catalog': {'Code': -2, 'Description': -3, 'Parent': -4, 'Owner': -5, 'IsFolder': -6, 'DeletionMark': -7, 'Ref': -8, 'DataVersion': -9, 'Predefined': -10, 'PredefinedDataName': -13},
     'Document': {'Number': -2, 'Date': -3, 'DeletionMark': -4, 'Ref': -5, 'DataVersion': -6, 'Posted': -7, 'RegisterRecords': -8},
@@ -135,8 +136,8 @@ STD_FIELD_CODES = {
     'AccumulationRegisterRow': {'Period': -2, 'Recorder': -3, 'LineNumber': -4, 'Active': -5, 'RecordType': -9, 'SecondPeriod': -10, 'MinutePeriod': -11, 'HourPeriod': -12, 'DayPeriod': -13, 'WeekPeriod': -14, 'TenDaysPeriod': -15},
     'TabularSectionRow': {'LineNumber': -2},
 }
-# Тип основного реквизита → вид для таблицы стандартных кодов (запись РС — сам реквизит,
-# набор записей РН — строка таблицы на нём)
+# Main attribute type -> kind for the standard codes table (information register record - the attribute itself,
+# accumulation register record set - the table row on it)
 MAIN_ATTR_KINDS = {
     'CatalogObject': 'Catalog', 'DocumentObject': 'Document', 'ChartOfCharacteristicTypesObject': 'ChartOfCharacteristicTypes',
     'ChartOfAccountsObject': 'ChartOfAccounts', 'ChartOfCalculationTypesObject': 'ChartOfCalculationTypes',
@@ -147,18 +148,18 @@ MAIN_ATTR_KINDS = {
 
 
 def resolve_link_data_path(path, ctx):
-    """Путь связи → текст (разрешается в расширении), код или None (вырезать).
-    ctx: MainName, MainId, MainBorrowed, MainKind, BorrowedNames (реквизиты объекта в расширении;
-    None — все), AttrUuids (имя/«ТЧ.Реквизит» → uuid),
-    FormAttrIds, FormAttrCols («Реквизит.Колонка» → id), AddCols («<путь таблицы>.Колонка» → id),
-    Tables (имя элемента-таблицы → {Id, Path})."""
-    # Уже код (форма-источник сама из расширения, или висячая ссылка в типовой) — как есть
+    """Link path -> text (resolves in the extension), code, or None (cut out).
+    ctx: MainName, MainId, MainBorrowed, MainKind, BorrowedNames (object attributes in the extension;
+    None - all), AttrUuids (name/«ТЧ.Реквизит» -> uuid),
+    FormAttrIds, FormAttrCols («Реквизит.Колонка» -> id), AddCols («<путь таблицы>.Колонка» -> id),
+    Tables (table element name -> {Id, Path})."""
+    # Already a code (source form is itself from an extension, or a dangling reference in a standard one) - as is
     if re.match(r'^-?\d', path):
         return path
     main = ctx['MainName']
     attr_uuids = ctx['AttrUuids']
 
-    # Текущая строка элемента-таблицы
+    # Current row of the table element
     cd = re.match(r'^Items\.([^.]+)\.CurrentData\.([^.]+)$', path)
     if cd:
         tbl = ctx['Tables'].get(cd.group(1))
@@ -168,11 +169,11 @@ def resolve_link_data_path(path, ctx):
         tp = tbl['Path']
         prefix = f"{tbl['Id']}:{LINK_CURRENT_DATA}"
         if main and (tp == main or tp.startswith(main + '.')):
-            # Таблица на основном реквизите: с заимствованным — текст разрешается (эталоны 7_1, УТ)
+            # Table on the main attribute: with a borrowed one the text resolves (references 7_1, UT)
             if ctx['MainBorrowed']:
                 return path
             if tp == main:
-                # Строки самого основного реквизита — набор записей регистра накопления
+                # Rows of the main attribute itself - accumulation register record set
                 if ctx['MainKind'] != 'AccumulationRegisterRow':
                     return None
                 if field in attr_uuids:
@@ -188,26 +189,26 @@ def resolve_link_data_path(path, ctx):
                 return f"{prefix}/{ctx['AddCols'][tp + '.' + field]}:{LINK_ADD_COLUMN}"
             code = STD_FIELD_CODES['TabularSectionRow'].get(field)
             return f"{prefix}/{code}" if code else None
-        # Таблица на реквизите формы: реквизиты формы не заимствуются никогда — только код
-        # (текст платформа отвергает и с заимствованным основным реквизитом, оракул 8.3.27)
+        # Table on a form attribute: form attributes are never borrowed - code only
+        # (the platform rejects text even with a borrowed main attribute, oracle 8.3.27)
         if tp in ctx['FormAttrIds'] and f"{tp}.{field}" in ctx['FormAttrCols']:
             return f"{prefix}/{ctx['FormAttrCols'][tp + '.' + field]}"
         return None
 
-    # Путь от основного реквизита формы
+    # Path from the form's main attribute
     if main and path.startswith(main + '.'):
         rest = path[len(main) + 1:]
         if ctx['MainBorrowed']:
-            # Заимствованный реквизит объекта разрешается текстом и остаётся читаемым. Стандартное
-            # поле («Объект.Owner», «Объект.Date») и реквизит, который в расширение не попал (в режиме
-            # Form заимствуется только используемое формой) — нет: платформа отвергает «Неверный путь
-            # к полю». Конфигуратор в обоих случаях ставит ссылку на сам основной реквизит (эталоны
-            # Issue66Example7_1 и УТ Претензии.ФормаЭлементаСамообслуживание).
+            # A borrowed object attribute resolves as text and stays readable. A standard
+            # field («Объект.Owner», «Объект.Date») and an attribute that did not get into the extension
+            # (in Form mode only what the form uses is borrowed) - do not: the platform rejects «Неверный путь
+            # к полю». The Configurator in both cases sets a reference to the main attribute itself (references
+            # Issue66Example7_1 and UT Претензии.ФормаЭлементаСамообслуживание).
             borrowed = ctx['BorrowedNames'] is None or rest.split('.')[0] in ctx['BorrowedNames']
             if borrowed and rest in attr_uuids:
                 return path
             return ctx['MainId']
-        # Код пути на константу набора не измерен — такую связь вырезаем, а не кодируем наугад
+        # The path code for a set constant is not measured - such a link is cut, not encoded blindly
         if ctx['MainKind'] == 'ConstantsSet':
             return None
         segs = rest.split('.')
@@ -222,7 +223,7 @@ def resolve_link_data_path(path, ctx):
             return f"{ctx['MainId']}/0:{attr_uuids[segs[0]]}/0:{attr_uuids[rest]}"
         return None
 
-    # Путь от реквизита формы — только по id исходной формы, в обоих режимах
+    # Path from a form attribute - only by the original form's id, in both modes
     segs = path.split('.')
     if segs[0] in ctx['FormAttrIds']:
         attr_id = ctx['FormAttrIds'][segs[0]]
@@ -232,14 +233,14 @@ def resolve_link_data_path(path, ctx):
             return f"{attr_id}/{ctx['FormAttrCols'][path]}"
         return None
 
-    # Прочее: с заимствованным основным реквизитом текст может разрешиться, без него — нет
+    # Other: with a borrowed main attribute the text may resolve, without it - no
     if ctx['MainBorrowed']:
         return path
     return None
 
 
 def rewrite_link_blocks(xml, block_pattern, ctx):
-    """Путь в <xr:DataPath> блока связи → разрешённый; неразрешимый блок вырезается целиком."""
+    """Path in the link block's <xr:DataPath> -> resolved; an unresolvable block is cut entirely."""
     def repl(m):
         link = m.group(0)
         dp = re.search(r'<xr:DataPath[^>]*>([^<]+)</xr:DataPath>', link)
@@ -261,24 +262,24 @@ def rewrite_choice_parameter_links(xml, ctx):
     if '<ChoiceParameterLinks>' not in xml:
         return xml
     xml = rewrite_link_blocks(xml, r'\s*<xr:Link>.*?</xr:Link>', ctx)
-    # Опустевший контейнер платформе не нужен
+    # The platform does not need an emptied container
     xml = re.sub(r'\s*<ChoiceParameterLinks>\s*</ChoiceParameterLinks>', '', xml, flags=re.DOTALL)
     return xml
 
 
 def rewrite_type_links(xml, ctx):
-    """Связь по типу — тот же путь и то же правило (эталоны УТ ВводОстатков.ФормаРасчетыМеждуОрганизациями:
-    без основного реквизита — код, с ним — текст)."""
+    """Type link - same path and same rule (references UT ВводОстатков.ФормаРасчетыМеждуОрганизациями:
+    without the main attribute - code, with it - text)."""
     if '<TypeLink>' not in xml:
         return xml
     return rewrite_link_blocks(xml, r'\s*<TypeLink>.*?</TypeLink>', ctx)
 
 
 def get_own_child_object_names(obj_file):
-    """Имена ПРЯМЫХ детей собственного <ChildObjects> объекта — для дедупа при повторном
-    заимствовании. Текстом это не снять: regex «первый <ChildObjects> до первого </ChildObjects>»
-    у объекта с табличными частями обрывается на закрытии первой ТЧ, забирает имена её колонок и
-    теряет то, что идёт после неё."""
+    """Names of DIRECT children of the object's own <ChildObjects> - for dedup on repeated
+    borrowing. Text alone cannot do this: the regex "first <ChildObjects> to first </ChildObjects>"
+    on an object with tabular sections breaks at the close of the first tabular section, takes its column names and
+    loses what follows it."""
     names = set()
     try:
         tree = etree.parse(obj_file)
@@ -304,13 +305,13 @@ def get_own_child_object_names(obj_file):
 
 
 def insert_into_own_child_objects(text, content):
-    """Вставка в СОБСТВЕННЫЙ <ChildObjects> объекта. Свой контейнер закрывается в файле последним:
-    объект в файле один, а вложенные <ChildObjects> табличных частей закрываются раньше. Замена по
-    всем вхождениям раскидывала реквизиты по каждой ТЧ — рвался XML или ТЧ пряталась внутрь ТЧ."""
+    """Insert into the object's OWN <ChildObjects>. Its own container closes last in the file:
+    there is one object per file, while nested <ChildObjects> of tabular sections close earlier. Replacement by
+    all occurrences scattered attributes across every tabular section - the XML broke or a tabular section hid inside another."""
     close_idx = text.rfind("</ChildObjects>")
     if close_idx >= 0:
         return text[:close_idx] + content + "\r\n\t\t" + text[close_idx:]
-    # Своего закрывающего тега нет — значит контейнер самозакрытый (детей у него нет, вложенных тоже)
+    # No own closing tag - so the container is self-closing (it has no children, nested ones either)
     self_matches = list(re.finditer(r'<ChildObjects\s*/>', text))
     if not self_matches:
         return text
@@ -343,16 +344,16 @@ def _sg_find_v8project(start_dir):
 
 
 def get_new_object_position(cfg_dir):
-    """Куда навык ставит новую запись в <ChildObjects> — настройка newObjectPosition.
+    """Where the skill places a new entry in <ChildObjects> - the newObjectPosition setting.
 
-    databases[].newObjectPosition базы, чей configSrc охватывает каталог родительского XML,
-    иначе корневое поле, иначе end. Значения: end — после последнего объекта того же вида
-    (так дописывает Конфигуратор); byName — по имени среди объектов того же вида.
-    Файл ищем от рабочего каталога вверх, каталог конфигурации — запасной путь: так же
-    его ищут support-guard и группа db-*, а скрипт навыка зовут по абсолютному пути, и cwd
-    остаётся рабочим каталогом проекта.
-    configSrc считается от каталога .v8-project.json, как задокументировано в
-    docs/v8-project-guide.md. Реестр семьи: tests/skills/check-inline-drift.mjs.
+    databases[].newObjectPosition of the database whose configSrc covers the parent XML directory,
+    otherwise the root field, otherwise end. Values: end - after the last object of the same kind
+    (that is how the Configurator appends); byName - by name among objects of the same kind.
+    The file is searched from the working directory upwards, the configuration directory is a fallback path:
+    support-guard and the db-* group search for it the same way, and the skill script is called by absolute path, so cwd
+    stays the project working directory.
+    configSrc is resolved from the .v8-project.json directory, as documented in
+    docs/v8-project-guide.md. Family registry: tests/skills/check-inline-drift.mjs.
     """
     try:
         pj = _sg_find_v8project(os.getcwd()) or _sg_find_v8project(os.path.abspath(cfg_dir or "."))
@@ -375,28 +376,28 @@ def get_new_object_position(cfg_dir):
 
 
 def is_order_sensitive_type(type_name):
-    """Виды, у которых порядок в дереве несёт смысл: автоматически их не упорядочиваем.
+    """Kinds where order in the tree matters: we do not sort them automatically.
 
-    CommonAttribute — исключение самого стандарта (#std467): у общих реквизитов-разделителей
-    порядок в дереве задаёт порядок установки параметров сеанса. Subsystem и CommandGroup:
-    пока они не перечислены в <SubsystemsOrder> / <GroupsOrder> файла Ext/CommandInterface.xml,
-    порядок дерева задаёт порядок в интерфейсе, а платформа эти списки сама не заводит
-    (в выгрузке ACC вне GroupsOrder 15 живых групп из 39). Language исключён из осторожности,
-    без замера: языков обычно один-два, и в типовых их порядок не алфавитный.
-    Явно названный вид сортируется в любом случае.
-    Реестр семьи: tests/skills/check-inline-drift.mjs.
+    CommonAttribute - an exception from the standard itself (#std467): for common separator attributes
+    the order in the tree sets the session parameter setup order. Subsystem and CommandGroup:
+    until they are listed in <SubsystemsOrder> / <GroupsOrder> of Ext/CommandInterface.xml,
+    the tree order sets the order in the interface, and the platform does not create these lists itself
+    (in the ACC export 15 live groups out of 39 are outside GroupsOrder). Language is excluded out of caution,
+    without measurement: there are usually one or two languages, and in standard configurations their order is not alphabetical.
+    An explicitly named kind is sorted in any case.
+    Family registry: tests/skills/check-inline-drift.mjs.
     """
     return type_name in ("CommonAttribute", "Subsystem", "CommandGroup", "Language")
 
 
 def compare_metadata_names(a, b):
-    """Порядок имён объектов метаданных, как в дереве Конфигуратора.
+    """Order of metadata object names, as in the Configurator tree.
 
-    Ключ — пары «ранг+символ»: регистр не учитывается, подчёркивание раньше цифр, цифры раньше
-    букв, буквы по кодам (латиница раньше кириллицы), ё на месте е. Культурные таблицы не
-    используются — они разные на разных ОС и в разных рантаймах, а так оба порта сравнивают
-    одинаково везде. Равные ключи разводит ordinal-сравнение исходных строк.
-    Возвращает -1 | 0 | 1. Реестр семьи: tests/skills/check-inline-drift.mjs.
+    The key is "rank+symbol" pairs: case is ignored, underscore before digits, digits before
+    letters, letters by codes (Latin before Cyrillic), ё in place of е. Culture tables are not
+    used - they differ across OSes and runtimes, while this way both ports compare
+    identically everywhere. Equal keys are separated by ordinal comparison of the source strings.
+    Returns -1 | 0 | 1. Family registry: tests/skills/check-inline-drift.mjs.
     """
     keys = []
     for name in (a, b):
@@ -456,9 +457,9 @@ CHILD_TYPE_DIR_MAP = {
     "Bot": "Bots", "PaletteColor": "PaletteColors", "PaletteColor": "PaletteColors", "Language": "Languages",
 }
 
-# --- Модули заимствованных объектов ---
-# Порядок внутри значения — порядок выгрузки Конфигуратора: сначала «объектный» модуль
-# (ObjectModule / RecordSetModule / ValueManagerModule), затем ManagerModule.
+# --- Borrowed object modules ---
+# The order inside the value is the Configurator export order: first the "object" module
+# (ObjectModule / RecordSetModule / ValueManagerModule), then ManagerModule.
 MODULE_KINDS_BY_TYPE = {
     "CommonModule": ["Module"], "HTTPService": ["Module"], "WebService": ["Module"],
     "Catalog": ["ObjectModule", "ManagerModule"], "Document": ["ObjectModule", "ManagerModule"],
@@ -477,8 +478,8 @@ MODULE_KINDS_BY_TYPE = {
     "Enum": ["ManagerModule"], "DocumentJournal": ["ManagerModule"],
     "FilterCriterion": ["ManagerModule"],
 }
-# Типы с ЕДИНСТВЕННЫМ модулем: ради него объект и заимствуют, поэтому файл создаётся молча.
-# Отказ — `-Module None`.
+# Types with a SINGLE module: the object is borrowed for its sake, so the file is created silently.
+# Opt out - `-Module None`.
 AUTO_MODULE_TYPES = ["CommonModule", "HTTPService", "WebService"]
 MODULE_KIND_NAMES = ["Module", "ObjectModule", "ManagerModule", "RecordSetModule", "ValueManagerModule"]
 
@@ -702,14 +703,14 @@ TYPES_WITH_CHILD_OBJECTS = [
 
 COMMON_MODULE_PROPS = ["Global", "ClientManagedApplication", "Server", "ExternalConnection", "ClientOrdinaryApplication", "ServerCall"]
 
-# Свойства объекта, от которых зависит существование стандартного поля: без них платформа
-# отвергает загрузку — «Неверный путь к данным». Конфигуратор переносит ровно их (эталоны
-# Issue66Example7_1 и Issue66Example2). Проверено сплошным прогоном по типам: у регистра
-# сведений без InformationRegisterPeriodicity не разрешается «Запись.Period».
+# Object properties on which the existence of a standard field depends: without them the platform
+# rejects the load - «Неверный путь к данным». The Configurator transfers exactly these (references
+# Issue66Example7_1 and Issue66Example2). Verified by a complete run over types: for an information
+# register without InformationRegisterPeriodicity «Запись.Period» does not resolve.
 TYPE_GATE_PROPS = {
     "InformationRegister": ["InformationRegisterPeriodicity", "WriteMode"],
 }
-# Владельцы справочника — список <xr:Item>, а не скаляр: переносится фрагментом, как __TypeXml
+# Catalog owners are a list of <xr:Item>, not a scalar: transferred as a fragment, like __TypeXml
 TYPES_WITH_OWNERS = ("Catalog", "ChartOfCharacteristicTypes")
 
 # Standard system fields to skip when collecting DataPath references
@@ -733,8 +734,8 @@ XMLNS_DECL = (
 
 def detect_format_version(d):
     while d:
-        # Автономная внешняя обработка/отчёт: своего Configuration.xml у неё нет, версию несёт
-        # корень самой обработки. Без этого форма и макет внутри обработки 2.21 писались бы 2.17.
+        # Standalone external data processor/report: it has no Configuration.xml of its own, the version
+        # is carried by the root of the processor itself. Without this the form and template inside a 2.21 processor would be written as 2.17.
         ext_path = d + ".xml"
         if os.path.isfile(ext_path):
             with open(ext_path, "r", encoding="utf-8-sig") as f:
@@ -758,16 +759,16 @@ def detect_format_version(d):
 
 
 def format_rank(ver):
-    """"2.20" → 220, "2.9" → 209. Строковое сравнение неверно ("2.9" > "2.17")."""
+    """"2.20" -> 220, "2.9" -> 209. String comparison is wrong ("2.9" > "2.17")."""
     m = re.match(r'^(\d+)\.(\d+)$', ver or '')
     return int(m.group(1)) * 100 + int(m.group(2)) if m else 0
 
 
-# --- Пометка расширенного свойства (<xr:PropertyState>) ---
-# Свойство появилось в формате 2.19 (8.3.26): на 2.18 и ниже платформа молча выбрасывает элемент
-# при загрузке. С 2.19 Конфигуратор ставит его сам при выгрузке. Правило: флаг ставит тот, кто
-# создал файл модуля, — здесь это мы. Имя свойства = базовое имя файла модуля.
-# Копии этих функций есть в cfe-patch-method (навыки автономны); держать их одинаковыми — сознательно.
+# --- Extended property flag (<xr:PropertyState>) ---
+# The property appeared in format 2.19 (8.3.26): on 2.18 and below the platform silently drops the element
+# on load. Since 2.19 the Configurator sets it itself on export. Rule: the flag is set by whoever
+# created the module file - here that is us. Property name = base name of the module file.
+# Copies of these functions exist in cfe-patch-method (skills are standalone); keeping them identical is deliberate.
 def build_property_state_xml(property_name, indent):
     return "\n".join([
         f"{indent}<xr:PropertyState>",
@@ -787,8 +788,8 @@ def set_property_state_flag(obj_file, property_name, format_version):
         text = fh.read()
     nl = "\r\n" if "\r\n" in text else "\n"
 
-    # ПЕРВЫЙ <InternalInfo> в файле — собственный у объекта: у реквизитов и подобъектов свои,
-    # но они лежат ниже, внутри <ChildObjects>.
+    # The FIRST <InternalInfo> in the file is the object's own: attributes and subobjects have their own,
+    # but they lie lower, inside <ChildObjects>.
     empty = re.search(r"([ \t]*)<InternalInfo\s*/>", text)
     opened = re.search(r"([ \t]*)<InternalInfo>(.*?)</InternalInfo>", text, re.S)
 
@@ -802,7 +803,7 @@ def set_property_state_flag(obj_file, property_name, format_version):
             return
         ind = opened.group(1)
         block = build_property_state_xml(property_name, ind + "\t")
-        # Дописываем в КОНЕЦ InternalInfo: у Конфигуратора PropertyState идёт после GeneratedType.
+        # Append to the END of InternalInfo: in the Configurator PropertyState goes after GeneratedType.
         close_at = opened.end() - len("</InternalInfo>") - len(ind)
         text = text[:close_at] + block + nl + text[close_at:]
     else:
@@ -813,9 +814,9 @@ def set_property_state_flag(obj_file, property_name, format_version):
 
 
 def apply_pal_ns(format_version):
-    """2.21 (8.5) добавила в шапку пространство палитры — ради <Color> у значений перечисления.
-    Вставляем НА МЕСТО (после lf, перед style): платформа держит объявления по алфавиту,
-    дописать в конец нельзя."""
+    """2.21 (8.5) added the palette namespace to the header - for <Color> in enum values.
+    Insert IN PLACE (after lf, before style): the platform keeps declarations alphabetically,
+    appending to the end is not allowed."""
     global XMLNS_DECL
     if format_rank(format_version) >= 221:
         XMLNS_DECL = XMLNS_DECL.replace(
@@ -873,8 +874,8 @@ def expand_self_closing(container, parent_indent):
 
 
 def _detect_xml_style(path):
-    """Стиль существующего файла для round-trip-сохранения: BOM / EOL / регистр encoding /
-    финальный перенос. None → файл новый (сохранить текущее поведение)."""
+    """Style of the existing file for round-trip saving: BOM / EOL / encoding case /
+    final newline. None -> the file is new (keep the current behavior)."""
     try:
         raw = open(path, "rb").read()
     except OSError:
@@ -889,21 +890,21 @@ def _detect_xml_style(path):
 
 
 def _finalize_xml_bytes(xml_bytes, style):
-    """Привести байты к стилю оригинала; для НОВОГО файла (style is None) — к канону
-    выгрузки Конфигуратора: encoding="UTF-8", CRLF в разделителях, без перевода в конце."""
+    """Bring bytes to the original's style; for a NEW file (style is None) - to the Configurator
+    export canon: encoding="UTF-8", CRLF in separators, no trailing newline."""
     enc_decl = style["enc"] if style else "UTF-8"
     xml_bytes = xml_bytes.replace(
         b"<?xml version='1.0' encoding='UTF-8'?>",
         b'<?xml version="1.0" encoding="' + enc_decl.encode("ascii") + b'"?>')
-    # Канонизировать переносы к LF (убирает &#13; от \r в tail'ах)
+    # Canonicalize line breaks to LF (removes &#13; from \r in tails)
     xml_bytes = (xml_bytes.replace(b"&#13;\n", b"\n").replace(b"&#13;", b"")
                  .replace(b"\r\n", b"\n").replace(b"\r", b"\n"))
-    # Финальный перенос — как в оригинале (новый файл → нет, канон #57)
+    # Final newline - as in the original (new file -> none, canon #57)
     want_final_nl = style["final_nl"] if style else False
     xml_bytes = xml_bytes.rstrip(b"\n")
     if want_final_nl:
         xml_bytes += b"\n"
-    # EOL — как в оригинале (новый файл → CRLF, канон #57)
+    # EOL - as in the original (new file -> CRLF, canon #57)
     if (style["crlf"] if style else True):
         xml_bytes = xml_bytes.replace(b"\n", b"\r\n")
     return xml_bytes
@@ -920,20 +921,20 @@ def save_xml_bom(tree, path):
 
 
 def write_utf8_bom(path, content):
-    # newline='' — без трансляции: иначе текстовый режим Python дал бы CRLF на Windows
-    # и LF на macOS, то есть вывод навыка зависел бы от ОС.
+    # newline='' - no translation: otherwise Python text mode would give CRLF on Windows
+    # and LF on macOS, i.e. the skill output would depend on the OS.
     with open(path, 'w', encoding='utf-8-sig', newline='') as f:
         f.write(content)
 
 
 
 def write_xml_file(path, content):
-    """XML в каноне выгрузки Конфигуратора: CRLF в разделителях, без перевода в конце.
+    """XML in the Configurator export canon: CRLF in separators, no trailing newline.
 
-    Копия этой функции есть в каждом навыке-эмиттере (навыки автономны). Держать
-    копии одинаковыми — сознательно: разошедшиеся копии сводят на нет весь смысл.
+    A copy of this function exists in every emitter skill (skills are standalone). Keeping the
+    copies identical is deliberate: diverged copies defeat the whole point.
 
-    Только для файлов, которые СОЗДАЁМ: правка существующего наследует его стиль.
+    Only for files we CREATE: editing an existing one inherits its style.
     """
     text = content.replace('\r\n', '\n').replace('\n', '\r\n').rstrip('\r\n')
     write_utf8_bom(path, text)
@@ -1034,8 +1035,8 @@ def main():
 
     # --- Helper functions ---
     def get_source_attribute_uuids(type_name, obj_name):
-        """Имена реквизитов исходного объекта → uuid: реквизиты, ТЧ, измерения и ресурсы регистра,
-        реквизиты ТЧ — ключом «ТЧ.Реквизит». Нужны для кода пути в связях формы (см. resolve_link_data_path)."""
+        """Source object attribute names -> uuid: attributes, tabular sections, register dimensions and resources,
+        tabular section attributes keyed «ТЧ.Реквизит». Needed for path codes in form links (see resolve_link_data_path)."""
         result = {}
         dir_name = CHILD_TYPE_DIR_MAP.get(type_name)
         if not dir_name:
@@ -1078,7 +1079,7 @@ def main():
         return result
 
     def md_name(el):
-        """<Properties>/<Name> объекта метаданных."""
+        """<Properties>/<Name> of a metadata object."""
         for props in el:
             if isinstance(props.tag, str) and localname(props) == "Properties":
                 for prop in props:
@@ -1130,13 +1131,13 @@ def main():
                 if type_node is not None:
                     type_xml = etree.tostring(type_node, encoding="unicode")
                     src_props["__TypeXml"] = re.sub(r'\s+xmlns(?::\w+)?="[^"]*"', '', type_xml)
-            # Владельцы: стандартное поле «Owner» появляется у справочника, только если задан Owners
+            # Owners: the standard field «Owner» appears on a catalog only if Owners is set
             if type_name in TYPES_WITH_OWNERS:
                 owners_node = props_node.find(f"{{{MD_NS}}}Owners")
                 if owners_node is not None and len(owners_node):
                     owners_xml = etree.tostring(owners_node, encoding="unicode")
                     src_props["__OwnersXml"] = re.sub(r'\s+xmlns(?::\w+)?="[^"]*"', '', owners_xml)
-            # Скалярные свойства, включающие стандартные поля своего типа
+            # Scalar properties enabling standard fields of their type
             for gp in TYPE_GATE_PROPS.get(type_name, []):
                 gp_node = props_node.find(f"{{{MD_NS}}}{gp}")
                 if gp_node is not None:
@@ -1149,7 +1150,7 @@ def main():
 
     def read_source_form_uuid(type_name, obj_name, form_name):
         dir_name = CHILD_TYPE_DIR_MAP[type_name]
-        # Общая форма — сама объект конфигурации: её описание лежит рядом с другими, а не в Forms владельца
+        # A common form is a configuration object itself: its description lies next to other objects, not in the owner's Forms
         if type_name == "CommonForm":
             src_file = os.path.join(cfg_dir, dir_name, f"{obj_name}.xml")
         else:
@@ -1176,14 +1177,14 @@ def main():
             sys.exit(1)
         return src_uuid
 
-    # --- Пустой модуль заимствованного объекта ---
+    # --- Empty module of a borrowed object ---
     def new_borrowed_module_file(type_name, obj_name, module_kind):
         dir_name = CHILD_TYPE_DIR_MAP[type_name]
         module_dir = os.path.join(ext_dir, dir_name, obj_name, "Ext")
         os.makedirs(module_dir, exist_ok=True)
 
-        # NEVER overwrite an existing one: повторное заимствование не должно затирать дописанный
-        # код (то же правило, что у модуля формы).
+        # NEVER overwrite an existing one: re-borrowing must not wipe the added
+        # code (the same rule as for a form module).
         module_file = os.path.join(module_dir, f"{module_kind}.bsl")
         if os.path.isfile(module_file):
             info(f"  Preserved existing {module_kind}.bsl")
@@ -1191,7 +1192,7 @@ def main():
             write_utf8_bom(module_file, "")
             info(f"  Created: {module_file}")
 
-        # Флаг ставим и для уже существовавшего файла: состояние объекта должно отражать факт модуля.
+        # Set the flag for an already existing file too: the object state must reflect the fact of the module.
         set_property_state_flag(os.path.join(ext_dir, dir_name, f"{obj_name}.xml"), module_kind, format_version)
         return module_file
 
@@ -1242,7 +1243,7 @@ def main():
         if type_name == "DefinedType" and "__TypeXml" in source_props:
             lines.append(f"\t\t\t{source_props['__TypeXml']}")
 
-        # Свойства, от которых зависят стандартные поля (см. TYPE_GATE_PROPS / TYPES_WITH_OWNERS)
+        # Properties on which standard fields depend (see TYPE_GATE_PROPS / TYPES_WITH_OWNERS)
         for gp in TYPE_GATE_PROPS.get(type_name, []):
             if gp in source_props:
                 lines.append(f"\t\t\t<{gp}>{source_props[gp]}</{gp}>")
@@ -1275,11 +1276,11 @@ def main():
                 warn(f"Already in ChildObjects: {type_name}.{obj_name}")
                 return
 
-        # Место вставки. Вид — по TYPE_ORDER; внутри вида — по newObjectPosition:
-        # end (по умолчанию) кладёт после последнего объекта того же вида, byName — по имени.
-        # Так же, как заимствует Конфигуратор: в боевых выгрузках расширений ChildObjects
-        # не отсортирован. Subsystem по имени не упорядочиваем никогда: порядок подсистем
-        # в дереве задаёт порядок разделов в панели.
+        # Insertion point. Kind - by TYPE_ORDER; inside a kind - by newObjectPosition:
+        # end (default) puts it after the last object of the same kind, byName - by name.
+        # Same as the Configurator borrows: in production extension exports ChildObjects
+        # is not sorted. Subsystem is never ordered by name: the subsystem order
+        # in the tree sets the section order in the panel.
         by_name = (not is_order_sensitive_type(type_name)
                    and get_new_object_position(ext_dir) == "byName")
         insert_before = None
@@ -1360,15 +1361,15 @@ def main():
         save_xml_bom(obj_tree, obj_file)
         info(f"  Registered form in: {obj_file}")
 
-    # --- 11b1. Основной реквизит исходной формы ---
-    # Переносится ЦЕЛИКОМ, а не собирается из констант: имя, тип и состав детей зависят от вида формы.
-    # У формы объекта это «Объект»/<Тип>Object + SavedData/UseAlways/Columns, у формы списка —
-    # «Список»/DynamicList + Settings, у формы записи регистра — «Запись»/RecordManager + SavedData.
-    # Синтез фиксированного набора давал для необъектных форм «Исключение XDTO» при загрузке.
-    # Конфигуратор меняет у скопированного реквизита только id (эталоны Issue64UtB, Issue66Example2).
+    # --- 11b1. Main attribute of the source form ---
+    # Transferred WHOLE, not assembled from constants: the name, type and child composition depend on the form kind.
+    # For an object form this is «Объект»/<Type>Object + SavedData/UseAlways/Columns, for a list form -
+    # «Список»/DynamicList + Settings, for a register record form - «Запись»/RecordManager + SavedData.
+    # Synthesizing a fixed set gave «Исключение XDTO» on load for non-object forms.
+    # The Configurator changes only the id of a copied attribute (references Issue64UtB, Issue66Example2).
     def get_form_attribute_ids(form_el):
-        """Имена реквизитов ИСХОДНОЙ формы → их id. Ссылки параметров выбора адресуют реквизит формы
-        именно по id базовой формы (см. rewrite_choice_parameter_links)."""
+        """Names of ORIGINAL form attributes -> their ids. Choice parameter links address a form attribute
+        by the base form's id specifically (see rewrite_choice_parameter_links)."""
         result = {}
         for child in form_el:
             if not isinstance(child.tag, str) or localname(child) != "Attributes":
@@ -1383,9 +1384,9 @@ def main():
         return result
 
     def get_link_context(form_el, main_name, main_borrowed, borrowed_names, attr_uuids, form_attr_ids):
-        """Контекст разрешения путей в связях формы (см. resolve_link_data_path) — всё по ИСХОДНОЙ
-        форме: колонки реквизитов формы, колонки AdditionalColumns, элементы-таблицы и вид основного
-        реквизита."""
+        """Path resolution context for form links (see resolve_link_data_path) - all from the ORIGINAL
+        form: form attribute columns, AdditionalColumns columns, table elements and the main
+        attribute kind."""
         cols, add_cols, tables, kind = {}, {}, {}, None
         for child in form_el:
             if not isinstance(child.tag, str):
@@ -1412,7 +1413,7 @@ def main():
                         elif localname(sub) == "Type" and main_name and nm == main_name and kind is None:
                             for tn in sub:
                                 if isinstance(tn.tag, str) and localname(tn) == "Type":
-                                    # Тип без имени объекта (cfg:ConstantsSet) — тоже вид
+                                    # A type without an object name (cfg:ConstantsSet) is also a kind
                                     tm = re.match(r'^(?:\w+:)?(\w+)(?:\.|$)', (tn.text or "").strip())
                                     if tm and tm.group(1) in MAIN_ATTR_KINDS:
                                         kind = MAIN_ATTR_KINDS[tm.group(1)]
@@ -1448,19 +1449,19 @@ def main():
             break
         if main_attr is None:
             return None
-        # with_tail=False: хвостовой пробельный узел — часть родителя, а не секции; иначе в
-        # вывод попадают пустые строки (хвост OuterXml их не включает).
+        # with_tail=False: the trailing whitespace node is part of the parent, not the section; otherwise
+        # empty lines get into the output (OuterXml's tail does not include them).
         xml = decode_numeric_entities(etree.tostring(main_attr, encoding="unicode", with_tail=False))
         xml = ns_strip_pattern.sub("", xml)
-        # id заменяется только в открывающем теге самого реквизита — у вложенных элементов свои
+        # id is replaced only in the attribute's own opening tag - nested elements have their own
         xml = re.sub(r'^(<Attribute\s[^>]*?)id="[^"]*"', lambda m: m.group(1) + f'id="{MAIN_ATTR_ID}"', xml)
         return {"Name": main_attr.get("name"), "Xml": xml}
 
     # --- 11b. Collect DataPath references from source Form.xml ---
     def collect_form_data_paths(form_xml_path, main_attr_name):
-        # Корень путей — имя основного реквизита формы: «Объект» у формы объекта, «Список» у формы
-        # списка, «Запись» у формы записи регистра. Зашитый «Объект» не находил ничего у необъектных
-        # форм, и в оболочку не заимствовалось ни одного дочернего объекта.
+        # The root of paths is the form's main attribute name: «Объект» for an object form, «Список» for a list
+        # form, «Запись» for a register record form. A hardcoded «Объект» found nothing in non-object
+        # forms, and not a single child object was borrowed into the wrapper.
         root = re.escape(main_attr_name)
         with open(form_xml_path, "r", encoding="utf-8-sig") as fh:
             content = fh.read()
@@ -1501,21 +1502,21 @@ def main():
                 seg2 = segments[2] if len(segments) >= 3 else None
                 deep_paths.append({"ObjectAttr": seg0, "SubAttr": seg1, "SubSubAttr": seg2})
 
-        # Also scan <AdditionalColumns table="Объект.X"> — доп. колонки табличной части, объявленные в
-        # самой форме (напр. Объект.Товары.Артикул). Такая ТЧ может больше нигде на форме не встречаться,
-        # и без её заимствования платформа отвергает форму: «Неверный путь к данным».
+        # Also scan <AdditionalColumns table="Объект.X"> - additional tabular section columns declared in
+        # the form itself (e.g. Объект.Товары.Артикул). Such a tabular section may not appear anywhere else on the form,
+        # and without borrowing it the platform rejects the form: «Неверный путь к данным».
         for m in re.finditer(r'<AdditionalColumns table="' + root + r'\.(\w+)"', content):
             seg0 = m.group(1)
             if seg0 in STANDARD_FIELDS:
                 continue
             first_level[seg0] = True
 
-        # Текст запроса динамического списка — такое же место ссылки на реквизиты объекта, как DataPath.
-        # Конфигуратор заимствует всё, что упомянуто в запросе: на эталоне Issue66Example2 это 21 из 27
-        # дочерних объектов, совпадение с ним точное в обе стороны. У списка без ручного запроса
-        # (<QueryText> нет) заимствуется только видимое на форме — эталон Issue66Example3.
-        # Разбирать язык запросов не нужно: имена-кандидаты отфильтрует resolve_source_attributes по
-        # реальному составу объекта, поэтому лишние слова из запроса безвредны.
+        # Dynamic list query text is as much a place referencing object attributes as DataPath.
+        # The Configurator borrows everything mentioned in the query: on reference Issue66Example2 that is 21 of 27
+        # child objects, matching it exactly in both directions. For a list without a manual query
+        # (no <QueryText>) only what is visible on the form is borrowed - reference Issue66Example3.
+        # There is no need to parse the query language: candidate names are filtered by resolve_source_attributes against
+        # the actual object composition, so extra words from the query are harmless.
         for qm in re.finditer(r'(?s)<QueryText>(.*?)</QueryText>', content):
             for w in re.finditer(r'\w+', qm.group(1)):
                 if w.group(0) in STANDARD_FIELDS:
@@ -1569,10 +1570,10 @@ def main():
                 continue
             ln = localname(child)
 
-            # Реквизит объекта, измерение и ресурс регистра — один и тот же вид дочернего объекта с
-            # точки зрения заимствования, различается только имя элемента. Конфигуратор переносит их
-            # своим видом (эталон Issue66Example2: у регистра <Dimension> x3 и <Resource>), поэтому вид
-            # запоминается и выпускается как есть — иначе измерение уехало бы в файл как <Attribute>.
+            # An object attribute, register dimension and resource are the same kind of child object from
+            # the borrowing standpoint, only the element name differs. The Configurator transfers them
+            # with their own kind (reference Issue66Example2: the register has <Dimension> x3 and <Resource>), so the kind
+            # is remembered and emitted as is - otherwise a dimension would end up in the file as <Attribute>.
             if ln in CHILD_OBJECT_KINDS:
                 name_node = child.find(f"{{{MD_NS}}}Properties/{{{MD_NS}}}Name")
                 if name_node is None:
@@ -1648,14 +1649,14 @@ def main():
         extra_props = {}
         props_node = src_el.find(f"{{{MD_NS}}}Properties")
         if props_node is not None:
-            # NumberPeriodicity сюда НЕ входит: платформа считает его модификацией настроек нумерации и
-            # тогда требует объявить ещё и <Numerator/>, иначе /UpdateDBCfg падает — «отключать
-            # контролируемость свойства "Нумератор" недопустимо». Конфигуратор его не переносит
-            # (эталон заимствования документа: NumberType/NumberLength/NumberAllowedLength и всё).
-            # Загрузку это не ломает, ошибка вылезает только на обновлении конфигурации БД.
-            # FoldersOnTop сюда НЕ входит: платформа его у заимствованной оболочки не хранит — при
-            # загрузке молча выбрасывает (проверено раундтрипом: записали, выгрузили обратно, свойства
-            # нет). Конфигуратор его тоже не переносит. Остальные из списка сохраняются.
+            # NumberPeriodicity is NOT included here: the platform treats it as a modification of numbering settings and
+            # then requires declaring <Numerator/> too, otherwise /UpdateDBCfg fails - «отключать
+            # контролируемость свойства "Нумератор" недопустимо». The Configurator does not transfer it
+            # (document borrowing reference: NumberType/NumberLength/NumberAllowedLength and that is all).
+            # This does not break loading, the error surfaces only on DB configuration update.
+            # FoldersOnTop is NOT included here: the platform does not store it for a borrowed shell - it
+            # silently drops it on load (verified by round-trip: wrote it, exported it back, the property
+            # is gone). The Configurator does not transfer it either. The rest of the list are preserved.
             props_to_extract = [
                 "Hierarchical", "CodeLength", "DescriptionLength",
                 "CodeType", "CodeAllowedLength", "NumberType", "NumberLength",
@@ -1751,12 +1752,12 @@ def main():
             warn(f"Cannot merge attributes: {obj_file} not found")
             return
 
-        # newline="" => без трансляции: иначе CRLF молча схлопнется в LF при чтении
-        # и файл будет переписан в LF.
+        # newline="" => no translation: otherwise CRLF silently collapses to LF on read
+        # and the file will be rewritten in LF.
         with open(obj_file, "r", encoding="utf-8-sig", newline="") as fh:
             obj_content = fh.read()
 
-        # Collect existing names for dedup — только прямые дети своего ChildObjects
+        # Collect existing names for dedup - only direct children of its own ChildObjects
         existing_names = get_own_child_object_names(obj_file)
 
         all_attr_xml = ""
@@ -1774,7 +1775,7 @@ def main():
 
     # --- 11h. Borrow main attribute orchestrator ---
     def borrow_reference_type_shells(type_xmls):
-        """Ссылочные типы → объекты-оболочки в расширении (кто уже заимствован — пропускается)."""
+        """Reference types -> shell objects in the extension (already borrowed ones are skipped)."""
         ref_types = collect_reference_types(type_xmls)
         info(f"  Reference types to borrow: {len(ref_types)}")
 
@@ -1799,10 +1800,10 @@ def main():
             borrowed_files.append(target_file)
             info(f"  Auto-borrowed: {rt['TypeName']}.{rt['ObjName']}")
 
-    # Владелец общей формы — из ТИПА её основного реквизита (эталон УТ CommonMain):
-    # <Вид>Object.Имя / <Вид>RecordManager.Имя → объект; DynamicList → объект из <MainTable>;
-    # ConstantsSet → константы по путям формы. Примитив, тип без имени (ReportObject — любой отчёт),
-    # список без MainTable → владельца нет: в расширение идёт только сам реквизит формы.
+    # A common form's owner comes from the TYPE of its main attribute (reference UT CommonMain):
+    # <Kind>Object.Name / <Kind>RecordManager.Name -> object; DynamicList -> the object from <MainTable>;
+    # ConstantsSet -> constants by form paths. A primitive, a type without a name (ReportObject - any report),
+    # a list without MainTable -> no owner: only the form attribute itself goes into the extension.
     common_form_owner_kinds = {
         'CatalogObject': 'Catalog', 'DocumentObject': 'Document', 'DataProcessorObject': 'DataProcessor', 'ReportObject': 'Report',
         'ChartOfCharacteristicTypesObject': 'ChartOfCharacteristicTypes', 'ChartOfAccountsObject': 'ChartOfAccounts',
@@ -1848,9 +1849,9 @@ def main():
         return None
 
     def borrow_form_constants(src_form_xml_path, main_name):
-        """Набор констант как основной реквизит общей формы: заимствуются константы, пути на которые есть
-        в форме (<Реквизит>.<Константа>), — с типом как в источнике; их ссылочные типы — оболочками
-        (эталон УТ CommonMain: НастройкаПереводаТекста → две константы + перечисление из типа)."""
+        """A constant set as the main attribute of a common form: constants that have paths
+        in the form (<Attribute>.<Constant>) are borrowed - with their type as in the source; their reference types - as shells
+        (reference UT CommonMain: НастройкаПереводаТекста -> two constants + an enum from the type)."""
         info(f"Borrowing constants for main attribute {main_name} (ConstantsSet)...")
         names = collect_form_data_paths(src_form_xml_path, main_name)["FirstLevel"]
         type_xmls = []
@@ -1860,18 +1861,18 @@ def main():
                 continue
             with open(c_src_file, "r", encoding="utf-8-sig") as fh:
                 c_text = fh.read()
-            # С пробелами: вложенные отступы типа в источнике — ровно та же глубина, что в расширении
+            # With spaces: the nested type indentation in the source has exactly the same depth as in the extension
             tm = re.search(r'<Constant uuid="[^"]+">[\s\S]*?<Properties>[\s\S]*?(<Type>[\s\S]*?</Type>)', c_text)
             c_type_xml = re.sub(r'\s+xmlns(?::\w+)?="[^"]*"', '', tm.group(1)).replace("\r\n", "\n") if tm else ""
             if c_type_xml:
                 type_xmls.append(c_type_xml)
             def add_type(xml):
-                # Тип — последним свойством, после ExtendedConfigurationObject (как у Конфигуратора)
+                # Type is the last property, after ExtendedConfigurationObject (as in the Configurator)
                 return re.sub(r'(?P<ind>[ \t]*)<ExtendedConfigurationObject>[^<]*</ExtendedConfigurationObject>',
                               lambda mm: mm.group(0) + "\n" + mm.group('ind') + c_type_xml, xml, count=1)
             if test_object_borrowed("Constant", c_name):
-                # Заимствованная раньше оболочкой (-Object Constant.X) — без типа: дописываем, как при
-                # слиянии реквизитов в уже заимствованный объект
+                # Borrowed earlier as a shell (-Object Constant.X) - without a type: append it, as when
+                # merging attributes into an already borrowed object
                 ext_c_file = os.path.join(ext_dir, "Constants", f"{c_name}.xml")
                 with open(ext_c_file, "r", encoding="utf-8-sig", newline="") as fh:
                     ext_c_text = fh.read()
@@ -1897,7 +1898,7 @@ def main():
     def borrow_main_attribute(type_name, obj_name, form_name, mode, src_form_xml_path=""):
         dir_name = CHILD_TYPE_DIR_MAP[type_name]
         info(f"Borrowing main attribute for {type_name}.{obj_name} (mode: {mode})...")
-        # Путь к исходной форме: у общей формы его передают явно (владелец выведен из типа реквизита)
+        # Path to the source form: for a common form it is passed explicitly (the owner is derived from the attribute type)
         if not src_form_xml_path:
             src_form_xml_path = os.path.join(cfg_dir, dir_name, obj_name, "Forms", form_name, "Ext", "Form.xml")
 
@@ -1908,7 +1909,7 @@ def main():
             if not os.path.isfile(src_form_xml_path):
                 print(f"Source Form.xml not found: {src_form_xml_path}", file=sys.stderr)
                 sys.exit(1)
-            # Имя основного реквизита исходной формы — корень путей, которые надо собрать
+            # Name of the source form's main attribute - the root of the paths to collect
             dp_ns_strip = re.compile(r'\s+xmlns(?::\w+)?="[^"]*"')
             dp_info = get_main_attribute_info(etree.parse(src_form_xml_path).getroot(), dp_ns_strip)
             if dp_info is None:
@@ -1935,8 +1936,8 @@ def main():
         obj_file = os.path.join(ext_dir, dir_name, f"{obj_name}.xml")
 
         # Read existing object XML (needed for dedup + enrichment)
-        # newline="" => без трансляции: иначе CRLF молча схлопнется в LF при чтении
-        # и файл будет переписан в LF.
+        # newline="" => no translation: otherwise CRLF silently collapses to LF on read
+        # and the file will be rewritten in LF.
         with open(obj_file, "r", encoding="utf-8-sig", newline="") as fh:
             obj_content = fh.read()
 
@@ -1967,7 +1968,7 @@ def main():
             if props_xml:
                 obj_content = obj_content.replace("</ExtendedConfigurationObject>", f"</ExtendedConfigurationObject>{props_xml}", 1)
 
-        # Добавить заимствованное содержимое в ChildObjects объекта (там уже может лежать <Form>)
+        # Add the borrowed content to the object's ChildObjects (a <Form> may already be there)
         if adopted_content:
             obj_content = insert_into_own_child_objects(obj_content, f"\r\n{adopted_content}")
 
@@ -1981,10 +1982,10 @@ def main():
         for ts in src_ts:
             for tsa in ts["Attributes"]:
                 all_type_xmls.append(tsa["TypeXml"])
-        # Типы из <Columns> основного реквизита формы: колонку мы переносим (borrow_form), значит и её
-        # тип должен быть заимствован — иначе колонка ссылается на DefinedType/справочник, которого в
-        # расширении нет. Конфигуратор поступает так же (эталон: DefinedTypes/Артикул при заимствовании
-        # формы заказа поставщику).
+        # Types from the <Columns> of the form's main attribute: we transfer the column (borrow_form), so its
+        # type must be borrowed too - otherwise the column references a DefinedType/catalog that is not in
+        # the extension. The Configurator does the same (reference: DefinedTypes/Артикул when borrowing
+        # the supplier order form).
         src_form_for_cols = src_form_xml_path
         if os.path.isfile(src_form_for_cols):
             cols_tree = etree.parse(src_form_for_cols)
@@ -2087,12 +2088,12 @@ def main():
     def borrow_form(type_name, obj_name, form_name, borrow_main_attr=False):
         dir_name = CHILD_TYPE_DIR_MAP[type_name]
 
-        # Общая форма — сама объект конфигурации: описание CommonForms/<Имя>.xml с корнем <CommonForm>,
-        # тело CommonForms/<Имя>/Ext/Form.xml, регистрация в Configuration.xml. Форма объекта — в Forms
-        # владельца. Остальное (скелет, BaseForm, связи, оформление, картинки) одинаково (эталон УТ link).
+        # A common form is a configuration object itself: description CommonForms/<Name>.xml with root <CommonForm>,
+        # body CommonForms/<Name>/Ext/Form.xml, registration in Configuration.xml. An object form lives in the owner's
+        # Forms. The rest (skeleton, BaseForm, links, appearance, pictures) is the same (reference UT link).
         is_common_form = type_name == "CommonForm"
-        # Уже заимствованная общая форма (в т.ч. оболочкой от прежних версий навыка) в Configuration.xml
-        # уже есть — повторно не регистрируем
+        # An already borrowed common form (including a shell from earlier skill versions) is already
+        # in Configuration.xml - do not register it again
         common_form_registered = is_common_form and test_object_borrowed(type_name, obj_name)
         if is_common_form:
             src_form_dir = os.path.join(cfg_dir, dir_name, obj_name)
@@ -2165,10 +2166,10 @@ def main():
         # (e.g. a 2.13 form inside a 2.17 extension). The platform upgrades the form to the root version.
         form_version = format_version
 
-        # Секции формы отбираются по имени, а не по позиции: свойства лежат и до, и после
-        # <CommandSet> (корпусная проверка: у всех 794 форм документов ERP с CommandSet он стоит
-        # раньше AutoCommandBar, а AutoTime/UsePostingMode/RepostOnWrite — после него). Позиционная
-        # отсечка теряла весь хвост, и платформа молча подставляла дефолты вместо потерянных свойств.
+        # Form sections are selected by name, not by position: properties lie both before and after
+        # <CommandSet> (corpus check: in all 794 ERP document forms with CommandSet it comes
+        # before AutoCommandBar, while AutoTime/UsePostingMode/RepostOnWrite come after it). A positional
+        # cutoff lost the whole tail, and the platform silently substituted defaults instead of the lost properties.
         src_auto_cmd = None
         form_props = []
         for fc in src_form_el:
@@ -2178,35 +2179,35 @@ def main():
             if ln == "AutoCommandBar" and src_auto_cmd is None:
                 src_auto_cmd = fc
                 continue
-            # ChildItems забирается отдельным поиском ниже
+            # ChildItems is taken by a separate search below
             if ln == "ChildItems":
                 continue
-            # Структурные секции: в расширении их содержимое недействительно (обработчики, команды и
-            # параметры базовой формы, ссылки командного интерфейса на команды базовой конфигурации).
+            # Structural sections: in the extension their content is invalid (handlers, commands and
+            # parameters of the base form, command interface references to base configuration commands).
             if ln in FORM_STRUCTURAL_SECTIONS:
                 continue
-            # Свойства, значение которых — имя реквизита формы. Реквизиты в заимствованную форму не
-            # переносятся, поэтому Конфигуратор такие свойства выбрасывает (проверено на форме отчёта:
-            # ReportResult и DetailsData выброшены, CustomSettingsFolder — имя элемента — сохранён).
+            # Properties whose value is a form attribute name. Attributes are not transferred into a borrowed
+            # form, so the Configurator drops such properties (verified on a report form:
+            # ReportResult and DetailsData are dropped, CustomSettingsFolder - an element name - is preserved).
             if ln in FORM_ATTRIBUTE_REF_PROPS:
                 continue
-            # with_tail=False — хвостовой пробел принадлежит родителю; с ним в вывод попадали
-            # пустые строки (хвост OuterXml их не включает).
+            # with_tail=False - the trailing whitespace belongs to the parent; with it, empty lines
+            # got into the output (OuterXml's tail does not include them).
             form_props.append(decode_numeric_entities(etree.tostring(fc, encoding="unicode", with_tail=False)))
 
         ns_strip_pattern = re.compile(r'\s+xmlns(?::\w+)?="[^"]*"')
 
-        # uuid реквизитов объекта — только для формы без заимствованного основного реквизита:
-        # там ссылки параметров выбора переводятся на непрозрачную форму пути
-        # Имя основного реквизита источника нужно в обоих режимах: по нему опознаётся корень путей
-        # в ссылках параметров выбора. А main_attr_name управляет вырезанием привязок и потому
-        # остаётся пустым в скелетном режиме — там привязки снимаются все.
+        # uuid of object attributes - only for a form without a borrowed main attribute:
+        # there choice parameter links are translated into the opaque path form
+        # The source main attribute name is needed in both modes: it identifies the root of paths
+        # in choice parameter links. main_attr_name controls binding stripping and therefore
+        # stays empty in skeleton mode - there all bindings are stripped.
         src_main_info = get_main_attribute_info(src_form_el, ns_strip_pattern)
         src_main_attr_name = src_main_info["Name"] if src_main_info else ""
         form_attr_ids = get_form_attribute_ids(src_form_el)
-        # Условное оформление формы Конфигуратор копирует как есть в обе части, внутрь <Attributes>
-        # после реквизитов — и без основного реквизита тоже; ссылки на незаимствованные реквизиты формы
-        # платформа принимает (эталоны УТ StdPic, StdPic_WithMain, CAStyle, УНФ Номенклатура)
+        # The Configurator copies form conditional appearance as is into both parts, inside <Attributes>
+        # after the attributes - and without the main attribute too; references to non-borrowed form attributes
+        # are accepted by the platform (references UT StdPic, StdPic_WithMain, CAStyle, UNF Номенклатура)
         src_cond_appearance_xml = ""
         for attrs_el in src_form_el:
             if isinstance(attrs_el.tag, str) and localname(attrs_el) == "Attributes":
@@ -2217,21 +2218,21 @@ def main():
                         break
                 break
 
-        # Основной реквизит исходной формы: его имя — корень путей к данным, которые нужно сохранить
-        # («Объект.» у формы объекта, «Список.» у формы списка, «Запись.» у формы записи регистра)
+        # Main attribute of the source form: its name is the root of data paths to preserve
+        # («Объект.» for an object form, «Список.» for a list form, «Запись.» for a register record form)
         main_attr_info = src_main_info if borrow_main_attr else None
-        # Имена реквизитов объекта нужны в обоих режимах: без заимствования — для кода пути в связях
-        # формы, с заимствованием — чтобы отличить реквизит (разрешается текстом) от стандартного поля
-        # У общей формы реквизиты берутся у владельца, выведенного из типа основного реквизита;
-        # у набора констант — ничего: код пути на константу не измерен, связь без основного реквизита
-        # вырезается с предупреждением, с ним — остаётся текстом
+        # Object attribute names are needed in both modes: without borrowing - for path codes in form
+        # links, with borrowing - to distinguish an attribute (resolves as text) from a standard field
+        # For a common form attributes are taken from the owner derived from the main attribute type;
+        # for a constant set - nothing: the path code for a constant is not measured, a link without the main
+        # attribute is cut with a warning, with it - stays as text
         if is_common_form:
             cf_owner = resolve_common_form_owner(etree.parse(src_form_xml_path).getroot())
             src_attr_uuids = {}
             if cf_owner and cf_owner["Kind"] == "Object":
                 src_attr_uuids = get_source_attribute_uuids(cf_owner["TypeName"], cf_owner["ObjName"])
             elif cf_owner and cf_owner["Kind"] == "Constants":
-                # Константы, на которые есть пути: с основным реквизитом путь на заимствованную — текстом
+                # Constants that have paths: with the main attribute the path to a borrowed one - as text
                 for c_name in list(collect_form_data_paths(src_form_xml_path, cf_owner["MainName"])["FirstLevel"].keys()):
                     c_file = os.path.join(cfg_dir, "Constants", f"{c_name}.xml")
                     if not os.path.isfile(c_file):
@@ -2242,8 +2243,8 @@ def main():
                         src_attr_uuids[c_name] = cm.group(1)
         else:
             src_attr_uuids = get_source_attribute_uuids(type_name, obj_name)
-        # Реквизиты объекта, которые попадут в расширение: в режиме Form — только используемые формой
-        # (тот же сбор, что в borrow_main_attribute), в режиме All — все (None)
+        # Object attributes that will get into the extension: in Form mode - only those used by the form
+        # (the same collection as in borrow_main_attribute), in All mode - all (None)
         borrowed_names = None
         if main_attr_info is not None and borrow_main_attribute_mode == "Form":
             borrowed_names = collect_form_data_paths(src_form_xml_path, src_main_attr_name)["FirstLevel"]
@@ -2260,8 +2261,8 @@ def main():
             auto_cmd_xml = ns_strip_pattern.sub("", auto_cmd_xml)
             auto_cmd_xml = re.sub(r'<CommandName>[^<]*</CommandName>', '<CommandName>0</CommandName>', auto_cmd_xml)
             auto_cmd_xml = auto_cmd_xml.replace('<Autofill>true</Autofill>', '<Autofill>false</Autofill>')
-            # Вложенный CommandSet выбрасывается целиком, а не опустошается: Конфигуратор в заимствованной
-            # форме оставляет только корневой (тот идёт свойством формы, здесь его нет).
+            # A nested CommandSet is dropped entirely, not emptied: in a borrowed form the Configurator
+            # keeps only the root one (it goes as a form property, it is not here).
             auto_cmd_xml = re.sub(r'(?s)\s*<CommandSet>.*?</CommandSet>', '', auto_cmd_xml)
             auto_cmd_xml = re.sub(r'\s*<CommandSet/>', '', auto_cmd_xml)
             # Strip data-binding tags whose root attribute isn't borrowed
@@ -2276,15 +2277,15 @@ def main():
                 src_child_items = fc
                 break
 
-        # Картинка декорации в заимствованную форму не переносится: Конфигуратор выбрасывает <Picture>
-        # у PictureDecoration из обеих частей формы при любом виде картинки (своя, общая, стандартная)
-        # и не тянет за ней ни файл, ни общую картинку. Замер 8.3.27: 10 декораций в 5 формах УТ.
-        # Картинки кнопок, таблиц и полей картинки остаются — вместе с файлами, см. копирование ниже.
+        # The picture of a decoration is not transferred into a borrowed form: the Configurator drops <Picture>
+        # on PictureDecoration from both parts of the form for any picture kind (own, common, standard)
+        # and does not pull the file or the common picture after it. Measurement 8.3.27: 10 decorations in 5 UT forms.
+        # Pictures of buttons, tables and picture fields stay - together with files, see copying below.
         if src_child_items is not None:
             for deco in [e for e in src_child_items.iter() if isinstance(e.tag, str) and localname(e) == "PictureDecoration"]:
                 for deco_pic in [c for c in deco if isinstance(c.tag, str) and localname(c) == "Picture"]:
-                    # Отступ перед картинкой — хвост предыдущего узла; уходит он,
-                    # а хвост самой картинки занимает его место.
+                    # The indent before the picture is the tail of the preceding node; it goes away,
+                    # and the picture's own tail takes its place.
                     prev = deco_pic.getprevious()
                     if prev is not None:
                         prev.tail = deco_pic.tail
@@ -2300,11 +2301,11 @@ def main():
             # Strip data-binding tags whose root attribute isn't borrowed
             child_items_xml = strip_form_bindings(child_items_xml, main_attr_name)
             child_items_xml = rewrite_choice_parameter_links(child_items_xml, link_ctx)
-            # Вложенные CommandSet (у таблиц, полей табличного документа и т.п.) — целиком, см. выше.
-            # Исключение — набор таблицы самого основного реквизита, когда он заимствован: его команды
-            # (Find/CancelSearch динамического списка) снова разрешимы, и Конфигуратор набор оставляет
-            # (эталоны УТ CommonMain/ФайлыВТоме, StdPic_WithMain/ЖурналСкладскихАктов; без основного
-            # реквизита и у прочих элементов — выброшен во всех эталонах).
+            # Nested CommandSets (on tables, spreadsheet document fields, etc.) - entirely, see above.
+            # Exception - the table set of the main attribute itself, when it is borrowed: its commands
+            # (Find/CancelSearch of a dynamic list) resolve again, and the Configurator keeps the set
+            # (references UT CommonMain/ФайлыВТоме, StdPic_WithMain/ЖурналСкладскихАктов; without the main
+            # attribute and on other elements - dropped in all references).
             kept_cmd_sets = {}
             if main_attr_name:
                 main_table_pat = (r'(?s)(<Table name="[^"]+" id="\d+">(?:(?!<ChildItems>|</Table>|<CommandSet>).)*?<DataPath>'
@@ -2364,8 +2365,8 @@ def main():
                 cp_name = pm.group(1)
                 if cp_name not in borrowed_pic_set:
                     child_items_xml = child_items_xml[:pm.start()] + child_items_xml[pm.end():]
-            # Стандартные картинки (StdPicture.*) не вырезаются: Конфигуратор оставляет их у кнопок, подменю
-            # и страниц в обеих частях формы (эталоны 8.3.27, 26 элементов в 3 формах).
+            # Standard pictures (StdPicture.*) are not cut: the Configurator keeps them on buttons, submenus
+            # and pages in both parts of the form (references 8.3.27, 26 elements in 3 forms).
 
             # Same Picture strip for AutoCommandBar
             if auto_cmd_xml:
@@ -2439,15 +2440,15 @@ def main():
                     else:
                         warn(f"  Enum.{enum_name} not found in source config")
 
-        # Вне блока ChildItems: стили нужны и оформлению формы без элементов
+        # Outside the ChildItems block: styles are also needed by form appearance without elements
         # Auto-borrow StyleItems referenced in ChildItems and in the form's conditional appearance
-        # (стиль только из оформления Конфигуратор тоже заимствует — эталон УТ CAStyle).
-        # Порядок первого упоминания (от него зависит порядок в ChildObjects)
+        # (the Configurator borrows a style referenced only from appearance too - reference UT CAStyle).
+        # First-mention order (the order in ChildObjects depends on it)
         style_scan_xml = child_items_xml + src_cond_appearance_xml
         referenced_styles = {}
         for m in re.finditer(r'ref="style:(\w+)"[^>]*kind="StyleItem"', style_scan_xml):
             referenced_styles[m.group(1)] = True
-        # Закрывающий тег может быть с префиксом: в оформлении значение — <dcscor:value>style:X</dcscor:value>
+        # The closing tag may have a prefix: in appearance the value is <dcscor:value>style:X</dcscor:value>
         for m in re.finditer(r'>style:(\w+)</[\w:]+>', style_scan_xml):
             referenced_styles[m.group(1)] = True
 
@@ -2464,14 +2465,14 @@ def main():
                     add_to_child_objects("StyleItem", style_name)
                     borrowed_files.append(target_file)
                     info(f"  Auto-borrowed: StyleItem.{style_name}")
-                # Файла нет — встроенный стиль платформы (ImportantColor, AccentColor…): заимствовать
-                # нечего, пропускаем молча. Пользовательский стиль, на который ссылается форма, в
-                # валидном источнике существует всегда — предупреждение было только шумом.
+                # No file - a built-in platform style (ImportantColor, AccentColor...): there is nothing
+                # to borrow, skip silently. A user style referenced by the form always exists in a
+                # valid source - the warning was only noise.
 
-        # Открывающий тег <Form ...> берём из исходной формы — ради её объявлений пространств
-        # имён, но version подставляем СВОЮ: форма обязана нести версию расширения, иначе
-        # платформа отвергает импорт (форма 2.13 внутри расширения 2.17). Раньше тег
-        # копировался целиком, и версия источника молча побеждала.
+        # The opening <Form ...> tag is taken from the source form - for its namespace
+        # declarations, but we substitute OUR version: the form must carry the extension version, otherwise
+        # the platform rejects the import (a 2.13 form inside a 2.17 extension). Previously the tag
+        # was copied whole, and the source version silently won.
         xml_decl = '<?xml version="1.0" encoding="UTF-8"?>'
         form_tag = f'<Form version="{form_version}">'
         m_decl = re.search(r'^(<\?xml[^?]*\?>)', src_form_content)
@@ -2482,7 +2483,7 @@ def main():
             src_ns = re.sub(r'^<Form\s*', '', m_tag.group(1))
             src_ns = re.sub(r'\s*/?>$', '', src_ns)
             src_ns = re.sub(r'\s*version="[^"]*"', '', src_ns)
-            # 2.21 (8.5): пространство палитры. Место строгое — после lf, перед style.
+            # 2.21 (8.5): palette namespace. The place is strict - after lf, before style.
             if format_rank(form_version) >= 221 and 'xmlns:pal=' not in src_ns:
                 src_ns = src_ns.replace(
                     ' xmlns:style=',
@@ -2505,7 +2506,7 @@ def main():
         if child_items_xml:
             parts.append(f"\t{child_items_xml}\r\n")
 
-        # Attributes: основной реквизит (с -BorrowMainAttribute) и условное оформление формы — после него
+        # Attributes: the main attribute (with -BorrowMainAttribute) and form conditional appearance - after it
         with_main_attr = bool(borrow_main_attr and main_attr_info)
         if with_main_attr or src_cond_appearance_xml:
             parts.append("\t<Attributes>\r\n")
@@ -2518,7 +2519,7 @@ def main():
             parts.append("\t<Attributes/>")
         parts.append("\r\n")
 
-        # BaseForm: same content, indented one more level (многострочный текст не сдвигается)
+        # BaseForm: same content, indented one more level (multiline text is not shifted)
         parts.append(f'\t<BaseForm version="{form_version}">\r\n')
 
         for prop_xml in form_props:
@@ -2532,7 +2533,7 @@ def main():
         # BaseForm Attributes: same as main section
         if with_main_attr or src_cond_appearance_xml:
             parts.append("\t\t<Attributes>\r\n")
-            # В BaseForm та же секция на уровень глубже — сдвиг тот же, что у ChildItems
+            # In BaseForm the same section one level deeper - the same shift as for ChildItems
             if with_main_attr:
                 parts.append(indent_for_base_form(main_attr_info['Xml'], "\t\t\t") + "\r\n")
             if src_cond_appearance_xml:
@@ -2565,10 +2566,10 @@ def main():
             write_utf8_bom(module_bsl_file, "")
             info(f"  Created: {module_bsl_file}")
 
-        # 6b. Встроенные картинки элементов. Form.xml ссылается на них как <xr:Abs>Файл</xr:Abs>, а сам файл
-        # лежит в Ext/Form/Items/<Элемент>/<Файл>; без него платформа отвергает расширение («Файл не найден»).
-        # Конфигуратор копирует их байт в байт. Берём ровно то, на что ссылается скелет (картинки декораций
-        # выброшены выше). Уже лежащий файл не перезаписываем: его могли заменить в расширении.
+        # 6b. Embedded element pictures. Form.xml references them as <xr:Abs>File</xr:Abs>, while the file
+        # itself lies in Ext/Form/Items/<Element>/<File>; without it the platform rejects the extension («Файл не найден»).
+        # The Configurator copies them byte for byte. We take exactly what the skeleton references (decoration pictures
+        # are dropped above). An already existing file is not overwritten: it could have been replaced in the extension.
         pic_files = []
         src_items_dir = os.path.join(os.path.dirname(src_form_xml_path), "Form", "Items")
         pic_rels = []
@@ -2581,7 +2582,7 @@ def main():
                 pic_file_name = (abs_node.text or "").strip()
                 if not pic_el_name or not pic_file_name:
                     continue
-                # Платформа пишет сюда голое имя файла. Иное (путь, «..») — не наша выгрузка: мимо Items не ходим.
+                # The platform writes a bare file name here. Anything else (a path, «..») is not our export: we do not go outside Items.
                 if ("\\" in pic_el_name or "\\" in pic_file_name or "/" in pic_el_name or "/" in pic_file_name
                         or pic_el_name in (".", "..") or pic_file_name in (".", "..")):
                     warn(f"  Картинка элемента пропущена — не имя файла: {pic_el_name} / {pic_file_name}")
@@ -2606,7 +2607,7 @@ def main():
             info(f"  Copied: {dst_pic}")
 
         # 7. Register form in parent object ChildObjects
-        # общая форма — в Configuration.xml, форма объекта — в ChildObjects владельца
+        # a common form goes to Configuration.xml, an object form - to the owner's ChildObjects
         if is_common_form:
             if not common_form_registered:
                 add_to_child_objects(type_name, obj_name)
@@ -2646,8 +2647,8 @@ def main():
             kind = raw.strip()
             if not kind:
                 continue
-            # Сравнение РЕГИСТРОНЕЗАВИСИМОЕ явно, иначе молчаливое расхождение
-            # портов на «none» ловится только глазами.
+            # The comparison is explicitly CASE-INSENSITIVE, otherwise a silent divergence
+            # of ports on "none" would be caught only by eye.
             if kind.lower() == "none":
                 no_module = True
                 continue
@@ -2660,9 +2661,9 @@ def main():
             print("-Module None нельзя сочетать с видами модулей", file=sys.stderr)
             sys.exit(1)
 
-    # Какие модули создать для объекта. Тип с единственным модулем получает его всегда — уточнять
-    # там нечего; -Module разбирает только неоднозначные типы. Иначе батч смешанных типов
-    # (`CommonModule.X ;; Catalog.Y`) не выражался бы одним вызовом.
+    # Which modules to create for an object. A type with a single module always gets it - there is
+    # nothing to clarify; -Module only handles ambiguous types. Otherwise a batch of mixed types
+    # (`CommonModule.X ;; Catalog.Y`) could not be expressed in one call.
     def resolve_module_kinds(type_name):
         if no_module:
             return []
@@ -2673,7 +2674,7 @@ def main():
             return [allowed[0]]
         if not requested_modules:
             return []
-        # Порядок берём из таблицы типа, а не из порядка ключей в -Module.
+        # The order is taken from the type table, not from the key order in -Module.
         selected = [k for k in allowed if k in requested_modules]
         if not selected:
             warn(f"  Тип {type_name} не имеет запрошенных модулей — пропущено. Допустимо: {', '.join(allowed)}")
@@ -2704,7 +2705,7 @@ def main():
             form_name = remainder[form_idx + 6:]
         else:
             obj_name = remainder
-        # Общая форма — сама форма: «CommonForm.X» заимствуется вместе с содержимым, владельца у неё нет
+        # A common form is the form itself: «CommonForm.X» is borrowed together with its content, it has no owner
         is_common_form = type_name == "CommonForm"
         if is_common_form:
             if form_name:
@@ -2740,14 +2741,14 @@ def main():
             has_bma = borrow_main_attribute_mode is not None
             form_files = borrow_form(type_name, obj_name, form_name, borrow_main_attr=has_bma)
             borrowed_files.extend(form_files)
-            # Замер на 8.3.26: платформа помечает форму расширенной сразу при заимствовании,
-            # даже если элементы не менялись. Флаг живёт в метаданных формы, не у владельца.
+            # Measurement on 8.3.26: the platform marks the form as extended right at borrowing,
+            # even if elements did not change. The flag lives in the form metadata, not in the owner.
             set_property_state_flag(form_files[0], "Form", format_version)
             borrowed_count += 1
 
             # Borrow main attribute if requested
             if has_bma and is_common_form:
-                # У общей формы владельца нет — он выводится из типа основного реквизита
+                # A common form has no owner - it is derived from the main attribute type
                 cf_src_form_xml_path = os.path.join(cfg_dir, dir_name, obj_name, "Ext", "Form.xml")
                 cf_owner = resolve_common_form_owner(etree.parse(cf_src_form_xml_path).getroot())
                 if not cf_owner:
@@ -2773,10 +2774,10 @@ def main():
             target_dir = os.path.join(ext_dir, dir_name)
             target_file = os.path.join(target_dir, f"{obj_name}.xml")
 
-            # Уже заимствованный объект НЕ переписываем: в его XML лежат собственные реквизиты
-            # расширения, заимствованные подобъекты и состояния, которые из источника не
-            # выводятся. Повторный вызов — законный способ доделать модуль (-Module), а не
-            # переиздать заготовку.
+            # An already borrowed object is NOT overwritten: its XML holds the extension's own attributes,
+            # borrowed subobjects and states that cannot be derived from the source.
+            # A repeated call is a legitimate way to finish the module (-Module), not to
+            # reissue the blank.
             if test_object_borrowed(type_name, obj_name):
                 info(f"Already borrowed: {type_name}.{obj_name} — XML сохранён без изменений")
             else:
@@ -2798,11 +2799,11 @@ def main():
                 borrowed_files.append(new_borrowed_module_file(type_name, obj_name, kind))
             borrowed_count += 1
 
-    # --- Владельцы заимствованных справочников ---
-    # Ссылка в <Owners> должна вести на объект, который в расширении есть: иначе платформа падает
-    # при загрузке (проверено — access violation, не сообщение об ошибке). Конфигуратор владельца
-    # заимствует (эталон Issue66Example7_1: вместе со справочником перенесён и его ПВХ-владелец).
-    # Проход общий и повторяется, пока находятся новые: у владельца может быть свой владелец.
+    # --- Owners of borrowed catalogs ---
+    # A reference in <Owners> must point to an object that exists in the extension: otherwise the platform crashes
+    # on load (verified - access violation, not an error message). The Configurator borrows the owner
+    # (reference Issue66Example7_1: along with the catalog, its ПВХ owner was transferred too).
+    # The pass is generic and repeats while new ones are found: an owner may have its own owner.
     for _owner_pass in range(10):
         new_owners = []
         for root_dir, _dirs, files in os.walk(ext_dir):

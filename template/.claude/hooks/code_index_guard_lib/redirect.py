@@ -1,25 +1,25 @@
-"""Общий хвост redirect-веток Bash и PowerShell (порт main.rs:790-858 v1.15.4).
+"""Common tail of the Bash and PowerShell redirect branches (port of main.rs:790-858 v1.15.4).
 
-Находит индексированный корень по звену команды (или по рабочему каталогу для
-bare-команды), отсеивает исключения проекта и выдаёт Deny с подсказкой про MCP.
+Finds the indexed root by the command link (or by the working directory for a
+bare command), filters project exclusions and returns Deny with an MCP hint.
 """
 from . import decisions, index_db, paths, shell, tools
 from .decisions import Decision
 
 
 def redirect_for_link(link: str, base: str, tool_label: str, ctx) -> Decision | None:
-    """`tool_label` — начало текста отказа (`Bash-чтение`, `PowerShell-поиск`)."""
-    # Нераскрытая подстановка ($var из окружения, $(...), обратные кавычки) — цель
-    # звена неизвестна. Воздерживаемся: подставить вместо неё каталог сессии значит
-    # отказать по репозиторию, к которому команда может не иметь отношения.
+    """`tool_label` - the start of the deny text (`Bash read`, `PowerShell search`)."""
+    # Unresolved substitution ($var from the environment, $(...), backticks) - the
+    # target of the link is unknown. Abstain: substituting the session directory instead
+    # means denying based on a repo the command may have nothing to do with.
     if "$" in link or "`" in link:
         return None
-    # Команда трогает бинарь → воздержаться (его в индексе нет, дед-энд недопустим).
+    # The command touches a binary -> abstain (it is not in the index, a dead end is unacceptable).
     link_lc = link.lower()
     if any(e in link_lc for e in decisions.BINARY_EXT):
         return None
-    # Префиксы в ctx.paths уже свёрнуты по регистру системы — сверяем со свёрнутым
-    # звеном; гейт явного пути смотрит на ИСХОДНОЕ звено (как путь пишет агент).
+    # Prefixes in ctx.paths are already folded by the system case - compare against the folded
+    # link; the explicit path gate looks at the ORIGINAL link (as the agent writes the path).
     link_folded = paths.fold_path(link, ctx.case_insensitive)
     paths_list = ctx.paths
     sorted_paths = sorted(paths_list, key=lambda entry: len(entry[0]), reverse=True)
@@ -31,9 +31,9 @@ def redirect_for_link(link: str, base: str, tool_label: str, ctx) -> Decision | 
             alias = a
             matched_root = prefix
             break
-    # cwd-fallback только для истинно bare-команд (без явного пути-аргумента):
-    # `ls ~/.claude/...` и `ls /tmp` из индексированного cwd к репо не относятся.
-    # Смотрим на звено БЕЗ кавычек: `ls "/tmp/x"` — тоже явный путь.
+    # cwd fallback only for truly bare commands (without an explicit path argument):
+    # `ls ~/.claude/...` and `ls /tmp` from an indexed cwd do not relate to the repo.
+    # Look at the link WITHOUT quotes: `ls "/tmp/x"` is also an explicit path.
     if alias is None and not shell.has_explicit_path(_unquote(link)):
         m = paths.match_indexed(base, paths_list, case_insensitive=ctx.case_insensitive)
         if m is not None:
@@ -42,7 +42,7 @@ def redirect_for_link(link: str, base: str, tool_label: str, ctx) -> Decision | 
             matched_root = root
     if alias is None:
         return None
-    # Исключения проекта — по КАЖДОМУ слову звена: цель бывает и путём, и маской.
+    # Project exclusions - for EVERY word of the link: the target is both a path and a mask.
     if matched_root is not None:
         for word in link.split()[1:]:
             if word.startswith("-"):
@@ -50,9 +50,9 @@ def redirect_for_link(link: str, base: str, tool_label: str, ctx) -> Decision | 
             clean = word.strip('"').strip("'")
             if not clean:
                 continue
-            # Абсолютный путь приводим к относительному ОТ ЕГО СОБСТВЕННОГО корня:
-            # склейка root + "c:/repo/file" даёт чепуху, и неиндексированный файл
-            # выглядит неисключённым.
+            # Reduce an absolute path to a path relative to ITS OWN root:
+            # gluing root + "c:/repo/file" gives nonsense, and a non-indexed file
+            # looks non-excluded.
             m = paths.match_indexed(clean, paths_list, case_insensitive=ctx.case_insensitive)
             if m is not None:
                 _a, rel, check_root = m
@@ -61,18 +61,18 @@ def redirect_for_link(link: str, base: str, tool_label: str, ctx) -> Decision | 
             if rel and index_db.excluded_from_index(
                     check_root, rel, case_insensitive=ctx.case_insensitive):
                 return None
-        # Свежесть каталога-цели: каталог изменился после индексации (новые
-        # объекты) → list_files их не знает, нативный листинг — единственный путь.
-        # Только для листинга: `cat`/`grep` по индексированным файлам блокируем.
+        # Freshness of the target directory: the directory changed after indexing (new
+        # objects) -> list_files does not know them, a native listing is the only way.
+        # Only for listings: `cat`/`grep` on indexed files are blocked.
         if _is_directory_listing(link) and _listing_dir_changed(
                 link, base, ctx, case_insensitive=ctx.case_insensitive):
             return None
     reason = (
-        f"{tool_label} по индексированному пути (repo='{alias}') запрещено. "
-        "На индексированных файлах MCP дешевле в 3-10×: инструменты code-index "
+        f"{tool_label} on an indexed path (repo='{alias}') is denied. "
+        "On indexed files MCP is 3-10x cheaper: use code-index tools "
         f'{tools.tool("grep_code")}/{tools.tool("grep_text")}/{tools.tool("read_file")}/'
         f'{tools.tool("list_files")}(repo="{alias}", ...). '
-        f'Список репо — {tools.tool("get_stats")}().'
+        f'Repo list - {tools.tool("get_stats")}().'
     )
     return Decision(False, reason)
 
@@ -81,16 +81,16 @@ _LISTING_UTILS = ("ls", "dir", "find", "get-childitem", "gci")
 
 
 def _is_directory_listing(link: str) -> bool:
-    """Звено — листинг каталога (`ls`/`dir`/`find`/`Get-ChildItem`/`gci`)."""
+    """The link is a directory listing (`ls`/`dir`/`find`/`Get-ChildItem`/`gci`)."""
     toks = link.split()
     return bool(toks) and toks[0].lower() in _LISTING_UTILS
 
 
 def _listing_targets(link: str) -> list[str] | None:
-    """Цели листинга без флагов. None → цель не разобрать (маска, флаг со значением).
+    """Listing targets without flags. None -> the target cannot be parsed (mask, flag with value).
 
-    Маска (`*`, `?`) — выборка по содержимому каталога, а не листинг конкретного
-    каталога: свежесть такого каталога не определяет, что найдёт команда.
+    A mask (`*`, `?`) is a selection by directory content, not a listing of a specific
+    directory: freshness of such a directory does not determine what the command finds.
     """
     out: list[str] = []
     for tok in link.split()[1:]:
@@ -98,7 +98,7 @@ def _listing_targets(link: str) -> list[str] | None:
         if not tok:
             continue
         if tok.startswith("-"):
-            continue  # флаг; значение флага каталогом не считаем — deny остаётся
+            continue  # flag; the flag value is not considered a directory - the deny remains
         if "*" in tok or "?" in tok:
             return None
         out.append(tok)
@@ -107,11 +107,11 @@ def _listing_targets(link: str) -> list[str] | None:
 
 def _listing_dir_changed(link: str, base: str, ctx, *,
                          case_insensitive: bool) -> bool:
-    """Изменился ли целевой каталог листинга после индексации.
+    """Whether the target listing directory changed after indexing.
 
-    Целей нет → листинг `base`. Относительная цель → от `base`. Цель берётся,
-    только если она попадает в индексированный репозиторий; несуществующий
-    каталог свежести не даёт (`dir_changed_since_index` → False).
+    No targets -> listing `base`. Relative target -> from `base`. A target is taken
+    only if it falls into an indexed repository; a non-existent
+    directory gives no freshness (`dir_changed_since_index` -> False).
     """
     targets = _listing_targets(link)
     if targets is None:
@@ -136,10 +136,10 @@ def _listing_dir_changed(link: str, base: str, ctx, *,
 
 
 def _unquote(link: str) -> str:
-    """Снять с каждого токена обрамляющие `"`/`'`: `ls "/tmp/x"` → `ls /tmp/x`.
+    """Strip surrounding `"`/`'` from each token: `ls "/tmp/x"` -> `ls /tmp/x`.
 
-    Гейт явного пути смотрит на токены, начинающиеся с `/`; в кавычках он не видел
-    абсолютный путь и подменял его индексированным cwd.
+    The explicit path gate looks at tokens starting with `/`; inside quotes it did not see
+    an absolute path and replaced it with the indexed cwd.
     """
     out: list[str] = []
     for tok in link.split():

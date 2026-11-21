@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// web-test run v1.19 — CLI entry-point (распилено по cli/)
+// web-test run v1.19 - CLI entry-point (split across cli/)
 // Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 /**
  * CLI runner for 1C web client automation.
@@ -16,7 +16,7 @@
  *   node src/run.mjs status                 — check session
  *   node src/run.mjs test <dir|file>... [--url]  — run regression tests
  *
- * Внутренности живут в cli/: util, session, exec-context, server,
+ * Internals live in cli/: util, session, exec-context, server,
  * commands/{start,run,exec,shot,stop,status,test}, test-runner/*.
  */
 import * as browser from './browser.mjs';

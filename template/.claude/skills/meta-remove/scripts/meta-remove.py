@@ -10,16 +10,16 @@ import sys
 import shutil
 from lxml import etree
 
-# Регистронезависимый ввод: имена параметров и значения choices принимаются
-# в любом регистре (в argparse по умолчанию совпадение точное).
+# Case-insensitive input: parameter names and choices values are accepted
+# in any case (argparse matches exactly by default).
 def ci_parse_args(parser, argv=None):
-    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
+    """parse_args: parameter names and choices values are accepted in any case."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
         if tok.startswith('-') and tok.lower() in names:
             argv[i] = names[tok.lower()]
-    # choices — зеркало [ValidateSet]; канонизируем ДО разбора, иначе argparse отвергнет регистр
+    # choices mirrors [ValidateSet]; canonicalize BEFORE parsing, otherwise argparse rejects the case
     choice_map = {}
     for a in parser._actions:
         if a.choices:
@@ -35,7 +35,7 @@ def ci_parse_args(parser, argv=None):
 
 # ============================================================
 # Support guard (Ext/ParentConfigurations.bin) — see docs/1c-support-state-spec.md
-# Blocks edits of vendor objects "на замке" / read-only configs. Trigger = bin
+# Blocks edits of vendor objects "на замке" / read-only configs. Trigger = the bin
 # present; reaction from .v8-project.json editingAllowedCheck (deny|warn|off,
 # default deny). Never throws (except sys.exit on deny) — errors degrade to allow.
 # ============================================================
@@ -295,14 +295,14 @@ NSMAP = {"md": MD_NS, "v8": V8_NS}
 
 
 def remove_node_with_indent(node):
-    """Удалить элемент вместе с предшествующим whitespace; опустевший контейнер сделать
-    самозакрывающимся. Копия из form-remove: одна задача — одна реализация."""
+    """Remove the element together with the preceding whitespace; make an emptied container
+    self-closing. Copy from form-remove: one task - one implementation."""
     parent = node.getparent()
     if parent is None:
         return
-    # В DOM whitespace — отдельные узлы: удаляются предшествующий и сам элемент, а
-    # whitespace ПОСЛЕ элемента остаётся. В lxml он лежит в node.tail и ушёл бы вместе с
-    # узлом, поэтому его надо передать предшественнику.
+    # In the DOM, whitespace forms separate nodes: the preceding whitespace and the element
+    # itself are removed, while the whitespace AFTER the element remains. In lxml it lives in
+    # node.tail and would leave together with the node, so it must be passed to the predecessor.
     prev = node.getprevious()
     if prev is not None:
         prev.tail = node.tail
@@ -318,8 +318,8 @@ def localname(el):
 
 
 def _detect_xml_style(path):
-    """Стиль существующего файла для round-trip-сохранения: BOM / EOL / регистр encoding /
-    финальный перенос. None → файл новый (сохранить текущее поведение)."""
+    """Existing file style for round-trip saving: BOM / EOL / encoding case /
+    final newline. None -> the file is new (keep current behavior)."""
     try:
         raw = open(path, "rb").read()
     except OSError:
@@ -334,21 +334,21 @@ def _detect_xml_style(path):
 
 
 def _finalize_xml_bytes(xml_bytes, style):
-    """Привести байты к стилю оригинала; для НОВОГО файла (style is None) — к канону
-    выгрузки Конфигуратора: encoding="UTF-8", CRLF в разделителях, без перевода в конце."""
+    """Bring bytes to the original style; for a NEW file (style is None) - to the
+    Configurator dump canon: encoding="UTF-8", CRLF separators, no trailing newline."""
     enc_decl = style["enc"] if style else "UTF-8"
     xml_bytes = xml_bytes.replace(
         b"<?xml version='1.0' encoding='UTF-8'?>",
         b'<?xml version="1.0" encoding="' + enc_decl.encode("ascii") + b'"?>')
-    # Канонизировать переносы к LF (убирает &#13; от \r в tail'ах)
+    # Canonicalize line breaks to LF (removes &#13; from \r in tails)
     xml_bytes = (xml_bytes.replace(b"&#13;\n", b"\n").replace(b"&#13;", b"")
                  .replace(b"\r\n", b"\n").replace(b"\r", b"\n"))
-    # Финальный перенос — как в оригинале (новый файл → нет, канон #57)
+    # Final newline as in the original (new file -> none, canon #57)
     want_final_nl = style["final_nl"] if style else False
     xml_bytes = xml_bytes.rstrip(b"\n")
     if want_final_nl:
         xml_bytes += b"\n"
-    # EOL — как в оригинале (новый файл → CRLF, канон #57)
+    # EOL as in the original (new file -> CRLF, canon #57)
     if (style["crlf"] if style else True):
         xml_bytes = xml_bytes.replace(b"\n", b"\r\n")
     return xml_bytes
@@ -389,8 +389,8 @@ def main():
         sys.exit(1)
 
     # --- Parse object spec ---
-    # Таблица внешнего источника — единственный объект с четырёхчастным именем: она лежит не в
-    # каталоге вида, а внутри источника, и числится в ChildObjects файла источника, не конфигурации.
+    # External data source table is the only object with a four-part name: it lives not in the
+    # type directory but inside the source, and is listed in ChildObjects of the source file, not the configuration.
     eds_source = ""
     m_eds = re.match(r'^ExternalDataSource\.([^.]+)\.Table\.(.+)$', args.Object)
     if m_eds:
@@ -413,7 +413,7 @@ def main():
             sys.exit(1)
         type_plural = TYPE_PLURAL_MAP[obj_type]
 
-    # Реестр, где объект числится: обычно ChildObjects конфигурации, а для таблицы — файл источника.
+    # Registry where the object is listed: usually the configuration ChildObjects, and for a table - the source file.
     if eds_source:
         registry_xml = os.path.join(config_dir, "ExternalDataSources", f"{eds_source}.xml")
         registry_root = "ExternalDataSource"
@@ -441,7 +441,7 @@ def main():
     obj_xml = os.path.join(type_dir, f"{obj_name}.xml")
     obj_dir = os.path.join(type_dir, obj_name)
 
-    # Support guard — removal requires the object be снят-с-поддержки (f1=2).
+    # Support guard - removal requires the object to be off support (f1=2).
     assert_edit_allowed(obj_xml, "removed")
 
     has_xml = os.path.isfile(obj_xml)
@@ -487,7 +487,7 @@ def main():
         search_patterns.append(f"{ru_mgr}.{obj_name}")
     search_patterns.append(f"{type_plural}.{obj_name}")
 
-    # 2а) Внешний источник данных: ссылки на сам источник и на его таблицы
+    # 2a) External data source: references to the source itself and to its tables
     if obj_type == "ExternalDataSource":
         search_patterns.append(f"ExternalDataSource.{obj_name}.")
         search_patterns.append(f"\u0412\u043d\u0435\u0448\u043d\u0438\u0435\u0418\u0441\u0442\u043e\u0447\u043d\u0438\u043a\u0438\u0414\u0430\u043d\u043d\u044b\u0445.{obj_name}")
@@ -512,9 +512,9 @@ def main():
         exclude_dirs.append(obj_dir)
     exclude_file = obj_xml if has_xml else ""
 
-    # Ссылки на формы удаляемого объекта: слоты вида <DefaultListForm>, <ChoiceForm>,
-    # <SettingsStorage>, элемент начальной страницы. Их, в отличие от типов и вызовов в .bsl,
-    # можно починить однозначно — пустой слот легален, — поэтому -Force их чистит.
+    # References to forms of the removed object: slots like <DefaultListForm>, <ChoiceForm>,
+    # <SettingsStorage>, the start page item. Unlike types and calls in .bsl, they
+    # can be fixed unambiguously - an empty slot is legal - so -Force cleans them.
     form_slot_re = re.compile(
         r"<([A-Za-z0-9_.]+)>(" + re.escape(f"{obj_type}.{obj_name}") + r"\.Form\.[^<]+|"
         + re.escape(f"CommonForm.{obj_name}") + r")</")
@@ -524,8 +524,8 @@ def main():
     references = []
     search_extensions = (".xml", ".bsl")
 
-    # Один проход вместо двух: раньше конфигурация обходилась дважды и каждый файл читался
-    # по два раза. Один проход по файлам.
+    # One pass instead of two: previously the configuration was walked twice and each file was read
+    # twice. One pass over the files.
     type_name_ref = f"{obj_type}.{obj_name}"
     for root_path, dirs, files in os.walk(config_dir):
         for fname in files:
@@ -549,9 +549,9 @@ def main():
             rel_path = os.path.relpath(full_path, config_dir)
             rel_path_fwd = rel_path.replace("\\", "/")
 
-            # Auto-cleaned: ChildObjects в Configuration.xml и состав подсистем. Сам
-            # Configuration.xml при этом НЕ слепая зона — его form-слоты (DefaultReportForm
-            # и соседи) не чистятся автоматически и раньше терялись молча.
+            # Auto-cleaned: ChildObjects in Configuration.xml and subsystem contents. Configuration.xml
+            # itself is NOT a blind spot here - its form slots (DefaultReportForm
+            # and neighbours) are not cleaned automatically and used to be lost silently.
             is_auto_cleaned = (rel_path_fwd in ("Configuration.xml", "ConfigDumpInfo.xml")
                                or rel_path_fwd.startswith("Subsystems"))
 
@@ -572,10 +572,10 @@ def main():
             if is_auto_cleaned:
                 continue
 
-            # Общие паттерны ищем в тексте БЕЗ form-слотов: «Catalog.Товары» есть внутри
-            # «Catalog.Товары.Form.X», и файл со слотом попадал бы в список дважды. Вырезаем
-            # слоты, а не пропускаем файл целиком — иначе настоящая ссылка рядом со слотом
-            # осталась бы незамеченной, а её, в отличие от слота, автоматически не починить.
+            # Generic patterns are searched in text WITHOUT form slots: "Catalog.Товары" is inside
+            # "Catalog.Товары.Form.X", and a file with a slot would appear in the list twice. We cut out
+            # slots rather than skip the whole file - otherwise a real reference next to a slot
+            # would stay unnoticed, and unlike a slot it cannot be fixed automatically.
             content_no_slots = form_slot_re.sub("", content) if full_path in form_slot_files else content
 
             matched = False
@@ -612,7 +612,7 @@ def main():
     else:
         print("[OK]    No references found")
 
-    # --- 3. Remove from registry ChildObjects (Configuration.xml или файл внешнего источника) ---
+    # --- 3. Remove from registry ChildObjects (Configuration.xml or external source file) ---
     print()
     print(f"--- {registry_label} ---")
 
@@ -634,8 +634,8 @@ def main():
                 if localname(child) == obj_type and (child.text or "").strip() == obj_name:
                     found = True
                     if not args.DryRun:
-                        # Общий помощник DOM-удаления. Прежняя ветка теряла
-                        # отступ следующего элемента, если удалялся ПЕРВЫЙ ребёнок.
+                        # Common DOM removal helper. The previous branch lost
+                        # the indentation of the next element if the FIRST child was removed.
                         remove_node_with_indent(child)
                     print(f"[OK]    Removed <{obj_type}>{obj_name}</{obj_type}> from ChildObjects")
                     actions += 1
@@ -728,8 +728,8 @@ def main():
 
     # --- 4b. Clear form slots pointing at this object's forms ---
 
-    # Только слоты форм: пустой слот легален (164 508 пустых на корпус), поэтому замена
-    # однозначна. Ссылки на типы и вызовы в .bsl не трогаем — чем их заменить, неизвестно.
+    # Form slots only: an empty slot is legal (164 508 empty ones per corpus), so replacement
+    # is unambiguous. We do not touch type references and calls in .bsl - what to replace them with is unknown.
     if form_slot_files:
         print()
         print("--- Form slots ---")
@@ -750,7 +750,7 @@ def main():
                 val = (el.text or "").strip()
                 if not val:
                     continue
-                # Сравнение регистронезависимое — как у платформы.
+                # Comparison is case-insensitive, like in the platform.
                 if val.lower() != common_form_ref.lower() and not val.lower().startswith(slot_prefix.lower()):
                     continue
 
@@ -760,12 +760,12 @@ def main():
                     touched.append(f"{localname(parent)}/{ln}")
                     remove_node_with_indent(parent)
                 elif is_form_file:
-                    # Внутри Ext/Form.xml пустых <ChoiceForm/> и <SettingsStorage/> нет ни
-                    # одного — каноничное «не задано» там это отсутствие тега.
+                    # Inside Ext/Form.xml there is not a single empty <ChoiceForm/> or
+                    # <SettingsStorage/> - the canonical "not set" there is the absence of the tag.
                     touched.append(ln)
                     remove_node_with_indent(el)
                 else:
-                    # text=None, а не "": Конфигуратор пустых пар не пишет.
+                    # text=None, not "": Configurator does not write empty pairs.
                     touched.append(ln)
                     el.text = None
             if not touched:

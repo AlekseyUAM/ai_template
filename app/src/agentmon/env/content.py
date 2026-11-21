@@ -173,8 +173,8 @@ def _guard_config_text(mcp) -> str:
     """
     actual = _guard_mcp_name(mcp)
     lines = [
-        "# Сгенерировано при развёртывании окружения agentmon.",
-        "# Ручные правки будут перезаписаны при обновлении окружения.",
+        "# Generated when the agentmon environment is deployed.",
+        "# Manual edits will be overwritten when the environment is updated.",
         f'mcp_prefix = "mcp__{actual}__"',
         f"max_denies = {_GUARD_MAX_DENIES}",
         "",
@@ -396,8 +396,8 @@ def _project_readme(project_name: str) -> str:
     """README проекта: заголовок-имя + как переподнять .venv на свежем клоне."""
     return (
         f"## {project_name}\n\n"
-        "### Окружение разработки\n\n"
-        "Python-зависимости навыков живут в изолированном `.venv` (он в `.gitignore`).\n"
-        "На свежем клоне подними его одной командой:\n\n"
+        "### Development environment\n\n"
+        "The Python dependencies of the skills live in an isolated `.venv` (it is in `.gitignore`).\n"
+        "On a fresh clone, create it with one command:\n\n"
         "    python setup-venv.py\n"
     )

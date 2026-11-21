@@ -11,18 +11,18 @@ import xml.etree.ElementTree as ET
 
 from lxml import etree
 
-# Регистронезависимый ввод: имена параметров и значения choices принимаются
-# в любом регистре (в argparse по умолчанию совпадение точное).
+# Case-insensitive input: parameter names and choices values are accepted
+# in any case (argparse matches exactly by default).
 
 def parse_json_input(text, source, expected=None, inline=False):
-    """Разбор пользовательского JSON: одна строка в stderr вместо traceback (issue #80).
+    """Parse user JSON: one line to stderr instead of a traceback (issue #80).
 
-    expected заполняем только для полиморфного входа: у файла подсказка
-    была бы наполнителем — имя файла и текст парсера самодостаточны. inline печатает ещё и то,
-    что доехало: у файла такого вопроса нет, он лежит на диске и его видно целиком.
+    expected is filled only for polymorphic input: for a file the hint would
+    be filler - the file name and the parser text are self-sufficient. inline also prints what
+    arrived: for a file there is no such question, it lies on disk and is visible in full.
 
-    Импорты внутри тела: копия функции живёт в навыках с разными именами модулей
-    (skd-decompile импортирует json локально как _json), а тело обязано быть одинаковым.
+    Imports inside the body: a copy of the function lives in skills with different module names
+    (skd-decompile imports json locally as _json), and the body must be identical.
     """
     import json as _pj
     import sys as _psys
@@ -46,10 +46,10 @@ def parse_json_input(text, source, expected=None, inline=False):
 
 
 def read_json_file(path):
-    """Чтение входного JSON-файла с кодировкой из BOM (issue #80).
+    """Read the input JSON file with the encoding from the BOM (issue #80).
 
-    BOM — объявление самого файла, поэтому ему верим; без BOM ждём строгий UTF-8. Кодовую
-    страницу не подбираем: угаданное имя уехало бы в метаданные молча.
+    The BOM is the file's own declaration, so we trust it; without a BOM we expect strict UTF-8. We do
+    not guess the code page: a guessed name would silently travel into metadata.
     """
     import os as _pos
     import sys as _psys
@@ -76,9 +76,9 @@ def read_json_file(path):
 
 
 class CIDict(dict):
-    # Ключи храним КАК ЕСТЬ: часть из них — имена объектов (табличные части, стандартные
-    # реквизиты), они попадают в XML. Регистронезависим только поиск. Порядок вставки
-    # сохраняется — от него зависит порядок эмиссии.
+    # Keys are stored AS IS: some of them are object names (tabular sections, standard
+    # attributes), they get into the XML. Only lookup is case-insensitive. Insertion order
+    # is preserved - the emission order depends on it.
     def _actual(self, key):
         if not isinstance(key, str) or dict.__contains__(self, key):
             return key
@@ -101,11 +101,11 @@ class CIDict(dict):
         return dict.pop(self, self._actual(key), *default)
 
     def __setitem__(self, key, value):
-        # запись по ключу, отличающемуся регистром, обновляет существующий, а не плодит дубль
+        # writing by a key with a different case updates the existing one instead of creating a duplicate
         dict.__setitem__(self, self._actual(key), value)
 
 def ci_json(obj):
-    """Рекурсивно оборачивает разобранный JSON: словари → CIDict, списки обходятся."""
+    """Recursively wraps parsed JSON: dicts -> CIDict, lists are walked."""
     if isinstance(obj, dict):
         return CIDict((k, ci_json(v)) for k, v in obj.items())
     if isinstance(obj, list):
@@ -113,13 +113,13 @@ def ci_json(obj):
     return obj
 
 def ci_parse_args(parser, argv=None):
-    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
+    """parse_args: parameter names and choices values are accepted in any case."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
         if tok.startswith('-') and tok.lower() in names:
             argv[i] = names[tok.lower()]
-    # choices — зеркало [ValidateSet]; канонизируем ДО разбора, иначе argparse отвергнет регистр
+    # choices - mirror of [ValidateSet]; canonicalize BEFORE parsing, otherwise argparse rejects the case
     choice_map = {}
     for a in parser._actions:
         if a.choices:
@@ -311,8 +311,8 @@ def assert_edit_allowed(target_path, require):
 
 def detect_format_version(d):
     while d:
-        # Автономная внешняя обработка/отчёт: своего Configuration.xml у неё нет, версию несёт
-        # корень самой обработки. Без этого форма и макет внутри обработки 2.21 писались бы 2.17.
+        # Standalone external data processor/report: it has no Configuration.xml of its own; the version is carried by
+        # the root of the processor itself. Without this, a form and a template inside a 2.21 processor would be written as 2.17.
         ext_path = d + ".xml"
         if os.path.isfile(ext_path):
             with open(ext_path, "r", encoding="utf-8-sig") as f:
@@ -336,27 +336,27 @@ def detect_format_version(d):
 
 
 def format_rank(ver):
-    """"2.20" → 220, "2.9" → 209. Строковое сравнение неверно ("2.9" > "2.17")."""
+    """"2.20" -> 220, "2.9" -> 209. String comparison is wrong ("2.9" > "2.17")."""
     m = re.match(r'^(\d+)\.(\d+)$', ver or '')
     return int(m.group(1)) * 100 + int(m.group(2)) if m else 0
 
 
 def detect_eol(text):
-    # Перевод строки ВСТАВКИ берём из самого файла: канон CRLF относится к файлам,
-    # которые мы создаём, а правка существующего сохраняет его стиль (#44/#46/#47).
-    # Семантика та же, что у _detect_xml_style в остальных портах: есть CRLF → CRLF.
-    # Мажоритарное правило здесь было расхождением — на смешанном входе оно давало
-    # другой ответ, чем канон, при том же назначении.
+    # Take the INSERT line ending from the file itself: the CRLF canon applies to files
+    # we create, while editing an existing one preserves its style (#44/#46/#47).
+    # The semantics are the same as _detect_xml_style in other ports: CRLF present -> CRLF.
+    # The majority rule was a discrepancy here - on mixed input it gave
+    # a different answer than the canon with the same purpose.
     return '\r\n' if '\r\n' in text else '\n'
 
 def esc_xml(s):
-    # Эскейп ЗНАЧЕНИЯ АТРИБУТА: & < > и кавычка — внутри "..." литеральная " невалидна.
+    # Escape an ATTRIBUTE VALUE: & < > and quote - inside "..." a literal " is invalid.
     return s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;')
 
 
 def esc_xml_text(s):
-    """Экранирование ТЕКСТА элемента: только & < > . Кавычки платформа в тексте не экранирует
-    (92142 сырых кавычки на корпус, ни одной &quot;); &quot; она принимает, но нормализует обратно."""
+    """Escape element TEXT: only & < > . The platform does not escape quotes in text
+    (92142 raw quotes in the corpus, not a single &quot;); it accepts &quot; but normalizes it back."""
     return s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
 
 
@@ -377,8 +377,8 @@ def new_uuid():
 
 
 def write_utf8_bom(path, content):
-    # newline='' — без трансляции: иначе текстовый режим Python дал бы CRLF на Windows
-    # и LF на macOS, то есть вывод навыка зависел бы от ОС.
+    # newline='' - no translation: otherwise Python text mode would give CRLF on Windows
+    # and LF on macOS, that is, the skill output would depend on the OS.
     with open(path, 'w', encoding='utf-8-sig', newline='') as f:
         f.write(content)
 
@@ -418,8 +418,8 @@ TYPE_ALIASES = {
     "ОбщийРеквизит": "CommonAttribute",
     "Конфигурация": "Configuration",
     "ВнешнийИсточникДанных": "ExternalDataSource",
-    # Типы без прав в ролях: алиасы нужны не ради генерации, а ради отказа по делу —
-    # иначе на русскую запись навык ответит «неизвестный тип 'ОбщийМодуль'».
+    # Types without rights in roles: aliases are needed not for generation but for a meaningful refusal -
+    # otherwise the skill would answer a Russian spelling with "unknown type 'ОбщийМодуль'".
     "Перечисление": "Enum",
     "ОбщийМодуль": "CommonModule",
     "ОпределяемыйТип": "DefinedType",
@@ -611,9 +611,9 @@ KNOWN_RIGHTS = {
     ],
 }
 
-# Виды вложенности (предпоследний сегмент пути) → допустимые права. Списки сняты с корпуса
-# типовых конфигураций и с выгрузки роли, где права проставлены по всему дереву редактора:
-# догадкам тут не место — закрытый список превращает промах в ложный отказ.
+# Nested kinds (penultimate path segment) -> allowed rights. The lists were taken from a corpus of
+# typical configurations and from a role dump where rights are set across the whole editor tree:
+# no place for guesses here - a closed list turns a miss into a false rejection.
 NESTED_KIND_RIGHTS = {
     "Attribute": ["View", "Edit"],
     "StandardAttribute": ["View", "Edit"],
@@ -640,8 +640,8 @@ NESTED_KIND_RIGHTS = {
     ],
 }
 
-# Виды, существующие только у одного типа-родителя: без этой привязки
-# `Catalog.Товары.Field.Цена` прошёл бы как валидный вложенный объект.
+# Kinds that exist only under one parent type: without this binding
+# `Catalog.Товары.Field.Цена` would pass as a valid nested object.
 KIND_OWNERS = {
     'Table': 'ExternalDataSource',
     'Cube': 'ExternalDataSource',
@@ -654,19 +654,19 @@ KIND_OWNERS = {
     'IntegrationServiceChannel': 'IntegrationService',
 }
 
-# Право на сервис живёт на ЛИСТЕ — методе шаблона URL, операции, канале, — а не на самом
-# сервисе: корневого узла нет ни в одной типовой роли (907 записей корпуса — ноль), в
-# Конфигураторе галки на корне нет вовсе. Короткая запись `HTTPService.X: Use` выражает
-# намерение «открой сервис целиком» и раскрывается в листья по метаданным сервиса.
+# A right on a service lives on the LEAF - the URL template method, operation, channel - not on the
+# service itself: there is no root node in any typical role (907 corpus records - zero), and in the
+# Configurator there is no checkbox on the root at all. The short entry `HTTPService.X: Use` expresses
+# the intent "open the service as a whole" and is expanded into leaves using the service metadata.
 SERVICE_LEAVES = {
     'WebService': {'dir': 'WebServices', 'kinds': ['Operation']},
     'HTTPService': {'dir': 'HTTPServices', 'kinds': ['URLTemplate', 'Method']},
     'IntegrationService': {'dir': 'IntegrationServices', 'kinds': ['IntegrationServiceChannel']},
 }
 
-# Один и тот же вид под разными родителями имеет разный набор: измерение регистра —
-# View + Edit, измерение куба внешнего источника — только View. Объединять нельзя,
-# объединение молча разрешило бы Edit там, где платформа его не даёт.
+# The same kind under different parents has a different set: a register dimension -
+# View + Edit, an external data source cube dimension - View only. Do not merge them:
+# merging would silently allow Edit where the platform does not grant it.
 NESTED_KIND_RIGHTS_BY_TYPE = {
     "ExternalDataSource": {
         "Dimension": ["View"],
@@ -674,8 +674,8 @@ NESTED_KIND_RIGHTS_BY_TYPE = {
     },
 }
 
-# Типы без прав в ролях (в дереве редактора ролей их нет). Список НЕ управляет поведением —
-# отказ даёт отсутствие типа в KNOWN_RIGHTS; здесь только выбор формулировки.
+# Types without rights in roles (they are absent from the role editor tree). The list does NOT drive
+# behavior - rejection comes from the type missing in KNOWN_RIGHTS; here it only chooses the wording.
 NO_RIGHTS_TYPES = [
     "Enum", "CommonModule", "DefinedType", "CommonPicture", "CommonTemplate", "Language",
     "FunctionalOption", "FunctionalOptionsParameter", "EventSubscription", "ScheduledJob",
@@ -756,8 +756,8 @@ def is_nested_object(object_name):
 
 
 def get_nested_kind(object_name):
-    """Вид вложенности — предпоследний сегмент: путь бывает и восьмисегментным
-    (ExternalDataSource.И.Cube.К.DimensionTable.Т.Field.П), считать от конца."""
+    """Nested kind - the penultimate segment: a path can have eight segments
+    (ExternalDataSource.И.Cube.К.DimensionTable.Т.Field.П), so count from the end."""
     parts = object_name.split('.')
     if len(parts) < 3:
         return None
@@ -771,11 +771,11 @@ def get_nested_rights(object_type, kind):
     return NESTED_KIND_RIGHTS.get(kind)
 
 
-# --- Зависимости прав (замерено на платформе) ---
-# Платформа при загрузке сама доводит набор до замыкания: выдал Edit — получил ещё
-# Read, Update и View. Пишем замыкание сразу, иначе файл и база расходятся.
-# Таблица общая для типов; исключения — там, где у типа своя механика (обработка и отчёт
-# держатся на Use, план счетов не тянет Read под историю данных).
+# --- Right dependencies (measured on the platform) ---
+# On load the platform itself closes the set: granted Edit - got Read, Update and View as well.
+# We write the closure immediately, otherwise the file and the infobase diverge.
+# The table is common to types; exceptions are where a type has its own mechanics (data processor and report
+# rely on Use, chart of accounts does not pull Read under data history).
 RIGHT_DEPS = {
     "Delete": ["Read"],
     "Edit": ["Read", "Update", "View"],
@@ -834,15 +834,15 @@ RIGHT_DEPS_BY_TYPE = {
 
 CONFIGURATION_LEGACY_DEPS = ["AnalyticsSystemClient", "MainWindowModeEmbeddedWorkplace", "MainWindowModeFullscreenWorkplace", "MainWindowModeKiosk", "MainWindowModeNormal", "MainWindowModeWorkplace"]
 
-# Права конфигурации: до формата 2.19 платформа взводила весь блок режимов окна вместе с
-# любым правом, с 2.19 (8.3.26) перестала. Сами права допустимы и там, и там.
+# Configuration rights: before format 2.19 the platform set the whole window mode block together with
+# any right; since 2.19 (8.3.26) it stopped. The rights themselves are valid in both.
 CONFIGURATION_LEGACY_RANK = 218
 
 
-# Платформа хранит только то, что ОТЛИЧАЕТСЯ от значения по умолчанию для роли: при
-# setForNewObjects=false на верхнем уровне живут разрешения, при true — запреты; у реквизитных
-# вложенных объектов ту же роль играет setForAttributesByDefault. Совпавшее с умолчанием
-# платформа выбрасывает при первой же загрузке, поэтому не пишем его и сами.
+# The platform stores only what DIFFERS from the role default: with
+# setForNewObjects=false permissions live at the top level; with true - denials; for attribute
+# nested objects the same role is played by setForAttributesByDefault. What matches the default
+# the platform discards on the first load, so we do not write it either.
 ATTRIBUTE_KINDS = [
     "Attribute", "StandardAttribute", "TabularSection", "StandardTabularSection",
     "Dimension", "Resource", "AccountingFlag", "ExtDimensionAccountingFlag", "AddressingAttribute",
@@ -853,18 +853,18 @@ def get_default_right_value(object_name, set_for_new_objects, set_for_attributes
     parts = object_name.split('.')
     if len(parts) < 3:
         return set_for_new_objects
-    # Внешние источники данных под это правило не проверялись — трогаем только то, что замерено.
+    # External data sources were not checked against this rule - touch only what was measured.
     if parts[0] == 'ExternalDataSource':
         return "false"
     kind = parts[-2]
     if kind in ATTRIBUTE_KINDS:
         return set_for_attributes_by_default
-    # Команды, подсистемы, операции сервисов флагами роли не управляются — там живут разрешения.
+    # Commands, subsystems, service operations are not controlled by role flags - permissions live there.
     return "false"
 
 
 def close_rights_dependencies(object_name, rights, format_rank):
-    """Замыкание набора прав объекта. Возвращает (итоговые права, что дописано)."""
+    """Closure of an object's right set. Returns (final rights, what was added)."""
     parts = object_name.split('.')
     nested = len(parts) >= 3
     object_type = parts[0]
@@ -877,7 +877,7 @@ def close_rights_dependencies(object_name, rights, format_rank):
         have.setdefault(r['Name'], r)
     by_type = RIGHT_DEPS_BY_TYPE.get(object_type, {})
     added = []
-    # Вперёд — только от РАЗРЕШЁННЫХ прав: платформа замыкает выданное, а не запрещённое.
+    # Forward - only from ALLOWED rights: the platform closes what is granted, not what is denied.
     queue = [n for n in have if have[n]['Value'] == 'true']
     while queue:
         name = queue.pop(0)
@@ -888,7 +888,7 @@ def close_rights_dependencies(object_name, rights, format_rank):
             if dep not in allowed:
                 continue
             if dep in have:
-                # Разрешение перебивает запрет — так поступает и платформа при загрузке.
+                # A permission overrides a denial - that is what the platform does on load too.
                 if have[dep]['Value'] != 'true':
                     have[dep]['Value'] = 'true'
                     added.append(dep)
@@ -897,7 +897,7 @@ def close_rights_dependencies(object_name, rights, format_rank):
             have[dep] = {'Name': dep, 'Value': 'true', 'Condition': None}
             added.append(dep)
             queue.append(dep)
-    # Назад — от ЗАПРЕТОВ: право, которому запрещённое нужно, платформа запрещает следом.
+    # Backward - from DENIALS: a right that a denied one needs is denied by the platform as well.
     deny_queue = [n for n in have if have[n]['Value'] != 'true']
     while deny_queue:
         name = deny_queue.pop(0)
@@ -919,10 +919,10 @@ def close_rights_dependencies(object_name, rights, format_rank):
     return list(have.values()), added
 
 
-# --- Канонический порядок прав и узлов (замерено на платформе) ---
-# Платформа нормализует порядок <right> внутри <object> и порядок самих <object>:
-# права идут в фиксированном для типа порядке, узлы — по uuid объекта метаданных.
-# Пишем сразу так же, иначе первая же выгрузка из Конфигуратора даст диф на ровном месте.
+# --- Canonical order of rights and nodes (measured on the platform) ---
+# The platform normalizes the order of <right> inside <object> and the order of the <object>s themselves:
+# rights go in a fixed per-type order, nodes - by the metadata object uuid.
+# We write it the same way right away, otherwise the first dump from the Configurator gives a diff out of nowhere.
 RIGHT_ORDER = {
     "AccountingRegister": ["Read", "Update", "View", "Edit", "TotalsControl"],
     "AccumulationRegister": ["Read", "Update", "View", "Edit", "TotalsControl"],
@@ -1049,7 +1049,7 @@ NESTED_RIGHT_ORDER = {
     "TabularSection": ["View", "Edit"],
 }
 
-# Каталоги объектов метаданных — нужны, чтобы прочитать uuid и расставить <object>.
+# Metadata object directories - needed to read the uuid and place <object> nodes.
 TYPE_DIRS = {
     "Catalog": "Catalogs", "Document": "Documents", "DocumentJournal": "DocumentJournals",
     "Sequence": "Sequences", "Constant": "Constants", "Report": "Reports",
@@ -1068,7 +1068,7 @@ TYPE_DIRS = {
 
 
 def sort_rights_canonical(object_name, rights):
-    """Порядок прав объекта: известные — по таблице, незнакомые — следом, в порядке ввода."""
+    """Order of object rights: known ones - by the table, unknown ones - after them, in input order."""
     parts = object_name.split('.')
     order = NESTED_RIGHT_ORDER.get(parts[-2]) if len(parts) >= 3 else RIGHT_ORDER.get(parts[0])
     if not order:
@@ -1086,8 +1086,8 @@ def sort_rights_canonical(object_name, rights):
     return sorted_rights
 
 
-# У стандартных реквизитов и стандартных табличных частей uuid в выгрузке нет: они системные.
-# Отсутствие uuid для них — норма, а не потерянный объект.
+# Standard attributes and standard tabular sections have no uuid in the dump: they are system ones.
+# The absence of a uuid for them is normal, not a lost object.
 def is_standard_kind(object_name):
     parts = object_name.split('.')
     if len(parts) < 3:
@@ -1095,11 +1095,11 @@ def is_standard_kind(object_name):
     return parts[-2].startswith("Standard")
 
 
-# uuid объекта прав: у верхнего уровня — из файла объекта, у вложенного — спуском по дереву.
-# Искать регуляркой по всему файлу нельзя: реквизит шапки и реквизит табличной части часто
-# называются одинаково, и поиск нашёл бы первый попавшийся. Дочерние подсистемы лежат
-# отдельными файлами, поэтому для них спуск идёт по каталогам.
-# У стандартных реквизитов uuid в выгрузке нет вовсе — для них возвращаем None молча.
+# uuid of the rights object: for the top level - from the object file, for a nested one - by descending the tree.
+# Searching the whole file with a regex is not allowed: a header attribute and a tabular section attribute are often
+# named the same, and the search would find the first one it meets. Child subsystems are stored
+# in separate files, so for them the descent goes through directories.
+# Standard attributes have no uuid in the dump at all - return None silently for them.
 def get_rights_object_uuid(object_name, config_root):
     parts = object_name.split('.')
     if parts[0] == 'Configuration':
@@ -1112,7 +1112,7 @@ def get_rights_object_uuid(object_name, config_root):
     directory = TYPE_DIRS.get(parts[0])
     if not directory or len(parts) < 2:
         return None
-    # Подсистемы вложены каталогами: Subsystems/Родитель/Subsystems/Ребёнок.xml
+    # Subsystems are nested by directories: Subsystems/Родитель/Subsystems/Ребёнок.xml
     owner_path = os.path.join(config_root, directory, parts[1] + '.xml')
     i = 2
     while len(parts) > i + 1 and parts[i] == 'Subsystem':
@@ -1128,7 +1128,7 @@ def get_rights_object_uuid(object_name, config_root):
     node = tree.getroot()[0] if len(tree.getroot()) else None
     if node is None:
         return None
-    # Оставшиеся пары «вид, имя» ищем строго внутри текущего узла.
+    # The remaining "kind, name" pairs are looked up strictly inside the current node.
     while i + 1 < len(parts):
         kind, name = parts[i], parts[i + 1]
         child = None
@@ -1145,7 +1145,7 @@ def get_rights_object_uuid(object_name, config_root):
 
 
 def sort_objects_by_uuid(objects, config_root):
-    """Порядок узлов: по uuid объекта; неразрешённые — в конец, в порядке ввода."""
+    """Node order: by object uuid; unresolved ones - at the end, in input order."""
     known, unknown = [], []
     for o in objects:
         uuid_value = get_rights_object_uuid(o['Name'], config_root)
@@ -1161,8 +1161,8 @@ def sort_objects_by_uuid(objects, config_root):
     return [o for _, o in known] + unknown
 
 
-# Отказ копится, а не печатается сразу: роль пишется целиком, поэтому единственный
-# безопасный момент отказа — до первой записи, и показать надо все причины сразу.
+# Errors accumulate rather than print immediately: the role is written as a whole, so the only
+# safe moment to refuse is before the first write, and all reasons must be shown at once.
 VALIDATION_ERRORS = []
 
 
@@ -1171,8 +1171,8 @@ def add_validation_error(message):
 
 
 def validate_object_name(object_name):
-    """Тип по белому списку (всегда, включая вложенные пути) и вид вложенности.
-    Запрещённый и незнакомый тип — разные диагнозы."""
+    """Type by the white list (always, including nested paths) and the nested kind.
+    A forbidden and an unknown type are different diagnoses."""
     object_type = get_object_type(object_name)
     if object_type not in KNOWN_RIGHTS:
         if object_type in NO_RIGHTS_TYPES:
@@ -1215,8 +1215,8 @@ def resolve_preset(object_type, preset_name):
 def validate_right_name(object_name, right_name):
     object_type = get_object_type(object_name)
 
-    # Тип уже проверен validate_object_name — здесь только права, иначе про один
-    # запрещённый тип напечатается столько строк, сколько у него перечислено прав.
+    # The type was already checked by validate_object_name - here only rights, otherwise a single
+    # forbidden type would print as many lines as it has rights listed.
     if object_type not in KNOWN_RIGHTS:
         return False
 
@@ -1240,9 +1240,9 @@ def validate_right_name(object_name, right_name):
     return True
 
 
-# "@путь" в значении условия — текст берётся из файла: условия RLS типовых занимают десятки
-# строк с кавычками, и внутри JSON-строки это источник ошибок экранирования. Относительный
-# путь ищется рядом с JSON-описанием роли, затем в текущем каталоге.
+# "@path" in a condition value - the text is taken from a file: typical RLS conditions take tens of
+# lines with quotes, and inside a JSON string that is a source of escaping errors. A relative
+# path is looked up next to the role JSON definition, then in the current directory.
 def resolve_text_from_file(val, base_dir):
     if not val.startswith("@"):
         return val
@@ -1267,8 +1267,8 @@ TEXT_BASE_DIR = os.getcwd()
 
 MD_NS = 'http://v8.1c.ru/8.3/MDClasses'
 
-# Метаданные сервиса читаются один раз на имя: раскрытие и проверка заимствования
-# спрашивают один и тот же файл.
+# Service metadata are read once per name: expansion and adoption check
+# ask for the same file.
 SERVICE_META_CACHE = {}
 
 
@@ -1287,13 +1287,13 @@ def get_service_meta(object_type, service_name, config_root):
             node = root.find(f"{{{MD_NS}}}{object_type}")
             if node is not None:
                 result['found'] = True
-                # ObjectBelonging=Adopted — сервис заимствован в расширение.
+                # ObjectBelonging=Adopted - the service is borrowed into the extension.
                 ob = node.find(f"{{{MD_NS}}}Properties/{{{MD_NS}}}ObjectBelonging")
                 if ob is not None and (ob.text or '') == 'Adopted':
                     result['adopted'] = True
 
-                # Спуск по видам: у HTTP-сервиса лист лежит на два уровня ниже
-                # (URLTemplate → Method), у остальных — на один.
+                # Descend by kinds: in an HTTP service the leaf lies two levels down
+                # (URLTemplate -> Method), in the others - one.
                 level = [(node, f"{object_type}.{service_name}")]
                 for kind in spec['kinds']:
                     nxt = []
@@ -1306,8 +1306,8 @@ def get_service_meta(object_type, service_name, config_root):
                     level = nxt
                 result['leaves'] = [n for _, n in level]
         except Exception:
-            # Битый XML — не наша забота: раскрывать нечего, дальше отработает отказ
-            # «метаданные не найдены» с тем же путём в подсказке.
+            # Broken XML is not our concern: there is nothing to expand, then the refusal
+            # "metadata not found" will work with the same path in the hint.
             pass
 
     SERVICE_META_CACHE[key] = result
@@ -1315,7 +1315,7 @@ def get_service_meta(object_type, service_name, config_root):
 
 
 def get_service_leaf_hint(object_type, service_name):
-    """Подсказка формата: единственное, что отличается у трёх видов сервисов, — путь до листа."""
+    """Format hint: the only thing that differs among the three service kinds is the path to the leaf."""
     if object_type == 'HTTPService':
         return f"{object_type}.{service_name}.URLTemplate.<Шаблон>.Method.<Метод>: Use"
     if object_type == 'WebService':
@@ -1323,9 +1323,9 @@ def get_service_leaf_hint(object_type, service_name):
     return f"{object_type}.{service_name}.IntegrationServiceChannel.<Канал>: Use"
 
 
-# Роль расширения, включённая в <DefaultRoles>, прав на заимствованные объекты давать не
-# может — платформа отвечает «Назначение прав доступа на заимствованные объекты основными
-# ролями в расширениях недопустимо». Считаем один раз: имя роли за прогон не меняется.
+# An extension role included in <DefaultRoles> cannot grant rights on borrowed objects -
+# the platform answers «Назначение прав доступа на заимствованные объекты основными
+# ролями в расширениях недопустимо». Count once: the role name does not change during a run.
 IS_DEFAULT_ROLE = None
 
 
@@ -1339,19 +1339,19 @@ def test_default_role(config_root, name):
     if os.path.isfile(cfg_path):
         with open(cfg_path, 'r', encoding='utf-8-sig') as f:
             text = f.read()
-        # Только расширение: у обычной конфигурации DefaultRoles значит другое и запрета нет.
+        # Extension only: for a regular configuration DefaultRoles means something else and there is no ban.
         if '<ConfigurationExtensionPurpose>' in text:
             m = re.search(r'<DefaultRoles>(.*?)</DefaultRoles>', text, re.S)
-            # Сравнение С УЧЁТОМ регистра, иначе «расш1_роль1» сошёл бы за основную роль
-            # «Расш1_Роль1».
+            # Comparison is CASE-SENSITIVE, otherwise "расш1_роль1" would pass as the main role
+            # "Расш1_Роль1".
             if m and re.search(re.escape(f"Role.{name}") + r'\s*<', m.group(1)):
                 IS_DEFAULT_ROLE = True
     return IS_DEFAULT_ROLE
 
 
 def expand_service_entry(parsed, config_root, name):
-    """Возвращает список записей на замену исходной: сервисный корень раскрывается в листья,
-    всё остальное проходит как есть."""
+    """Returns a list of entries to replace the original: the service root is expanded into leaves,
+    everything else passes as is."""
     obj_name = parsed['Name']
     object_type = get_object_type(obj_name)
     if object_type not in SERVICE_LEAVES:
@@ -1370,7 +1370,7 @@ def expand_service_entry(parsed, config_root, name):
             "основными ролями расширения платформа запрещает. Заведите отдельную роль и не включайте её в основные.")
         return []
 
-    # Полный путь пользователь задал сам — раскрывать нечего.
+    # The user specified the full path - there is nothing to expand.
     if len(parts) > 2:
         return [parsed]
 
@@ -1401,8 +1401,8 @@ def parse_object_entry(entry):
             return None
         obj_name = translate_object_name(entry[:colon_idx].strip())
         rights_str = entry[colon_idx + 1:].strip()
-        # Объект с непроходным именем дальше не разбираем: пресет для несуществующего типа
-        # добавил бы к отказу ещё и бессмысленное предупреждение.
+        # Do not parse further an object with an invalid name: a preset for a non-existent type
+        # would add a meaningless warning to the refusal.
         if not validate_object_name(obj_name):
             return None
         object_type = get_object_type(obj_name)
@@ -1481,16 +1481,16 @@ def parse_object_entry(entry):
 
 
 def get_new_object_position(cfg_dir):
-    """Куда навык ставит новую запись в <ChildObjects> — настройка newObjectPosition.
+    """Where the skill places a new entry in <ChildObjects> - the newObjectPosition setting.
 
-    databases[].newObjectPosition базы, чей configSrc охватывает каталог родительского XML,
-    иначе корневое поле, иначе end. Значения: end — после последнего объекта того же вида
-    (так дописывает Конфигуратор); byName — по имени среди объектов того же вида.
-    Файл ищем от рабочего каталога вверх, каталог конфигурации — запасной путь: так же
-    его ищут support-guard и группа db-*, а скрипт навыка зовут по абсолютному пути, и cwd
-    остаётся рабочим каталогом проекта.
-    configSrc считается от каталога .v8-project.json, как задокументировано в
-    docs/v8-project-guide.md. Реестр семьи: tests/skills/check-inline-drift.mjs.
+    databases[].newObjectPosition of the database whose configSrc covers the parent XML directory,
+    otherwise the root field, otherwise end. Values: end - after the last object of the same kind
+    (that is how the Configurator appends); byName - by name among objects of the same kind.
+    We search the file from the working directory upward, the configuration directory - as a fallback: the same way
+    support-guard and the db-* group search it, and the skill script is called by an absolute path, and cwd
+    remains the project working directory.
+    configSrc is counted from the .v8-project.json directory, as documented in
+    docs/v8-project-guide.md. Family registry: tests/skills/check-inline-drift.mjs.
     """
     try:
         pj = _sg_find_v8project(os.getcwd()) or _sg_find_v8project(os.path.abspath(cfg_dir or "."))
@@ -1513,28 +1513,28 @@ def get_new_object_position(cfg_dir):
 
 
 def is_order_sensitive_type(type_name):
-    """Виды, у которых порядок в дереве несёт смысл: автоматически их не упорядочиваем.
+    """Kinds whose order in the tree carries meaning: we do not sort them automatically.
 
-    CommonAttribute — исключение самого стандарта (#std467): у общих реквизитов-разделителей
-    порядок в дереве задаёт порядок установки параметров сеанса. Subsystem и CommandGroup:
-    пока они не перечислены в <SubsystemsOrder> / <GroupsOrder> файла Ext/CommandInterface.xml,
-    порядок дерева задаёт порядок в интерфейсе, а платформа эти списки сама не заводит
-    (в выгрузке ACC вне GroupsOrder 15 живых групп из 39). Language исключён из осторожности,
-    без замера: языков обычно один-два, и в типовых их порядок не алфавитный.
-    Явно названный вид сортируется в любом случае.
-    Реестр семьи: tests/skills/check-inline-drift.mjs.
+    CommonAttribute is an exception from the standard itself (#std467): for common divider attributes
+    the order in the tree sets the order of session parameter assignment. Subsystem and CommandGroup:
+    until they are listed in <SubsystemsOrder> / <GroupsOrder> of the Ext/CommandInterface.xml file,
+    the tree order sets the interface order, and the platform does not create these lists itself
+    (in the ACC dump, outside GroupsOrder there are 15 live groups out of 39). Language is excluded out of caution,
+    without measurement: there are usually one or two languages, and in typical configurations their order is not alphabetical.
+    An explicitly named kind is sorted in any case.
+    Family registry: tests/skills/check-inline-drift.mjs.
     """
     return type_name in ("CommonAttribute", "Subsystem", "CommandGroup", "Language")
 
 
 def compare_metadata_names(a, b):
-    """Порядок имён объектов метаданных, как в дереве Конфигуратора.
+    """Order of metadata object names, as in the Configurator tree.
 
-    Ключ — пары «ранг+символ»: регистр не учитывается, подчёркивание раньше цифр, цифры раньше
-    букв, буквы по кодам (латиница раньше кириллицы), ё на месте е. Культурные таблицы не
-    используются — они разные на разных ОС и в разных рантаймах, а так оба порта сравнивают
-    одинаково везде. Равные ключи разводит ordinal-сравнение исходных строк.
-    Возвращает -1 | 0 | 1. Реестр семьи: tests/skills/check-inline-drift.mjs.
+    The key is "rank+char" pairs: case is ignored, underscore before digits, digits before
+    letters, letters by code (Latin before Cyrillic), ё in place of е. Cultural tables are not
+    used - they differ across OSes and runtimes, while this way both ports compare
+    identically everywhere. Equal keys are separated by ordinal comparison of the source strings.
+    Returns -1 | 0 | 1. Family registry: tests/skills/check-inline-drift.mjs.
     """
     keys = []
     for name in (a, b):
@@ -1556,10 +1556,10 @@ def compare_metadata_names(a, b):
     return 0
 
 
-# Канонический порядок видов в <ChildObjects> — эталон в docs/1c-configuration-spec.md,
-# таблица «Порядок типов в ChildObjects». Нужен, чтобы новая группа вида вставала на своё
-# место: иначе платформа переставит её при первой же выгрузке и даст диф на ровном месте.
-# Реестр карт: tests/skills/check-type-maps.mjs.
+# Canonical kind order in <ChildObjects> - the reference is docs/1c-configuration-spec.md,
+# table "Order of types in ChildObjects". Needed so a new kind group takes its
+# place: otherwise the platform will reorder it on the first dump and produce a diff out of nowhere.
+# Map registry: tests/skills/check-type-maps.mjs.
 CHILD_OBJECT_TYPES = [
     'Language', 'Subsystem', 'StyleItem', 'Style',
     'CommonPicture', 'SessionParameter', 'Role', 'CommonTemplate',
@@ -1577,11 +1577,11 @@ CHILD_OBJECT_TYPES = [
 
 
 def register_in_childobjects(parent_xml_path, parent_tag, child_tag, child_name):
-    """Регистрация объекта в <ChildObjects> родительского XML.
+    """Register an object in <ChildObjects> of the parent XML.
 
-    Общая реализация: эталон — meta-compile, копии — role-compile, xdto-compile.
-    Реестр семьи: tests/skills/check-inline-drift.mjs.
-    Возвращает исход: added | already | no-childobj | no-config.
+    Common implementation: the reference is meta-compile, copies - role-compile, xdto-compile.
+    Family registry: tests/skills/check-inline-drift.mjs.
+    Returns the outcome: added | already | no-childobj | no-config.
     """
     if not os.path.isfile(parent_xml_path):
         return 'no-config'
@@ -1630,8 +1630,8 @@ def register_in_childobjects(parent_xml_path, parent_tag, child_tag, child_name)
         write_utf8_bom(parent_xml_path, new_content)
         return 'added'
 
-    # byName: перед первым объектом того же вида, чьё имя больше нового.
-    # Виды с осмысленным порядком в дереве пропускаем — см. is_order_sensitive_type.
+    # byName: before the first object of the same kind whose name is greater than the new one.
+    # Skip kinds with meaningful tree order - see is_order_sensitive_type.
     if (not is_order_sensitive_type(child_tag)
             and get_new_object_position(os.path.dirname(os.path.abspath(parent_xml_path))) == 'byName'):
         line_rx = re.compile(rf'(?m)^([ \t]*)<{child_tag}>([^<]*)</{child_tag}>')
@@ -1652,9 +1652,9 @@ def register_in_childobjects(parent_xml_path, parent_tag, child_tag, child_name)
                        + f'{eol}\t\t\t{entry}'
                        + config_content[insert_at:])
     else:
-        # Группы своего вида ещё нет: ставим её в канонический порядок видов — перед первой
-        # группой вида старше по CHILD_OBJECT_TYPES. Дописать в конец блока нельзя: платформа
-        # переставит группу при первой же выгрузке и даст диф на ровном месте.
+        # There is no group of this kind yet: put it into the canonical kind order - before the first
+        # group of a kind older in CHILD_OBJECT_TYPES. Appending to the end of the block is not allowed: the platform
+        # would reorder the group on the first dump and produce a diff out of nowhere.
         anchor = None
         if child_tag in CHILD_OBJECT_TYPES:
             own_idx = CHILD_OBJECT_TYPES.index(child_tag)
@@ -1669,8 +1669,8 @@ def register_in_childobjects(parent_xml_path, parent_tag, child_tag, child_name)
                            + f'{anchor.group(1)}{entry}{eol}'
                            + config_content[anchor.start():])
         else:
-            # Видов старше в файле нет — новая строка перед </ChildObjects>,
-            # отступ закрывающего тега переиспользуется.
+            # There are no older kinds in the file - the new line goes before </ChildObjects>,
+            # the closing tag indent is reused.
             close_at = config_content.rfind('</ChildObjects>', block.start(), block.end())
             new_content = (config_content[:close_at]
                            + f'\t{entry}{eol}\t\t'
@@ -1712,7 +1712,7 @@ def main():
     format_version = detect_format_version(out_dir_resolved)
 
     # --- 2. Parse all object entries ---
-    # Относительный путь @файла ищем сначала рядом с JSON-описанием роли.
+    # Look up the relative path of the @file first next to the role JSON definition.
     global TEXT_BASE_DIR
     TEXT_BASE_DIR = os.path.dirname(os.path.abspath(args.JsonPath))
 
@@ -1724,17 +1724,17 @@ def main():
             if not parsed:
                 continue
             for p in expand_service_entry(parsed, out_dir_resolved, role_name):
-                # Дубль возникает штатно: раскрытый лист совпал с явно заданным. Права на
-                # листе одни и те же (Use), так что вторая запись — шум, а не конфликт.
+                # A duplicate arises normally: an expanded leaf coincided with an explicit one. Rights on
+                # the leaf are the same (Use), so the second entry is noise, not a conflict.
                 if p['Name'] in seen_object_names:
                     print(f"WARNING: {p['Name']}: объект указан дважды, вторая запись пропущена", file=sys.stderr)
                     continue
                 seen_object_names.add(p['Name'])
                 parsed_objects.append(p)
 
-    # Отказ ДО записи: роль пишется тремя файлами (метаданные, права, регистрация в
-    # Configuration.xml), и частично записанная роль хуже отсутствующей. Печатаем все
-    # причины разом — иначе пользователь чинит их по одной.
+    # Refuse BEFORE writing: the role is written with three files (metadata, rights, registration in
+    # Configuration.xml), and a partially written role is worse than a missing one. Print all
+    # reasons at once - otherwise the user fixes them one by one.
     if VALIDATION_ERRORS:
         print(f"[role-compile] Роль не создана: {len(VALIDATION_ERRORS)} ошибок в описании прав.", file=sys.stderr)
         for e in VALIDATION_ERRORS:
@@ -1747,10 +1747,10 @@ def main():
     # --- 4. Emit metadata XML (Roles/Name.xml) ---
     lines = []
     lines.append('<?xml version="1.0" encoding="UTF-8"?>')
-    # Объявления пространств имён — одной переменной и одной строкой, как пишет платформа.
+    # Namespace declarations - in one variable and one line, as the platform writes them.
     xmlns_decl = ('xmlns="http://v8.1c.ru/8.3/MDClasses" xmlns:app="http://v8.1c.ru/8.2/managed-application/core" xmlns:cfg="http://v8.1c.ru/8.1/data/enterprise/current-config" xmlns:cmi="http://v8.1c.ru/8.2/managed-application/cmi" xmlns:ent="http://v8.1c.ru/8.1/data/enterprise" xmlns:lf="http://v8.1c.ru/8.2/managed-application/logform" xmlns:style="http://v8.1c.ru/8.1/data/ui/style" xmlns:sys="http://v8.1c.ru/8.1/data/ui/fonts/system" xmlns:v8="http://v8.1c.ru/8.1/data/core" xmlns:v8ui="http://v8.1c.ru/8.1/data/ui" xmlns:web="http://v8.1c.ru/8.1/data/ui/colors/web" xmlns:win="http://v8.1c.ru/8.1/data/ui/colors/windows" xmlns:xen="http://v8.1c.ru/8.3/xcf/enums" xmlns:xpr="http://v8.1c.ru/8.3/xcf/predef" xmlns:xr="http://v8.1c.ru/8.3/xcf/readable" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"')
-    # 2.21 (8.5) добавила в шапку пространство палитры. Вставляем НА МЕСТО (после lf, перед
-    # style): платформа держит объявления по алфавиту. В Rights.xml палитра НЕ идёт.
+    # 2.21 (8.5) added the palette namespace to the header. Insert it IN PLACE (after lf, before
+    # style): the platform keeps declarations alphabetically. Palette does NOT go into Rights.xml.
     if format_rank(format_version) >= 221:
         xmlns_decl = xmlns_decl.replace(
             ' xmlns:style=',
@@ -1791,28 +1791,28 @@ def main():
     lines.append(f'\t<setForAttributesByDefault>{sfab}</setForAttributesByDefault>')
     lines.append(f'\t<independentRightsOfChildObjects>{irco}</independentRightsOfChildObjects>')
 
-    # Замыкание зависимостей: платформа при загрузке всё равно доведёт набор до полного,
-    # и файл разошёлся бы с базой. Дописанное показываем — права выдаются не молча.
+    # Dependency closure: on load the platform will bring the set to the full one anyway,
+    # and the file would diverge from the infobase. We show what was added - rights are not granted silently.
     closure_notes = []
     for o in parsed_objects:
         o['Rights'], added = close_rights_dependencies(o['Name'], o['Rights'], format_rank(format_version))
         if added:
             closure_notes.append(f"     {o['Name']}: по зависимости добавлено — {', '.join(added)}")
 
-    # Порядок как у платформы: узлы по uuid объекта, права — по канону типа. Иначе первая же
-    # выгрузка из Конфигуратора переставит их и даст диф, которого никто не делал.
+    # Order as on the platform: nodes by object uuid, rights - by the type canon. Otherwise the first
+    # dump from the Configurator will reorder them and give a diff nobody made.
     parsed_objects = sort_objects_by_uuid(parsed_objects, out_dir_resolved)
     for o in parsed_objects:
         o['Rights'] = sort_rights_canonical(o['Name'], o['Rights'])
 
-    # Записи, равные умолчанию роли, платформа не хранит — отбрасываем их сами и говорим об этом.
+    # The platform does not store entries equal to the role default - we drop them ourselves and say so.
     dropped_by_default = []
     for obj in parsed_objects:
         default_value = get_default_right_value(obj['Name'], sfno, sfab)
         kept = []
         for right in obj['Rights']:
-            # Право с ограничением отличается от умолчания самим ограничением — его платформа хранит,
-            # и выбросить его значило бы молча потерять написанное условие.
+            # A right with a restriction differs from the default by the restriction itself - the platform stores it,
+            # and dropping it would silently lose the written condition.
             if right['Value'] == default_value and not right['Condition']:
                 dropped_by_default.append(f"{obj['Name']}.{right['Name']}")
                 continue

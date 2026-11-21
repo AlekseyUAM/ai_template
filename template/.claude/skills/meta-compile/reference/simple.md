@@ -2,11 +2,11 @@
 
 ## Enum (Перечисление)
 
-| Ключ | Умолчание | Значения |
+| Key | Default | Values |
 |------|-----------|----------|
-| `values` | `[]` | значения перечисления (массив имён или объектов) |
+| `values` | `[]` | enum values (array of names or objects) |
 
-Значение — строка `"ИмяЗначения"` или объект `{ name, synonym }`.
+A value is a string `"ИмяЗначения"` or an object `{ name, synonym }`.
 
 ```json
 { "type": "Enum", "name": "Статусы", "values": ["Новый", "ВРаботе", "Закрыт"] }
@@ -14,13 +14,13 @@
 
 ## Constant (Константа)
 
-| Ключ | Умолчание | Значения |
+| Key | Default | Values |
 |------|-----------|----------|
-| `valueType` | `String` | тип значения (shorthand типа) |
+| `valueType` | `String` | value type (type shorthand) |
 | `dataLockControlMode` | `Managed` | `Automatic` / `Managed` |
 
-`valueType` принимает shorthand: `"String(100)"`, `"Number(15,2)"`, `"Boolean"`, `"CatalogRef.Валюты"`,
-составной через `+`.
+`valueType` accepts shorthand: `"String(100)"`, `"Number(15,2)"`, `"Boolean"`, `"CatalogRef.Валюты"`,
+composite via `+`.
 
 ```json
 { "type": "Constant", "name": "ОсновнаяВалюта", "valueType": "CatalogRef.Валюты" }
@@ -28,10 +28,10 @@
 
 ## DefinedType (Определяемый тип)
 
-| Ключ | Умолчание | Значения |
+| Key | Default | Values |
 |------|-----------|----------|
-| `valueTypes` | `[]` | состав типа (массив shorthand-типов) |
-| `valueType` | — | то же одной строкой (`"A + B"`) или строкой одного типа |
+| `valueTypes` | `[]` | type composition (array of shorthand types) |
+| `valueType` | - | same as one string (`"A + B"`) or a single-type string |
 
 ```json
 { "type": "DefinedType", "name": "ДенежныеСредства",

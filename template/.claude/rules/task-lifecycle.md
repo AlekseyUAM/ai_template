@@ -1,18 +1,18 @@
 ---
 name: task-lifecycle
-description: Работа с задачей идёт по task.json с обновлением статусов и артефактов.
+description: Work on a task follows task.json with status and artifact updates.
 ---
 
-# Жизненный цикл задачи
+# Task lifecycle
 
-При работе над задачей из `tasks/task#<id>`:
-1. Читай `task.json` и уважай `enabled` каждого этапа.
-2. Исполнитель этапа (в single-agent — ты сам) пишет артефакт этапа (`ANALYZE.md`,
+When working on a task from `tasks/task#<id>`:
+1. Read `task.json` and respect `enabled` of each stage.
+2. The stage executor (in single-agent mode - you yourself) writes the stage artifact (`ANALYZE.md`,
    `ARCHITECT.md`, `TESTS.md`, `DEVELOP.md`, `TESTING.md`, `REVIEW.md`, `DOCS.md`)
-   в каталог задачи.
-3. Статус этапа и список изменённых файлов обновляются через
-   `.claude/tools/task_status.py` (см. правило `single-agent-workflow`). `done` —
-   только из `running`; для повторного запуска — `restart`.
+   to the task directory.
+3. The stage status and the list of changed files are updated via
+   `.claude/tools/task_status.py` (see the `single-agent-workflow` rule). `done` -
+   only from `running`; for a repeated run - `restart`.
 
-Отдельную ветку git под задачу не создавай — в проекте одновременно выполняется
-только одна задача, работа идёт в текущей ветке проекта.
+Do not create a separate git branch for the task - only one task is executed in the project
+at a time, work goes in the project's current branch.

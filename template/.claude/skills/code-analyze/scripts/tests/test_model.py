@@ -1,4 +1,4 @@
-# Тесты структурной модели модуля BSL.
+# Tests for the BSL module structural model.
 import os
 import sys
 
@@ -67,7 +67,7 @@ def test_loop_body_and_nesting():
     assert len(m.loops) == 1
     loop = m.loops[0]
     assert loop.loop_var == "Сч"
-    assert m.is_in_loop(3) is True       # строка «А = Сч;»
+    assert m.is_in_loop(3) is True       # line "А = Сч;"
     assert m.is_in_loop(5) is False      # КонецПроцедуры
 
 
@@ -79,7 +79,7 @@ def test_for_each_loop_var():
 
 def test_var_declarations():
     text = "Перem = 0;\nПерем ПеременнаяА, _Плохая Экспорт;\n"
-    # намеренно: первая строка — НЕ объявление (ловушка на «Перem» латиницей)
+    # deliberately: the first line is NOT a declaration (trap on "Перem" with Latin letters)
     m = bsl_model.Module(text)
     names = [n for n, _l, _e in m.var_declarations]
     assert "ПеременнаяА" in names

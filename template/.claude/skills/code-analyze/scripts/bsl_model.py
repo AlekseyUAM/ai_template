@@ -1,20 +1,20 @@
-# bsl_model.py — лёгкий парсер структуры модуля BSL (1С).
+# bsl_model.py - lightweight parser of BSL (1C) module structure.
 #
-# Не полный AST выражений: даёт токены, вырезание строк/комментариев и
-# СТРУКТУРУ модуля — методы (Процедура/Функция), вложенные блоки
-# (Если/Цикл/Попытка), объявления Перем и параметры методов. Этого достаточно
-# для структурных правил вида «вызов внутри цикла», «переменная объявлена через
-# Перем», «параметр метода». Где правилу нужен разбор выражений — оно работает
-# по тексту (ctx.code) консервативно либо выносится в ручной чеклист.
+# Not a full expression AST: it provides tokens, string/comment stripping and
+# the module STRUCTURE - methods (Процедура/Функция), nested blocks
+# (Если/Цикл/Попытка), Перем declarations and method parameters. That is enough
+# for structural rules like "call inside a loop", "variable declared via
+# Перем", "method parameter". Where a rule needs expression parsing, it works
+# on the text (ctx.code) conservatively or is moved to the manual checklist.
 #
-# Ключевые слова распознаются в обоих регистрах и на русском/английском
-# (платформа поддерживает англоязычные ключевые слова).
+# Keywords are recognized in both cases and in Russian/English
+# (the platform supports English keywords).
 
 import re
 
-# ── Токенизация ──────────────────────────────────────────────
+# ── Tokenization ─────────────────────────────────────────────
 
-# Идентификатор BSL: буква/подчёркивание, затем буквы/цифры/подчёркивания.
+# BSL identifier: letter/underscore, then letters/digits/underscores.
 _IDENT_RE = re.compile(r"[A-Za-zА-Яа-яЁё_][A-Za-zА-Яа-яЁё0-9_]*", re.UNICODE)
 _NUMBER_RE = re.compile(r"\d+(?:\.\d+)?", re.UNICODE)
 
@@ -25,7 +25,7 @@ class Token:
     def __init__(self, kind, value, line, col, pos):
         self.kind = kind      # 'ident' | 'number' | 'string' | 'comment'
                               # | 'directive' | 'preproc' | 'op'
-        self.value = value    # для string — внутреннее содержимое без кавычек
+        self.value = value    # for string - inner content without quotes
         self.line = line
         self.col = col
         self.pos = pos
@@ -36,9 +36,9 @@ class Token:
 
 
 def tokenize(text):
-    """Разбивает текст модуля на токены. Строки и комментарии сохраняются как
-    отдельные токены (их содержимое правила обычно игнорируют). Переводы строк
-    не порождают токенов — номер строки хранится в каждом токене."""
+    """Split module text into tokens. Strings and comments are kept as
+    separate tokens (rules usually ignore their content). Line breaks
+    do not produce tokens - the line number is stored in each token."""
     tokens = []
     i, n = 0, len(text)
     line, line_start = 1, 0
@@ -56,7 +56,7 @@ def tokenize(text):
         if ch in " \t\r":
             i += 1
             continue
-        # Строковый литерал "..."
+        # String literal "..."
         if ch == '"':
             start, start_line, start_col = i, line, col(i)
             i += 1
@@ -77,7 +77,7 @@ def tokenize(text):
                 i += 1
             tokens.append(Token("string", "".join(buf), start_line, start_col, start))
             continue
-        # Комментарий //…
+        # Comment //...
         if ch == "/" and i + 1 < n and text[i + 1] == "/":
             start, start_col = i, col(i)
             j = i + 2
@@ -86,7 +86,7 @@ def tokenize(text):
             tokens.append(Token("comment", text[i:j], line, start_col, start))
             i = j
             continue
-        # Директива компиляции &НаКлиенте / &AtClient
+        # Compilation directive &НаКлиенте / &AtClient
         if ch == "&":
             start, start_col = i, col(i)
             m = _IDENT_RE.match(text, i + 1)
@@ -95,7 +95,7 @@ def tokenize(text):
             tokens.append(Token("directive", val, line, start_col, start))
             i = end
             continue
-        # Инструкция препроцессора #Если / #Область …
+        # Preprocessor instruction #Если / #Область ...
         if ch == "#":
             start, start_col = i, col(i)
             j = i + 1
@@ -104,19 +104,19 @@ def tokenize(text):
             tokens.append(Token("preproc", text[i:j], line, start_col, start))
             i = j
             continue
-        # Идентификатор
+        # Identifier
         m = _IDENT_RE.match(text, i)
         if m:
             tokens.append(Token("ident", m.group(), line, col(i), i))
             i = m.end()
             continue
-        # Число
+        # Number
         m = _NUMBER_RE.match(text, i)
         if m:
             tokens.append(Token("number", m.group(), line, col(i), i))
             i = m.end()
             continue
-        # Оператор/пунктуация — одиночный символ
+        # Operator/punctuation - single character
         tokens.append(Token("op", ch, line, col(i), i))
         i += 1
 
@@ -124,10 +124,10 @@ def tokenize(text):
 
 
 def sanitize(text):
-    """Содержимое строк "…" и комментариев //… заменяется пробелами той же
-    длины (переводы строк сохранены). Длина и номера строк сохраняются —
-    позиции совпадают с исходным текстом. Для текстовых правил, которые не
-    должны срабатывать на слова внутри строк и комментариев."""
+    """Content of strings "..." and comments //... is replaced with spaces of the same
+    length (line breaks preserved). Length and line numbers are preserved -
+    positions match the source text. For text rules that must not
+    fire on words inside strings and comments."""
     out = []
     i, n = 0, len(text)
     while i < n:
@@ -158,9 +158,9 @@ def sanitize(text):
     return "".join(out)
 
 
-# ── Ключевые слова структуры ─────────────────────────────────
+# ── Structure keywords ───────────────────────────────────────
 
-# Открыватели блоков → тип блока.
+# Block openers -> block type.
 _OPENERS = {
     "ПРОЦЕДУРА": "procedure", "PROCEDURE": "procedure",
     "ФУНКЦИЯ": "function", "FUNCTION": "function",
@@ -169,7 +169,7 @@ _OPENERS = {
     "ДЛЯ": "loop", "FOR": "loop",
     "ПОПЫТКА": "try", "TRY": "try",
 }
-# Закрыватели блоков → тип блока, который они закрывают.
+# Block closers -> type of the block they close.
 _CLOSERS = {
     "КОНЕЦПРОЦЕДУРЫ": "procedure", "ENDPROCEDURE": "procedure",
     "КОНЕЦФУНКЦИИ": "function", "ENDFUNCTION": "function",
@@ -177,7 +177,7 @@ _CLOSERS = {
     "КОНЕЦЦИКЛА": "loop", "ENDDO": "loop",
     "КОНЕЦПОПЫТКИ": "try", "ENDTRY": "try",
 }
-# Маркеры начала тела блока (конец заголовка).
+# Markers of the block body start (end of the header).
 _BODY_MARKERS = {"ТОГДА", "THEN", "ЦИКЛ", "DO"}
 _VAR_KW = {"ПЕРЕМ", "VAR"}
 _EXPORT_KW = {"ЭКСПОРТ", "EXPORT"}
@@ -185,9 +185,9 @@ _BYVAL_KW = {"ЗНАЧ", "VAL"}
 
 
 class Block:
-    """Узел структуры модуля. Для методов заполнены name/is_export/directive/
-    params. header_end_line — строка маркера начала тела (Тогда/Цикл) или строка
-    заголовка метода."""
+    """Module structure node. For methods name/is_export/directive/
+    params are filled. header_end_line - the body start marker line (Тогда/Цикл) or the
+    method header line."""
 
     __slots__ = ("kind", "name", "is_export", "directive", "params",
                  "loop_var", "header_line", "header_end_line", "end_line",
@@ -197,9 +197,9 @@ class Block:
         self.kind = kind            # 'procedure'|'function'|'if'|'loop'|'try'
         self.name = None
         self.is_export = False
-        self.directive = None       # 'НаКлиенте' и т.п. (без &)
-        self.params = []            # имена параметров (для методов)
-        self.loop_var = None        # переменная цикла (для Для … = …)
+        self.directive = None       # 'НаКлиенте' etc. (without &)
+        self.params = []            # parameter names (for methods)
+        self.loop_var = None        # loop variable (for Для ... = ...)
         self.header_line = header_line
         self.header_end_line = header_line
         self.end_line = header_line
@@ -212,7 +212,7 @@ class Block:
 
     @property
     def body_start_line(self):
-        """Первая строка тела блока (после заголовка)."""
+        """First line of the block body (after the header)."""
         return self.header_end_line
 
     def __repr__(self):
@@ -221,15 +221,15 @@ class Block:
 
 
 def _parse_method_header(tokens, start_idx, block):
-    """Заполняет name/params/is_export у метода по токенам, начиная с индекса
-    открывателя (ПРОЦЕДУРА/ФУНКЦИЯ). Возвращает индекс токена после ')'."""
+    """Fill name/params/is_export of a method from tokens starting at the
+    opener index (ПРОЦЕДУРА/ФУНКЦИЯ). Returns the index of the token after ')'."""
     i = start_idx + 1
     n = len(tokens)
-    # Имя метода
+    # Method name
     if i < n and tokens[i].kind == "ident":
         block.name = tokens[i].value
         i += 1
-    # Открывающая скобка
+    # Opening parenthesis
     if i < n and tokens[i].kind == "op" and tokens[i].value == "(":
         i += 1
         depth = 1
@@ -245,12 +245,12 @@ def _parse_method_header(tokens, start_idx, block):
             elif depth == 1 and t.kind == "ident":
                 up = t.value.upper()
                 if up in _BYVAL_KW:
-                    pass  # пропускаем Знач, имя — следующий идентификатор
+                    pass  # skip Знач, the name is the next identifier
                 elif expect_name:
                     block.params.append(t.value)
                     expect_name = False
             i += 1
-    # Экспорт после скобок (до конца строки заголовка)
+    # Export after parentheses (until the end of the header line)
     header_line = tokens[start_idx].line
     j = i
     while j < n and tokens[j].line <= header_line + 3:
@@ -265,7 +265,7 @@ def _parse_method_header(tokens, start_idx, block):
 
 
 def _collect_vars(tokens):
-    """Собирает объявления Перем: список (имя, строка, is_export)."""
+    """Collect Перем declarations: list of (name, line, is_export)."""
     out = []
     n = len(tokens)
     i = 0
@@ -293,13 +293,13 @@ def _collect_vars(tokens):
 
 
 class Module:
-    """Структурная модель модуля BSL."""
+    """Structural model of a BSL module."""
 
     def __init__(self, text):
         self.text = text
         self._tokens = None
         self._sanitized = None
-        self._blocks = None       # дерево: список корневых блоков
+        self._blocks = None       # tree: list of root blocks
         self._all_blocks = None
         self._methods = None
         self._vars = None
@@ -318,12 +318,12 @@ class Module:
         return self._sanitized
 
     def _build(self):
-        """Строит дерево блоков однопроходным сканированием токенов кода."""
+        """Build the block tree with a single pass over code tokens."""
         tokens = self.tokens
         roots = []
         all_blocks = []
         stack = []
-        # Директива компиляции, встреченная перед ближайшим методом.
+        # Compilation directive found before the nearest method.
         pending_directive = None
         n = len(tokens)
         i = 0
@@ -354,7 +354,7 @@ class Module:
                     i = nxt
                     continue
                 if kind == "loop":
-                    # переменная цикла: Для <var> = …  (не Для Каждого)
+                    # loop variable: Для <var> = ...  (not Для Каждого)
                     if i + 1 < n and tokens[i + 1].kind == "ident":
                         if tokens[i + 1].value.upper() not in ("КАЖДОГО", "EACH"):
                             blk.loop_var = tokens[i + 1].value
@@ -371,7 +371,7 @@ class Module:
                 continue
             if up in _CLOSERS:
                 want = _CLOSERS[up]
-                # Снимаем со стека до блока ожидаемого типа включительно.
+                # Pop from the stack up to and including the expected block type.
                 while stack:
                     blk = stack.pop()
                     blk.end_line = t.line
@@ -381,7 +381,7 @@ class Module:
                 continue
             i += 1
 
-        # Незакрытые блоки (битый код) — закрываем по последней строке.
+        # Unclosed blocks (broken code) - close them at the last line.
         last_line = tokens[-1].line if tokens else 1
         for blk in stack:
             blk.end_line = last_line
@@ -415,20 +415,20 @@ class Module:
 
     @property
     def var_declarations(self):
-        """Список (имя, строка, is_export) всех объявлений Перем."""
+        """List of (name, line, is_export) of all Перем declarations."""
         if self._vars is None:
             self._vars = _collect_vars(self.tokens)
         return self._vars
 
     def method_at(self, line):
-        """Метод, в теле которого находится строка (или None)."""
+        """Method whose body contains the line (or None)."""
         for m in self.methods:
             if m.header_line <= line <= m.end_line:
                 return m
         return None
 
     def is_in_loop(self, line):
-        """True, если строка находится в теле хотя бы одного цикла."""
+        """True if the line is inside the body of at least one loop."""
         for lp in self.loops:
             if lp.body_start_line <= line <= lp.end_line:
                 return True

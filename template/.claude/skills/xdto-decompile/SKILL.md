@@ -1,59 +1,59 @@
 ---
 name: xdto-decompile
-description: Выгрузка пакета XDTO 1С в XML-схему (XSD). Используй когда нужно получить схему существующего пакета — чтобы переработать её целиком, отдать контрагенту или перенести пакет в другую конфигурацию
-argument-hint: <PackagePath> [-OutFile <файл.xsd>]
+description: Dump a 1C XDTO package to an XML schema (XSD). Use when you need to get the schema of an existing package - to rework it entirely, hand it to a counterparty or move the package to another configuration
+argument-hint: <PackagePath> [-OutFile <file.xsd>]
 allowed-tools:
   - Bash
   - Read
   - Glob
 ---
 
-# /xdto-decompile — Выгрузка пакета XDTO в XML-схему
+# /xdto-decompile - Dump an XDTO package to an XML schema
 
-Превращает пакет XDTO в обычную XML-схему — читаемую и редактируемую.
-Заменяет чтение `Ext/Package.bin` напрямую.
+Turns an XDTO package into a regular XML schema - readable and editable.
+Replaces reading `Ext/Package.bin` directly.
 
-## Параметры
+## Parameters
 
-| Параметр | Обязательный | Описание |
+| Parameter | Required | Description |
 |----------|--------------|----------|
-| `PackagePath` | да | Каталог пакета, путь к `Ext/Package.bin` или к `<Имя>.xml` объекта метаданных. Псевдоним — `-Path` |
-| `OutFile` | нет | Записать схему в файл (UTF-8 с BOM). Без него — вывод в stdout |
+| `PackagePath` | yes | Package directory, path to `Ext/Package.bin` or to the metadata object's `<Имя>.xml`. Alias - `-Path` |
+| `OutFile` | no | Write the schema to a file (UTF-8 with BOM). Without it - output to stdout |
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/xdto-decompile.py" -PackagePath "<путь>"
 ```
 
-Примеры:
+Examples:
 ```bash
 ... -PackagePath src/XDTOPackages/ОбменСБанком
 ... -PackagePath src/XDTOPackages/ОбменСБанком -OutFile bank.xsd
 ```
 
-## Переработка схемы целиком
+## Reworking the schema entirely
 
-`/xdto-decompile` → правка XSD → `/xdto-compile -Force` возвращает пакет без потерь,
-включая имя, синоним и комментарий объекта метаданных — они выгружаются
-в `xs:annotation/xs:appinfo`.
+`/xdto-decompile` → edit XSD → `/xdto-compile -Force` returns the package without loss,
+including the metadata object name, synonym and comment - they are dumped
+to `xs:annotation/xs:appinfo`.
 
-Этот же путь даёт версионную копию пакета: смени в схеме `targetNamespace` и собери
-её с `-Name` нового пакета — имя и синоним задаются флагами `/xdto-compile`, внутри
-схемы их править не нужно. Меняя пространство имён, поправь **и объявление `xmlns`
-с тем же URI**: внутренние ссылки пользуются им как префиксом. Заменять все вхождения
-строки нельзя — пострадает импорт пространства имён, для которого старый URI является
-префиксом (`urn:пример:обмен` и `urn:пример:обмен:legacy`).
+This path also gives a versioned copy of the package: change `targetNamespace` in the schema and build
+it with the `-Name` of the new package - the name and synonym are set by `/xdto-compile` flags, there is no
+need to edit them inside the schema. When changing the namespace, also fix **the `xmlns` declaration
+with the same URI**: internal references use it as a prefix. Replacing all occurrences of the
+string is not allowed - the import of a namespace for which the old URI is a prefix would suffer
+(`urn:пример:обмен` and `urn:пример:обмен:legacy`).
 
-Этот путь нужен, когда схему меняют широко или сначала надо разобраться, как она
-устроена. Чтобы поправить одно свойство, схему целиком читать не нужно — `/xdto-edit`.
-Если нужна не схема, а сводка «что присвоить и что обязательно», — `/xdto-info`.
+This path is needed when the schema is changed broadly or you first need to understand how it is
+structured. To fix one property, there is no need to read the whole schema - use `/xdto-edit`.
+If you need not the schema but a summary of "what to assign and what is required", use `/xdto-info`.
 
-В схеме могут встретиться атрибуты с префиксом `xdto:` — так записано то, что
-XML Schema выразить не может (например `nillable` у атрибута). Схема при этом остаётся
-валидной, валидаторы такие атрибуты игнорируют. Трогать их обычно не нужно; смысл
-каждого описан в `xsd-reference.md` навыка `/xdto-compile`.
+In the schema you may encounter attributes with the `xdto:` prefix - this is how things
+XML Schema cannot express are written (for example `nillable` on an attribute). The schema remains
+valid; validators ignore such attributes. Usually they should not be touched; the meaning of
+each is described in `xsd-reference.md` of the `/xdto-compile` skill.
 
-## Передача схемы наружу
+## Passing the schema outside
 
-Полученную XSD можно отдавать контрагенту как есть — она валидна и не теряет
-данных пакета. Штатная команда «Экспорт XML-схемы» в Конфигураторе для этого
-хуже: она теряет `nillable` у свойств-атрибутов.
+The resulting XSD can be given to the counterparty as is - it is valid and does not lose
+package data. The built-in "Export XML schema" command in Configurator is worse
+for this: it loses `nillable` on attribute properties.

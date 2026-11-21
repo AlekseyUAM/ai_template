@@ -32,7 +32,7 @@ def test_checklists_are_not_agents():
     for name in CHECKLISTS:
         text = (CONTENT / "checklists" / f"{name}.md").read_text(encoding="utf-8")
         assert not text.startswith("---\n"), f"{name}: frontmatter субагента"
-        assert "Чеклист этапа" in text, f"{name}: нет шапки чеклиста"
+        assert "Stage checklist" in text, f"{name}: нет шапки чеклиста"
         assert len(text) > 400, "чеклист слишком короткий"
 
 

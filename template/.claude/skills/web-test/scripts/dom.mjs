@@ -2,7 +2,7 @@
 // Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 /**
  * Facade: re-exports DOM selector & semantic mapping script generators.
- * Внутренности живут в dom/*. Публичный набор имён неизменен.
+ * Internals live in dom/*. The public set of names is unchanged.
  *
  * All functions return JavaScript strings for page.evaluate().
  * They produce clean semantic structures — no DOM IDs or CSS classes leak out.

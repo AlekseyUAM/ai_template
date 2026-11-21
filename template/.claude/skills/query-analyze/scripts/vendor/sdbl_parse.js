@@ -37,7 +37,7 @@ var KEYWORDS = /* @__PURE__ */ new Set([
   "\u041C\u0410\u041A\u0421\u0418\u041C\u0423\u041C",
   "\u041C\u0418\u041D\u0418\u041C\u0423\u041C",
   "\u0421\u0420\u0415\u0414\u041D\u0415\u0415",
-  // 6.2.B: ГДЕ / соединения / группировка.
+  // 6.2.B: WHERE / joins / grouping.
   "\u0413\u0414\u0415",
   "\u0418",
   "\u0412",
@@ -53,7 +53,7 @@ var KEYWORDS = /* @__PURE__ */ new Set([
   "\u0413\u0420\u0423\u041F\u041F\u0418\u0420\u0423\u042E\u0429\u0418\u041C",
   "\u041D\u0410\u0411\u041E\u0420\u0410\u041C",
   "\u0418\u041C\u0415\u042E\u0429\u0418\u0415",
-  // 6.2.C: временные таблицы, порядок, итоги, индекс, построитель.
+  // 6.2.C: temporary tables, ordering, totals, index, builder.
   "\u041F\u041E\u041C\u0415\u0421\u0422\u0418\u0422\u042C",
   "\u0414\u041E\u0411\u0410\u0412\u0418\u0422\u042C",
   "\u0423\u041D\u0418\u0427\u0422\u041E\u0416\u0418\u0422\u042C",
@@ -68,7 +68,7 @@ var KEYWORDS = /* @__PURE__ */ new Set([
   "\u0423\u041D\u0418\u041A\u0410\u041B\u042C\u041D\u041E",
   "\u0414\u041B\u042F",
   "\u0418\u0417\u041C\u0415\u041D\u0415\u041D\u0418\u042F",
-  // 6.2.D: объединения.
+  // 6.2.D: unions.
   "\u041E\u0411\u042A\u0415\u0414\u0418\u041D\u0418\u0422\u042C",
   "\u0412\u0421\u0415"
 ]);
@@ -2222,7 +2222,7 @@ var ArithReprinter = class {
   val(t) {
     return t ? t.text ?? t.value : "";
   }
-  /** Полный разбор: выражение должно занять все токены. */
+  /** Full parse: the expression must consume all tokens. */
   parseAll() {
     const node = this.parseExpr();
     if (this.i !== this.sig.length) throw new ArithError("\u0445\u0432\u043E\u0441\u0442");
@@ -2263,7 +2263,7 @@ var ArithReprinter = class {
     }
     return this.parsePrimary();
   }
-  /** Операнд унарного оператора в скобках, если это бинарная арифметика. */
+  /** Operand of a unary operator in parentheses, if this is binary arithmetic. */
   atomText(n) {
     return n.bareCast || n.prec < 3 ? `(${n.text})` : n.text;
   }
@@ -2288,7 +2288,7 @@ var ArithReprinter = class {
     if (t.type === "punct" && ARITH_STOP_PUNCT.has(t.value)) throw new ArithError("\u0441\u0442\u043E\u043F-\u043F\u0443\u043D\u043A\u0442");
     throw new ArithError("\u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u043E");
   }
-  /** Точечный путь `Имя(.Имя)*` или вызов `Имя(arg, …)`. */
+  /** Dotted path `Имя(.Имя)*` or a call `Имя(arg, …)`. */
   parseNameOrCall() {
     const headTok = this.next();
     const head = this.val(headTok);
@@ -2311,7 +2311,7 @@ var ArithReprinter = class {
     }
     return { text: path, prec: 3, bareCast: false };
   }
-  /** Список аргументов вызова: каждый — арифметика, опц. с `КАК <тип>` (ВЫРАЗИТЬ). */
+  /** Call argument list: each one is arithmetic, optionally with `КАК <type>` (ВЫРАЗИТЬ). */
   parseArgList() {
     const args = [];
     if (this.peek() && this.peek().type === "punct" && this.peek().value === ")") return args;
@@ -2326,7 +2326,7 @@ var ArithReprinter = class {
     }
     return args;
   }
-  /** Аргумент вызова: арифм. выражение и опц. `КАК <тип-выражение>` (приведение). */
+  /** Call argument: an arithmetic expression and optionally `КАК <type-expression>` (cast). */
   parseArg() {
     const expr = this.parseExpr();
     const t = this.peek();
@@ -2338,11 +2338,11 @@ var ArithReprinter = class {
     return expr.text;
   }
   /**
-   * Решает обрамление дочернего операнда скобками. `parentPrec` — приоритет
-   * родительского оператора; `side` — слева/справа от него.
-   *   - Голый ВЫРАЗИТЬ-операнд арифметики всегда в скобках (особое правило 1С).
-   *   - prec < parentPrec → нужны скобки (защита приоритета).
-   *   - prec == parentPrec и правый операнд под `- /` (non-assoc) → скобки.
+   * Decides whether a child operand is wrapped in parentheses. `parentPrec` is the precedence
+   * of the parent operator; `side` is left/right of it.
+   *   - A bare ВЫРАЗИТЬ operand of arithmetic is always in parentheses (special 1C rule).
+   *   - prec < parentPrec → parentheses are needed (precedence protection).
+   *   - prec == parentPrec and the right operand is under `- /` (non-assoc) → parentheses.
    */
   wrap(n, parentPrec, side, op2) {
     if (n.bareCast) return `(${n.text})`;
@@ -2685,10 +2685,10 @@ var Parser = class {
   raw;
   i = 0;
   /**
-   * Сплющивать ли многострочные листья в одну строку. Включается только для слота
-   * `select` (поля выборки и значения ВЫБОР), где конструктор печатает листовое
-   * подвыражение на одной строке. В слотах ГДЕ/ИМЕЮЩИЕ/ПО исторически сохраняется
-   * многострочная структура исходника дословно (нулевая регрессия принятых файлов).
+   * Whether to flatten multiline leaves into one line. Enabled only for the slot
+   * `select` (selection fields and ВЫБОР values), where the constructor prints a leaf
+   * subexpression on one line. In ГДЕ/ИМЕЮЩИЕ/ПО slots the
+   * multiline structure of the source is kept verbatim historically (zero regression of accepted files).
    */
   flattenLeaves;
   constructor(raw, flattenLeaves = false) {
@@ -2702,15 +2702,15 @@ var Parser = class {
   atEof() {
     return this.peek().type === "eof";
   }
-  /** Срез исходной строки [from, to) с обрезкой хвостовых пробелов. */
+  /** Slice of the source line [from, to) with trailing spaces trimmed. */
   slice(from, to) {
     return this.raw.slice(from, to).replace(/\s+$/u, "");
   }
   /**
-   * Текст листа [from, to): сплющивает многострочный лист в одну строку (конструктор
-   * печатает листовые подвыражения на одной строке), затем нормализует регистр и
-   * пробелы. Однострочные листья проходят только нормализацию (поведение принятых
-   * запросов не меняется).
+   * Leaf text [from, to): flattens a multiline leaf into one line (the constructor
+   * prints leaf subexpressions on one line), then normalizes case and
+   * spaces. Single-line leaves only go through normalization (behavior of accepted
+   * queries does not change).
    */
   leafText(from, to) {
     const raw = this.raw.slice(from, to).replace(/\s+$/u, "");
@@ -2722,9 +2722,9 @@ var Parser = class {
     return node;
   }
   /**
-   * Дословный хвост: всё от КОНЦА последнего потреблённого токена до конца строки
-   * (включая исходные пробелы/переносы перед хвостом). '' если хвоста нет.
-   * Сохраняет, например, ошибочно захваченные парсером SDBL `\n\nУПОРЯДОЧИТЬ ПО …`.
+   * Verbatim tail: everything from the END of the last consumed token to the end of the line
+   * (including the original spaces/newlines before the tail). '' if there is no tail.
+   * Keeps, for example, `\n\nУПОРЯДОЧИТЬ ПО …` mistakenly captured by the SDBL parser.
    */
   tail() {
     if (this.peek().type === "eof") return "";
@@ -2732,7 +2732,7 @@ var Parser = class {
     const from = prev ? prev.pos + prev.text.length : this.peek().pos;
     return this.raw.slice(from);
   }
-  // ИЛИ — низший приоритет
+  // ИЛИ - lowest precedence
   parseOr() {
     const first = this.parseAnd();
     const operands = [];
@@ -2762,10 +2762,10 @@ var Parser = class {
     return this.parsePrimary();
   }
   /**
-   * Является ли текущее `НЕ` структурным булевым отрицанием. Структурно — если
-   * за ним ВЫБОР или открывающая скобка, чьё содержимое содержит верхнеуровневый
-   * И/ИЛИ (булева группа). Иначе `НЕ` — унарный оператор внутри листа (`НЕ a.Флаг`,
-   * `НЕ a.X В (…)`), и обрабатывается листом дословно.
+   * Whether the current `НЕ` is a structural boolean negation. Structurally - if
+   * it is followed by ВЫБОР or an opening parenthesis whose content contains a top-level
+   * И/ИЛИ (boolean group). Otherwise `НЕ` is a unary operator inside a leaf (`НЕ a.Флаг`,
+   * `НЕ a.X В (…)`), and is handled by the leaf verbatim.
    */
   notIsStructural() {
     const next = this.toks[this.i + 1];
@@ -2776,7 +2776,7 @@ var Parser = class {
     }
     return false;
   }
-  /** Содержит ли скобочная группа, открытая на индексе `open`, верхнеур. И/ИЛИ. */
+  /** Whether the parenthesis group opened at index `open` contains top-level И/ИЛИ. */
   parenHasTopBoolean(open) {
     let depth = 0;
     for (let k = open; k < this.toks.length; k++) {
@@ -2796,10 +2796,10 @@ var Parser = class {
     return false;
   }
   /**
-   * Скобка на индексе `open` обёртывает РОВНО один ВЫБОР…КОНЕЦ (первый значимый
-   * токен внутри — ВЫБОР), а ПОСЛЕ её закрывающей `)` сразу идёт оператор сравнения
-   * (`= <> < > <= >=`), арифметики (`+ - * / %`) или МЕЖДУ/ПОДОБНО. Используется для
-   * снятия избыточной обёртки CASE-операнда (`(ВЫБОР…КОНЕЦ) <> X` → `ВЫБОР…КОНЕЦ <> X`).
+   * The parenthesis at index `open` wraps EXACTLY one ВЫБОР…КОНЕЦ (the first significant
+   * token inside is ВЫБОР), and AFTER its closing `)` comes a comparison operator
+   * (`= <> < > <= >=`), arithmetic (`+ - * / %`) or МЕЖДУ/ПОДОБНО. Used for
+   * removing the redundant wrapper of a CASE operand (`(ВЫБОР…КОНЕЦ) <> X` → `ВЫБОР…КОНЕЦ <> X`).
    */
   parenWrapsCaseThenCompare(open) {
     const inner = this.toks[open + 1];
@@ -2831,14 +2831,14 @@ var Parser = class {
     return false;
   }
   /**
-   * Ведущий CASE-операнд сравнения, чей RHS — тоже ВЫБОР (`ВЫБОР…КОНЕЦ <op> ВЫБОР…КОНЕЦ`).
-   * `tryParseSimpleCaseTrailing` такую форму бракует (вложенный ВЫБОР в хвосте), а
-   * структурный CASE-узел не несёт многоклаузный CASE-RHS. Поэтому, как и зеркальный
-   * случай `<лист> <op> ВЫБОР…КОНЕЦ` (который parseLeaf поглощает листом через caseDepth),
-   * поглощаем весь сравнительный цепочечный CASE одним ЛИСТОМ — рендер раскладывает обе
-   * (и более) ветви ВЫБОР через reindentLeafCase, печатая `КОНЕЦ <op> ВЫБОР` единой
-   * строкой (сверено живым оракулом: `КОНЕЦ <> ВЫБОР` на одной строке, RHS-CASE
-   * многострочно). Возвращает листовой текст ИЛИ undefined (позицию НЕ двигает).
+   * Leading CASE operand of a comparison whose RHS is also ВЫБОР (`ВЫБОР…КОНЕЦ <op> ВЫБОР…КОНЕЦ`).
+   * `tryParseSimpleCaseTrailing` rejects such a form (nested ВЫБОР in the tail), and
+   * the structural CASE node does not carry a multi-clause CASE-RHS. Therefore, like the mirror
+   * case `<leaf> <op> ВЫБОР…КОНЕЦ` (which parseLeaf absorbs as a leaf via caseDepth),
+   * we absorb the whole comparative chained CASE as one LEAF - the renderer lays out both
+   * (and more) ВЫБОР branches via reindentLeafCase, printing `КОНЕЦ <op> ВЫБОР` as a single
+   * line (verified with a live oracle: `КОНЕЦ <> ВЫБОР` on one line, RHS-CASE
+   * multiline). Returns the leaf text OR undefined (does NOT move the position).
    */
   tryParseCaseCompareCaseLeaf() {
     const save = this.i;
@@ -2919,12 +2919,12 @@ var Parser = class {
     return this.parseLeaf();
   }
   /**
-   * Скобка структурна, если содержит верхнеур. И/ИЛИ или ВЫБОР. Скобка с
-   * верхнеуровневой ЗАПЯТОЙ — это КОРТЕЖ-операнд (`(ВЫБОР…КОНЕЦ, ВЫБОР…КОНЕЦ) В (…)`,
-   * `(Поле1, Поле2) В (…)`), а НЕ группа вокруг одного выражения: его нельзя
-   * раскрывать в под-дерево group/case (иначе renderBool обернёт лишь ПЕРВЫЙ элемент,
-   * добавив избыточные `(`…`)` и лишний уровень отступа). Кортеж поглощается листом
-   * дословно (фаза 6.16, корпус ЗастрахованныеЛицаСЭДО/ОтчётКомиссионера).
+   * A parenthesis is structural if it contains top-level И/ИЛИ or ВЫБОР. A parenthesis with
+   * a top-level COMMA is a TUPLE operand (`(ВЫБОР…КОНЕЦ, ВЫБОР…КОНЕЦ) В (…)`,
+   * `(Поле1, Поле2) В (…)`), and NOT a group around one expression: it must not be
+   * expanded into a group/case subtree (otherwise renderBool wraps only the FIRST element,
+   * adding redundant `(`…`)` and an extra indentation level). The tuple is absorbed by the leaf
+   * verbatim (phase 6.16, corpus ЗастрахованныеЛицаСЭДО/ОтчётКомиссионера).
    */
   parenIsStructuralGroup(open) {
     let depth = 0;
@@ -2947,9 +2947,9 @@ var Parser = class {
     return hasStructural;
   }
   /**
-   * Лист: диапазон токенов до следующего верхнеуровневого булева И/ИЛИ, конца,
-   * закрывающей скобки или КОГДА/ТОГДА/ИНАЧЕ/КОНЕЦ. Поглощает внутренние скобки,
-   * вызовы, МЕЖДУ a И b (И после МЕЖДУ — не разделитель), ЕСТЬ [НЕ] NULL, ПОДОБНО.
+   * Leaf: a token range up to the next top-level boolean И/ИЛИ, end,
+   * closing parenthesis or КОГДА/ТОГДА/ИНАЧЕ/КОНЕЦ. Absorbs inner parentheses,
+   * calls, МЕЖДУ a И b (И after МЕЖДУ is not a separator), ЕСТЬ [НЕ] NULL, ПОДОБНО.
    */
   parseLeaf() {
     const startTok = this.peek();
@@ -3041,11 +3041,11 @@ var Parser = class {
     return { kind: "case", clauses, elseExpr: elseNode, selector };
   }
   /**
-   * Хвост после `КОНЕЦ` value-слотового ВЫБОР: `<op> value` (`КОНЕЦ <> &П`).
-   * Возвращает нормализованный текст хвоста (`<> &П`) ТОЛЬКО для узкой формы —
-   * ровно один верхнеуровневый оператор сравнения, листовой операнд, без вложенного
-   * ВЫБОР и без верхнеуровневых И/ИЛИ. Иначе undefined (позицию НЕ двигает).
-   * Эта форма позволяет CASE идти структурным путём с приклеенным хвостом к КОНЕЦ.
+   * Tail after `КОНЕЦ` of a value-slot ВЫБОР: `<op> value` (`КОНЕЦ <> &П`).
+   * Returns the normalized tail text (`<> &П`) ONLY for the narrow form -
+   * exactly one top-level comparison operator, a leaf operand, without a nested
+   * ВЫБОР and without top-level И/ИЛИ. Otherwise undefined (does NOT move the position).
+   * This form lets CASE go the structural way with a tail glued to КОНЕЦ.
    */
   tryParseSimpleCaseTrailing(allowLeadingArith = false, boolBoundary = false) {
     const save = this.i;
@@ -3110,8 +3110,8 @@ var Parser = class {
     return normalizeLeafWhitespace(this.leafText(from, to));
   }
   /**
-   * Селектор формы `ВЫБОР <выражение> КОГДА …` — листовое выражение между ВЫБОР и
-   * первым верхнеуровневым КОГДА. Печатается инлайн; нормализуется как лист.
+   * Form selector `ВЫБОР <expression> КОГДА …` - the leaf expression between ВЫБОР and
+   * the first top-level КОГДА. Printed inline; normalized as a leaf.
    */
   parseCaseSelector() {
     const startTok = this.peek();
@@ -3140,8 +3140,8 @@ var Parser = class {
     return this.leafText(from, to);
   }
   /**
-   * Value-слот (после ТОГДА/ИНАЧЕ или поле выборки): либо вложенный ВЫБОР, либо
-   * дословный текст до следующего КОГДА/ИНАЧЕ/КОНЕЦ верхнего уровня.
+   * Value slot (after ТОГДА/ИНАЧЕ or a selection field): either a nested ВЫБОР, or
+   * verbatim text up to the next top-level КОГДА/ИНАЧЕ/КОНЕЦ.
    */
   parseValue() {
     if (!this.atEof() && isCase(this.peek())) {
@@ -3945,10 +3945,10 @@ function renderVirtualParams(fullName, positions, condition, bodyTabs) {
   const base = bodyTabs + 2;
   const pad = "	".repeat(base);
   const condFirstLine0 = condition.includes("\n") ? condition.slice(0, condition.indexOf("\n")) : condition;
-  const isCaseValueParam = !hasBool && !/\bВЫБРАТЬ\b/iu.test(condition) && // Параметр-CASE: первая строка либо ОКАНЧИВАЕТСЯ словом ВЫБОР (`Имя = ВЫБОР`,
-  // корпус СдельныйНаряд), либо НАЧИНАЕТСЯ им (селекторный `ВЫБОР &Парам …` или
-  // условный `ВЫБОР КОГДА …`, корпус ПланФактныйАнализПродаж). В обоих случаях это
-  // лист-CASE на отступе строки параметра (КОНЕЦ на base), не подзапрос.
+  const isCaseValueParam = !hasBool && !/\bВЫБРАТЬ\b/iu.test(condition) && // CASE parameter: the first line either ENDS with the word ВЫБОР (`Имя = ВЫБОР`,
+  // corpus СдельныйНаряд), or STARTS with it (selector `ВЫБОР &Парам …` or
+  // conditional `ВЫБОР КОГДА …`, corpus ПланФактныйАнализПродаж). In both cases this is
+  // a CASE leaf at the parameter line's indent (КОНЕЦ at base), not a subquery.
   (/(^|[^\p{L}\p{N}_])ВЫБОР\s*$/u.test(condFirstLine0) || /^ВЫБОР(?:[^\p{L}\p{N}_]|$)/u.test(condition.trim()));
   const inlineCond = !hasBool && !isCaseValueParam && /(?:^|[^\p{L}\p{N}_])В(?:\s+ИЕРАРХИИ)?\s*\(\s*ВЫБРАТЬ(?![\p{L}\p{N}_])/iu.test(condition) ? reflowInlineMembershipSubquery(condition.trim(), base, base + 1, "") : null;
   if (inlineCond) {
@@ -4699,8 +4699,8 @@ function builderBlock(keyword, fields) {
   if (fields.length === 0) return [];
   const render = (f) => {
     const isMultilineCase = f.condition && f.ref.includes("\n") && /(^|[^\p{L}\p{N}_])ВЫБОР(?:[^\p{L}\p{N}_]|$)/u.test(f.ref);
-    const isMultilineBool = !isMultilineCase && f.condition && f.ref.includes("\n") && hasTopLevelBooleanOp(f.ref) && !/(?:^|[^\p{L}\p{N}_])(?:ВЫБОР|ВЫБРАТЬ)(?:[^\p{L}\p{N}_]|$)/u.test(f.ref) && // Группа `НЕ(…)` несёт лишний +1 (НЕ — отдельный уровень), который reindentLeafBool
-    // НЕ учитывает; такие условия не реиндентируем (оставляем геометрию как есть).
+    const isMultilineBool = !isMultilineCase && f.condition && f.ref.includes("\n") && hasTopLevelBooleanOp(f.ref) && !/(?:^|[^\p{L}\p{N}_])(?:ВЫБОР|ВЫБРАТЬ)(?:[^\p{L}\p{N}_]|$)/u.test(f.ref) && // A `НЕ(…)` group carries an extra +1 (НЕ is a separate level), which reindentLeafBool
+    // does NOT account for; we do not reindent such conditions (leave the geometry as is).
     !/(?:^|[^\p{L}\p{N}_])НЕ\s*\(/u.test(f.ref);
     const ref = isMultilineCase ? reindentLeafCase(normalizeLeafCase(f.ref), 2) : isMultilineBool ? reindentLeafBool(normalizeLeafCase(f.ref), 2) : normalizeLeafCase(f.ref);
     return f.condition ? `(${ref})` + (f.child ? ".*" : "") + (f.alias ? " \u041A\u0410\u041A " + f.alias : "") : ref + (f.child ? ".*" : "") + (f.alias ? " \u041A\u0410\u041A " + f.alias : "");
@@ -4764,12 +4764,12 @@ function buildQueryBlock(model, fieldLines, aliases) {
   const builderOrder = builderBlock("\u0423\u041F\u041E\u0420\u042F\u0414\u041E\u0427\u0418\u0422\u042C \u041F\u041E", model.builder?.order ?? []);
   const builderTotals = builderBlock("\u0418\u0422\u041E\u0413\u0418 \u041F\u041E", model.builder?.totals ?? []);
   return [
-    // Вид 3 (beforeSelect) — строки перед `ВЫБРАТЬ`, нулевой отступ.
+    // Kind 3 (beforeSelect) - lines before `ВЫБРАТЬ`, zero indent.
     ...model.comments?.beforeSelect ?? [],
     "\u0412\u042B\u0411\u0420\u0410\u0422\u042C" + selectionModifiers(model.selection),
     ...lines,
-    // {ВЫБРАТЬ …} конструктор печатает ПОСЛЕ ПОМЕСТИТЬ/ДОБАВИТЬ (если те есть),
-    // перед ИЗ; без ПОМЕСТИТЬ placeLines пуст и блок идёт сразу за списком полей.
+    // {ВЫБРАТЬ …} the constructor prints AFTER ПОМЕСТИТЬ/ДОБАВИТЬ (if any),
+    // before ИЗ; without ПОМЕСТИТЬ placeLines is empty and the block follows the field list immediately.
     ...placeLines,
     ...builderSelect,
     ...fromLines,
@@ -4780,9 +4780,9 @@ function buildQueryBlock(model, fieldLines, aliases) {
     ...builderOrder,
     ...builderTotals,
     ...lockLines,
-    // Блок характеристик СКД `{ХАРАКТЕРИСТИКИ … }` — почти дословно (байт-в-байт),
-    // последним; единственная нормализация — склейка арифметики/конкатенации поля
-    // подзапроса, разнесённой разработчиком по строкам (оракул печатает её одной строкой).
+    // DCS characteristics block `{ХАРАКТЕРИСТИКИ … }` - almost verbatim (byte-for-byte),
+    // last; the only normalization - joining arithmetic/concatenation of the field
+    // subquery that the developer split across lines (the oracle prints it as one line).
     ...model.characteristics ? reflowCharacteristics(model.characteristics).split("\n") : []
   ].join("\n");
 }
@@ -4926,8 +4926,8 @@ function buildFieldLines(model, aliases) {
   };
   const tsLine = (tsf) => renderTabProjection(model, tsf, aliases, {
     suppress: false,
-    // Дедупликация псевдонима всей ТЧ (как раньше): явный — как есть, авто — через
-    // наименьший целый суффикс при коллизии.
+    // Deduplication of the whole tabular section alias (as before): explicit - as is, auto - via
+    // the smallest integer suffix on collision.
     outerAlias: (name, explicit) => explicit !== void 0 ? (usedAliases.add(explicit), explicit) : uniqueAlias(name)
   });
   const headLines = model.fields.map(fieldLine);
@@ -5014,9 +5014,9 @@ function renderOrder(order, model, includeAuto = true) {
       const metadataTable = resolvable && !paramTable && ownerTable.fullName.includes(".");
       const tempTable = resolvable && !paramTable && !ownerTable.fullName.includes(".");
       const hierKeep = (
-        // Резолвимый источник, адресованный псевдонимом выборки (не &параметр): KEEP.
-        resolvable && !paramTable && f.selectAlias !== void 0 || // Временная таблица (схемы нет): KEEP.
-        tempTable || // Квалифицированная ссылка на метаданные: KEEP лишь для иерарх./`…Ссылка`.
+        // Resolvable source addressed by a selection alias (not &parameter): KEEP.
+        resolvable && !paramTable && f.selectAlias !== void 0 || // Temporary table (no schema): KEEP.
+        tempTable || // Qualified metadata reference: KEEP only for hierarchical/`…Ссылка`.
         metadataTable && (ownerTable.hierarchical || lastSeg === "\u0421\u0441\u044B\u043B\u043A\u0430")
       );
       const hierSuffix = f.hierarchy && hierKeep ? " \u0418\u0415\u0420\u0410\u0420\u0425\u0418\u042F" : "";
@@ -5470,7 +5470,7 @@ function renderGrouping(grouping, aliases, model) {
     }
     const fields = model ? capGroupDuplicatesToSelect(fieldsRaw, explicitCountRaw, selectMult, aggregatedTexts, aliases) : fieldsRaw;
     const explicitCount = fields.length === fieldsRaw.length ? explicitCountRaw : explicitCountRaw - (fieldsRaw.length - fields.length) >= 0 ? (
-      // все урезанные были в явной части (cap трогает только явную)
+      // all trimmed ones were in the explicit part (cap touches only the explicit part)
       explicitCountRaw - (fieldsRaw.length - fields.length)
     ) : 0;
     const appended = model && fields.length > 0 ? appendMissingGroupRefs(model, fields, aliases) : [];
@@ -6120,7 +6120,7 @@ function wrapTabSectionAggregates(model, resolver) {
       tsFullName: `${aliasToFull.get(cur.target.prefix.split(".")[0].toUpperCase())}.${cur.target.tsName}`,
       fields: [],
       exprFields,
-      // Псевдоним проекции = псевдоним ПЕРВОГО исходного поля группы.
+      // Projection alias = alias of the FIRST source field of the group.
       alias: cur.f.alias ?? cur.target.tsName,
       selectOrder: groupOrder
     });
@@ -6242,14 +6242,14 @@ var STRUCTURAL = /* @__PURE__ */ new Set([
   "\u0418\u0417",
   "\u0413\u0414\u0415",
   "\u041F\u041E",
-  // Модификаторы выборки/агрегата внутри выражений (`КОЛИЧЕСТВО(РАЗЛИЧНЫЕ …)`).
+  // Selection/aggregate modifiers inside expressions (`КОЛИЧЕСТВО(РАЗЛИЧНЫЕ …)`).
   "\u0420\u0410\u0417\u041B\u0418\u0427\u041D\u042B\u0415",
   "\u0420\u0410\u0417\u0420\u0415\u0428\u0415\u041D\u041D\u042B\u0415",
   "\u041F\u0415\u0420\u0412\u042B\u0415",
   "\u0412\u0421\u0415",
   "\u041E\u0411\u042A\u0415\u0414\u0418\u041D\u0418\u0422\u042C",
-  // Структурные слова СЕКЦИЙ/СОЕДИНЕНИЙ встроенного подзапроса (тело разбирается
-  // как `ВЫБРАТЬ … ИЗ … СОЕДИНЕНИЕ … ГДЕ … СГРУППИРОВАТЬ … ПОМЕСТИТЬ`): они не поля.
+  // Structural words of SECTIONS/JOINS of an embedded subquery (the body is parsed
+  // as `ВЫБРАТЬ … ИЗ … СОЕДИНЕНИЕ … ГДЕ … СГРУППИРОВАТЬ … ПОМЕСТИТЬ`): they are not fields.
   "\u041B\u0415\u0412\u041E\u0415",
   "\u041F\u0420\u0410\u0412\u041E\u0415",
   "\u0412\u041D\u0423\u0422\u0420\u0415\u041D\u041D\u0415\u0415",
@@ -6264,7 +6264,7 @@ var STRUCTURAL = /* @__PURE__ */ new Set([
   "\u041F\u041E\u041C\u0415\u0421\u0422\u0418\u0422\u042C",
   "\u0414\u041B\u042F",
   "\u0418\u0417\u041C\u0415\u041D\u0415\u041D\u0418\u042F",
-  // Английские эквиваленты операторов/литералов (встречаются в нетиповых запросах).
+  // English equivalents of operators/literals (found in non-standard queries).
   "IS",
   "NULL",
   "AND",
@@ -6661,18 +6661,18 @@ var ResolveCtx = class _ResolveCtx {
   aliasToTable = /* @__PURE__ */ new Map();
   selectAlias = /* @__PURE__ */ new Map();
   /**
-   * true — ссылка `ref` ДОКАЗУЕМО резолвится в ссылочное поле (суффикс `.*`
-   * сохраняется). При любой неопределённости (нерезолвимый источник/поле) — false.
+   * true - the `ref` reference DEFINITELY resolves to a reference field (the `.*`
+   * suffix is kept). On any uncertainty (unresolvable source/field) - false.
    */
   /**
-   * Решение о суффиксе `.*` для простой ссылки построителя. Возвращает:
-   *  - 'reference'    — цепочка ДОКАЗУЕМО резолвится в ссылочное поле → сохранить;
-   *  - 'scalar'       — цепочка резолвится в НЕссылочное поле → снять;
-   *  - 'parameter'    — источник-параметр `&Имя` → снять (поле нерезолвимо в принципе);
-   *  - 'unknown'      — нерезолвимо по иным причинам (ВТ/представление/пробел в
-   *                     метаданных) → консервативно сохранить.
-   * Снимаем `.*` только при ДОКАЗАННОЙ нессылочности либо источнике-параметре —
-   * чтобы пробелы метаданных (нерезолвимые ВТ/регистры) не роняли корректные `.*`.
+   * Decision on the `.*` suffix for a simple builder reference. Returns:
+   *  - 'reference'    - the chain DEFINITELY resolves to a reference field → keep;
+   *  - 'scalar'       - the chain resolves to a NON-reference field → remove;
+   *  - 'parameter'    - the source is a parameter `&Имя` → remove (the field is unresolvable in principle);
+   *  - 'unknown'      - unresolvable for other reasons (temp table/view/space in
+   *                     metadata) → conservatively keep.
+   * We remove `.*` only for PROVEN non-reference or a parameter source -
+   * so that metadata gaps (unresolvable temp tables/registers) do not break correct `.*`.
    */
   classify(ref) {
     const segs = ref.split(".");
@@ -6705,7 +6705,7 @@ var ResolveCtx = class _ResolveCtx {
     const meta = this.metaFor(src.fullName);
     return meta ? this.walk(meta, [...sel.path.split("."), ...rest]) : "unknown";
   }
-  /** Резолв сегментов относительно выходных полей подзапроса. */
+  /** Resolution of segments relative to the subquery output fields. */
   fromSubquery(subModel, segs) {
     if (segs.length === 0) return "unknown";
     const ctx = new _ResolveCtx(subModel, this.resolver);
@@ -6713,7 +6713,7 @@ var ResolveCtx = class _ResolveCtx {
     if (!out || out.expression) return "unknown";
     return ctx.fromSelectField(out, segs.slice(1));
   }
-  /** Идёт по сегментам от таблицы через ссылочные поля до финального типа. */
+  /** Walks segments from the table through reference fields to the final type. */
   walk(meta, segs) {
     if (segs.length === 0) return hasReference(meta) ? "reference" : "scalar";
     let cur = meta;
@@ -6731,7 +6731,7 @@ var ResolveCtx = class _ResolveCtx {
     }
     return "unknown";
   }
-  /** Метаданные таблицы по fullName с учётом среза виртуальной таблицы регистра. */
+  /** Table metadata by fullName, accounting for the virtual table slice of a register. */
   metaFor(fullName) {
     const direct = this.resolver.tableByFullName(fullName);
     if (direct) return direct;
@@ -7390,8 +7390,8 @@ var Cursor = class {
     return this.tokens[Math.min(j, this.tokens.length - 1)];
   }
   /**
-   * Все токены среза (включая уже поглощённые). Используется для построения
-   * карты «поле → таблица-владелец» по квалифицированным вхождениям (фаза 6.15.4).
+   * All tokens of the slice (including already consumed ones). Used to build
+   * the "field → owner table" map by qualified occurrences (phase 6.15.4).
    */
   get allTokens() {
     return this.tokens;
@@ -7401,7 +7401,7 @@ var Cursor = class {
     if (this.idx < this.tokens.length - 1) this.idx++;
     return t;
   }
-  /** Проверяет, что следующий токен — keyword с данным значением, и поглощает его. */
+  /** Checks that the next token is a keyword with the given value and consumes it. */
   expectKeyword(value) {
     const t = this.peek();
     if (t.type !== "keyword" || t.value !== value) {
@@ -7409,7 +7409,7 @@ var Cursor = class {
     }
     return this.next();
   }
-  /** Поглощает keyword, если он есть; возвращает true при успехе. */
+  /** Consumes a keyword if present; returns true on success. */
   matchKeyword(value) {
     const t = this.peek();
     if (t.type === "keyword" && t.value === value) {
@@ -7441,22 +7441,22 @@ var Cursor = class {
     const t = this.peek(offset);
     return t.type === "keyword" && t.value === value;
   }
-  /** Проверяет, что дальше блок построителя `{<keyword>` (punct `{` + ключевое слово). */
+  /** Checks that a builder block `{<keyword>` follows (punct `{` + keyword). */
   isBuilderBlock(keyword) {
     return this.isPunct("{") && this.isKeyword(keyword, 1);
   }
   /**
-   * Дальше начинается РАСПОЗНАВАЕМЫЙ блок построителя (`{ГДЕ`/`{УПОРЯДОЧИТЬ`/
-   * `{ИТОГИ`/`{ВЫБРАТЬ`). Читалки условий (ПО/ГДЕ/ИМЕЮЩИЕ) останавливаются перед
-   * ним (фаза 6.15.7); прочие `{…}` (например `{ЛЕВОЕ СОЕДИНЕНИЕ …}`) пока
-   * заглатываются как раньше — их разбор не реализован.
+   * A RECOGNIZABLE builder block starts here (`{ГДЕ`/`{УПОРЯДОЧИТЬ`/
+   * `{ИТОГИ`/`{ВЫБРАТЬ`). Condition readers (ПО/ГДЕ/ИМЕЮЩИЕ) stop before
+   * it (phase 6.15.7); other `{…}` (e.g. `{ЛЕВОЕ СОЕДИНЕНИЕ …}`) are still
+   * swallowed as before - their parsing is not implemented.
    */
   isBuilderStart() {
     return this.isBuilderBlock("\u0413\u0414\u0415") || this.isBuilderBlock("\u0423\u041F\u041E\u0420\u042F\u0414\u041E\u0427\u0418\u0422\u042C") || this.isBuilderBlock("\u0418\u0422\u041E\u0413\u0418") || this.isBuilderBlock("\u0412\u042B\u0411\u0420\u0410\u0422\u042C");
   }
   /**
-   * Дальше начинается ОПЦИОНАЛЬНОЕ соединение построителя `{<вид> СОЕДИНЕНИЕ …}`
-   * (фаза 6.15.13): punct `{` + ключевое слово вида соединения
+   * An OPTIONAL builder join starts here `{<kind> СОЕДИНЕНИЕ …}`
+   * (phase 6.15.13): punct `{` + a join kind keyword
    * (ВНУТРЕННЕЕ/ЛЕВОЕ/ПРАВОЕ/ПОЛНОЕ).
    */
   isBuilderJoinStart() {
@@ -7467,11 +7467,11 @@ var Cursor = class {
   error(message, t = this.peek()) {
     return new Error(`\u041E\u0448\u0438\u0431\u043A\u0430 \u0440\u0430\u0437\u0431\u043E\u0440\u0430 ${t.line}:${t.col} \u2014 ${message} (\u043F\u043E\u043B\u0443\u0447\u0435\u043D\u043E \xAB${t.value || "<\u043A\u043E\u043D\u0435\u0446>"}\xBB)`);
   }
-  /** Снимок позиции для отката (спекулятивный разбор). */
+  /** Position snapshot for rollback (speculative parsing). */
   mark() {
     return this.idx;
   }
-  /** Откат позиции к снимку, снятому `mark()`. */
+  /** Rollback of the position to a snapshot taken by `mark()`. */
   reset(m) {
     this.idx = m;
   }
@@ -7844,7 +7844,7 @@ function parseSingleQuery(cur, inheritedSectionCtx, ctxOut) {
       groupFields: groupingFromClause?.groupFields ?? [],
       groupSets: groupingFromClause?.groupSets ?? [],
       aggregates,
-      // Граница ЯВНОЙ части группировки — до автодописанных ниже расширений выборки.
+      // Boundary of the EXPLICIT part of the grouping - up to the selection extensions auto-described below.
       explicitGroupCount: groupingFromClause?.groupFields.length ?? 0
     };
     if (!grouping.multiple && groupingFromClause && !groupingFromClause.multiple) {
@@ -8402,11 +8402,11 @@ function parseFrom(cur) {
         kind,
         seedAlias: lastAlias,
         joinedAlias: joinedHead,
-        // КОРЕНЬ цепочки (первая по тексту таблица): конструктор 1С при левоассоциа-
-        // тивной цепочке считает СТАНДАРТНЫМ условие `<корень>.поле cmp <присоединяемая>.поле`,
-        // а не `<предыдущая>.поле …`. Для классификации `ПО` (фаза 6.13) нужен корень,
-        // тогда как порядок СЦЕПЛЕНИЯ (seedAlias) — предыдущая таблица. У вложенной
-        // подцепочки корень — её собственная затравка (joinedHead).
+        // ROOT of the chain (the first table in the text): the 1C constructor, with a left-associative
+        // chain, considers STANDARD the condition `<root>.field cmp <joined>.field`,
+        // not `<previous>.field …`. To classify `ПО` (phase 6.13) the root is needed,
+        // whereas the JOIN order (seedAlias) uses the previous table. In a nested
+        // subchain the root is its own seed (joinedHead).
         chainSeedAlias: seedAlias,
         condTokens: [],
         condText: "",
@@ -8572,8 +8572,8 @@ var JOIN_COND_STOP = /* @__PURE__ */ new Set([
   "\u0414\u041B\u042F",
   "\u041E\u0411\u042A\u0415\u0414\u0418\u041D\u0418\u0422\u042C",
   "\u0412\u042B\u0411\u0420\u0410\u0422\u042C",
-  // `ПО` верхнего уровня завершает условие текущего соединения: это `ПО`
-  // внешнего соединения в правовложенной цепочке (`A СОЕД B СОЕД C ПО c1 ПО c2`).
+  // A top-level `ПО` finishes the condition of the current join: this is the `ПО`
+  // of an outer join in a right-nested chain (`A СОЕД B СОЕД C ПО c1 ПО c2`).
   "\u041F\u041E"
 ]);
 function readJoinCondition(cur, stopOnBrace = false) {
@@ -8996,18 +8996,18 @@ function parseWhere(cur, aliasToId, soleSource, aliasSpelling) {
 }
 var WHERE_STOP = /* @__PURE__ */ new Set([
   "\u0421\u0413\u0420\u0423\u041F\u041F\u0418\u0420\u041E\u0412\u0410\u0422\u042C",
-  // Секция УПОРЯДОЧИТЬ ПО, идущая после ГДЕ в запросе без группировки. Без неё
-  // parseWhere дословно затягивал хвост (`…\nУПОРЯДОЧИТЬ ПО …`) в param последнего
-  // условия, и УПОРЯДОЧИТЬ воспроизводилось как сырой текст (теряя нормализацию
-  // отступов конструктора). Остановка здесь передаёт управление штатному parseOrder.
+  // ORDER BY section that follows WHERE in a query without grouping. Without it
+  // parseWhere literally dragged the tail (`…\nУПОРЯДОЧИТЬ ПО …`) into the param of the last
+  // condition, and УПОРЯДОЧИТЬ was reproduced as raw text (losing the constructor's
+  // indentation normalization). Stopping here hands control to the regular parseOrder.
   "\u0423\u041F\u041E\u0420\u042F\u0414\u041E\u0427\u0418\u0422\u042C",
   "\u0410\u0412\u0422\u041E\u0423\u041F\u041E\u0420\u042F\u0414\u041E\u0427\u0418\u0412\u0410\u041D\u0418\u0415",
   "\u0418\u0422\u041E\u0413\u0418",
   "\u0418\u041D\u0414\u0415\u041A\u0421\u0418\u0420\u041E\u0412\u0410\u0422\u042C",
   "\u0414\u041B\u042F",
-  // ИМЕЮЩИЕ может идти сразу за ГДЕ без СГРУППИРОВАТЬ, когда в выборке есть
-  // агрегат (`ВЫБРАТЬ МАКСИМУМ(…) … ГДЕ … ИМЕЮЩИЕ МАКСИМУМ(…) ЕСТЬ НЕ NULL`).
-  // Без остановки хвост затягивался в param последнего условия ГДЕ.
+  // ИМЕЮЩИЕ can follow ГДЕ immediately without СГРУППИРОВАТЬ when the selection has
+  // an aggregate (`ВЫБРАТЬ МАКСИМУМ(…) … ГДЕ … ИМЕЮЩИЕ МАКСИМУМ(…) ЕСТЬ НЕ NULL`).
+  // Without the stop, the tail was dragged into the param of the last ГДЕ condition.
   "\u0418\u041C\u0415\u042E\u0429\u0418\u0415"
 ]);
 var HAVING_STOP = /* @__PURE__ */ new Set(["\u0423\u041F\u041E\u0420\u042F\u0414\u041E\u0427\u0418\u0422\u042C", "\u0418\u0422\u041E\u0413\u0418", "\u0418\u041D\u0414\u0415\u041A\u0421\u0418\u0420\u041E\u0412\u0410\u0422\u042C", "\u0410\u0412\u0422\u041E\u0423\u041F\u041E\u0420\u042F\u0414\u041E\u0427\u0418\u0412\u0410\u041D\u0418\u0415", "\u0414\u041B\u042F"]);
@@ -9388,7 +9388,7 @@ function resolveJoin(raw, aliasToId, source) {
       seedTableId: seedId,
       joinedTableId: joinedId,
       conditions,
-      // depth добавляется только у вложенных — плоские модели не меняются.
+      // depth is added only for nested ones - flat models do not change.
       ...raw.depth > 0 ? { depth: raw.depth } : {},
       ...raw.optional ? { optional: true } : {},
       ...raw.optionalLast ? { optionalLast: true } : {}
@@ -10565,7 +10565,7 @@ function registerTempTables(doc, tempTables) {
   }));
   tempTables.set(m0.tempTableName.toUpperCase(), {
     kind: "\u0421\u043F\u0440\u0430\u0432\u043E\u0447\u043D\u0438\u043A",
-    // вид не используется развёрткой ВТ (нет ТЧ/виртуальных полей)
+    // the kind is not used by temp-table expansion (no tabular sections/virtual fields)
     name: m0.tempTableName,
     fullName: m0.tempTableName,
     fields
@@ -10579,11 +10579,11 @@ function augmentResolverWithTempTables(base, tempTables, inferred) {
   };
   return {
     tableByFullName: lookup,
-    // Виртуальный слой пробрасываем как есть — ВТ виртуальных таблиц не имеют.
+    // Pass the virtual layer through as is - temp tables have no virtual tables.
     virtualTableByFullName: (fullName) => base?.virtualTableByFullName?.(fullName),
-    // Канонизация ИМЕНИ источника-ВТ к написанию её определения `ПОМЕСТИТЬ <имя>`
-    // (фаза 6.16.76): `ВтВзносыБезОкругления`→`ВТВзносыБезОкругления`. ВТ
-    // нечувствительны к регистру; реестр хранит каноническое имя из определения.
+    // Canonicalization of the temp-table source NAME to the spelling of its definition `ПОМЕСТИТЬ <имя>`
+    // (phase 6.16.76): `ВтВзносыБезОкругления`→`ВТВзносыБезОкругления`. Temp tables
+    // are case-insensitive; the registry stores the canonical name from the definition.
     canonicalFullName: (fullName) => tempTables.get(fullName.toUpperCase())?.name ?? base?.canonicalFullName?.(fullName)
   };
 }

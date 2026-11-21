@@ -1,7 +1,7 @@
 ---
 name: web-test
-description: Тестирование 1С через веб-клиент — автоматизация действий в браузере. Используй когда пользователь просит проверить, протестировать, автоматизировать действия в 1С через браузер
-argument-hint: "сценарий на естественном языке"
+description: Testing 1C through the web client - automating actions in the browser. Use when the user asks to check, test, or automate actions in 1C through the browser
+argument-hint: "scenario in natural language"
 allowed-tools:
   - Bash
   - Read

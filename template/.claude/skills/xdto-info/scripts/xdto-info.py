@@ -10,16 +10,16 @@ from lxml import etree
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
-# Регистронезависимый ввод: имена параметров и значения choices принимаются
-# в любом регистре (в argparse по умолчанию совпадение точное).
+# Case-insensitive input: parameter names and choices values are accepted
+# in any case (argparse matches exactly by default).
 def ci_parse_args(parser, argv=None):
-    """parse_args: имена параметров и значения choices принимаются в любом регистре."""
+    """parse_args: parameter names and choices values are accepted in any case."""
     argv = list(sys.argv[1:] if argv is None else argv)
     names = {s.lower(): s for a in parser._actions for s in a.option_strings}
     for i, tok in enumerate(argv):
         if tok.startswith('-') and tok.lower() in names:
             argv[i] = names[tok.lower()]
-    # choices — зеркало [ValidateSet]; канонизируем ДО разбора, иначе argparse отвергнет регистр
+    # choices - mirror of [ValidateSet]; canonicalize BEFORE parsing, otherwise argparse rejects the case
     choice_map = {}
     for a in parser._actions:
         if a.choices:
@@ -71,19 +71,19 @@ def flush_output():
 
 
 def die(msg):
-    # Отрицательный результат поиска — не исключение: сообщение и код 1,
-    # без трассировки
+    # A negative search result is not an exception: a message and exit code 1,
+    # without a traceback
     print(msg)
     sys.exit(1)
 
 
 def _parse_xml(source, from_string=False):
-    """Разбор с узким отступлением для не-URI пространств имён.
+    """Parsing with a narrow fallback for non-URI namespaces.
 
-    Платформа допускает в targetNamespace произвольную строку (в выгрузке БП есть
-    пакет с кириллическим «ДопФайлУниверсальный»), .NET такое принимает, а libxml2
-    отвергает. Откатываемся на восстанавливающий разбор ТОЛЬКО на этой ошибке,
-    иначе по-настоящему битый XML перестал бы отличаться от корректного.
+    The platform allows an arbitrary string in targetNamespace (the BSP dump has a
+    package with the Cyrillic «ДопФайлУниверсальный»), .NET accepts this, while libxml2
+    rejects it. We fall back to recovering parsing ONLY on this error, otherwise truly
+    broken XML would stop being distinguishable from valid XML.
     """
     try:
         return (etree.fromstring(source) if from_string else etree.parse(source))
@@ -360,7 +360,7 @@ def get_prop_rows(type_el, pkg, depth, indent, seen):
             pname = ref_q[1] if ref_q else "(без имени)"
         lower, upper = p.get("lowerBound"), p.get("upperBound")
         flags = []
-        # В модели умолчание lowerBound = 1; помечаем обязательные, как в meta-info
+        # In the model the lowerBound default is 1; mark required ones, as in meta-info
         if lower != "0":
             flags.append("обязательный")
         if upper == "-1":
@@ -374,8 +374,8 @@ def get_prop_rows(type_el, pkg, depth, indent, seen):
         type_text = ""
         children = None
         child_pkg = pkg
-        # Именованный вложенный тип берётся так же, как корневой; окольный путь
-        # через свойство владельца нужен только анонимному — имени у него нет
+        # A named nested type is taken the same way as a root one; the roundabout path
+        # through the owner property is needed only for an anonymous one - it has no name
         obj_name = None
         obj_ns = None
 
@@ -385,7 +385,7 @@ def get_prop_rows(type_el, pkg, depth, indent, seen):
             if anon.get(f"{{{XSI_NS}}}type") == "ObjectType":
                 type_text = "объект (анонимный)"
                 obj_name = "(анонимный)"
-                children = anon   # анонимные раскрываем всегда: смотреть отдельно негде
+                children = anon   # anonymous types are always expanded: there is nowhere else to look
             else:
                 res = resolve_scalar(anon, pkg)
                 type_text = format_scalar(res)
@@ -439,8 +439,8 @@ def get_prop_rows(type_el, pkg, depth, indent, seen):
     return rows
 
 
-# Оставить только обязательные свойства. Ребёнок необязательного объекта тоже
-# уходит: он лежит под необязательной веткой и заполнять его не обязательно.
+# Keep only required properties. A child of an optional object also goes
+# away: it lies under an optional branch and filling it is not mandatory.
 def select_required(rows):
     res = []
     cut_from = -1
@@ -539,8 +539,8 @@ def show_package_overview(pkg):
     O("Следующий шаг: -Name <Тип> — структура типа для заполнения")
 
 
-# Легенда едет вместе с выводом, а не живёт в инструкции: показываем только те
-# обозначения, которые реально встретились, иначе она сама становится шумом.
+# The legend travels with the output rather than living in the instructions: show only the
+# notations that actually occurred, otherwise it becomes noise itself.
 def write_legend(rows):
     text = " ".join(r["Type"] + " " + ",".join(r["Flags"]) + " " + ",".join(r["Notes"]) for r in rows)
     items = []
@@ -581,8 +581,8 @@ def show_type(pkg, type_name):
                 O("  " + v)
         O("")
         O("Создание:")
-        # Создать(<Тип>, <Значение>) принимает именно ТипЗначенияXDTO —
-        # для объектного типа эта форма неприменима
+        # Создать(<Тип>, <Значение>) accepts exactly ТипЗначенияXDTO -
+        # for an object type this form is inapplicable
         O(f'  Значение = ФабрикаXDTO.Создать(ФабрикаXDTO.Тип("{pkg.Namespace}", "{type_name}"), Значение);')
         return
 
@@ -607,7 +607,7 @@ def show_type(pkg, type_name):
         total = len(rows)
         rows = select_required(rows)
         own_req = [r for r in rows if r["Indent"] == 0]
-        # Фильтр обязан сообщать о себе: иначе список читается как полный
+        # The filter must report itself: otherwise the list reads as complete
         O(f"Свойства: обязательных {len(own_req)} из {len(own)} "
           f"(-RequiredOnly; скрыто строк: {total - len(rows)})")
     else:
@@ -618,8 +618,8 @@ def show_type(pkg, type_name):
     O("Создание:")
     O(f'  Тип = ФабрикаXDTO.Тип("{pkg.Namespace}", "{type_name}");')
     O("  Объект = ФабрикаXDTO.Создать(Тип);")
-    # Рецепты для вложенных и анонимных типов: имени у анонимного нет, через
-    # ФабрикаXDTO.Тип(ns, имя) его не получить — только от свойства владельца
+    # Recipes for nested and anonymous types: an anonymous one has no name, it cannot be obtained
+    # via ФабрикаXDTO.Тип(ns, name) - only from the owner property
     named = next((r for r in rows if r.get("ObjName") and r.get("ObjName") != "(анонимный)"), None)
     if named:
         O("  // вложенный именованный тип — так же, как корневой:")
@@ -693,7 +693,7 @@ if args.Mode == "used-by":
 
 if args.Name:
     if not selected:
-        # Тип известен, пакет — нет: ищем по всей конфигурации
+        # The type is known, the package is not: search the whole configuration
         found = [p for p in packages if args.Name in p.Types]
         if not found:
             die(f'Тип "{args.Name}" не найден ни в одном пакете конфигурации')

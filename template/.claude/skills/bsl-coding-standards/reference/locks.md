@@ -1,54 +1,54 @@
-# Блокировки
+# Locks
 
-Состав регистров, их измерения и режим управления блокировкой данных конфигурации —
-в `code_index`.
+Register composition, their dimensions and the configuration's data lock control mode are
+in `code_index`.
 
-## Объектные и транзакционные блокировки
+## Object and transaction locks
 
-**Объектные** блокировки защищают прикладной объект (элемент справочника, документ) от
-одновременного изменения в разных сеансах; не связаны напрямую с транзакцией СУБД. Бывают
-двух видов:
+**Object** locks protect an application object (catalog item, document) from
+simultaneous modification in different sessions; they are not directly tied to a DBMS
+transaction. There are two kinds:
 
-- **Оптимистическая** — платформа автоматически контролирует версию объекта: при записи
-  проверяется, не изменилась ли версия объекта с момента его чтения в память; если объект
-  уже был изменён другим сеансом — запись отклоняется с ошибкой («Версия объекта … устарела»).
-  Явного вызова не требует, срабатывает сама при записи ранее прочитанного объекта.
-- **Пессимистическая** — явная блокировка `Заблокировать()` /
-  `ЗаблокироватьДанныеДляРедактирования` на объект или ссылку: запрещает другим сеансам
-  начать редактирование этих данных (ставится при открытии объекта на редактирование в форме,
-  перед изменением из кода). Не нужна при загрузке в обмене и в монопольных операциях
-  (обновление ИБ).
+- **Optimistic** - the platform automatically controls the object version: on write
+  it checks whether the object version has changed since it was read into memory; if the object
+  was already modified by another session, the write is rejected with an error ("Object version … is out of date").
+  It requires no explicit call and triggers itself when writing a previously read object.
+- **Pessimistic** - an explicit lock `Заблокировать()` /
+  `ЗаблокироватьДанныеДляРедактирования` on an object or ref: forbids other sessions
+  to start editing these data (set when opening the object for editing in a form,
+  before modifying from code). Not needed during exchange load and in exclusive operations
+  (IB update).
 
-**Транзакционные** — блокировки СУБД в рамках транзакции. Бывают автоматические
-(ставит платформа по уровню изоляции) и управляемые (`БлокировкаДанных`, ставит разработчик).
+**Transaction** locks are DBMS locks within a transaction. They can be automatic
+(set by the platform according to the isolation level) and managed (`БлокировкаДанных`, set by the developer).
 
-## Управляемые и автоматические
+## Managed and automatic
 
-- **Автоматический режим** — платформа сама ставит блокировки через высокий уровень
-  изоляции СУБД (Repeatable Read / Serializable). Много избыточных блокировок, выше риск
-  эскалации и взаимоблокировок.
-- **Управляемый режим** (рекомендуемый) — уровень изоляции Read Committed, блокировки
-  разработчик ставит явно через `БлокировкаДанных`. Меньше блокировок, выше параллельность.
-  В управляемом режиме конструкция `ДЛЯ ИЗМЕНЕНИЯ` в тексте запроса **бессмысленна** — не
-  применять; для блокировки использовать `БлокировкаДанных`.
+- **Automatic mode** - the platform sets locks itself via a high DBMS isolation
+  level (Repeatable Read / Serializable). Many redundant locks, higher risk of
+  escalation and deadlocks.
+- **Managed mode** (recommended) - Read Committed isolation level, the developer sets
+  locks explicitly via `БлокировкаДанных`. Fewer locks, higher concurrency.
+  In managed mode the `ДЛЯ ИЗМЕНЕНИЯ` construct in query text is **meaningless** - do not
+  use it; use `БлокировкаДанных` for locking.
 
-Режим задаётся свойством конфигурации «Режим управления блокировкой данных» (и может
-переопределяться на объекте). Проверять по `code_index`.
+The mode is set by the configuration property "Data lock control mode" (and can be
+overridden per object). Check via `code_index`.
 
-## Исключительные и разделяемые
+## Exclusive and shared
 
-- **Разделяемая** (`РежимБлокировкиДанных.Разделяемый`) — устанавливается, чтобы данные не
-  были изменены другими транзакциями. Другие транзакции при этом могут читать данные
-  (и ставить свои разделяемые блокировки), но не могут их изменять.
-- **Исключительная** (`РежимБлокировкиДанных.Исключительный`) — помимо запрета изменения,
-  обеспечивает запрет даже чтения этих данных другими транзакциями, устанавливающими
-  управляемые блокировки.
-- Правило: при чтении **с последующим изменением** ставить **исключительную** блокировку
-  **до** чтения (иначе при эскалации разделяемой в исключительную возникает взаимоблокировка).
-  При чтении **без изменения** (например, для формирования движений) — разделяемую на
-  читаемые данные, исключительную — на изменяемые.
+- **Shared** (`РежимБлокировкиДанных.Разделяемый`) - set so that data is not
+  modified by other transactions. Other transactions can still read the data
+  (and set their own shared locks) but cannot modify it.
+- **Exclusive** (`РежимБлокировкиДанных.Исключительный`) - besides prohibiting modification,
+  it prohibits even reading these data by other transactions that set
+  managed locks.
+- Rule: when reading **followed by modification**, set an **exclusive** lock
+  **before** reading (otherwise escalating a shared lock to exclusive causes a deadlock).
+  When reading **without modification** (e.g., to form movements) - shared on the
+  read data, exclusive on the modified data.
 
-## Пример правильного использования
+## Example of correct use
 
 ```bsl
 Блокировка = Новый БлокировкаДанных;
@@ -61,29 +61,29 @@
 Блокировка.Заблокировать(); // обязательно внутри транзакции
 ```
 
-Что здесь важно:
+What matters here:
 
-- `ИсточникДанных` — таблица (табличная часть документа, выгрузка результата запроса),
-  по строкам которой строятся условия блокировки. Так блокируются только реально
-  обрабатываемые комбинации измерений, а не весь регистр.
-- `ИспользоватьИзИсточникаДанных("ИзмерениеБлокировки", "КолонкаИсточника")` сопоставляет
-  измерение блокируемого регистра колонке источника данных.
-- `.Заблокировать()` имеет эффект **только внутри транзакции**; вызов вне транзакции —
-  молчаливый no-op (данные не защищены).
+- `ИсточникДанных` is a table (document tabular section, query result upload)
+  whose rows are used to build lock conditions. This locks only the dimension
+  combinations actually processed, not the whole register.
+- `ИспользоватьИзИсточникаДанных("ИзмерениеБлокировки", "КолонкаИсточника")` maps
+  the dimension of the locked register to a data source column.
+- `.Заблокировать()` has an effect **only inside a transaction**; a call outside a transaction is
+  a silent no-op (data is not protected).
 
-Альтернатива источнику данных — задать значения измерений поэлементно:
+An alternative to a data source is to set dimension values element by element:
 `ЭлементБлокировки.УстановитьЗначение("Номенклатура", Номенклатура);`
 
-Сигнатуры:
+Signatures:
 
-- `БлокировкаДанных.Добавить(<ПолноеИмяТаблицы>)` — возвращает элемент блокировки;
-  имя блокируемого регистра задаётся здесь, в `Добавить`.
-- `ЭлементБлокировкиДанных.Режим` — по умолчанию
-  `РежимБлокировкиДанных.Исключительный`; свойство задаётся явно для разделяемой
-  блокировки.
-- `БлокировкаДанных.Заблокировать()` — без параметров.
+- `БлокировкаДанных.Добавить(<ПолноеИмяТаблицы>)` - returns a lock element;
+  the name of the locked register is specified here, in `Добавить`.
+- `ЭлементБлокировкиДанных.Режим` - defaults to
+  `РежимБлокировкиДанных.Исключительный`; the property is set explicitly for a shared
+  lock.
+- `БлокировкаДанных.Заблокировать()` - no parameters.
 
-Пример для документа с ТЧ `СписокНоменклатуры` и регистром `Товары`:
+Example for a document with the tabular section `СписокНоменклатуры` and the register `Товары`:
 
 ```bsl
 Блокировка = Новый БлокировкаДанных;
@@ -94,17 +94,17 @@
 Блокировка.Заблокировать();
 ```
 
-## Использование объекта Диапазон
+## Using the Диапазон object
 
-Для блокировки интервала значений измерения (а не одного значения) передавать в
-`УстановитьЗначение` объект `Диапазон`:
+To lock an interval of dimension values (rather than a single value), pass the
+`Диапазон` object to `УстановитьЗначение`:
 
 ```bsl
 ЭлементБлокировки.УстановитьЗначение("Период", Новый Диапазон(ДатаНачала, ДатаОкончания));
 ```
 
-Блокируется диапазон значений измерения — полезно для периодических регистров сведений и
-блокировок по интервалу дат/моментов. См. [Граница и момент времени](boundary-and-moment.md).
+A range of dimension values is locked - useful for periodic information registers and
+locks by a date/moment interval. See [Boundary and point in time](boundary-and-moment.md).
 
-Выбор методики контроля остатков и порядок действий — см.
-[Методика контроля остатков](balance-control-methodology.md).
+The choice of balance control methodology and the order of actions - see
+[Balance control methodology](balance-control-methodology.md).
