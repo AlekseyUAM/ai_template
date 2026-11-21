@@ -91,8 +91,8 @@ def stop_code_index(code_index_dir, *, run=subprocess.run, kill=os.kill,
         if os.name == "nt":
             try:
                 run(["taskkill", "/PID", str(pid), "/T", "/F"],
-                    capture_output=True, text=True)
-            except OSError:
+                    capture_output=True, text=True, timeout=5)
+            except (OSError, subprocess.TimeoutExpired):
                 pass
         else:
             try:

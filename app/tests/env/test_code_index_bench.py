@@ -125,9 +125,17 @@ def test_start_cleans_first_and_spawns_detached(tmp_path, monkeypatch):
 
 
 def _ready_run(status, calls):
+    """Фейковый ``run``: JSON статуса — только на ``daemon status --json``.
+
+    Остальные команды (tasklist/docker/...) получают пустой успешный вывод,
+    как настоящий ``tasklist`` о чужом PID: иначе ``_is_our_process`` счёл бы
+    любой PID "нашим".
+    """
     def run(*args, **kwargs):
-        calls.append(args[0])
-        return SimpleNamespace(returncode=0, stdout=status, stderr="")
+        cmd = list(args[0])
+        calls.append(cmd)
+        out = status if cmd[-2:] == ["status", "--json"] else ""
+        return SimpleNamespace(returncode=0, stdout=out, stderr="")
     return run
 
 
@@ -216,21 +224,41 @@ def test_stop_gives_up_waiting_after_deadline(tmp_path, monkeypatch):
     ci = tmp_path / "ci"; ci.mkdir()
     (ci / "benchmark-pids.json").write_text('{"daemon": 10, "serve": 11}')
     waits, signals = [], []
+    alive = {10, 11}
 
     def wait(pids, **kw):
-        waits.append((list(pids), kw["timeout"]))
-        kw["sleep"] = lambda _s: None
+        waits.append((sorted(pids), kw["timeout"]))
         return B._wait_exit(pids, **kw)
 
-    monkeypatch.setattr(B, "_is_our_process", lambda pid, run: True)
+    def kill(pid, sig):
+        signals.append((pid, sig))
+        if sig == signal.SIGKILL:
+            alive.discard(pid)          # SIGKILL добил процесс
+
+    monkeypatch.setattr(B, "_is_our_process", lambda pid, run: pid in alive)
     monkeypatch.setattr(B, "STOP_TIMEOUT_SEC", 10.0)
-    B.stop_code_index(ci, run=lambda cmd, **k: None,
-                      kill=lambda pid, sig: signals.append((pid, sig)),
-                      clock=_Clock([0.0, 0.0, 10.0, 10.0, 10.0]), wait=wait,
+    B.stop_code_index(ci, run=lambda cmd, **k: None, kill=kill,
+                      clock=_Clock([0.0, 0.0, 10.0, 10.0]), wait=wait,
                       log=lambda _m: None)
     assert waits == [([10, 11], 10.0)]
     assert signals == [(10, signal.SIGTERM), (11, signal.SIGTERM),
                        (10, signal.SIGKILL), (11, signal.SIGKILL)]
+
+
+def test_stop_no_sigkill_when_wait_witnessed_exit(tmp_path, monkeypatch):
+    ci = tmp_path / "ci"; ci.mkdir()
+    (ci / "benchmark-pids.json").write_text('{"daemon": 10, "serve": 11}')
+    signals = []
+
+    def wait(pids, **kw):
+        return []                       # оба PID вышли до дедлайна
+
+    monkeypatch.setattr(B, "_is_our_process", lambda pid, run: True)
+    B.stop_code_index(ci, run=lambda cmd, **k: None,
+                      kill=lambda pid, sig: signals.append((pid, sig)),
+                      clock=_Clock([0.0, 0.0]), wait=wait,
+                      log=lambda _m: None)
+    assert signals == [(10, signal.SIGTERM), (11, signal.SIGTERM)]
 
 
 def test_stop_check_overrunning_deadline_ends_wait():
