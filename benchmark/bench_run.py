@@ -14,6 +14,7 @@ from pathlib import Path
 
 from bench_analysis import (build_prompt, deterministic_report,
                             extract_analyst_text, prepare_inputs, write_report)
+from bench_index import refresh_index
 from bench_metrics import (aggregate_environment, collect_task_state,
                            cycle_metrics, find_session_files, parse_stream,
                            render_digest, run_static_analyzers, stage_table,
@@ -50,6 +51,7 @@ class RunOptions:
     force: bool
     run_dir: Path | None
     env_file: Path
+    index_refresh: bool = True
 
 
 @dataclass(frozen=True)
@@ -364,6 +366,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         help="не запускать сессию-аналитик")
     parser.add_argument("--force", action="store_true",
                         help="разрешить прогон на непустом проекте")
+    parser.add_argument("--no-index-refresh", action="store_false",
+                        dest="index_refresh",
+                        help="не обновлять индекс code_index между задачами")
     return parser.parse_args(argv)
 
 
@@ -394,6 +399,7 @@ def build_options(ns: argparse.Namespace, repo_root: Path) -> RunOptions:
         force=bool(ns.force),
         run_dir=None,
         env_file=env_path,
+        index_refresh=bool(ns.index_refresh),
     )
 
 
@@ -534,6 +540,10 @@ def execute(options: RunOptions) -> int:
     stopped = False
     for task in options.tasks:
         log(f"▶ {task.folder}: старт (лимит {options.limits[task.folder]} мин)")
+        index_status = refresh_index(options.project_dir,
+                                     enabled=options.index_refresh,
+                                     log=log)
+        log(f"  индекс code_index: {index_status}")
         task_started = _iso_now()
         before = git_state(options.project_dir)
         stream_path = run_dir / "transcripts" / f"{task.folder}.stream.jsonl"
@@ -571,6 +581,7 @@ def execute(options: RunOptions) -> int:
             "duration_sec": round(run.duration_sec, 1),
             "started_at": task_started,
             "finished_at": task_finished,
+            "index_refresh": index_status,
             "stream": _stream_metrics(run),
             "task_json": task_json,
             "stages": stage_table(task_json),
