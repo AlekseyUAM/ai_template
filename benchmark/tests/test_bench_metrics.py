@@ -146,7 +146,8 @@ def test_aggregate_environment():
 
 
 def test_aggregate_environment_timed_out_and_mcp():
-    tasks = [{"transcript": {"main": {"tool_errors": 3, "error_signatures": [
+    tasks = [{"transcript": {"main": {"tool_errors": 3,
+        "mcp_errors": 1, "hook_denials": 0, "error_signatures": [
         {"signature": "Bash: Command timed out after 2m", "count": 1},
         {"signature": "Bash: command not found", "count": 1},
         {"signature": "mcp__bsl_ls__check: server unavailable", "count": 1}]}}}]
@@ -205,6 +206,52 @@ def test_aggregate_environment_includes_subagent_errors():
     assert env["tool_errors"] == 3
     assert any("Edit: sub" in item["signature"]
                for item in env["error_signatures"])
+
+
+def test_hook_denial_is_not_mcp_error(tmp_path):
+    path = write_jsonl(tmp_path / "t.jsonl", [
+        tool_use("2026-01-01T00:00:00+00:00", "h1", "Bash",
+                 {"command": "ls src/cf"}),
+        tool_result("2026-01-01T00:00:01+00:00", "h1",
+                    "PreToolUse:Bash hook error: use "
+                    "mcp__code_index__list_files(repo='ssl2')", True),
+    ])
+    summary = summarize_events(parse_tool_events(path), tmp_path)
+    assert summary["hook_denials"] == 1
+    assert summary["mcp_errors"] == 0
+    env = aggregate_environment([{"transcript": {"main": summary}}])
+    assert env["hook_denials"] == 1
+    assert env["mcp_errors"] == 0
+
+
+def test_mcp_error_and_hook_denial_are_disjoint(tmp_path):
+    path = write_jsonl(tmp_path / "t.jsonl", [
+        tool_use("2026-01-01T00:00:00+00:00", "m1", "mcp__bsl_ls__check", {}),
+        tool_result("2026-01-01T00:00:01+00:00", "m1", "server unavailable", True),
+        tool_use("2026-01-01T00:00:02+00:00", "h1", "Bash", {"command": "ls"}),
+        tool_result("2026-01-01T00:00:03+00:00", "h1",
+                    "PreToolUse:Bash hook error: denied", True),
+    ])
+    summary = summarize_events(parse_tool_events(path), tmp_path)
+    assert summary["mcp_errors"] == 1
+    assert summary["hook_denials"] == 1
+
+
+def test_mcp_usage_skill_and_duplicates_counted(tmp_path):
+    path = write_jsonl(tmp_path / "t.jsonl", [
+        tool_use("2026-01-01T00:00:00+00:00", "s1", "Skill",
+                 {"skill": "mcp-usage"}),
+        tool_result("2026-01-01T00:00:01+00:00", "s1", "ok"),
+        tool_use("2026-01-01T00:00:02+00:00", "r1", "Read",
+                 {"file_path": "/p/a.bsl"}),
+        tool_result("2026-01-01T00:00:03+00:00", "r1", "ok"),
+        tool_use("2026-01-01T00:00:04+00:00", "r2", "Read",
+                 {"file_path": "/p/a.bsl"}),
+        tool_result("2026-01-01T00:00:05+00:00", "r2", "ok"),
+    ])
+    summary = summarize_events(parse_tool_events(path), tmp_path)
+    assert summary["mcp_usage_skill_calls"] == 1
+    assert summary["duplicate_calls"] == 1
 
 
 def task_info(project: Path, folder: str) -> TaskInfo:

@@ -202,9 +202,27 @@ def _short_input(event: ToolEvent) -> str:
     return ""
 
 
+def _is_hook_denial(event: ToolEvent) -> bool:
+    return bool(event.is_error and "hook error" in (event.result_text or "").lower())
+
+
 def summarize_events(events: list[ToolEvent], project_dir: Path) -> dict:
     tools = Counter(event.name for event in events)
     errors = [event for event in events if event.is_error]
+    hook_denials = sum(1 for event in errors if _is_hook_denial(event))
+    mcp_errors = sum(1 for event in errors
+                     if event.name.startswith("mcp__")
+                     and not _is_hook_denial(event))
+    skill_calls = sum(
+        1 for event in events
+        if event.name == "Skill"
+        and str(event.input.get("skill") or "") == "mcp-usage")
+    seen_calls: Counter = Counter()
+    for event in events:
+        seen_calls[(event.name, json.dumps(event.input, ensure_ascii=False,
+                                           sort_keys=True, default=str))] += 1
+    duplicate_calls = sum(count - 1 for count in seen_calls.values()
+                          if count > 1)
     signatures: Counter = Counter()
     for event in errors:
         line = next((part.strip() for part in event.result_text.splitlines()
@@ -242,6 +260,10 @@ def summarize_events(events: list[ToolEvent], project_dir: Path) -> dict:
     return {
         "tools": dict(tools),
         "tool_errors": len(errors),
+        "mcp_errors": mcp_errors,
+        "hook_denials": hook_denials,
+        "mcp_usage_skill_calls": skill_calls,
+        "duplicate_calls": duplicate_calls,
         "error_signatures": [
             {"signature": signature, "count": count}
             for signature, count in signatures.most_common(10)],
@@ -293,6 +315,8 @@ def summarize_transcripts(project_dir: Path, session: SessionFiles,
             "duration_sec": duration,
             "tools": summary["tools"],
             "tool_errors": summary["tool_errors"],
+            "mcp_errors": summary["mcp_errors"],
+            "hook_denials": summary["hook_denials"],
             "error_signatures": summary["error_signatures"],
             "test_runs": summary["test_runs"],
             "edits": summary["edits"],
@@ -310,6 +334,8 @@ def _count_timeouts(lowered: str) -> int:
 def aggregate_environment(task_metrics: list[dict]) -> dict:
     signatures: Counter = Counter()
     tool_errors = 0
+    mcp_errors = 0
+    hook_denials = 0
     for task in task_metrics:
         transcript = task.get("transcript") if isinstance(task, dict) else None
         if not isinstance(transcript, dict):
@@ -323,6 +349,8 @@ def aggregate_environment(task_metrics: list[dict]) -> dict:
             agents.extend(item for item in subagents if isinstance(item, dict))
         for agent in agents:
             tool_errors += int(agent.get("tool_errors") or 0)
+            mcp_errors += int(agent.get("mcp_errors") or 0)
+            hook_denials += int(agent.get("hook_denials") or 0)
             for item in agent.get("error_signatures") or []:
                 if not isinstance(item, dict):
                     continue
@@ -335,8 +363,8 @@ def aggregate_environment(task_metrics: list[dict]) -> dict:
             for signature, count in signatures.most_common(10)],
         "command_not_found": lowered.count("command not found"),
         "timeouts": _count_timeouts(lowered),
-        "mcp_errors": sum(count for signature, count in signatures.items()
-                          if "mcp__" in signature),
+        "mcp_errors": mcp_errors,
+        "hook_denials": hook_denials,
     }
 
 
@@ -747,6 +775,12 @@ def render_digest(metrics: dict) -> str:
             lines.append("- Инструменты: " + ", ".join(
                 f"{name}={count}" for name, count in
                 sorted(main["tools"].items())))
+        skill_calls = int(main.get("mcp_usage_skill_calls") or 0)
+        lines.append(f"- Skill mcp-usage: {'да' if skill_calls else 'нет'} "
+                     f"({skill_calls})")
+        duplicates = int(main.get("duplicate_calls") or 0)
+        if duplicates:
+            lines.append(f"- Повторных вызовов инструментов: {duplicates}")
         if main.get("slow_ops"):
             lines += ["", "### Долгие операции", "",
                       "| Инструмент | Вход | Длительность |", "|---|---|---|"]
@@ -809,10 +843,14 @@ def render_digest(metrics: dict) -> str:
                              f"(предупреждения выше)")
     env = metrics.get("environment") or {}
     lines += ["", "## Окружение", "",
-              f"- Ошибок инструментов: {env.get('tool_errors', 0)}",
+              f"- Ошибок инструментов: {env.get('tool_errors', 0)} "
+              f"(MCP: {env.get('mcp_errors', 0)}, "
+              f"хуки: {env.get('hook_denials', 0)}, "
+              f"прочие: {max(0, int(env.get('tool_errors', 0)) - int(env.get('mcp_errors', 0)) - int(env.get('hook_denials', 0)))})",
               f"- «command not found»: {env.get('command_not_found', 0)}",
               f"- Таймаутов: {env.get('timeouts', 0)}",
-              f"- Ошибок MCP: {env.get('mcp_errors', 0)}"]
+              f"- Ошибок MCP: {env.get('mcp_errors', 0)}",
+              f"- Отказов хуков: {env.get('hook_denials', 0)}"]
     for item in env.get("error_signatures") or []:
         lines.append(f"- ×{item.get('count')}: {item.get('signature')}")
     return "\n".join(lines).rstrip() + "\n"
