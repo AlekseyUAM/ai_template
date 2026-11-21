@@ -87,3 +87,34 @@ def test_ensure_sections_adds_missing_and_is_idempotent():
     assert "[[cache_targets]]" in out
     assert out.count("[[cache_targets]]") == 1
     assert ensure_sections(out, 8005).count("[[cache_targets]]") == 1
+
+
+def test_ensure_sections_replaces_single_target_url():
+    text = render_daemon_toml("a", "/a", 8005)
+    out = ensure_sections(merge_path(text, alias="b", path="/b"), 9000)
+    assert out.count("[[cache_targets]]") == 1
+    assert "http://127.0.0.1:9000" in out
+    assert "8005" not in out
+    assert 'alias = "b"' in out
+
+
+def test_ensure_sections_keeps_extra_keys_of_target_block():
+    text = ('[daemon]\nhttp_port = 0\n\n'
+            '[[cache_targets]]\nurl = "http://127.0.0.1:8005"\n'
+            'mode = "read"  # keep me\n\n'
+            '[[paths]]\npath = "/a"\nalias = "a"\nlanguage = "bsl"\n')
+    out = ensure_sections(text, 9000)
+    assert out.count("[[cache_targets]]") == 1
+    assert 'url = "http://127.0.0.1:9000"' in out
+    assert "# keep me" in out and 'mode = "read"' in out
+
+
+def test_ensure_sections_does_not_append_duplicate_on_multiple_blocks():
+    text = ('[[cache_targets]]\nurl = "http://127.0.0.1:8005"\n\n'
+            '[[cache_targets]]\nurl = "http://other:9000"\n\n'
+            '[[paths]]\npath = "/a"\nalias = "a"\nlanguage = "bsl"\n')
+    out = ensure_sections(text, 8005)
+    assert out.count("[[cache_targets]]") == 2
+    out = ensure_sections(text, 9100)
+    assert out.count("[[cache_targets]]") == 3
+    assert "http://127.0.0.1:9100" in out

@@ -8,6 +8,8 @@ _ALIAS = re.compile(r'(?m)^[ \t]*alias[ \t]*=[ \t]*"((?:[^"\\]|\\.)*)"')
 _MCP_HEADER = re.compile(r"(?m)^\[mcp\][ \t]*$")
 _PATH_KEY = re.compile(r"(?m)^[ \t]*path[ \t]*=[ \t]*.*$")
 _LANG_KEY = re.compile(r"(?m)^[ \t]*language[ \t]*=[ \t]*.*$")
+_CACHE_HEADER = re.compile(r"(?m)^\[\[cache_targets\]\][ \t]*$")
+_URL_KEY = re.compile(r"(?m)^[ \t]*url[ \t]*=[ \t]*.*$")
 
 _MCP_SECTION = ('[mcp]\n'
                 '# массовый режим: get_object_structure принимает full_names (несколько объектов).\n'
@@ -115,6 +117,19 @@ def ensure_sections(text: str, port: int) -> str:
     elif "mass_mode_tools" not in out:
         out = _MCP_HEADER.sub(_MCP_SECTION.lstrip(), out, count=1)
     cache_url = f"http://127.0.0.1:{port}"
-    if cache_url not in out:
-        out = out.rstrip() + f"\n\n[[cache_targets]]\nurl = {_quote(cache_url)}\n"
-    return out
+    if cache_url in out:
+        return out
+    headers = list(_CACHE_HEADER.finditer(out))
+    if len(headers) == 1:
+        # единственный локальный target — правка url на месте
+        start = headers[0].start()
+        nxt = re.search(r"(?m)^\[", out[headers[0].end():])
+        end = headers[0].end() + nxt.start() if nxt else len(out)
+        segment = out[start:end]
+        line = f"url = {_quote(cache_url)}"
+        if _URL_KEY.search(segment):
+            segment = _URL_KEY.sub(lambda _m: line, segment, count=1)
+        else:
+            segment = segment.rstrip("\n") + "\n" + line + "\n"
+        return out[:start] + segment + out[end:]
+    return out.rstrip() + f"\n\n[[cache_targets]]\nurl = {_quote(cache_url)}\n"

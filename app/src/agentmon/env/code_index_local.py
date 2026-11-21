@@ -66,12 +66,17 @@ def _reload_daemon(binary, code_index_dir, run) -> str | None:
 
 
 def deploy_local(*, code_index_dir, catalog_dir, project_name, port,
-                 mid=None, download=_download, install=autostart.install_and_start,
+                 mid=None, home=None, download=_download,
+                 install=autostart.install_and_start,
                  restart=autostart.restart, stop=autostart.stop,
                  run=subprocess.run):
     ci = Path(code_index_dir)
     ci.mkdir(parents=True, exist_ok=True)
     existing_port = read_service_port(ci)
+    if existing_port is not None and int(port) != existing_port:
+        raise ValueError(
+            f"сервис {ci} уже использует порт {existing_port}; "
+            f"укажите его вместо {port}")
     effective_port = existing_port or int(port)
     first = existing_port is None
     yield (f"▶ code-index: {ci} (alias={project_name}, "
@@ -98,25 +103,38 @@ def deploy_local(*, code_index_dir, catalog_dir, project_name, port,
                   "--config", str(toml_path)]
 
     if first:
-        yield from install(daemon_name, [str(binary), "daemon", "run"],
-                           env=home_env, state_dir=str(ci))
-        yield from install(serve_name, serve_argv, env=serve_env,
-                           state_dir=str(ci))
-        write_service_port(ci, effective_port)
+        # legacy services must be stopped BEFORE the new serve binds the port
         if mid is not None:
             for legacy in (f"ai1c-code-index-daemon-{mid}",
                            f"ai1c-code-index-mcp-{mid}"):
                 try:
-                    yield from stop(legacy, state_dir=str(ci))
+                    yield from stop(legacy, state_dir=str(ci), home=home)
                 except Exception as exc:                       # noqa: BLE001
                     yield f"⚠ legacy {legacy}: {exc}"
+        installed = []
+        try:
+            installed.append(daemon_name)
+            yield from install(daemon_name, [str(binary), "daemon", "run"],
+                               env=home_env, state_dir=str(ci))
+            installed.append(serve_name)
+            yield from install(serve_name, serve_argv, env=serve_env,
+                               state_dir=str(ci))
+        except Exception:
+            # Roll back a half-installed service so a retry starts clean.
+            for name in reversed(installed):
+                try:
+                    yield from stop(name, state_dir=str(ci), home=home)
+                except Exception:                              # noqa: BLE001
+                    pass
+            raise
+        write_service_port(ci, effective_port)
     else:
         error = _reload_daemon(binary, ci, run)
         if error:
             yield f"⚠ daemon reload: {error}"
         else:
             yield "✓ daemon reload"
-        yield from restart(serve_name, state_dir=str(ci))
+        yield from restart(serve_name, state_dir=str(ci), home=home)
 
     yield (f"✓ code-index готов: {ci}, alias={project_name}, "
            f"порт {effective_port}")

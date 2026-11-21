@@ -1,4 +1,5 @@
 from pathlib import Path
+import pytest
 from agentmon.env import code_index_local as L
 
 
@@ -43,7 +44,7 @@ def test_second_deploy_adds_base_without_reinstall(tmp_path):
         stop=lambda *a, **k: []))
     log = list(L.deploy_local(
         code_index_dir=str(ci), catalog_dir="/code/b", project_name="b",
-        port=9999, download=_fake_download, install=_install(installs),
+        port=8005, download=_fake_download, install=_install(installs),
         restart=lambda *a, **k: restarts.append(a) or [],
         stop=lambda *a, **k: [],
         run=lambda *a, **k: type("R", (), {"returncode": 0, "stdout": "",
@@ -51,10 +52,16 @@ def test_second_deploy_adds_base_without_reinstall(tmp_path):
     text = (ci / "daemon.toml").read_text(encoding="utf-8")
     assert text.count("[[paths]]") == 2
     assert 'alias = "a"' in text and 'alias = "b"' in text
+    assert text.count("[[cache_targets]]") == 1
+    assert "http://127.0.0.1:8005" in text
     assert L.read_service_port(ci) == 8005
     assert len(installs) == 2          # только первое развёртывание
     assert restarts and restarts[0][0] == L.service_names(ci)[1]
     assert "8005" in "\n".join(log)
+
+
+def _ok_run(*a, **k):
+    return type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
 
 
 def test_first_deploy_install_argv_and_env(tmp_path):
@@ -101,19 +108,58 @@ def test_service_port_roundtrip_and_invalid(tmp_path):
     assert L.read_service_port(ci) is None
 
 
+def _events(events):
+    def install(name, argv, *, env, state_dir):
+        events.append(("install", name))
+        return [f"install {name}"]
+
+    def stop(name, *, state_dir=None, home=None, **k):
+        events.append(("stop", name))
+        return []
+    return install, stop
+
+
 def test_first_deploy_cleans_legacy_mid_services(tmp_path):
     ci = tmp_path / "ci"
+    events = []
+    install, stop = _events(events)
+    list(L.deploy_local(
+        code_index_dir=str(ci), catalog_dir="/code/a", project_name="a",
+        port=8005, mid=7, download=_fake_download, install=install,
+        restart=lambda *a, **k: [], stop=stop))
+    assert events == [
+        ("stop", "ai1c-code-index-daemon-7"),
+        ("stop", "ai1c-code-index-mcp-7"),
+        ("install", L.service_names(ci)[0]),
+        ("install", L.service_names(ci)[1]),
+    ]
+    assert L.read_service_port(ci) == 8005
+
+
+def test_first_deploy_rolls_back_daemon_when_serve_install_fails(tmp_path):
+    ci = tmp_path / "ci"
+    daemon_name, serve_name = L.service_names(ci)
     stopped = []
 
-    def stop(name, *, state_dir=None, **k):
+    def install(name, argv, *, env, state_dir):
+        if name == daemon_name:
+            return ["install daemon"]
+        raise RuntimeError("install failed")
+
+    def stop(name, *, state_dir=None, home=None, **k):
         stopped.append(name)
         return []
 
-    list(L.deploy_local(
-        code_index_dir=str(ci), catalog_dir="/code/a", project_name="a",
-        port=8005, mid=7, download=_fake_download, install=_install([]),
-        restart=lambda *a, **k: [], stop=stop))
-    assert stopped == ["ai1c-code-index-daemon-7", "ai1c-code-index-mcp-7"]
+    with pytest.raises(RuntimeError, match="install failed"):
+        list(L.deploy_local(
+            code_index_dir=str(ci), catalog_dir="/code/a", project_name="a",
+            port=8005, mid=7, download=_fake_download, install=install,
+            restart=lambda *a, **k: [], stop=stop))
+    # legacy first, then rollback of both new names (serve stop is idempotent)
+    assert stopped == ["ai1c-code-index-daemon-7",
+                       "ai1c-code-index-mcp-7",
+                       serve_name, daemon_name]
+    assert not (ci / L.SERVICE_FILE).exists()
 
 
 def test_second_deploy_reports_reload_error_but_continues(tmp_path):
@@ -125,7 +171,7 @@ def test_second_deploy_reports_reload_error_but_continues(tmp_path):
         restart=lambda *a, **k: [], stop=lambda *a, **k: []))
     log = list(L.deploy_local(
         code_index_dir=str(ci), catalog_dir="/code/b", project_name="b",
-        port=9999, download=_fake_download, install=_install(installs),
+        port=8005, download=_fake_download, install=_install(installs),
         restart=lambda *a, **k: [],
         stop=lambda *a, **k: [],
         run=lambda *a, **k: type("R", (), {"returncode": 1, "stdout": "",
@@ -134,3 +180,47 @@ def test_second_deploy_reports_reload_error_but_continues(tmp_path):
     assert "daemon reload: boom" in text
     assert L.read_service_port(ci) == 8005
     assert len(installs) == 2
+
+
+def test_port_mismatch_with_existing_service_raises(tmp_path):
+    ci = tmp_path / "ci"
+    ci.mkdir()
+    L.write_service_port(ci, 8005)
+    with pytest.raises(ValueError, match="8005"):
+        list(L.deploy_local(
+            code_index_dir=str(ci), catalog_dir="/code/b", project_name="b",
+            port=9999, download=_fake_download, install=_install([]),
+            restart=lambda *a, **k: [], stop=lambda *a, **k: []))
+    assert L.read_service_port(ci) == 8005
+
+
+def test_first_deploy_forwards_home_to_legacy_stop(tmp_path):
+    ci = tmp_path / "ci"
+    captured = []
+
+    def stop(name, *, state_dir=None, home=None, **k):
+        captured.append(home)
+        return []
+
+    list(L.deploy_local(
+        code_index_dir=str(ci), catalog_dir="/code/a", project_name="a",
+        port=8005, mid=7, home="/h", download=_fake_download,
+        install=_install([]), restart=lambda *a, **k: [], stop=stop))
+    assert captured == ["/h", "/h"]
+
+
+def test_second_deploy_forwards_home_to_restart(tmp_path):
+    ci = tmp_path / "ci"
+    ci.mkdir()
+    L.write_service_port(ci, 8005)
+    restarts = []
+
+    def restart(name, *, state_dir=None, home=None):
+        restarts.append((name, state_dir, home))
+        return []
+
+    list(L.deploy_local(
+        code_index_dir=str(ci), catalog_dir="/code/b", project_name="b",
+        port=8005, home="/h", download=_fake_download, install=_install([]),
+        restart=restart, stop=lambda *a, **k: [], run=_ok_run))
+    assert restarts == [(L.service_names(ci)[1], str(ci), "/h")]
