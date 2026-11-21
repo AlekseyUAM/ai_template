@@ -1,50 +1,122 @@
-"""Оркестратор локального (нативного) развёртывания code-index."""
+"""Нативное развёртывание code-index: один сервис на code_index_dir."""
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import subprocess
 from pathlib import Path
 
-from .mcp_docker_recipes import _daemon_toml
+from . import autostart
 from .code_index_release import download_binary as _download
-from .autostart import install_and_start as _install
+from .code_index_toml import ensure_sections, merge_path, render_daemon_toml
+
+SERVICE_FILE = "service.json"
 
 
-def deploy_local(*, mid, code_index_dir, catalog_dir, project_name, port,
-                 download=_download, install=_install):
-    """Генератор строк лога: скачать bsl-indexer, написать daemon.toml, поставить
-    индексатор и MCP-сервер в автозапуск (и стартовать)."""
-    yield (f"▶ Локальное развёртывание code-index: проект «{project_name}», "
-           f"порт {port}")
-    buf = []
-    binary = download(code_index_dir, log=buf.append)
-    for s in buf:
-        yield s
+def service_id(code_index_dir) -> str:
+    raw = str(Path(code_index_dir).resolve()).encode("utf-8")
+    return hashlib.sha1(raw).hexdigest()[:8]
 
-    toml_path = Path(code_index_dir) / "daemon.toml"
-    toml_path.write_text(
-        _daemon_toml(project_name, catalog_dir, f"http://127.0.0.1:{port}"),
-        encoding="utf-8")
-    yield (f"✓ daemon.toml: {toml_path} (alias={project_name}, "
-           f"path={catalog_dir})")
 
-    home_env = {"CODE_INDEX_HOME": str(code_index_dir)}
+def service_names(code_index_dir) -> tuple[str, str]:
+    sid = service_id(code_index_dir)
+    return (f"ai1c-code-index-daemon-{sid}",
+            f"ai1c-code-index-mcp-{sid}")
 
-    yield "=== Автозапуск: индексатор (daemon) ==="
-    for s in install(f"ai1c-code-index-daemon-{mid}",
-                     [str(binary), "daemon", "run"],
-                     env=home_env, state_dir=code_index_dir):
-        yield s
 
-    yield "=== Автозапуск: MCP-сервер (serve) ==="
-    host = "127.0.0.1"
-    serve_env = {**home_env, "MCP_HTTP_HOST": host,
-                 "MCP_HTTP_PORT": str(port)}
-    # Транспорт/порт/конфиг задаём явными флагами CLI: `serve` не читает
-    # MCP_HTTP_HOST/MCP_HTTP_PORT из окружения (это делает только entrypoint
-    # docker-образа), без флагов он запустится в stdio-режиме.
-    serve_argv = [str(binary), "serve",
-                  "--transport", "http",
-                  "--host", host, "--port", str(port),
+def read_service_port(code_index_dir) -> int | None:
+    try:
+        data = json.loads((Path(code_index_dir) / SERVICE_FILE)
+                          .read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    port = data.get("port")
+    return port if isinstance(port, int) and 1 <= port <= 65535 else None
+
+
+def write_service_port(code_index_dir, port: int) -> None:
+    path = Path(code_index_dir) / SERVICE_FILE
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps({"port": int(port), "version": 1}) + "\n",
+                   encoding="utf-8")
+    tmp.replace(path)
+
+
+def _find_binary(code_index_dir) -> Path | None:
+    for name in ("bsl-indexer.exe", "bsl-indexer"):
+        for path in Path(code_index_dir).rglob(name):
+            if path.is_file():
+                return path
+    return None
+
+
+def _reload_daemon(binary, code_index_dir, run) -> str | None:
+    env = {**os.environ, "CODE_INDEX_HOME": str(code_index_dir)}
+    try:
+        res = run([str(binary), "daemon", "reload"], env=env,
+                  capture_output=True, text=True)
+    except OSError as exc:
+        return str(exc)
+    if getattr(res, "returncode", 1) != 0:
+        return ((getattr(res, "stderr", "") or "")
+                + (getattr(res, "stdout", "") or "")).strip()
+    return None
+
+
+def deploy_local(*, code_index_dir, catalog_dir, project_name, port,
+                 mid=None, download=_download, install=autostart.install_and_start,
+                 restart=autostart.restart, stop=autostart.stop,
+                 run=subprocess.run):
+    ci = Path(code_index_dir)
+    ci.mkdir(parents=True, exist_ok=True)
+    existing_port = read_service_port(ci)
+    effective_port = existing_port or int(port)
+    first = existing_port is None
+    yield (f"▶ code-index: {ci} (alias={project_name}, "
+           f"порт {effective_port}, {'новый сервис' if first else 'добавление базы'})")
+
+    binary = _find_binary(ci)
+    if binary is None:
+        buf = []
+        binary = download(str(ci), log=buf.append)
+        yield from buf
+    toml_path = ci / "daemon.toml"
+    text = toml_path.read_text(encoding="utf-8") if toml_path.is_file() else ""
+    text = merge_path(text, alias=project_name, path=str(catalog_dir))
+    text = ensure_sections(text, effective_port)
+    toml_path.write_text(text, encoding="utf-8")
+    yield f"✓ daemon.toml: alias={project_name}, path={catalog_dir}"
+
+    daemon_name, serve_name = service_names(ci)
+    home_env = {"CODE_INDEX_HOME": str(ci)}
+    serve_env = {**home_env, "MCP_HTTP_HOST": "127.0.0.1",
+                 "MCP_HTTP_PORT": str(effective_port)}
+    serve_argv = [str(binary), "serve", "--transport", "http",
+                  "--host", "127.0.0.1", "--port", str(effective_port),
                   "--config", str(toml_path)]
-    for s in install(f"ai1c-code-index-mcp-{mid}", serve_argv,
-                     env=serve_env, state_dir=code_index_dir):
-        yield s
 
-    yield f"✓ Готово. MCP доступен на http://127.0.0.1:{port}/mcp"
+    if first:
+        yield from install(daemon_name, [str(binary), "daemon", "run"],
+                           env=home_env, state_dir=str(ci))
+        yield from install(serve_name, serve_argv, env=serve_env,
+                           state_dir=str(ci))
+        write_service_port(ci, effective_port)
+        if mid is not None:
+            for legacy in (f"ai1c-code-index-daemon-{mid}",
+                           f"ai1c-code-index-mcp-{mid}"):
+                try:
+                    yield from stop(legacy, state_dir=str(ci))
+                except Exception as exc:                       # noqa: BLE001
+                    yield f"⚠ legacy {legacy}: {exc}"
+    else:
+        error = _reload_daemon(binary, ci, run)
+        if error:
+            yield f"⚠ daemon reload: {error}"
+        else:
+            yield "✓ daemon reload"
+        yield from restart(serve_name, state_dir=str(ci))
+
+    yield (f"✓ code-index готов: {ci}, alias={project_name}, "
+           f"порт {effective_port}")
