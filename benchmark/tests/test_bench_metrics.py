@@ -625,6 +625,16 @@ def _digest_review_cell(task: dict) -> str:
     return cells[-1]
 
 
+def test_render_digest_shows_index_refresh_only_when_present():
+    task = {"folder": "task##009", "limit_minutes": 30, "outcome": "success",
+            "duration_sec": 5.0, "exit_code": 0, "stages": [], "cycles": {},
+            "transcript": {}}
+    task["index_refresh"] = "ready"
+    assert "- Индекс code_index: `ready`" in render_digest(_digest_metrics(task))
+    task.pop("index_refresh")
+    assert "Индекс code_index" not in render_digest(_digest_metrics(task))
+
+
 def test_render_digest_review_not_done_when_pending():
     task = {"folder": "task##008", "limit_minutes": 30, "outcome": "success",
             "duration_sec": 5.0, "exit_code": 0,
