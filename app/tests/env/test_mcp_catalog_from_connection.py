@@ -11,8 +11,21 @@ def test_build_mcp_json_uses_connection_fragment():
     )]
     servers = build_mcp_json(sel)["mcpServers"]
     assert servers == {
-        "bsl_ls": {"type": "http", "url": "http://localhost:8001/mcp"}
+        "bsl_ls": {"type": "http", "url": "http://localhost:8001/mcp",
+                   "alwaysLoad": True}
     }
+
+
+def test_build_mcp_json_preloads_code_index_and_bsl_ls():
+    sel = [
+        McpSelection(id="code-index", enabled=True, mode="managed",
+                     connection='"code_index": {"type":"http","url":"http://x/mcp"}'),
+        McpSelection(id="1c-md", enabled=True, mode="managed",
+                     connection='"1c-md": {"type":"http","url":"http://y/mcp"}'),
+    ]
+    servers = build_mcp_json(sel)["mcpServers"]
+    assert servers["code_index"]["alwaysLoad"] is True
+    assert "alwaysLoad" not in servers["1c-md"]
 
 
 def test_build_mcp_json_rejects_non_object_server_value():

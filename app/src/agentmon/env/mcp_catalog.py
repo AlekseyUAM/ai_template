@@ -82,6 +82,16 @@ def _server_name(sel) -> str:
     return sel.id
 
 
+_PRELOAD_IDS = frozenset({"code-index", "code-index-local", "bsl-ls"})
+_PRELOAD_NAMES = frozenset({"code_index", "bsl_ls"})
+
+
+def _preload_entry(sel_id: str, name: str, value: dict) -> dict:
+    if sel_id in _PRELOAD_IDS or name in _PRELOAD_NAMES:
+        return {**value, "alwaysLoad": True}
+    return value
+
+
 def build_mcp_json(selections, catalog=CATALOG) -> dict:
     servers: dict[str, dict] = {}
     for sel in selections:
@@ -91,18 +101,21 @@ def build_mcp_json(selections, catalog=CATALOG) -> dict:
         connection = getattr(sel, "connection", None)
         if connection:
             _, value = _parse_connection(connection, sel.id)
-            servers[name] = value
+            servers[name] = _preload_entry(sel.id, name, value)
             continue
         if sel.id not in catalog:
             raise ValueError(f"неизвестный MCP-сервер: {sel.id}")
         spec = catalog[sel.id]
         if sel.mode == "external":
-            servers[name] = _external_entry(sel.endpoint or "")
+            servers[name] = _preload_entry(sel.id, name,
+                                           _external_entry(sel.endpoint or ""))
         elif spec.transport == "http":
-            servers[name] = {"url": f"http://127.0.0.1:{spec.default_port}"}
+            servers[name] = _preload_entry(
+                sel.id, name, {"url": f"http://127.0.0.1:{spec.default_port}"})
         else:  # managed stdio: команда docker exec по container id (sel.id)
-            servers[name] = {"command": "docker",
-                             "args": ["exec", "-i", sel.id]}
+            servers[name] = _preload_entry(
+                sel.id, name, {"command": "docker",
+                               "args": ["exec", "-i", sel.id]})
     return {"mcpServers": servers}
 
 
