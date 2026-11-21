@@ -11,6 +11,8 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .code_index_toml import render_daemon_toml as _render_daemon_toml
+
 
 # Куда монтируется каталог платформы 1С внутри Linux-контейнера. На Windows
 # хостовый путь (`C:\Program Files (x86)\1cv8\...`) нельзя использовать как
@@ -141,26 +143,10 @@ def _daemon_toml(alias: str, path: str, cache_target_url: str | None = None) -> 
     старте, — после её появления нужен перезапуск контейнера."""
     # Секция — только при известном URL: без неё демон не уведомляет serve,
     # и его кэш результатов держит протухшие ответы до TTL (1 час).
-    cache = ""
+    port = None
     if cache_target_url:
-        cache = f'\n[[cache_targets]]\nurl = "{cache_target_url}"\n'
-    return f"""# Сгенерировано автоматически при развёртывании code-index.
-[daemon]
-http_host = "127.0.0.1"
-http_port = 0
-log_level = "info"
-{cache}
-[mcp]
-# массовый режим: get_object_structure принимает full_names (несколько объектов).
-# serve читает секцию один раз при старте — после изменения daemon.toml
-# перезапусти контейнер, иначе full_names продолжит отбиваться с -32602.
-mass_mode_tools = ["get_object_structure"]
-
-[[paths]]
-path = "{path}"
-alias = "{alias}"
-language = "bsl"
-"""
+        port = int(str(cache_target_url).rsplit(":", 1)[-1])
+    return _render_daemon_toml(alias, path, port)
 
 
 def recipe_for(type_key: str) -> DockerRecipe | None:
