@@ -15,12 +15,21 @@
 Задачи выполнялись последовательно на одной конфигурации: каждая следующая
 может опираться на объекты, созданные предыдущими.
 
-| Каталог | Задача |
-|---------|--------|
-| `tasks/task#001` | #001 Метаданные оперативного учета |
-| `tasks/task#002` | #002 Оперативный учет |
-| `tasks/task#003` | #003 Отчет Продажи |
-| `tasks/task#004` | #004 Отчет Остатки товаров |
+| Каталог | id | Задача |
+|---------|----|--------|
+| `tasks/task#001` | #23 | Метаданные оперативного учета |
+| `tasks/task#002` | #24 | Учетная политика |
+| `tasks/task#003` | #25 | Приходная накладная |
+| `tasks/task#004` | #26 | Расходная накладная |
+| `tasks/task#005` | #27 | Форма документа Расходная накладная |
+| `tasks/task#006` | #28 | Отчет Продажи |
+| `tasks/task#007` | #29 | Отчет Остатки товаров |
+
+`id` — внутренний номер задачи в AgentMon (он же в заголовке `TASK.md` и в
+логах `logs/task#NN`); каталог и `identifier` в `task.json` — `task#NNN`/`#NNN`.
+Полный набор этапов включён только в `task#004` (`plan`, `tests`, `develop`,
+`testing`, `review`); у остальных задач включён только `develop`. Состав
+этапов задаётся флагами `enabled` в `task.json`.
 
 ## Использование
 
@@ -84,12 +93,12 @@
 ```bash
 # Linux / macOS
 .venv/bin/python benchmark/run_benchmark.py \
-    --limit task#001=30 --limit task#002=120
+    --limit task#001=45 --limit task#004=180
 ```
 
 ```bat
 :: Windows (cmd) — одной строкой, перенос через «\» не работает
-.venv\Scripts\python.exe benchmark\run_benchmark.py --limit task#001=30 --limit task#002=120
+.venv\Scripts\python.exe benchmark\run_benchmark.py --limit task#001=45 --limit task#004=180
 ```
 
 Скрипт выполняет все задачи проекта `tasks/task#*` по очереди в `claude-ds`.
@@ -128,17 +137,38 @@
 1. Настройте проект на локальную LLM: скопируйте
    `template/.claude/settings.local.json.example` в
    `<проект>/.claude/settings.local.json`, подставьте `ANTHROPIC_BASE_URL`,
-   токен и id модели. Файл не коммитится.
-2. Скопируйте `benchmark/claude-local.bat.example` в корень проекта как
-   `claude-local.bat` (Windows) или настройте аналогичную обёртку на
-   Linux/macOS; модель и адрес приходят из `settings.local.json`.
-3. Запустите этапы (лимиты по умолчанию — в `DEFAULT_STAGE_LIMITS`):
+   токен и id модели. Файл не коммитится. Если модель обслуживает Strata,
+   значения печатает `strata connect` — см. «Настройки из Strata» ниже.
+2. Скопируйте обёртку в корень проекта; модель и адрес приходят из
+   `settings.local.json`:
+
+   ```bash
+   # Linux / macOS
+   cp benchmark/claude-local.sh.example <проект>/claude-local.sh
+   chmod +x <проект>/claude-local.sh
+   ```
 
    ```bat
-   .venv\Scripts\python.exe benchmark\stage_run.py ^
-     --task task#004 --project D:\projects\test ^
-     --claude-cmd D:\projects\test\claude-local.bat ^
-     --stages analyze,plan,tests --limit-stage tests=30
+   :: Windows (cmd)
+   copy benchmark\claude-local.bat.example <проект>\claude-local.bat
+   ```
+
+   Обёртка сбрасывает унаследованные `ANTHROPIC_*` (чтобы не подхватить
+   `claude-ds` из внешнего окружения) и запускает `claude` с
+   `--dangerously-skip-permissions`.
+3. Запустите этапы (лимиты по умолчанию — в `DEFAULT_STAGE_LIMITS`):
+
+   ```bash
+   # Linux / macOS
+   .venv/bin/python benchmark/stage_run.py \
+     --task task#004 --project ~/projects/test \
+     --claude-cmd ~/projects/test/claude-local.sh \
+     --stages plan,tests --limit-stage tests=30
+   ```
+
+   ```bat
+   :: Windows (cmd) — одной строкой
+   .venv\Scripts\python.exe benchmark\stage_run.py --task task#004 --project D:\projects\test --claude-cmd D:\projects\test\claude-local.bat --stages plan,tests --limit-stage tests=30
    ```
 
    Раннер останавливается, если этап не дошёл до `done`, не создал артефакт
@@ -148,7 +178,41 @@
 
 Порядок этапов по умолчанию: `analyze → plan → tests → develop → testing →
 review → docs`. Для локальной модели этапы `analyze`/`docs` можно отключить в
-`task.json` (`enabled: false`) — раннер выполнит только включённые.
+`task.json` (`enabled: false`) — раннер выполнит только включённые. Сейчас
+полный набор включён только у `task#004`, у остальных задач — только `develop`,
+поэтому `--stages` имеет смысл прежде всего для неё.
+
+### Настройки из Strata
+
+Если локальную модель обслуживает [Strata](https://github.com/Niko1221/Strata),
+готовые параметры подключения печатает её CLI:
+
+```bash
+strata launch                       # запустить сервер, если ещё не запущен
+strata connect claude-code          # блок env для settings.local.json
+strata connect claude-code --show-key  # то же, но с реальным ключом
+strata connect claude-code --check  # пробный запрос и вызов инструмента
+```
+
+`strata connect` берёт адрес, ключ и имя модели у запущенного сервера
+(`strata launch`), а если сервера нет — подставляет умолчания
+(`http://127.0.0.1:8080`, токен `strata-local`, модель `strata`). Перенесите
+значения из блока `Environment` в `<проект>/.claude/settings.local.json`:
+
+- `ANTHROPIC_BASE_URL` — адрес **без** `/v1`: Claude Code сам добавляет
+  `/v1/messages`;
+- `ANTHROPIC_AUTH_TOKEN` — ключ сервера (при запуске без ключа — `strata-local`);
+- `ANTHROPIC_MODEL` и `ANTHROPIC_SMALL_FAST_MODEL`/`ANTHROPIC_DEFAULT_*` —
+  имя, которое отдаёт сервер (в примере без сервера — `strata`, у реального
+  запуска — имя модели);
+- `CLAUDE_CODE_MAX_CONTEXT_TOKENS` и `CLAUDE_CODE_MAX_OUTPUT_TOKENS` — реальный
+  контекст и лимит вывода сервера; их же печатает `strata connect`. Без них
+  Claude Code считает окно равным 100K и либо не компактит, либо компактит
+  каждый ход.
+
+Флаг `--write` записывает настройки в глобальный `~/.claude/settings.json`
+(с резервной копией). Для benchmark предпочтителен проектный
+`settings.local.json`, чтобы не менять окружение остальных проектов.
 
 При сбое аналитика отчёт всё равно создаётся — с объективной сводкой и описанием
 ошибки. Старый `RESULT.md` не сохраняется.
