@@ -189,7 +189,7 @@ def classify_bash(command: str) -> str:
 
 def _relative(path: str, project_dir: Path) -> str:
     try:
-        return str(Path(path).resolve().relative_to(project_dir.resolve()))
+        return Path(path).resolve().relative_to(project_dir.resolve()).as_posix()
     except (ValueError, OSError):
         return str(path)
 

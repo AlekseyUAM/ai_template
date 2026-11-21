@@ -16,10 +16,53 @@ from bench_run import (BenchError, TaskInfo, _stream_metrics, _task_aliases,
                        select_tasks)
 
 
+def pid_alive(pid: int) -> bool:
+    if os.name == "nt":
+        # os.kill(pid, 0) на Windows не проверка живости, а TerminateProcess:
+        # спрашиваем код выхода через OpenProcess.
+        import ctypes
+        from ctypes import wintypes
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL,
+                                         wintypes.DWORD)
+        kernel32.OpenProcess.restype = wintypes.HANDLE
+        kernel32.GetExitCodeProcess.argtypes = (wintypes.HANDLE,
+                                                ctypes.POINTER(wintypes.DWORD))
+        kernel32.GetExitCodeProcess.restype = wintypes.BOOL
+        kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
+        kernel32.CloseHandle.restype = wintypes.BOOL
+        handle = kernel32.OpenProcess(0x1000, False, pid)  # QUERY_LIMITED_INFO
+        if not handle:
+            return False
+        try:
+            code = wintypes.DWORD()
+            if not kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+                return False
+            return code.value == 259  # STILL_ACTIVE
+        finally:
+            kernel32.CloseHandle(handle)
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
 def write_fake_claude(path: Path, body: str) -> Path:
-    path.write_text("#!/usr/bin/env python3\n" + body, encoding="utf-8")
-    path.chmod(0o755)
-    return path
+    script = path.with_name(path.name + ".py")
+    script.write_text("#!/usr/bin/env python3\n" + body, encoding="utf-8")
+    if os.name == "nt":
+        # Windows не исполняет shebang-скрипты напрямую (WinError 193) —
+        # оборачиваем в .bat, который запускает тот же интерпретатор.
+        bat = path.with_name(path.name + ".bat")
+        bat.write_text("@echo off\r\n"
+                       + f'"{sys.executable}" "{script}" %*\r\n',
+                       encoding="utf-8")
+        return bat
+    script.chmod(0o755)
+    return script
 
 
 def test_parse_stream(tmp_path):
@@ -126,9 +169,7 @@ def test_run_claude_timeout_kills_descendants(tmp_path):
     pid = int(pid_file.read_text(encoding="utf-8"))
     deadline = time.monotonic() + 5
     while time.monotonic() < deadline:
-        try:
-            os.kill(pid, 0)
-        except ProcessLookupError:
+        if not pid_alive(pid):
             break
         time.sleep(0.1)
     else:
