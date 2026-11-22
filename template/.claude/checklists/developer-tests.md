@@ -63,13 +63,18 @@ additional checks "just in case" nor scenarios for adjacent cases.
 6. If a scenario does not fit into 150 lines - move the common part into helpers or a separate
    module, do not generate everything at once.
 
-**Ready helpers.** In `ЮТ_ТестированиеСервер` there are already checks and data
-creation: `ДвиженияПоРегистратору`, `Проверить`, `ПроверитьНаборДвижений`,
-`ПроверитьОтсутствиеДвижения`, `ТаблицыЗначенийРавны`, `СоздатьДокумент`,
-`СоздатьЭлементСправочника`, `СоздатьЭлементПВХ`, `НоваяТаблицаСтрокНакладной`,
-`ДобавитьСтрокуНакладной`, `СоздатьНакладную`, `СоздатьТестовуюОрганизацию`,
-`СоздатьТестовуюНоменклатуру`, `УстановитьМетодСписанияСебестоимости`,
-`УдалитьМетодСписанияСебестоимости`. Use them, do not duplicate in the test module.
+**Ready helpers.** Use the existing functions of `ЮТ_ТестированиеСервер`, do not duplicate
+them in the test module:
+
+- movements: `ДвиженияПоРегистратору`, `НоваяТаблицаДвижений`,
+  `ПроверитьНаборДвижений`, `ПроверитьОтсутствиеДвижения`;
+- registers and data: `ЗаписатьЗаписьРегистраСведений`, `СоздатьДокумент`,
+  `СоздатьЭлементСправочника`, `СоздатьЭлементПВХ`, `ДанныеНовогоЭлемента`;
+- comparison and run: `ТаблицыЗначенийРавны`, `РезультатТеста`, `ЗаписьЖР`,
+  `Тестирование`, `ВыполнениеТеста`, `УдалитьТестовыеЭлементы`.
+
+Helpers take metadata names as parameters (catalog, document, register, attribute) and
+do not reference task#001 objects, so they work for any task's metadata.
 
 **`bsl_ls` diagnostics.** `Information` diagnostics do not block the stage; fix
 only `Error` and `Warning` that point to a real defect.

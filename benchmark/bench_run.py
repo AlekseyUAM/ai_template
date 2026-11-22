@@ -413,7 +413,8 @@ def build_task_prompt(folder: str, limit_minutes: int | None = None) -> str:
     prompt = (f"Выполни задачу tasks/{folder} по этапам из её task.json. "
               f"Первое действие до вызова инструментов — Skill mcp-usage. "
               f"Следуй правилу single-agent-workflow и чеклистам этапов. "
-              f"Работай по TASK.md, изменения — в src/cf/**; `.claude/**` не меняй.")
+              f"Работай по TASK.md, изменения — в src/cf/**; `.claude/**` не меняй. "
+              f"План TASK.md — контракт: каждый пункт реализуй как написано и отрази в DEVELOP.md.")
     if limit_minutes is not None:
         prompt += (f" Жёсткий лимит выполнения задачи: {limit_minutes} мин. "
                    f"При нехватке времени приоритет — обязательным пунктам плана.")

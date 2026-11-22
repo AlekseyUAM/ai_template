@@ -28,6 +28,10 @@ The severity of each item is set on the single critical/important/minor scale (a
 - [important] Nested subqueries - check whether nested queries were added solely for readability; if present, make sure they are required by the task.
 - [important] Complex join and WHERE conditions - check for subqueries and ВЫБОР constructs in join clauses and WHERE; if present, assess whether they can be simplified.
 
+## Querying a document's data in the posting handler
+
+- [important] Direct query to the document's tabular sections - when posting changes the post on the basis of the document's tabular sections (`ОбработкаПроведения`), query `Документ.<Имя>.<ТЧ>` with the filter `Ссылка = &Ссылка`: the document is already written at that moment and the query returns the saved rows.
+
 ## Aliases of data sources in queries
 
 - [minor] Meaningfulness of the alias - make sure the source alias clearly describes its role in this query (e.g. "ОстаткиНаСкладах", not "Таблица1" or "РегистрНакопления").
