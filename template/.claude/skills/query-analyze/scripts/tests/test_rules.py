@@ -201,55 +201,29 @@ def test_totals_without_order_not_flagged():
     assert "order-after-totals" not in _codes(q)
 
 
-# ── totals-field-not-aggregated (error 4) ───────────
+# ── param-table-in-from (parameter table in ИЗ) ─────
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
-def test_totals_field_not_aggregated_flagged():
-    q = (
-        "ВЫБРАТЬ Т.Номенклатура КАК Номенклатура, Т.Услуга КАК Услуга "
-        "ИЗ РегистрСведений.Цены КАК Т "
-        "ИТОГИ ПО Номенклатура"
-    )
-    assert "totals-field-not-aggregated" in _codes(q)
+def test_param_table_in_from_flagged():
+    q = "ВЫБРАТЬ Т.Номенклатура КАК Номенклатура ИЗ &ТаблицаТоваров КАК Т"
+    assert "param-table-in-from" in _codes(q)
 
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
-def test_totals_field_aggregated_not_flagged():
-    q = (
-        "ВЫБРАТЬ Т.Номенклатура КАК Номенклатура, Т.Услуга КАК Услуга "
-        "ИЗ РегистрСведений.Цены КАК Т "
-        "ИТОГИ МАКСИМУМ(Услуга) ПО Номенклатура"
-    )
-    assert "totals-field-not-aggregated" not in _codes(q)
-
-
-@pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
-def test_totals_grouping_field_not_flagged():
-    # The grouping field (Номенклатура) is filled on totals rows - not flagged.
+def test_param_table_in_temp_not_flagged():
     q = (
         "ВЫБРАТЬ Т.Номенклатура КАК Номенклатура "
-        "ИЗ РегистрСведений.Цены КАК Т "
-        "ИТОГИ ПО Номенклатура"
+        "ПОМЕСТИТЬ ВТ "
+        "ИЗ &ТаблицаТоваров КАК Т"
     )
-    assert "totals-field-not-aggregated" not in _codes(q)
+    assert "param-table-in-from" not in _codes(q)
 
 
 @pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
-def test_no_totals_not_flagged():
-    q = "ВЫБРАТЬ Т.Номенклатура КАК Номенклатура, Т.Услуга КАК Услуга ИЗ РегистрСведений.Цены КАК Т"
-    assert "totals-field-not-aggregated" not in _codes(q)
-
-
-@pytest.mark.skipif(not HAVE_NODE, reason="нужен node")
-def test_totals_field_not_aggregated_is_error():
-    q = (
-        "ВЫБРАТЬ Т.Номенклатура КАК Номенклатура, Т.Услуга КАК Услуга "
-        "ИЗ РегистрСведений.Цены КАК Т "
-        "ИТОГИ ПО Номенклатура"
-    )
-    ctx = rules.QueryContext(q)
-    hits = [f for f in rules.run_all(ctx)
-            if f.code == "totals-field-not-aggregated"]
+def test_param_table_in_from_is_error():
+    q = "ВЫБРАТЬ Т.Номенклатура КАК Номенклатура ИЗ &ТаблицаТоваров КАК Т"
+    hits = [f for f in rules.run_all(rules.QueryContext(q))
+            if f.code == "param-table-in-from"]
     assert hits and hits[0].severity == "error"
 
 

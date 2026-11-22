@@ -1,8 +1,8 @@
 # Totals in 1C queries (ИТОГИ section)
 
 Domain reference: `ИТОГИ` semantics, aggregates, `NULL` in total rows,
-result iteration. Non-aggregated fields are caught automatically by the
-`totals-field-not-aggregated` rule of the `query-analyze` skill (severity `error`).
+result iteration. Non-aggregated fields in total rows are checked manually
+(section 4) - the automatic query analyzer does not detect them.
 Manual query checks - the `query-review` skill.
 
 ## 1. What ИТОГИ does

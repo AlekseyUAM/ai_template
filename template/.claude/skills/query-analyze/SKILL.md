@@ -132,9 +132,10 @@ produce a wrong result (typical code-generation mistakes):
   (section order violated). The platform reports a syntax error. **The parser is
   lenient about this order** (parses without error, silently dropping `УПОРЯДОЧИТЬ`),
   so the check is textual, not via `query-not-parseable`.
-- `totals-field-not-aggregated` (**critical**) - in a query with `ИТОГИ`, a field is
-  neither in the grouping nor in an aggregate -> on total rows it returns `NULL` (a common
-  cause of the runtime error "Преобразование значения к типу Булево…").
+- `param-table-in-from` (**critical**) - a parameter table (`&Параметр`) is selected
+  directly in `ИЗ` of a query that does not use `ПОМЕСТИТЬ`. Select from the parameter
+  table only after placing it into a temp table (`ВЫБРАТЬ … ПОМЕСТИТЬ ВТ ИЗ &Параметр`):
+  on 8.3.27 `ИЗ &Параметр` does not compile.
 - `vt-too-many-params` (**critical**) - more parameters are passed in a virtual table
   call than its signature allows. `РегистрНакопления.*.Остатки` -
   2 parameters `(Период, Условие)`, `*.Обороты` - 4, `*.ОстаткиИОбороты` - 5;
@@ -157,3 +158,5 @@ checked in `query-review` via `code_index` (`get_object_structure`).
 The exact allowed number of parameters for an accounting register VT (depends on the presence of
 subconto and correspondence) is not checked - `vt-too-many-params` catches only
 guaranteed extra parameters (above the maximum).
+Non-aggregated fields in `ИТОГИ` (fields neither grouped in `ПО` nor aggregated, which
+return `NULL` on total rows) are checked manually by `query-review`.

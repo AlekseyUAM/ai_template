@@ -497,8 +497,7 @@ module method called from the loop (depth 1) are caught automatically by `code-a
 ## Totals in queries (ИТОГИ)
 
 - [critical] **Non-aggregated fields in TOTALS** - a field that is not included in the
-  `ИТОГИ` grouping and not wrapped in an aggregate equals `NULL` on total rows. This is caught by
-  `query-analyze` (`totals-field-not-aggregated`, error), but also check by eye:
+  `ИТОГИ` grouping and not wrapped in an aggregate equals `NULL` on total rows. Check by eye:
   every "bare" field of the select list must be either in `ПО` or in an aggregate.
 
 ## Information registers

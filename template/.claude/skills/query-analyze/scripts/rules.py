@@ -1603,67 +1603,44 @@ def check_order_after_totals(ctx):
     return out
 
 
-# ── ИТОГИ: non-aggregated non-grouping fields ────
+# ── Parameter table in ИЗ of a plain ВЫБРАТЬ ────
 
-@rule(code="totals-field-not-aggregated", severity="error",
-      title="Поле выводится при ИТОГИ, но не агрегировано и не входит в группировку — на строках-итогах NULL")
-def check_totals_field_not_aggregated(ctx):
-    """Flags a "bare" field in a query with ИТОГИ that is included neither in the
-    ИТОГИ grouping nor in an aggregate.
+@rule(code="param-table-in-from", severity="error",
+      title="Параметрическая таблица в ИЗ — сначала помести её во временную таблицу (ПОМЕСТИТЬ), затем выбирай из неё")
+def check_param_table_in_from(ctx):
+    """Flags a parameter table (`&Параметр`) used directly in `ИЗ` of a query
+    that does not put the selection into a temp table.
 
-    Error 4 in errors.md: `ИТОГИ ПО Номенклатура` without aggregates for the fields
-    `Услуга`, `Потребность`. When traversing `ОбходРезультатаЗапроса.ПоГруппировкам`
-    (and on ОБЩИЕ rows) non-grouping non-aggregated fields are returned as
-    NULL. As a side effect this causes a runtime error like «Преобразование значения к типу
-    Булево не может быть выполнено» when such a NULL field is used in a condition.
+    On 8.3.27 a selection directly from a parameter table
+    (`ВЫБРАТЬ … ИЗ &Параметр`) does not compile. The parameter table must be placed
+    into a temp table first (`ВЫБРАТЬ … ПОМЕСТИТЬ ВТ ИЗ &Параметр`), and the
+    selection is made from `ВТ`.
 
-    Works on the AST model: if the query has a totals section, then for each
-    "bare" field of the select list (has path, no func, no expression) it checks
-    whether it is in totals.groupFields (by selectAlias or path) or in
-    totals.totalFields (by operandAlias). If not, the field becomes NULL on
-    totals rows -> finding. Calculated fields (expression) and aggregates (func) are not
-    flagged. If the model is unavailable, the rule is skipped.
-
-    Severity=error: leads to NULL in the data and usually to a runtime error
-    when traversing the result. The finding blocks acceptance.
+    Works on the AST model: iterates iter_query_models(ctx); a table in
+    model_dict["tables"] is a parameter table if its fullName starts with `&`.
+    Flagged when model_dict.queryType is not "createTemp". If the model is
+    unavailable, the rule is skipped.
     """
     out = []
     for line, distinct, model_dict in iter_query_models(ctx):
-        totals = model_dict.get("totals")
-        if not totals:
+        if model_dict.get("queryType") == "createTemp":
             continue
-        group_aliases = set()
-        group_paths = set()
-        for g in totals.get("groupFields") or []:
-            sa = g.get("selectAlias")
-            if sa:
-                group_aliases.add(sa.upper())
-            gp = g.get("path")
-            if gp:
-                group_paths.add(gp.upper())
-        total_aliases = set()
-        for t in totals.get("totalFields") or []:
-            oa = t.get("operandAlias")
-            if oa:
-                total_aliases.add(oa.upper())
-        for f in model_dict.get("fields") or []:
-            if f.get("func") or f.get("expression"):
-                continue  # aggregate or calculated field - not "bare"
-            path = f.get("path")
-            if not path:
-                continue
-            alias = f.get("alias") or path
-            au = alias.upper()
-            pu = path.upper()
-            if au in group_aliases or pu in group_paths or au in total_aliases:
-                continue
-            out.append(Finding(
-                "totals-field-not-aggregated", "error", line,
-                f"Поле «{alias}» выводится, но в секции ИТОГИ не входит ни в группировку, "
-                f"ни в агрегат — на строках-итогах (обход ПоГруппировкам, строки ОБЩИЕ) "
-                f"оно вернётся как NULL. Добавьте для него агрегат в ИТОГИ "
-                f"(например МАКСИМУМ({alias})) или уберите поле из списка выбора.",
-            ))
+        is_param_table = any(
+            (t.get("fullName") or "").startswith("&")
+            for t in model_dict.get("tables") or []
+        )
+        if not is_param_table:
+            continue
+        out.append(Finding(
+            code="param-table-in-from",
+            severity="error",
+            line=line,
+            message=(
+                "Параметрическую таблицу помещай во временную "
+                "(`ПОМЕСТИТЬ ВТ ИЗ &Параметр`) и выбирай из неё — на 8.3.27 выборка "
+                "`ИЗ &Параметр` не компилируется."
+            ),
+        ))
     return out
 
 

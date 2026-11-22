@@ -156,6 +156,10 @@ The severity of each item is set on the single critical/important/minor scale (a
 - [important] Indexing with В (...) - if query-analyze flagged a temp table without ИНДЕКСИРОВАТЬ ПО used in В (...), make sure: for small temp tables no index is needed; if the temp table is large - add ИНДЕКСИРОВАТЬ ПО over the fields from the subquery selection list in В (...).
 - [important] Several conditions using a temp table - if a temp table is used simultaneously in several joins/В conditions and only one of them is checked often, build an index only for the most frequently checked condition.
 
+## Totals in queries (ИТОГИ)
+
+- [critical] Non-aggregated fields in totals - in a query with `ИТОГИ`, check that every field of the select list that has no aggregate is listed in the `ИТОГИ` grouping (`ПО`); a field that is neither grouped nor aggregated returns `NULL` on total rows (traverse of `ПоГруппировкам`, `ОБЩИЕ` rows) and commonly causes a runtime error like "Value conversion to Boolean cannot be performed". query-analyze does not check this automatically.
+
 ## Counting records in queries
 
 - [important] Record count via КОЛИЧЕСТВО, not СУММА - if query-analyze flagged СУММА(1) or ЕСТЬNULL(СУММА(1), 0), replace with КОЛИЧЕСТВО(*) or КОЛИЧЕСТВО(<Поле>): using СУММА(1) leads to overflow at >=10 million records due to the default number precision (7 digits).
