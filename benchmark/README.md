@@ -27,9 +27,10 @@
 
 `id` — внутренний номер задачи в AgentMon (он же в заголовке `TASK.md` и в
 логах `logs/task#NN`); каталог и `identifier` в `task.json` — `task#NNN`/`#NNN`.
-Полный набор этапов включён только в `task#004` (`plan`, `tests`, `develop`,
-`testing`, `review`); у остальных задач включён только `develop`. Состав
-этапов задаётся флагами `enabled` в `task.json`.
+В `task#004` включены `plan`, `tests`, `develop`, `testing`, `review`; в
+`task#002` и `task#003` — `tests`, `develop`, `testing`; у остальных задач
+включён только `develop`. Состав этапов задаётся флагами `enabled` в
+`task.json`.
 
 ## Использование
 
@@ -209,8 +210,9 @@
 Порядок этапов по умолчанию: `analyze → plan → tests → develop → testing →
 review → docs`. Для локальной модели этапы `analyze`/`docs` можно отключить в
 `task.json` (`enabled: false`) — раннер выполнит только включённые. Сейчас
-полный набор включён только у `task#004`, у остальных задач — только `develop`,
-поэтому `--stages` имеет смысл прежде всего для неё.
+`plan`, `tests`, `develop`, `testing`, `review` включены у `task#004`; `tests`,
+`develop`, `testing` — у `task#002` и `task#003`; у остальных задач — только
+`develop`.
 
 ### Настройки из Strata
 
