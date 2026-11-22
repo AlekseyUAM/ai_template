@@ -163,6 +163,10 @@ def start_code_index(*, code_index_dir, catalog_dir, alias, port,
     toml_path.write_text(
         render_daemon_toml(alias, str(Path(catalog_dir).resolve()), int(port)),
         encoding="utf-8")
+    # serve принимает --host как socket-адрес, а не hostname: 'localhost'
+    # даёт "invalid socket address syntax". Наружу (URL/проба) оставляем
+    # исходный host, слушаем loopback.
+    bind_host = "127.0.0.1" if host in ("localhost", "::1", "") else host
     env = {**os.environ, "CODE_INDEX_HOME": str(ci)}
     with (ci / "daemon.log").open("ab") as daemon_log:
         daemon = popen([str(binary), "daemon", "run"], cwd=str(ci),
@@ -171,11 +175,11 @@ def start_code_index(*, code_index_dir, catalog_dir, alias, port,
     # PID демона пишется до spawn serve: если serve не стартует, демон
     # не останется сиротой без PID-файла.
     _write_pids(ci, daemon.pid)
-    serve_env = {**env, "MCP_HTTP_HOST": host, "MCP_HTTP_PORT": str(port)}
+    serve_env = {**env, "MCP_HTTP_HOST": bind_host, "MCP_HTTP_PORT": str(port)}
     try:
         with (ci / "serve.log").open("ab") as serve_log:
             serve = popen([str(binary), "serve", "--transport", "http",
-                           "--host", host, "--port", str(port),
+                           "--host", bind_host, "--port", str(port),
                            "--config", str(toml_path)],
                           cwd=str(ci), env=serve_env, stdout=serve_log,
                           stderr=subprocess.STDOUT, **_spawn_kwargs())
@@ -186,6 +190,14 @@ def start_code_index(*, code_index_dir, catalog_dir, alias, port,
     log(f"✓ code-index запущен: daemon pid={daemon.pid}, "
         f"serve pid={serve.pid}, порт {port}")
     return NativeIndex(ci, Path(binary), daemon.pid, serve.pid)
+
+
+def _log_tail(path: Path, lines: int = 15) -> str:
+    try:
+        text = Path(path).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+    return "\n".join(text.splitlines()[-lines:])
 
 
 def _daemon_status(index: NativeIndex, run=subprocess.run):
@@ -223,8 +235,12 @@ def wait_code_index_ready(index: NativeIndex, *, wait_minutes: int, host: str,
         # порту выдал бы готовность за нас.
         if not _is_our_process(index.daemon_pid, run) or \
                 not _is_our_process(index.serve_pid, run):
-            raise SetupError("native code-index завершился; смотрите "
-                             f"{index.code_index_dir}/daemon.log и serve.log")
+            serve_tail = _log_tail(index.code_index_dir / "serve.log")
+            daemon_tail = _log_tail(index.code_index_dir / "daemon.log")
+            raise SetupError(
+                "native code-index завершился; последние строки логов:\n"
+                f"--- serve.log ---\n{serve_tail or '(пусто)'}\n"
+                f"--- daemon.log ---\n{daemon_tail or '(пусто)'}")
         ready = bool(paths) and all(p.get("status") == "ready"
                                     for p in paths)
         if ready and tcp_ok(f"http://{host}:{port}"):
