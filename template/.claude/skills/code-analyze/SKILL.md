@@ -62,6 +62,7 @@ title)`; each returns a list of `Finding`. Codes are meaningful slugs (not `std*
 | `query-execute-in-loop-via-call` | warning | call in a loop to a local module method that executes a query (depth 1) |
 | `query-new-in-loop-via-call` | warning | call in a loop to a local module method that creates `Новый Запрос` (depth 1) |
 | `user-message-via-constructor` | info | `Новый СообщениеПользователю` instead of `ОбщегоНазначения.СообщитьПользователю` |
+| `comment-in-body` | warning | Comment in a method body (after the header), including `\|//` lines in query strings - move it to the method description |
 | `use-before-assignment` | warning | Variable is initialized only in an `Если` branch without `Иначе` and is used after the block - `Неопределено` is possible |
 
 ## System enums and value sets

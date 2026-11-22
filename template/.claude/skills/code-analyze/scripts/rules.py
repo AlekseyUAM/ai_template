@@ -1198,6 +1198,54 @@ def check_system_enum_value(ctx):
     return out
 
 
+@rule(code="comment-in-body", severity="warning",
+      title="Комментарий в теле метода — перенесите пояснение в описание метода")
+def check_comment_in_body(ctx):
+    """Flag explanatory comments inside a method body.
+
+    The standard ([important]) keeps the method body free of comments: the
+    contract is described in the method description before the declaration,
+    implementation notes in DEVELOP.md. A comment token on a line after the
+    method header (header_line < line <= end_line) is in the body.
+
+    Exceptions: comments before the declaration (method description, module
+    header, Перем block), `// BSLLS:` directive comments and mark_changes
+    markers (`-->` / `<--`).
+
+    A multi-line query string token keeps line breaks; a line whose stripped
+    content starts with `|//` is a commented-out query fragment - also flagged.
+    """
+    out = []
+    reported = set()
+
+    def report(line):
+        if line in reported:
+            return
+        reported.add(line)
+        out.append(Finding(
+            code="comment-in-body",
+            severity="warning",
+            line=line,
+            message=("Комментарий в теле метода: перенеси пояснение в описание "
+                     "метода или в DEVELOP.md."),
+        ))
+
+    model = ctx.model
+    for t in model.tokens:
+        if t.kind == "comment":
+            if any(m.header_line < t.line <= m.end_line for m in model.methods):
+                if t.value.lstrip().startswith("// BSLLS:"):
+                    continue
+                if "-->" in t.value or "<--" in t.value:
+                    continue
+                report(t.line)
+        elif t.kind == "string" and "\n" in t.value:
+            for offset, value_line in enumerate(t.value.split("\n")):
+                if value_line.strip().startswith("|//"):
+                    report(t.line + offset)
+    return out
+
+
 @rule(code="reserved-system-name", severity="error",
       title="Имя совпадает с системным перечислением/набором значений")
 def check_reserved_system_name(ctx):

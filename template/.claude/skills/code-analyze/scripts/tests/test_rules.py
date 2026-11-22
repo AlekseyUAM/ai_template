@@ -846,3 +846,81 @@ def test_reserved_name_comment_and_string_not_flagged():
 def test_normal_name_not_flagged():
     text = "Перем ОбычноеИмяПеременной;\n"
     assert "reserved-system-name" not in codes(text)
+
+
+# ── comment-in-body ──────────────────────────────────────────
+
+def test_comment_in_body_flagged():
+    text = (
+        "Процедура Тест()\n"
+        "    // Обнуляем счётчик\n"
+        "    Счётчик = 0;\n"
+        "КонецПроцедуры\n"
+    )
+    assert "comment-in-body" in codes(text)
+
+
+def test_comment_description_not_flagged():
+    text = (
+        "// Описание метода: выполняет обработку.\n"
+        "Процедура Тест()\n"
+        "    Счётчик = 0;\n"
+        "КонецПроцедуры\n"
+    )
+    assert "comment-in-body" not in codes(text)
+
+
+def test_comment_bslls_directive_not_flagged():
+    text = (
+        "Процедура Тест()\n"
+        "    // BSLLS:MagicNumber-off\n"
+        "    Счётчик = 0;\n"
+        "КонецПроцедуры\n"
+    )
+    assert "comment-in-body" not in codes(text)
+
+
+def test_comment_mark_changes_not_flagged():
+    text = (
+        "Процедура Тест()\n"
+        "    Счётчик = 0; // --> добавлено\n"
+        "    Флаг = Истина; // <-- изменено\n"
+        "КонецПроцедуры\n"
+    )
+    assert "comment-in-body" not in codes(text)
+
+
+def test_query_string_comment_flagged():
+    text = (
+        "Процедура Тест()\n"
+        "    Запрос.Текст = \"ВЫБРАТЬ\n"
+        "    |// закомментированный кусок\n"
+        "    |ИЗ Константы.Настройки\";\n"
+        "КонецПроцедуры\n"
+    )
+    fs = [f for f in findings(text) if f.code == "comment-in-body"]
+    assert len(fs) == 1
+    assert fs[0].line == 3
+    assert fs[0].severity == "warning"
+
+
+def test_query_string_without_comment_not_flagged():
+    text = (
+        "Процедура Тест()\n"
+        "    Запрос.Текст = \"ВЫБРАТЬ\n"
+        "    |Константа.Настройки КАК Настройки\";\n"
+        "КонецПроцедуры\n"
+    )
+    assert "comment-in-body" not in codes(text)
+
+
+def test_comment_module_header_not_flagged():
+    text = (
+        "// Модуль менеджера: служебные процедуры.\n"
+        "Перем Кэш;\n"
+        "\n"
+        "Процедура Тест()\n"
+        "    Кэш = 1;\n"
+        "КонецПроцедуры\n"
+    )
+    assert "comment-in-body" not in codes(text)
