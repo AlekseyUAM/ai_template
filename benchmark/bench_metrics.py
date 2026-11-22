@@ -207,13 +207,31 @@ def _is_hook_denial(event: ToolEvent) -> bool:
     return bool(event.is_error and "hook error" in (event.result_text or "").lower())
 
 
+def _is_ok_false_result(event: ToolEvent) -> bool:
+    """MCP-результат с `"ok": false`: ошибка инструмента без `is_error` в событии.
+
+    MCP-серверы возвращают прикладную ошибку как обычный JSON-результат, поэтому
+    Claude Code помечает такой вызов успешным; для метрики это ошибка MCP.
+    """
+    text = (event.result_text or "").strip()
+    if not text.startswith("{"):
+        return False
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        return False
+    return isinstance(payload, dict) and payload.get("ok") is False
+
+
 def summarize_events(events: list[ToolEvent], project_dir: Path) -> dict:
     tools = Counter(event.name for event in events)
     errors = [event for event in events if event.is_error]
     hook_denials = sum(1 for event in errors if _is_hook_denial(event))
-    mcp_errors = sum(1 for event in errors
-                     if event.name.startswith("mcp__")
-                     and not _is_hook_denial(event))
+    mcp_errors = sum(
+        1 for event in events
+        if event.name.startswith("mcp__")
+        and ((event.is_error and not _is_hook_denial(event))
+             or (not event.is_error and _is_ok_false_result(event))))
     skill_calls = sum(
         1 for event in events
         if event.name == "Skill"

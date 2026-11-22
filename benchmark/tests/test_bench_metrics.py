@@ -238,6 +238,24 @@ def test_mcp_error_and_hook_denial_are_disjoint(tmp_path):
     assert summary["hook_denials"] == 1
 
 
+def test_mcp_result_with_ok_false_counted_as_mcp_error(tmp_path):
+    """MCP-результат `{"ok": false}` без is_error — ошибка MCP."""
+    path = write_jsonl(tmp_path / "t.jsonl", [
+        tool_use("2026-01-01T00:00:00+00:00", "m1", "mcp__bsl_ls__check", {}),
+        tool_result("2026-01-01T00:00:01+00:00", "m1",
+                    json.dumps({"ok": False, "summary": "sha256 не совпадает"},
+                               ensure_ascii=False)),
+        tool_use("2026-01-01T00:00:02+00:00", "m2", "mcp__bsl_ls__check", {}),
+        tool_result("2026-01-01T00:00:03+00:00", "m2",
+                    json.dumps({"ok": True, "count": 0})),
+    ])
+    summary = summarize_events(parse_tool_events(path), tmp_path)
+    assert summary["tool_errors"] == 0  # is_error в событии нет
+    assert summary["mcp_errors"] == 1
+    env = aggregate_environment([{"transcript": {"main": summary}}])
+    assert env["mcp_errors"] == 1
+
+
 def test_mcp_usage_skill_and_duplicates_counted(tmp_path):
     path = write_jsonl(tmp_path / "t.jsonl", [
         tool_use("2026-01-01T00:00:00+00:00", "s1", "Skill",

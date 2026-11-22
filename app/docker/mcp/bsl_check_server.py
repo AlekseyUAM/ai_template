@@ -132,6 +132,33 @@ def _sha256_hex(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def _sha256_variants(*texts: str) -> set[str]:
+    """Допустимые SHA-256: с BOM и без, с одним завершающим `\n` и без него.
+
+    Файл модуля часто заканчивается переводом строки, а текст в аргументе `code`
+    приходит без него (и наоборот). Принимаем оба варианта плюс BOM-формы —
+    `sha256sum Module.bsl` продолжает работать независимо от последней строки.
+    """
+    variants: set[str] = set()
+    for text in texts:
+        for candidate in (text, _strip_bom(text)):
+            variants.add(_sha256_hex(candidate))
+            if candidate.endswith("\n"):
+                variants.add(_sha256_hex(candidate[:-1]))
+            else:
+                variants.add(_sha256_hex(candidate + "\n"))
+    return variants
+
+
+# Признак сбоя старта Spring в stderr BSL LS: повторный запуск обычно проходит.
+_TRANSIENT_STDERR_MARKERS = ("BeanCreationException",)
+
+
+def _is_transient_failure(stderr: str) -> bool:
+    """stderr сносит запуск java, но повтор может пройти (сбой старта Spring)."""
+    return any(marker in (stderr or "") for marker in _TRANSIENT_STDERR_MARKERS)
+
+
 def _counts(diagnostics: list[dict]) -> dict:
     """Сырые счётчики по уровням severity (нули для отсутствующих уровней)."""
     counts = {"Error": 0, "Warning": 0, "Information": 0, "Hint": 0}
@@ -166,8 +193,9 @@ def prepare_input(code, file_path, sha256, filename):
 
     `code` возвращается **исходным** (с BOM): BOM срезает `run_check`, который
     также сообщает `bom_removed`/`raw_sha256`. Здесь проверяется, что sha256
-    соответствует либо исходному тексту (с BOM), либо нормализованному — так
-    `sha256sum Module.bsl` продолжает работать для BOM-файлов.
+    соответствует исходному или нормализованному тексту, а также варианту с
+    завершающим переводом строки или без него — так `sha256sum Module.bsl`
+    продолжает работать для BOM-файлов и для файлов, оканчивающихся `\n`.
     """
     expected = str(sha256 or "").strip().lower()
     if not expected:
@@ -197,10 +225,11 @@ def prepare_input(code, file_path, sha256, filename):
     normalized = _strip_bom(raw)
     actual = _sha256_hex(normalized)
     raw_sha = _sha256_hex(raw)
-    if expected not in (actual, raw_sha):
+    if expected not in _sha256_variants(raw):
         return None, filename, expected, source, (
             f"sha256 не совпадает: передан {expected}, фактический {actual} "
-            f"(без BOM) / {raw_sha} (с BOM). Текст не соответствует файлу — "
+            f"(без BOM) / {raw_sha} (с BOM); допускается также хэш варианта "
+            f"с/без завершающего перевода строки. Текст не соответствует файлу — "
             f"не перепечатывай модуль, передай его как есть.")
     # Возвращаем исходный текст: run_check сам срежет BOM и заполнит
     # bom_removed/raw_sha256. expected нормализуем к хэшу текста без BOM —
@@ -228,7 +257,9 @@ def run_check(code: str, filename: str, jar: str, config: str | None = None,
     дополнительно возвращаются `raw_sha256` и `bom_removed=true`.
 
     Если передан `expected_sha256` — он должен быть 64 hex и совпасть с SHA-256
-    `code` (в любой из двух форм); иначе `ok=False` и java не запускается.
+    `code` (с BOM/без и с завершающим `\n`/без него); иначе `ok=False` и java не
+    запускается. Если java завершилась без отчёта с `BeanCreationException` в
+    stderr — запуск повторяется один раз; прочие ошибки не повторяются.
     Внутренний вызов может не передавать хэш (`None`) — обязательность
     обеспечивает публичный `check`.
 
@@ -249,13 +280,14 @@ def run_check(code: str, filename: str, jar: str, config: str | None = None,
             return _result(ok=False, summary="sha256 должен быть 64 hex-символа.",
                            sha256=actual_sha, source=source, raw_bytes=raw_bytes,
                            bom_removed=bom_removed, raw_sha256=raw_sha)
-        if expected not in (actual_sha, raw_sha):
+        if expected not in _sha256_variants(raw_code):
             return _result(
                 ok=False,
                 summary=(f"sha256 не совпадает: передан {expected}, фактический "
-                         f"{actual_sha} (без BOM) / {raw_sha} (с BOM). Текст не "
-                         f"соответствует файлу — не перепечатывай модуль, передай "
-                         f"его как есть."),
+                         f"{actual_sha} (без BOM) / {raw_sha} (с BOM); "
+                         f"допускается также хэш варианта с/без завершающего "
+                         f"перевода строки. Текст не соответствует файлу — не "
+                         f"перепечатывай модуль, передай его как есть."),
                 sha256=actual_sha, source=source, raw_bytes=raw_bytes,
                 bom_removed=bom_removed, raw_sha256=raw_sha)
     if raw_bytes > MAX_CODE_BYTES:
@@ -307,11 +339,34 @@ def run_check(code: str, filename: str, jar: str, config: str | None = None,
         report_path = outdir / "bsl-json.json"
         if not report_path.exists():
             stderr = (getattr(proc, "stderr", "") or "").strip()
-            code_ = getattr(proc, "returncode", "?")
-            return _result(ok=False,
-                           summary=stderr or f"Отчёт не создан (код возврата {code_}).",
-                           sha256=actual_sha, source=source, raw_bytes=raw_bytes,
-                           bom_removed=bom_removed, raw_sha256=raw_sha)
+            # Сбой старта Spring (BeanCreationException) — транзиентный: повтор
+            # запуска обычно проходит. Ошибки разбора (ParseError) и прочие
+            # сбои не повторяются. Повтор ровно один; каталог отчёта старого
+            # запуска удаляется, чтобы отчёт писался с нуля.
+            if _is_transient_failure(stderr):
+                shutil.rmtree(outdir, ignore_errors=True)
+                try:
+                    proc = run(cmd, capture_output=True, text=True,
+                               timeout=ANALYZE_TIMEOUT_SECONDS)
+                except subprocess.TimeoutExpired:
+                    return _result(
+                        ok=False,
+                        summary=f"BSL LS не завершился за {ANALYZE_TIMEOUT_SECONDS} с",
+                        sha256=actual_sha, source=source, raw_bytes=raw_bytes,
+                        bom_removed=bom_removed, raw_sha256=raw_sha)
+                except Exception as exc:  # java не найдена и т.п.
+                    return _result(ok=False,
+                                   summary=f"Не удалось запустить BSL LS: {exc}",
+                                   sha256=actual_sha, source=source,
+                                   raw_bytes=raw_bytes, bom_removed=bom_removed,
+                                   raw_sha256=raw_sha)
+            if not report_path.exists():
+                stderr = (getattr(proc, "stderr", "") or "").strip()
+                code_ = getattr(proc, "returncode", "?")
+                return _result(ok=False,
+                               summary=stderr or f"Отчёт не создан (код возврата {code_}).",
+                               sha256=actual_sha, source=source, raw_bytes=raw_bytes,
+                               bom_removed=bom_removed, raw_sha256=raw_sha)
 
         try:
             report = json.loads(report_path.read_text(encoding="utf-8"))
@@ -351,7 +406,8 @@ def build_server():
 
         sha256 — обязательный SHA-256 файла (64 hex). Вычисли по самому файлу:
             sha256sum Module.bsl
-        code — точный текст модуля; не перепечатывай его вручную.
+        code — точный текст модуля; не перепечатывай его вручную. Хэш принимается
+            и для текста с завершающим переводом строки, и без него.
         file_path — альтернатива code: сервер прочитает файл сам, если путь виден
             в контейнере. В стандартном Docker-развёртывании проект не смонтирован;
             используйте code+sha256.
