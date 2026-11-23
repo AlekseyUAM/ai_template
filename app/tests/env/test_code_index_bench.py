@@ -43,25 +43,33 @@ def test_start_writes_pid_and_toml(tmp_path, monkeypatch):
     assert index.daemon_pid == 111 and index.serve_pid == 222
     assert (ci / "benchmark-pids.json").is_file()
     text = (ci / "daemon.toml").read_text(encoding="utf-8")
-    assert 'alias = "a"' in text and str(catalog.resolve()) in text
+    # Путь в TOML экранирован: обратные слэши Windows удвоены.
+    escaped = str(catalog.resolve()).replace("\\", "\\\\")
+    assert 'alias = "a"' in text and escaped in text
 
 
 def test_stop_kills_own_pids(tmp_path, monkeypatch):
     ci = tmp_path / "ci"; ci.mkdir()
     (ci / "benchmark-pids.json").write_text('{"daemon": 10, "serve": 11}')
-    killed, calls = [], []
+    terminated, calls = [], []
     checks = {"n": 0}
 
     def ours(pid, run):
         checks["n"] += 1
         return checks["n"] <= 2          # живы только до SIGTERM
 
+    def run(cmd, **kwargs):
+        calls.append(list(cmd))
+        if cmd[:2] == ["taskkill", "/PID"]:
+            terminated.append(int(cmd[2]))
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
     monkeypatch.setattr(B, "_is_our_process", ours)
-    B.stop_code_index(ci, run=lambda cmd, **k: calls.append(cmd),
-                      kill=lambda pid, sig: killed.append(pid),
+    B.stop_code_index(ci, run=run,
+                      kill=lambda pid, sig: terminated.append(pid),
                       sleep=lambda _s: None, clock=lambda: 0.0,
                       log=lambda _m: None)
-    assert killed == [10, 11]
+    assert terminated == [10, 11]
     assert not (ci / "benchmark-pids.json").exists()
 
 
@@ -221,6 +229,7 @@ class _Clock:
         return self.values.pop(0) if self.values else self.past
 
 
+@pytest.mark.skipif(os.name == "nt", reason="SIGKILL — POSIX")
 def test_stop_gives_up_waiting_after_deadline(tmp_path, monkeypatch):
     ci = tmp_path / "ci"; ci.mkdir()
     (ci / "benchmark-pids.json").write_text('{"daemon": 10, "serve": 11}')
@@ -251,15 +260,23 @@ def test_stop_no_sigkill_when_wait_witnessed_exit(tmp_path, monkeypatch):
     (ci / "benchmark-pids.json").write_text('{"daemon": 10, "serve": 11}')
     signals = []
 
+    def run(cmd, **kwargs):
+        if cmd[:2] == ["taskkill", "/PID"]:
+            signals.append((int(cmd[2]), "taskkill"))
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
     def wait(pids, **kw):
         return []                       # оба PID вышли до дедлайна
 
     monkeypatch.setattr(B, "_is_our_process", lambda pid, run: True)
-    B.stop_code_index(ci, run=lambda cmd, **k: None,
+    B.stop_code_index(ci, run=run,
                       kill=lambda pid, sig: signals.append((pid, sig)),
                       clock=_Clock([0.0, 0.0]), wait=wait,
                       log=lambda _m: None)
-    assert signals == [(10, signal.SIGTERM), (11, signal.SIGTERM)]
+    if os.name == "nt":
+        assert signals == [(10, "taskkill"), (11, "taskkill")]
+    else:
+        assert signals == [(10, signal.SIGTERM), (11, signal.SIGTERM)]
 
 
 def test_stop_check_overrunning_deadline_ends_wait():
@@ -480,6 +497,46 @@ def test_start_maps_localhost_to_loopback_for_serve(tmp_path, monkeypatch):
     serve_args, serve_kwargs = spawned[1]
     assert serve_args[serve_args.index("--host") + 1] == "127.0.0.1"
     assert serve_kwargs["env"]["MCP_HTTP_HOST"] == "127.0.0.1"
+
+
+def test_wait_ready_uses_daemon_pid_from_state_file(tmp_path, monkeypatch):
+    """daemon run на Windows отделяется: launcher-PID мёртв, живой PID — в daemon.json."""
+    ci = tmp_path / "ci"; ci.mkdir()
+    (ci / "daemon.json").write_text(json.dumps({"pid": 71884}),
+                                    encoding="utf-8")
+    alive = {71884, 39296}
+    seen = []
+
+    def ours(pid, run):
+        seen.append(pid)
+        return pid in alive
+
+    monkeypatch.setattr(B, "_is_our_process", ours)
+    index = B.NativeIndex(ci, ci / "bsl-indexer", 52360, 39296)
+    status = json.dumps({"paths": [{"path": "/p", "status": "ready"}]})
+    B.wait_code_index_ready(index, wait_minutes=1, host="h", port=1,
+                            run=_ready_run(status, []),
+                            sleep=lambda _s: None, clock=_counting_clock(),
+                            tcp_ok=lambda _u: True, log=lambda _m: None)
+    assert 71884 in seen and 52360 not in seen
+
+
+def test_stop_kills_daemon_pid_from_state_file(tmp_path, monkeypatch):
+    """Сохранённый launcher-PID мёртв; stop добивает живой PID из daemon.json."""
+    ci = tmp_path / "ci"; ci.mkdir()
+    (ci / "benchmark-pids.json").write_text('{"daemon": 52360, "serve": 39296}')
+    (ci / "daemon.json").write_text(json.dumps({"pid": 71884}),
+                                    encoding="utf-8")
+    ran, killed = [], []
+    monkeypatch.setattr(B, "_is_our_process", lambda pid, run: pid == 71884)
+    B.stop_code_index(ci, run=lambda cmd, **k: ran.append(list(cmd)),
+                      kill=lambda pid, sig: killed.append(pid),
+                      wait=lambda pids, **kw: [], sleep=lambda _s: None,
+                      clock=lambda: 0.0, log=lambda _m: None)
+    if os.name == "nt":
+        assert ["taskkill", "/PID", "71884", "/T", "/F"] in ran
+    else:
+        assert killed == [71884]
 
 
 def test_wait_dead_process_includes_log_tail(tmp_path, monkeypatch):

@@ -1,5 +1,6 @@
 """Ретрай setup_benchmark при транзиентной блокировке ИБ."""
 import importlib.util
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -16,6 +17,22 @@ def _load():
 
 
 LOCK = "Ошибка исключительной блокировки информационной базы"
+
+
+def test_import_switches_stdout_to_utf8():
+    code = (
+        "import importlib.util, sys\n"
+        f"spec = importlib.util.spec_from_file_location("
+        f"'setup_benchmark', {str(SCRIPT)!r})\n"
+        "mod = importlib.util.module_from_spec(spec)\n"
+        "sys.modules['setup_benchmark'] = mod\n"
+        "spec.loader.exec_module(mod)\n"
+        "print('\\u2713')\n"
+    )
+    env = {**os.environ, "PYTHONIOENCODING": "cp1251"}
+    proc = subprocess.run([sys.executable, "-c", code], env=env,
+                          capture_output=True, text=True, timeout=30)
+    assert proc.returncode == 0, proc.stderr
 
 
 def test_retries_lock_error_then_succeeds():

@@ -14,6 +14,13 @@ import sys
 import time
 from pathlib import Path
 
+# Windows-консоль часто cp1251/cp866: «✓» и «→» в логах роняют print.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
+
 ROOT = Path(__file__).resolve().parents[1]
 
 _LOCK_MARK = "Ошибка исключительной блокировки информационной базы"

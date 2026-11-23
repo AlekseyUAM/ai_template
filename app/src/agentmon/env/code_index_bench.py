@@ -48,6 +48,22 @@ def _write_pids(code_index_dir, daemon: int,
                     encoding="utf-8")
 
 
+def _daemon_state_pid(code_index_dir) -> int | None:
+    """PID, который демон записал о себе сам (`daemon.json`).
+
+    `bsl-indexer daemon run` на Windows отделяется в дочерний процесс: PID,
+    возвращённый Popen, к моменту ожидания уже мёртв. Настоящий PID демон
+    пишет в `daemon.json`.
+    """
+    try:
+        data = json.loads((Path(code_index_dir) / "daemon.json")
+                          .read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    pid = data.get("pid") if isinstance(data, dict) else None
+    return pid if isinstance(pid, int) and pid > 0 else None
+
+
 def _is_our_process(pid: int, run=subprocess.run) -> bool:
     if os.name == "nt":
         try:
@@ -88,6 +104,9 @@ def stop_code_index(code_index_dir, *, run=subprocess.run, kill=os.kill,
                     wait=_wait_exit) -> None:
     pids = [pid for pid in _read_pids(code_index_dir)
             if _is_our_process(pid, run)]
+    own = _daemon_state_pid(code_index_dir)
+    if own is not None and own not in pids and _is_our_process(own, run):
+        pids.append(own)
     for pid in pids:
         if os.name == "nt":
             try:
@@ -232,8 +251,11 @@ def wait_code_index_ready(index: NativeIndex, *, wait_minutes: int, host: str,
                     f"code-index: ошибка индексации {p.get('path', '?')}: "
                     f"{p.get('error') or p.get('message') or 'ошибка индексации'}")
         # Проверяем свои процессы до «ready»: иначе чужой слушатель на
-        # порту выдал бы готовность за нас.
-        if not _is_our_process(index.daemon_pid, run) or \
+        # порту выдал бы готовность за нас. PID демона берём из его
+        # состояния: на Windows `daemon run` отделяется, и PID launcher'а
+        # уже мёртв.
+        daemon_pid = _daemon_state_pid(index.code_index_dir) or index.daemon_pid
+        if not _is_our_process(daemon_pid, run) or \
                 not _is_our_process(index.serve_pid, run):
             serve_tail = _log_tail(index.code_index_dir / "serve.log")
             daemon_tail = _log_tail(index.code_index_dir / "daemon.log")
