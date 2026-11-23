@@ -623,13 +623,21 @@ def _safe_name(path: Path) -> str:
     return f"{digest}_{path.name}"
 
 
+def _utf8_env() -> dict[str, str]:
+    """UTF-8 в дочерних скриптах: на Windows локаль даёт cp1251."""
+    env = os.environ.copy()
+    env["PYTHONUTF8"] = "1"
+    env["PYTHONIOENCODING"] = "utf-8"
+    return env
+
+
 def _run_script(argv: list[str], cwd: Path, stdin_text: str | None = None) -> dict:
     stdin_kwargs = ({"input": stdin_text} if stdin_text is not None
                     else {"stdin": subprocess.DEVNULL})
     try:
         proc = subprocess.run(argv, cwd=cwd, text=True, capture_output=True,
                               encoding="utf-8", errors="replace",
-                              timeout=180, **stdin_kwargs)
+                              env=_utf8_env(), timeout=180, **stdin_kwargs)
         return {"returncode": proc.returncode, "stdout": proc.stdout,
                 "stderr": proc.stderr}
     except (OSError, subprocess.TimeoutExpired) as exc:

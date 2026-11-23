@@ -58,6 +58,8 @@ def write_fake_claude(path: Path, body: str) -> Path:
         # оборачиваем в .bat, который запускает тот же интерпретатор.
         bat = path.with_name(path.name + ".bat")
         bat.write_text("@echo off\r\n"
+                       'set "PYTHONUTF8=1"\r\n'
+                       'set "PYTHONIOENCODING=utf-8"\r\n'
                        + f'"{sys.executable}" "{script}" %*\r\n',
                        encoding="utf-8")
         return bat
