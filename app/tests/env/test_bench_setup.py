@@ -1023,6 +1023,38 @@ def test_run_setup_happy_path(tmp_path):
     assert [index.code_index_dir for index in waited] == [Path(cfg.code_index_dir)]
     assert registry.list()[0].path == cfg.project_dir
     assert TaskRepo(store).list(project_id=result.project_id)
+    assert not (Path(cfg.project_dir) / ".claude" /
+                "settings.local.json").exists()
+
+
+def test_run_setup_writes_strata_settings(tmp_path):
+    root = make_repo_root(tmp_path)
+    make_tasks(root)
+    cfg = load_config(
+        write_env(tmp_path, BENCH_STRATA_SETTINGS="1"), repo_root=root)
+    store, registry = make_store(tmp_path), make_registry(tmp_path)
+    from types import SimpleNamespace
+
+    run_setup(
+        cfg, repo_root=root, store=store, registry=registry,
+        prov=OrchestratorProv(), tcp_ok=lambda url: True,
+        http_ok=lambda url: True, install_env=fake_install_env,
+        batch_run=lambda project_dir, args, **kwargs: None,
+        launch_index=lambda **kwargs: SimpleNamespace(
+            code_index_dir=cfg.code_index_dir),
+        wait_index=lambda index, **kwargs: None,
+        strata_env={
+            "ANTHROPIC_BASE_URL": "http://127.0.0.1:8080",
+            "ANTHROPIC_AUTH_TOKEN": "strata-local",
+            "ANTHROPIC_MODEL": "local-model",
+            "CLAUDE_CODE_MAX_CONTEXT_TOKENS": "262144",
+        },
+        log=lambda line: None,
+    )
+    path = Path(cfg.project_dir) / ".claude" / "settings.local.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert data["env"]["ANTHROPIC_MODEL"] == "local-model"
+    assert data["env"]["PYTHONUTF8"] == "1"
 
 
 def test_run_setup_recreate_removes_old_project(tmp_path):

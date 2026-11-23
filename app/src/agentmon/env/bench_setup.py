@@ -1024,6 +1024,7 @@ def run_setup(cfg: BenchConfig, *, repo_root: Path, store, registry,
               http_ok=default_http_ok, install_env=install_environment,
               batch_run=run_batch_step, launch_index=start_code_index,
               wait_index=wait_code_index_ready,
+              strata_env: dict[str, str] | None = None,
               recreate: bool = False) -> SetupResult:
     """Полный сценарий подготовки проекта. Ошибка → откат записей БД.
 
@@ -1063,6 +1064,12 @@ def run_setup(cfg: BenchConfig, *, repo_root: Path, store, registry,
                 db_user=cfg.db_user, db_password=cfg.db_password, prov=prov):
             detail = f" {event.detail}" if event.detail else ""
             log(f"[{event.step}] {event.status}{detail}")
+
+        if cfg.strata_settings:
+            settings_env = (strata_env if strata_env is not None
+                            else fetch_strata_env(cfg.strata_cmd))
+            write_strata_settings(
+                cfg.project_dir, build_strata_settings(settings_env), log=log)
 
         log("▶ база 1С")
         ensure_base(cfg, prov=prov, log=log)

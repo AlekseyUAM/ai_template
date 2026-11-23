@@ -247,6 +247,13 @@ strata connect claude-code --check  # пробный запрос и вызов 
   Claude Code считает окно равным 100K и либо не компактит, либо компактит
   каждый ход.
 
+При `BENCH_STRATA_SETTINGS=1` setup сам выполняет
+`strata connect claude-code --show-key` и пишет
+`<проект>/.claude/settings.local.json` (env, `permissions.deny`,
+`claudeMdExcludes`, `modelOverrides`); токен в лог не попадает. Если
+`strata` нет в `PATH`, укажите `STRATA_CMD`. Сервер должен быть запущен
+(`strata launch`), иначе `strata connect` подставит умолчания.
+
 Флаг `--write` записывает настройки в глобальный `~/.claude/settings.json`
 (с резервной копией). Для benchmark предпочтителен проектный
 `settings.local.json`, чтобы не менять окружение остальных проектов.

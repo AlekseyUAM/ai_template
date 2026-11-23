@@ -89,8 +89,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         from agentmon import config
         from agentmon.backends.local import LocalProvisioner
-        from agentmon.env.bench_setup import (SetupError, load_config,
-                                               run_setup)
+        from agentmon.env.bench_setup import (SetupError, fetch_strata_env,
+                                               load_config, run_setup)
         from agentmon.registry import ProjectRegistry, open_db
         from agentmon.store.db import connect
         from agentmon.store.schema import init_schema
@@ -109,6 +109,17 @@ def main(argv: list[str] | None = None) -> int:
     except SetupError as exc:
         print(f"✗ {exc}", file=sys.stderr)
         return 1
+
+    strata_env = None
+    if cfg.strata_settings:
+        try:
+            strata_env = fetch_strata_env(cfg.strata_cmd)
+        except SetupError as exc:
+            print(f"✗ {exc}", file=sys.stderr)
+            return 1
+        print(f"✓ Strata: модель {strata_env.get('ANTHROPIC_MODEL', '—')}, "
+              f"контекст "
+              f"{strata_env.get('CLAUDE_CODE_MAX_CONTEXT_TOKENS', '—')}")
 
     problem = docker_problem()
     if problem:
@@ -146,7 +157,8 @@ def main(argv: list[str] | None = None) -> int:
         result = run_setup_with_lock_retry(
             lambda: run_setup(
                 cfg, repo_root=ROOT, store=store, registry=registry,
-                prov=LocalProvisioner(), recreate=True),
+                prov=LocalProvisioner(), strata_env=strata_env,
+                recreate=True),
             log=print)
     except SetupError as exc:
         print(f"✗ {exc}", file=sys.stderr)
