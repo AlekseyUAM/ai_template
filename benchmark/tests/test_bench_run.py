@@ -14,6 +14,7 @@ from bench_run import (BenchError, TaskInfo, _stream_metrics, _task_aliases,
                        git_state, parse_args, parse_limit_arg, parse_minutes,
                        read_env_file, resolve_project_dir, run_claude,
                        select_tasks)
+from claude_proc import resolve_command, split_command
 
 
 def pid_alive(pid: int) -> bool:
@@ -123,6 +124,52 @@ def test_run_claude_result(tmp_path):
     assert run.timed_out is False
     assert run.stream.result["result"] == "ok"
     assert run.stream.session_id == "sid-2"
+
+
+def test_split_command_multitoken():
+    assert split_command("claude --dangerously-skip-permissions") == [
+        "claude", "--dangerously-skip-permissions"]
+
+
+def test_split_command_keeps_quoted_path_with_spaces():
+    assert split_command(
+        r'"C:\Program Files\Claude\claude.bat" --flag') == [
+        r"C:\Program Files\Claude\claude.bat", "--flag"]
+
+
+def test_resolve_command_accepts_whole_path_with_spaces(tmp_path):
+    exe = tmp_path / "claude local.bat"
+    exe.write_text("@echo off\n", encoding="utf-8")
+    assert resolve_command(str(exe)) == [str(exe)]
+
+
+def test_resolve_command_uses_path_and_pathext(monkeypatch, tmp_path):
+    exe = tmp_path / "claude-ds.bat"
+    exe.write_text("@echo off\n", encoding="utf-8")
+    monkeypatch.setattr(
+        "claude_proc.shutil.which",
+        lambda name: str(exe) if name == "claude-ds" else None)
+    assert resolve_command("claude-ds --flag") == [str(exe), "--flag"]
+
+
+def test_resolve_command_missing_raises(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        resolve_command(str(tmp_path / "nope.bat"))
+
+
+def test_run_claude_resolves_command_from_path(monkeypatch, tmp_path):
+    fake = write_fake_claude(tmp_path / "fake", "\n".join([
+        "import json",
+        "print(json.dumps({'type':'result','is_error':False,'result':'ok',"
+        "'session_id':'sid-path'}))",
+    ]) + "\n")
+    monkeypatch.setenv(
+        "PATH", str(tmp_path) + os.pathsep + os.environ.get("PATH", ""))
+    run = run_claude(cmd=f"{fake.stem} --extra", prompt="hi", cwd=tmp_path,
+                     timeout_sec=10, stream_path=tmp_path / "out.jsonl",
+                     stderr_path=tmp_path / "err.log")
+    assert run.exit_code == 0
+    assert run.stream.session_id == "sid-path"
 
 
 def test_run_claude_multiline_prompt_via_stdin(tmp_path):

@@ -6,6 +6,8 @@ CLI теряет флаги. Поэтому промпт пишем в stdin, а
 from __future__ import annotations
 
 import os
+import shlex
+import shutil
 import signal
 import subprocess
 import time
@@ -92,14 +94,57 @@ def _kill_group(proc: subprocess.Popen, pgid: int) -> None:
         _wait_exit(proc, 5)
 
 
+def _strip_quotes(arg: str) -> str:
+    if len(arg) >= 2 and arg[0] == arg[-1] == '"':
+        return arg[1:-1]
+    return arg
+
+
+def split_command(cmd: str) -> list[str]:
+    """Разобрать командную строку на argv (backslash-пути Windows целы)."""
+    posix = os.name != "nt" and "\\" not in cmd
+    argv = shlex.split(cmd, posix=posix)
+    if not posix:
+        argv = [_strip_quotes(arg) for arg in argv]
+    return [arg for arg in argv if arg]
+
+
+def resolve_command(cmd: str) -> list[str]:
+    """Вернуть argv с полным путём к исполняемому файлу.
+
+    Работает с коротким именем (PATH + PATHEXT на Windows), полным путём и
+    командой из нескольких слов. Raises FileNotFoundError.
+    """
+    raw = (cmd or "").strip()
+    if not raw:
+        raise FileNotFoundError("пустая команда агента")
+    if Path(raw).is_file():
+        return [raw]
+    argv = split_command(raw)
+    if not argv:
+        raise FileNotFoundError("пустая команда агента")
+    exe = argv[0]
+    path = Path(exe)
+    if path.is_absolute() or os.sep in exe or (os.altsep and os.altsep in exe):
+        resolved = str(path)
+    else:
+        found = shutil.which(exe)
+        if not found:
+            raise FileNotFoundError(f"команда не найдена: {exe}")
+        resolved = found
+    if not os.path.isfile(resolved) or not os.access(resolved, os.X_OK):
+        raise FileNotFoundError(f"команда не найдена или не исполняема: {cmd}")
+    return [resolved, *argv[1:]]
+
+
 def run_claude_process(*, cmd: str, prompt: str, cwd: Path,
                        timeout_sec: float, stdout_path: Path,
                        stderr_path: Path,
                        extra_args: tuple[str, ...] = (),
                        env: dict[str, str] | None = None) -> ProcessResult:
     """Запустить `claude -p` с промптом в stdin; таймаут убивает группу."""
-    argv = [cmd, "-p", "--output-format", "stream-json",
-            "--verbose", *extra_args]
+    argv = resolve_command(cmd) + ["-p", "--output-format", "stream-json",
+                                   "--verbose", *extra_args]
     stdout_path.parent.mkdir(parents=True, exist_ok=True)
     stderr_path.parent.mkdir(parents=True, exist_ok=True)
     started = time.monotonic()
