@@ -852,7 +852,8 @@ set "CLAUDE_CODE_EFFORT_LEVEL=max"
 set "CLAUDE_CODE_AUTO_COMPACT_WINDOW=786432"
 
 claude --dangerously-skip-permissions %*
-endlocal
+set "RC=%ERRORLEVEL%"
+endlocal & exit /b %RC%
 ```
 
 - [ ] **Step 2: Создать `deploy/claude/claude-ds.sh`**
@@ -902,7 +903,8 @@ set "PYTHONUTF8=1"
 set "PYTHONIOENCODING=utf-8"
 
 claude --dangerously-skip-permissions %*
-endlocal
+set "RC=%ERRORLEVEL%"
+endlocal & exit /b %RC%
 ```
 
 - [ ] **Step 4: Создать `deploy/claude/claude-local.sh`**

@@ -10,4 +10,5 @@ set "PYTHONUTF8=1"
 set "PYTHONIOENCODING=utf-8"
 
 claude --dangerously-skip-permissions %*
-endlocal
+set "RC=%ERRORLEVEL%"
+endlocal & exit /b %RC%

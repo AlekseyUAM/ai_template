@@ -118,23 +118,31 @@ def resolve_command(cmd: str) -> list[str]:
     raw = (cmd or "").strip()
     if not raw:
         raise FileNotFoundError("пустая команда агента")
+    args: list[str]
     if Path(raw).is_file():
-        return [raw]
-    argv = split_command(raw)
-    if not argv:
-        raise FileNotFoundError("пустая команда агента")
-    exe = argv[0]
-    path = Path(exe)
-    if path.is_absolute() or os.sep in exe or (os.altsep and os.altsep in exe):
-        resolved = str(path)
+        resolved = raw
+        args = []
     else:
-        found = shutil.which(exe)
-        if not found:
-            raise FileNotFoundError(f"команда не найдена: {exe}")
-        resolved = found
+        try:
+            argv = split_command(raw)
+        except ValueError as exc:
+            raise FileNotFoundError(f"некорректная команда: {exc}") from None
+        if not argv:
+            raise FileNotFoundError("пустая команда агента")
+        exe = argv[0]
+        path = Path(exe)
+        if path.is_absolute() or os.sep in exe or (
+                os.altsep and os.altsep in exe):
+            resolved = str(path)
+        else:
+            found = shutil.which(exe)
+            if not found:
+                raise FileNotFoundError(f"команда не найдена: {exe}")
+            resolved = found
+        args = argv[1:]
     if not os.path.isfile(resolved) or not os.access(resolved, os.X_OK):
         raise FileNotFoundError(f"команда не найдена или не исполняема: {cmd}")
-    return [resolved, *argv[1:]]
+    return [resolved, *args]
 
 
 def run_claude_process(*, cmd: str, prompt: str, cwd: Path,

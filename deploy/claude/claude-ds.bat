@@ -27,4 +27,5 @@ set "CLAUDE_CODE_EFFORT_LEVEL=max"
 set "CLAUDE_CODE_AUTO_COMPACT_WINDOW=786432"
 
 claude --dangerously-skip-permissions %*
-endlocal
+set "RC=%ERRORLEVEL%"
+endlocal & exit /b %RC%

@@ -1394,6 +1394,13 @@ def test_parse_strata_env_requires_model():
             '"ANTHROPIC_AUTH_TOKEN": "t"}}')
 
 
+def test_parse_strata_env_rejects_non_string_values():
+    with pytest.raises(SetupError, match="strata connect"):
+        parse_strata_env(
+            '{"env": {"ANTHROPIC_BASE_URL": "http://x", '
+            '"ANTHROPIC_AUTH_TOKEN": null, "ANTHROPIC_MODEL": "m"}}')
+
+
 def test_build_strata_settings_merges_benchmark_defaults():
     settings = build_strata_settings({
         "ANTHROPIC_BASE_URL": "http://x",
@@ -1424,6 +1431,7 @@ def test_build_strata_settings_keeps_strata_values():
 def test_fetch_strata_env_uses_connect_command(tmp_path, monkeypatch):
     exe = tmp_path / "strata.cmd"
     exe.write_text("", encoding="utf-8")
+    exe.chmod(0o755)
     monkeypatch.setattr(
         "agentmon.env.bench_setup.shutil.which", lambda name: str(exe))
     calls = []
@@ -1440,6 +1448,7 @@ def test_fetch_strata_env_uses_connect_command(tmp_path, monkeypatch):
 def test_fetch_strata_env_reports_bad_exit(tmp_path):
     exe = tmp_path / "strata.cmd"
     exe.write_text("", encoding="utf-8")
+    exe.chmod(0o755)
     with pytest.raises(SetupError, match="strata connect"):
         fetch_strata_env(
             str(exe),

@@ -134,23 +134,31 @@ def _resolve_command(cmd: str) -> list[str]:
     raw = (cmd or "").strip()
     if not raw:
         raise FileNotFoundError("пустая команда")
+    args: list[str]
     if Path(raw).is_file():
-        return [raw]
-    argv = _split_command(raw)
-    if not argv:
-        raise FileNotFoundError("пустая команда")
-    exe = argv[0]
-    path = Path(exe)
-    if path.is_absolute() or os.sep in exe or (os.altsep and os.altsep in exe):
-        resolved = str(path)
+        resolved = raw
+        args = []
     else:
-        found = shutil.which(exe)
-        if not found:
-            raise FileNotFoundError(f"команда не найдена: {exe}")
-        resolved = found
+        try:
+            argv = _split_command(raw)
+        except ValueError as exc:
+            raise FileNotFoundError(f"некорректная команда: {exc}") from None
+        if not argv:
+            raise FileNotFoundError("пустая команда")
+        exe = argv[0]
+        path = Path(exe)
+        if path.is_absolute() or os.sep in exe or (
+                os.altsep and os.altsep in exe):
+            resolved = str(path)
+        else:
+            found = shutil.which(exe)
+            if not found:
+                raise FileNotFoundError(f"команда не найдена: {exe}")
+            resolved = found
+        args = argv[1:]
     if not os.path.isfile(resolved) or not os.access(resolved, os.X_OK):
         raise FileNotFoundError(f"команда не найдена: {cmd}")
-    return [resolved, *argv[1:]]
+    return [resolved, *args]
 
 
 def parse_strata_env(output: str) -> dict[str, str]:
@@ -166,7 +174,13 @@ def parse_strata_env(output: str) -> dict[str, str]:
     env = data.get("env") if isinstance(data, dict) else None
     if not isinstance(env, dict) or not env:
         raise SetupError("strata connect: в JSON нет непустого блока env")
-    result = {str(key): str(value) for key, value in env.items()}
+    result: dict[str, str] = {}
+    for key, value in env.items():
+        if not isinstance(key, str) or not isinstance(value, str):
+            raise SetupError(
+                "strata connect: env должен содержать строковые ключи "
+                "и значения")
+        result[key] = value
     for key in ("ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN",
                 "ANTHROPIC_MODEL"):
         if not result.get(key):

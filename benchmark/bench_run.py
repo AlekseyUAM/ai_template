@@ -220,7 +220,11 @@ def read_env_file(path: Path) -> dict[str, str]:
         key, value = line.split("=", 1)
         value = value.strip()
         if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
-            value = value[1:-1]
+            inner = value[1:-1]
+            # Снимаем кавычки, только если это обрамление всего значения:
+            # у команды вида `"путь" --flag "аргумент"` кавычки внутри.
+            if value[0] not in inner:
+                value = inner
         values[key.strip()] = value
     return values
 

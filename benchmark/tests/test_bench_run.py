@@ -13,7 +13,7 @@ from bench_run import (BenchError, TaskInfo, _stream_metrics, _task_aliases,
                        check_freshness, collect_diff, discover_tasks,
                        git_state, parse_args, parse_limit_arg, parse_minutes,
                        read_env_file, resolve_claude_cmd, resolve_project_dir,
-                       run_claude, select_tasks)
+                       run_claude, select_tasks, ensure_claude_cmd)
 from claude_proc import resolve_command, split_command
 
 
@@ -140,12 +140,40 @@ def test_split_command_keeps_quoted_path_with_spaces():
 def test_resolve_command_accepts_whole_path_with_spaces(tmp_path):
     exe = tmp_path / "claude local.bat"
     exe.write_text("@echo off\n", encoding="utf-8")
+    exe.chmod(0o755)
     assert resolve_command(str(exe)) == [str(exe)]
+
+
+def test_resolve_command_accepts_quoted_path_and_args(tmp_path):
+    exe = tmp_path / "claude local.bat"
+    exe.write_text("@echo off\n", encoding="utf-8")
+    exe.chmod(0o755)
+    assert resolve_command(f'"{exe}" --flag "two words"') == [
+        str(exe), "--flag", "two words"]
+
+
+def test_resolve_command_rejects_unbalanced_quotes():
+    with pytest.raises(FileNotFoundError):
+        resolve_command('claude "unclosed')
+
+
+def test_resolve_command_rejects_non_executable(monkeypatch, tmp_path):
+    exe = tmp_path / "claude local.bat"
+    exe.write_text("@echo off\n", encoding="utf-8")
+    monkeypatch.setattr("claude_proc.os.access", lambda path, mode: False)
+    with pytest.raises(FileNotFoundError):
+        resolve_command(str(exe))
+
+
+def test_ensure_claude_cmd_reports_unbalanced_quotes():
+    with pytest.raises(BenchError, match="команда агента"):
+        ensure_claude_cmd('claude "unclosed')
 
 
 def test_resolve_command_uses_path_and_pathext(monkeypatch, tmp_path):
     exe = tmp_path / "claude-ds.bat"
     exe.write_text("@echo off\n", encoding="utf-8")
+    exe.chmod(0o755)
     monkeypatch.setattr(
         "claude_proc.shutil.which",
         lambda name: str(exe) if name == "claude-ds" else None)
@@ -157,6 +185,13 @@ def test_resolve_command_missing_raises(tmp_path):
         resolve_command(str(tmp_path / "nope.bat"))
 
 
+def test_read_env_file_keeps_quoted_command(tmp_path):
+    env = tmp_path / "test.env"
+    value = r'"C:\Program Files\Claude\claude.bat" --flag "two words"'
+    env.write_text(f"AGENTMON_CLAUDE_CMD={value}\n", encoding="utf-8")
+    assert read_env_file(env)["AGENTMON_CLAUDE_CMD"] == value
+
+
 def test_run_claude_resolves_command_from_path(monkeypatch, tmp_path):
     fake = write_fake_claude(tmp_path / "fake", "\n".join([
         "import json",
@@ -165,7 +200,7 @@ def test_run_claude_resolves_command_from_path(monkeypatch, tmp_path):
     ]) + "\n")
     monkeypatch.setenv(
         "PATH", str(tmp_path) + os.pathsep + os.environ.get("PATH", ""))
-    run = run_claude(cmd=f"{fake.stem} --extra", prompt="hi", cwd=tmp_path,
+    run = run_claude(cmd=f"{fake.name} --extra", prompt="hi", cwd=tmp_path,
                      timeout_sec=10, stream_path=tmp_path / "out.jsonl",
                      stderr_path=tmp_path / "err.log")
     assert run.exit_code == 0
