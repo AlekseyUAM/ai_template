@@ -33,6 +33,57 @@ also shows passed rules. Exit code is not 0 when there are `error`-level finding
 (suppressed by the `-NoFail` flag). When analyzing a directory, blocks are separated by
 `--- 8< ---`.
 
+## Event handler checks
+
+Standard event handlers are checked separately, because the expected signature
+depends on the metadata type and module kind. The script understands the object
+from the XML dump path (`Catalogs/X/Ext/ObjectModule.bsl` →
+`Catalog.X`, `Catalog.ObjectModule`) and does not read metadata XML or require
+the platform.
+
+```bash
+# Один .bsl-файл: вид модуля и объект определяются по пути
+python "${CLAUDE_SKILL_DIR}/scripts/check_event_handlers.py" \
+  src/cf/Documents/Заказ/Ext/ObjectModule.bsl
+# Каталог (рекурсивно)
+python "${CLAUDE_SKILL_DIR}/scripts/check_event_handlers.py" src/cf
+# Произвольный файл/stdin без пути в выгрузке
+python "${CLAUDE_SKILL_DIR}/scripts/check_event_handlers.py" \
+  --module-type Document.ObjectModule --object-name Заказ tmp/документ.txt
+# Справочник видов модулей
+python "${CLAUDE_SKILL_DIR}/scripts/check_event_handlers.py" --list-module-types
+```
+
+For a directory, blocks are separated by `--- 8< ---`; files whose module kind
+cannot be inferred (form modules, unknown layouts) are skipped and counted in
+the stderr summary. `-Detailed` prints the detected context
+(`Document.Заказ — Модуль объекта (Документ)`) and passed checks. Exit code is
+non-zero on `error` findings; `-NoFail` suppresses it.
+
+Each message contains the correct signature, for example:
+
+```
+error | event-handler-params | строка 9 | ОбработкаПроведения: объявлено параметров: 3 (ОтменитьПроведение, Параметр, ВыполняетсяЛица); правильная сигнатура: Процедура ОбработкаПроведения(Отказ, РежимПроведения) / Procedure Posting(Cancel, PostingMode)
+```
+
+| Code | Severity | What it catches |
+|---|---|---|
+| `event-handler-exported` | warning | standard handler declared with `Экспорт` |
+| `event-handler-params` | error | declared parameters do not fit the contract: extra parameters, or an omitted required trailing parameter |
+| `event-handler-param-name` | info | parameter at a position is named differently from the contract (RU/EN names accepted) |
+| `event-handler-wrong-module` | warning | the name is a standard event of another metadata type/module kind; the message names the right module and signature |
+
+Optional trailing parameters may be omitted: the contract marks parameters with
+a platform default (e.g. `Отказ`) as optional. BSP reports may declare the 4th
+`АдресХранилища` parameter of `ПриКомпоновкеРезультата`; it is included as an
+allowed overload. Form modules are not checked in v1: their handlers are bound
+in `Form.xml`, so name-based checks produce false positives. HTTP/Web/
+integration service handlers are skipped because their handler names are
+configured in metadata.
+
+Data lives in `scripts/event_handlers.json`; **do not read it manually** - the
+script does. To update it from the platform help, see `scripts/tools/README.md`.
+
 ## Rule registry
 
 Rules are declared in `scripts/rules.py` via the decorator `@rule(code, severity,

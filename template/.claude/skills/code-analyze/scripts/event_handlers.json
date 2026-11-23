@@ -1,0 +1,5436 @@
+{
+ "schema_version": 1,
+ "platform": "8.3.27.2170",
+ "generated_at": "2026-11-23",
+ "source": "shcntx_ru.hbk (syntax assistant)",
+ "event_count": 231,
+ "modules": {
+  "AccountingRegister.ManagerModule": {
+   "title_ru": "Модуль менеджера (Регистр бухгалтерии)",
+   "title_en": "AccountingRegisterManager.<Accounting register name>",
+   "metadata_type": "AccountingRegister",
+   "module_kind": "ManagerModule",
+   "events": {
+    "ОбработкаПолученияФормы": {
+     "name_en": "FormGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ВидФормы",
+        "Параметры",
+        "ВыбраннаяФорма",
+        "ДополнительнаяИнформация",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "FormType",
+        "Parameters",
+        "SelectedForm",
+        "AdditionalInformation",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        false,
+        false,
+        true
+       ],
+       "required_count": 4
+      }
+     ]
+    }
+   }
+  },
+  "AccountingRegister.RecordSetModule": {
+   "title_ru": "Модуль набора записей (Регистр бухгалтерии)",
+   "title_en": "AccountingRegisterRecordSet.<Accounting register name>",
+   "metadata_type": "AccountingRegister",
+   "module_kind": "RecordSetModule",
+   "events": {
+    "ПередЗаписью": {
+     "name_en": "BeforeWrite",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ",
+        "Замещение"
+       ],
+       "params_en": [
+        "Cancel",
+        "Replacing"
+       ],
+       "optional": [
+        true,
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ОбработкаПроверкиЗаполнения": {
+     "name_en": "FillCheckProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ",
+        "ПроверяемыеРеквизиты"
+       ],
+       "params_en": [
+        "Cancel",
+        "CheckedAttributes"
+       ],
+       "optional": [
+        true,
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ПриЗаписи": {
+     "name_en": "OnWrite",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ",
+        "Замещение"
+       ],
+       "params_en": [
+        "Cancel",
+        "Replacing"
+       ],
+       "optional": [
+        true,
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    }
+   }
+  },
+  "AccumulationRegister.ManagerModule": {
+   "title_ru": "Модуль менеджера (Регистр накопления)",
+   "title_en": "AccumulationRegisterManager.<Accumulation register name>",
+   "metadata_type": "AccumulationRegister",
+   "module_kind": "ManagerModule",
+   "events": {
+    "ОбработкаПолученияФормы": {
+     "name_en": "FormGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ВидФормы",
+        "Параметры",
+        "ВыбраннаяФорма",
+        "ДополнительнаяИнформация",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "FormType",
+        "Parameters",
+        "SelectedForm",
+        "AdditionalInformation",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        false,
+        false,
+        true
+       ],
+       "required_count": 4
+      }
+     ]
+    }
+   }
+  },
+  "AccumulationRegister.RecordSetModule": {
+   "title_ru": "Модуль набора записей (Регистр накопления)",
+   "title_en": "AccumulationRegisterRecordSet.<Accumulation register name>",
+   "metadata_type": "AccumulationRegister",
+   "module_kind": "RecordSetModule",
+   "events": {
+    "ПередЗаписью": {
+     "name_en": "BeforeWrite",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ",
+        "Замещение"
+       ],
+       "params_en": [
+        "Cancel",
+        "Replacing"
+       ],
+       "optional": [
+        true,
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ОбработкаПроверкиЗаполнения": {
+     "name_en": "FillCheckProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ",
+        "ПроверяемыеРеквизиты"
+       ],
+       "params_en": [
+        "Cancel",
+        "CheckedAttributes"
+       ],
+       "optional": [
+        true,
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ПриЗаписи": {
+     "name_en": "OnWrite",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ",
+        "Замещение"
+       ],
+       "params_en": [
+        "Cancel",
+        "Replacing"
+       ],
+       "optional": [
+        true,
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    }
+   }
+  },
+  "Bot.Module": {
+   "title_ru": "Модуль (Бот)",
+   "title_en": "Bot module",
+   "metadata_type": "Bot",
+   "module_kind": "Module",
+   "events": {
+    "ОбработкаНажатияКнопкиПанелиКнопокСообщенияСистемыВзаимодействия": {
+     "name_en": "CollaborationSystemMessageButtonPanelButtonClickProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Сообщение",
+        "Кнопка",
+        "Пользователь",
+        "ДополнительныеПараметры"
+       ],
+       "params_en": [
+        "Message",
+        "Button",
+        "User",
+        "AdditionalParameters"
+       ],
+       "optional": [
+        false,
+        false,
+        false,
+        false
+       ],
+       "required_count": 4
+      }
+     ]
+    },
+    "ОбработкаСообщенияСистемыВзаимодействия": {
+     "name_en": "CollaborationSystemMessageProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Сообщение",
+        "ДополнительныеПараметры"
+       ],
+       "params_en": [
+        "Message",
+        "AdditionalParameters"
+       ],
+       "optional": [
+        false,
+        false
+       ],
+       "required_count": 2
+      }
+     ]
+    },
+    "ПриДобавленииВОбсуждениеСистемыВзаимодействия": {
+     "name_en": "OnAddToCollaborationSystemConversation",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ИдентификаторОбсуждения",
+        "ДополнительныеПараметры"
+       ],
+       "params_en": [
+        "ConversationID",
+        "AdditionalParameters"
+       ],
+       "optional": [
+        false,
+        false
+       ],
+       "required_count": 2
+      }
+     ]
+    },
+    "ПриСозданииОбсужденияСистемыВзаимодействия": {
+     "name_en": "OnCreateCollaborationSystemConversation",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ИдентификаторОбсуждения",
+        "ДополнительныеПараметры"
+       ],
+       "params_en": [
+        "ConversationID",
+        "AdditionalParameters"
+       ],
+       "optional": [
+        false,
+        false
+       ],
+       "required_count": 2
+      }
+     ]
+    },
+    "ПриУдаленииИзОбсужденияСистемыВзаимодействия": {
+     "name_en": "OnDeleteFromCollaborationSystemConversation",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ИдентификаторОбсуждения",
+        "ДополнительныеПараметры"
+       ],
+       "params_en": [
+        "ConversationID",
+        "AdditionalParameters"
+       ],
+       "optional": [
+        false,
+        false
+       ],
+       "required_count": 2
+      }
+     ]
+    }
+   }
+  },
+  "BusinessProcess.ManagerModule": {
+   "title_ru": "Модуль менеджера (Бизнес-процесс)",
+   "title_en": "BusinessProcessManager.<Business process name>",
+   "metadata_type": "BusinessProcess",
+   "module_kind": "ManagerModule",
+   "events": {
+    "ОбработкаПослеЗаписиВерсийИсторииДанных": {
+     "name_en": "AfterWriteDataHistoryVersionsProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ИнформацияОЗаписиВерсий"
+       ],
+       "params_en": [
+        "WriteVersionsInformation"
+       ],
+       "optional": [
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ОбработкаПолученияДанныхВыбора": {
+     "name_en": "ChoiceDataGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ДанныеВыбора",
+        "Параметры",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "ChoiceData",
+        "Parameters",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        true
+       ],
+       "required_count": 2
+      }
+     ]
+    },
+    "ОбработкаПолученияФормы": {
+     "name_en": "FormGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ВидФормы",
+        "Параметры",
+        "ВыбраннаяФорма",
+        "ДополнительнаяИнформация",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "FormType",
+        "Parameters",
+        "SelectedForm",
+        "AdditionalInformation",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        false,
+        false,
+        true
+       ],
+       "required_count": 4
+      }
+     ]
+    },
+    "ОбработкаПолученияПолейПредставления": {
+     "name_en": "PresentationFieldsGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Поля",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "Fields",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        true
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ОбработкаПолученияПредставления": {
+     "name_en": "PresentationGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Данные",
+        "Представление",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "Data",
+        "Presentation",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        true
+       ],
+       "required_count": 2
+      }
+     ]
+    }
+   }
+  },
+  "BusinessProcess.ObjectModule": {
+   "title_ru": "Модуль объекта (Бизнес-процесс)",
+   "title_en": "BusinessProcessObject.<Business process name>",
+   "metadata_type": "BusinessProcess",
+   "module_kind": "ObjectModule",
+   "events": {
+    "ПередУдалением": {
+     "name_en": "BeforeDelete",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ"
+       ],
+       "params_en": [
+        "Cancel"
+       ],
+       "optional": [
+        true
+       ],
+       "required_count": 0
+      }
+     ]
+    },
+    "ПередЗаписью": {
+     "name_en": "BeforeWrite",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ"
+       ],
+       "params_en": [
+        "Cancel"
+       ],
+       "optional": [
+        true
+       ],
+       "required_count": 0
+      }
+     ]
+    },
+    "ОбработкаПроверкиЗаполнения": {
+     "name_en": "FillCheckProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ",
+        "ПроверяемыеРеквизиты"
+       ],
+       "params_en": [
+        "Cancel",
+        "CheckedAttributes"
+       ],
+       "optional": [
+        true,
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ОбработкаЗаполнения": {
+     "name_en": "Filling",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ДанныеЗаполнения",
+        "ТекстЗаполнения",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "FillingData",
+        "FillingText",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        true
+       ],
+       "required_count": 2
+      }
+     ]
+    },
+    "ОбработкаФормированияПоВерсииИсторииДанных": {
+     "name_en": "GenerateFromDataHistoryVersionProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ДанныеВерсии",
+        "НомерВерсии",
+        "ИсключитьДанные",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "VersionData",
+        "VersionNumber",
+        "ExcludedData",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        false,
+        true
+       ],
+       "required_count": 3
+      }
+     ]
+    },
+    "ОбработкаИнтерактивнойАктивации": {
+     "name_en": "InteractiveActivationProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "StandardProcessing"
+       ],
+       "optional": [
+        true
+       ],
+       "required_count": 0
+      }
+     ]
+    },
+    "ПриКопировании": {
+     "name_en": "OnCopy",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ОбъектКопирования"
+       ],
+       "params_en": [
+        "CopiedObject"
+       ],
+       "optional": [
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ПриУстановкеНовогоНомера": {
+     "name_en": "OnSetNewNumber",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "СтандартнаяОбработка",
+        "Префикс"
+       ],
+       "params_en": [
+        "StandardProcessing",
+        "Prefix"
+       ],
+       "optional": [
+        true,
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ПриЗаписи": {
+     "name_en": "OnWrite",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ"
+       ],
+       "params_en": [
+        "Cancel"
+       ],
+       "optional": [
+        true
+       ],
+       "required_count": 0
+      }
+     ]
+    }
+   }
+  },
+  "CalculationRegister.ManagerModule": {
+   "title_ru": "Модуль менеджера (Регистр расчета)",
+   "title_en": "CalculationRegisterManager.<Calculation register name>",
+   "metadata_type": "CalculationRegister",
+   "module_kind": "ManagerModule",
+   "events": {
+    "ОбработкаПолученияФормы": {
+     "name_en": "FormGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ВидФормы",
+        "Параметры",
+        "ВыбраннаяФорма",
+        "ДополнительнаяИнформация",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "FormType",
+        "Parameters",
+        "SelectedForm",
+        "AdditionalInformation",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        false,
+        false,
+        true
+       ],
+       "required_count": 4
+      }
+     ]
+    }
+   }
+  },
+  "CalculationRegister.RecordSetModule": {
+   "title_ru": "Модуль набора записей (Регистр расчета)",
+   "title_en": "CalculationRegisterRecordSet.<Calculation register name>",
+   "metadata_type": "CalculationRegister",
+   "module_kind": "RecordSetModule",
+   "events": {
+    "ПередЗаписью": {
+     "name_en": "BeforeWrite",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ",
+        "Замещение",
+        "ТолькоЗапись",
+        "ЗаписьФактическогоПериодаДействия",
+        "ЗаписьПерерасчетов"
+       ],
+       "params_en": [
+        "Cancel",
+        "Replacing",
+        "WriteOnly",
+        "WriteActualActionPeriod",
+        "WriteRecalculations"
+       ],
+       "optional": [
+        true,
+        false,
+        false,
+        false,
+        false
+       ],
+       "required_count": 4
+      }
+     ]
+    },
+    "ОбработкаПроверкиЗаполнения": {
+     "name_en": "FillCheckProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ",
+        "ПроверяемыеРеквизиты"
+       ],
+       "params_en": [
+        "Cancel",
+        "CheckedAttributes"
+       ],
+       "optional": [
+        true,
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ПриЗаписи": {
+     "name_en": "OnWrite",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ",
+        "Замещение",
+        "ТолькоЗапись",
+        "ЗаписьФактическогоПериодаДействия",
+        "ЗаписьПерерасчетов"
+       ],
+       "params_en": [
+        "Cancel",
+        "Replacing",
+        "WriteOnly",
+        "WriteActualActionPeriod",
+        "WriteRecalculations"
+       ],
+       "optional": [
+        true,
+        false,
+        false,
+        false,
+        false
+       ],
+       "required_count": 4
+      }
+     ]
+    }
+   }
+  },
+  "Catalog.ManagerModule": {
+   "title_ru": "Модуль менеджера (Справочник)",
+   "title_en": "CatalogManager.<Catalog name>",
+   "metadata_type": "Catalog",
+   "module_kind": "ManagerModule",
+   "events": {
+    "ОбработкаПослеЗаписиВерсийИсторииДанных": {
+     "name_en": "AfterWriteDataHistoryVersionsProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ИнформацияОЗаписиВерсий"
+       ],
+       "params_en": [
+        "WriteVersionsInformation"
+       ],
+       "optional": [
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ОбработкаПолученияДанныхВыбора": {
+     "name_en": "ChoiceDataGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ДанныеВыбора",
+        "Параметры",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "ChoiceData",
+        "Parameters",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        true
+       ],
+       "required_count": 2
+      }
+     ]
+    },
+    "ОбработкаПолученияФормы": {
+     "name_en": "FormGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ВидФормы",
+        "Параметры",
+        "ВыбраннаяФорма",
+        "ДополнительнаяИнформация",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "FormType",
+        "Parameters",
+        "SelectedForm",
+        "AdditionalInformation",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        false,
+        false,
+        true
+       ],
+       "required_count": 4
+      }
+     ]
+    },
+    "ОбработкаПолученияПолейПредставления": {
+     "name_en": "PresentationFieldsGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Поля",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "Fields",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        true
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ОбработкаПолученияПредставления": {
+     "name_en": "PresentationGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Данные",
+        "Представление",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "Data",
+        "Presentation",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        true
+       ],
+       "required_count": 2
+      }
+     ]
+    }
+   }
+  },
+  "Catalog.ObjectModule": {
+   "title_ru": "Модуль объекта (Справочник)",
+   "title_en": "CatalogObject.<Catalog name>",
+   "metadata_type": "Catalog",
+   "module_kind": "ObjectModule",
+   "events": {
+    "ПередУдалением": {
+     "name_en": "BeforeDelete",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ"
+       ],
+       "params_en": [
+        "Cancel"
+       ],
+       "optional": [
+        true
+       ],
+       "required_count": 0
+      }
+     ]
+    },
+    "ПередЗаписью": {
+     "name_en": "BeforeWrite",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ"
+       ],
+       "params_en": [
+        "Cancel"
+       ],
+       "optional": [
+        true
+       ],
+       "required_count": 0
+      }
+     ]
+    },
+    "ОбработкаПроверкиЗаполнения": {
+     "name_en": "FillCheckProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ",
+        "ПроверяемыеРеквизиты"
+       ],
+       "params_en": [
+        "Cancel",
+        "CheckedAttributes"
+       ],
+       "optional": [
+        true,
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ОбработкаЗаполнения": {
+     "name_en": "Filling",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ДанныеЗаполнения",
+        "ТекстЗаполнения",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "FillingData",
+        "FillingText",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        true
+       ],
+       "required_count": 2
+      }
+     ]
+    },
+    "ОбработкаФормированияПоВерсииИсторииДанных": {
+     "name_en": "GenerateFromDataHistoryVersionProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ДанныеВерсии",
+        "НомерВерсии",
+        "ИсключитьДанные",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "VersionData",
+        "VersionNumber",
+        "ExcludedData",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        false,
+        true
+       ],
+       "required_count": 3
+      }
+     ]
+    },
+    "ПриКопировании": {
+     "name_en": "OnCopy",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ОбъектКопирования"
+       ],
+       "params_en": [
+        "CopiedObject"
+       ],
+       "optional": [
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ПриУстановкеНовогоКода": {
+     "name_en": "OnSetNewCode",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "СтандартнаяОбработка",
+        "Префикс"
+       ],
+       "params_en": [
+        "StandardProcessing",
+        "Prefix"
+       ],
+       "optional": [
+        true,
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ПриЗаписи": {
+     "name_en": "OnWrite",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ"
+       ],
+       "params_en": [
+        "Cancel"
+       ],
+       "optional": [
+        true
+       ],
+       "required_count": 0
+      }
+     ]
+    }
+   }
+  },
+  "ChartOfAccounts.ManagerModule": {
+   "title_ru": "Модуль менеджера (План счетов)",
+   "title_en": "ChartOfAccountsManager.<Chart of accounts name>",
+   "metadata_type": "ChartOfAccounts",
+   "module_kind": "ManagerModule",
+   "events": {
+    "ОбработкаПослеЗаписиВерсийИсторииДанных": {
+     "name_en": "AfterWriteDataHistoryVersionsProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ИнформацияОЗаписиВерсий"
+       ],
+       "params_en": [
+        "WriteVersionsInformation"
+       ],
+       "optional": [
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ОбработкаПолученияДанныхВыбора": {
+     "name_en": "ChoiceDataGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ДанныеВыбора",
+        "Параметры",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "ChoiceData",
+        "Parameters",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        true
+       ],
+       "required_count": 2
+      }
+     ]
+    },
+    "ОбработкаПолученияФормы": {
+     "name_en": "FormGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ВидФормы",
+        "Параметры",
+        "ВыбраннаяФорма",
+        "ДополнительнаяИнформация",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "FormType",
+        "Parameters",
+        "SelectedForm",
+        "AdditionalInformation",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        false,
+        false,
+        true
+       ],
+       "required_count": 4
+      }
+     ]
+    },
+    "ОбработкаПолученияПолейПредставления": {
+     "name_en": "PresentationFieldsGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Поля",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "Fields",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        true
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ОбработкаПолученияПредставления": {
+     "name_en": "PresentationGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Данные",
+        "Представление",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "Data",
+        "Presentation",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        true
+       ],
+       "required_count": 2
+      }
+     ]
+    }
+   }
+  },
+  "ChartOfAccounts.ObjectModule": {
+   "title_ru": "Модуль объекта (План счетов)",
+   "title_en": "ChartOfAccountsObject.<Chart of accounts name>",
+   "metadata_type": "ChartOfAccounts",
+   "module_kind": "ObjectModule",
+   "events": {
+    "ПередУдалением": {
+     "name_en": "BeforeDelete",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ"
+       ],
+       "params_en": [
+        "Cancel"
+       ],
+       "optional": [
+        true
+       ],
+       "required_count": 0
+      }
+     ]
+    },
+    "ПередЗаписью": {
+     "name_en": "BeforeWrite",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ"
+       ],
+       "params_en": [
+        "Cancel"
+       ],
+       "optional": [
+        true
+       ],
+       "required_count": 0
+      }
+     ]
+    },
+    "ОбработкаПроверкиЗаполнения": {
+     "name_en": "FillCheckProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ",
+        "ПроверяемыеРеквизиты"
+       ],
+       "params_en": [
+        "Cancel",
+        "CheckedAttributes"
+       ],
+       "optional": [
+        true,
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ОбработкаЗаполнения": {
+     "name_en": "Filling",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ДанныеЗаполнения",
+        "ТекстЗаполнения",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "FillingData",
+        "FillingText",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        true
+       ],
+       "required_count": 2
+      }
+     ]
+    },
+    "ОбработкаФормированияПоВерсииИсторииДанных": {
+     "name_en": "GenerateFromDataHistoryVersionProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ДанныеВерсии",
+        "НомерВерсии",
+        "ИсключитьДанные",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "VersionData",
+        "VersionNumber",
+        "ExcludedData",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        false,
+        true
+       ],
+       "required_count": 3
+      }
+     ]
+    },
+    "ПриКопировании": {
+     "name_en": "OnCopy",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ОбъектКопирования"
+       ],
+       "params_en": [
+        "CopiedObject"
+       ],
+       "optional": [
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ПриЗаписи": {
+     "name_en": "OnWrite",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ"
+       ],
+       "params_en": [
+        "Cancel"
+       ],
+       "optional": [
+        true
+       ],
+       "required_count": 0
+      }
+     ]
+    }
+   }
+  },
+  "ChartOfCalculationTypes.ManagerModule": {
+   "title_ru": "Модуль менеджера (План видов расчета)",
+   "title_en": "ChartOfCalculationTypesManager.<Chart of calculation types name>",
+   "metadata_type": "ChartOfCalculationTypes",
+   "module_kind": "ManagerModule",
+   "events": {
+    "ОбработкаПослеЗаписиВерсийИсторииДанных": {
+     "name_en": "AfterWriteDataHistoryVersionsProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ИнформацияОЗаписиВерсий"
+       ],
+       "params_en": [
+        "WriteVersionsInformation"
+       ],
+       "optional": [
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ОбработкаПолученияДанныхВыбора": {
+     "name_en": "ChoiceDataGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ДанныеВыбора",
+        "Параметры",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "ChoiceData",
+        "Parameters",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        true
+       ],
+       "required_count": 2
+      }
+     ]
+    },
+    "ОбработкаПолученияФормы": {
+     "name_en": "FormGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ВидФормы",
+        "Параметры",
+        "ВыбраннаяФорма",
+        "ДополнительнаяИнформация",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "FormType",
+        "Parameters",
+        "SelectedForm",
+        "AdditionalInformation",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        false,
+        false,
+        true
+       ],
+       "required_count": 4
+      }
+     ]
+    },
+    "ОбработкаПолученияПолейПредставления": {
+     "name_en": "PresentationFieldsGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Поля",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "Fields",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        true
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ОбработкаПолученияПредставления": {
+     "name_en": "PresentationGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Данные",
+        "Представление",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "Data",
+        "Presentation",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        true
+       ],
+       "required_count": 2
+      }
+     ]
+    }
+   }
+  },
+  "ChartOfCalculationTypes.ObjectModule": {
+   "title_ru": "Модуль объекта (План видов расчета)",
+   "title_en": "ChartOfCalculationTypesObject.<Chart of calculation types name>",
+   "metadata_type": "ChartOfCalculationTypes",
+   "module_kind": "ObjectModule",
+   "events": {
+    "ПередУдалением": {
+     "name_en": "BeforeDelete",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ"
+       ],
+       "params_en": [
+        "Cancel"
+       ],
+       "optional": [
+        true
+       ],
+       "required_count": 0
+      }
+     ]
+    },
+    "ПередЗаписью": {
+     "name_en": "BeforeWrite",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ"
+       ],
+       "params_en": [
+        "Cancel"
+       ],
+       "optional": [
+        true
+       ],
+       "required_count": 0
+      }
+     ]
+    },
+    "ОбработкаПроверкиЗаполнения": {
+     "name_en": "FillCheckProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ",
+        "ПроверяемыеРеквизиты"
+       ],
+       "params_en": [
+        "Cancel",
+        "CheckedAttributes"
+       ],
+       "optional": [
+        true,
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ОбработкаЗаполнения": {
+     "name_en": "Filling",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ДанныеЗаполнения",
+        "ТекстЗаполнения",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "FillingData",
+        "FillingText",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        true
+       ],
+       "required_count": 2
+      }
+     ]
+    },
+    "ОбработкаФормированияПоВерсииИсторииДанных": {
+     "name_en": "GenerateFromDataHistoryVersionProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [],
+       "params_en": [],
+       "optional": [],
+       "required_count": 0
+      }
+     ]
+    },
+    "ПриКопировании": {
+     "name_en": "OnCopy",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ОбъектКопирования"
+       ],
+       "params_en": [
+        "CopiedObject"
+       ],
+       "optional": [
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ПриЗаписи": {
+     "name_en": "OnWrite",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ"
+       ],
+       "params_en": [
+        "Cancel"
+       ],
+       "optional": [
+        true
+       ],
+       "required_count": 0
+      }
+     ]
+    }
+   }
+  },
+  "ChartOfCharacteristicTypes.ManagerModule": {
+   "title_ru": "Модуль менеджера (План видов характеристик)",
+   "title_en": "ChartOfCharacteristicTypesManager.<Chart of characteristic types name>",
+   "metadata_type": "ChartOfCharacteristicTypes",
+   "module_kind": "ManagerModule",
+   "events": {
+    "ОбработкаПослеЗаписиВерсийИсторииДанных": {
+     "name_en": "AfterWriteDataHistoryVersionsProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ИнформацияОЗаписиВерсий"
+       ],
+       "params_en": [
+        "WriteVersionsInformation"
+       ],
+       "optional": [
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ОбработкаПолученияДанныхВыбора": {
+     "name_en": "ChoiceDataGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ДанныеВыбора",
+        "Параметры",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "ChoiceData",
+        "Parameters",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        true
+       ],
+       "required_count": 2
+      }
+     ]
+    },
+    "ОбработкаПолученияФормы": {
+     "name_en": "FormGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ВидФормы",
+        "Параметры",
+        "ВыбраннаяФорма",
+        "ДополнительнаяИнформация",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "FormType",
+        "Parameters",
+        "SelectedForm",
+        "AdditionalInformation",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        false,
+        false,
+        true
+       ],
+       "required_count": 4
+      }
+     ]
+    },
+    "ОбработкаПолученияПолейПредставления": {
+     "name_en": "PresentationFieldsGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Поля",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "Fields",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        true
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ОбработкаПолученияПредставления": {
+     "name_en": "PresentationGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Данные",
+        "Представление",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "Data",
+        "Presentation",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        true
+       ],
+       "required_count": 2
+      }
+     ]
+    }
+   }
+  },
+  "ChartOfCharacteristicTypes.ObjectModule": {
+   "title_ru": "Модуль объекта (План видов характеристик)",
+   "title_en": "ChartOfCharacteristicTypesObject.<Chart of characteristic types name>",
+   "metadata_type": "ChartOfCharacteristicTypes",
+   "module_kind": "ObjectModule",
+   "events": {
+    "ПередУдалением": {
+     "name_en": "BeforeDelete",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ"
+       ],
+       "params_en": [
+        "Cancel"
+       ],
+       "optional": [
+        true
+       ],
+       "required_count": 0
+      }
+     ]
+    },
+    "ПередЗаписью": {
+     "name_en": "BeforeWrite",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ"
+       ],
+       "params_en": [
+        "Cancel"
+       ],
+       "optional": [
+        true
+       ],
+       "required_count": 0
+      }
+     ]
+    },
+    "ОбработкаПроверкиЗаполнения": {
+     "name_en": "FillCheckProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ",
+        "ПроверяемыеРеквизиты"
+       ],
+       "params_en": [
+        "Cancel",
+        "CheckedAttributes"
+       ],
+       "optional": [
+        true,
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ОбработкаЗаполнения": {
+     "name_en": "Filling",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ДанныеЗаполнения",
+        "ТекстЗаполнения",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "FillingData",
+        "FillingText",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        true
+       ],
+       "required_count": 2
+      }
+     ]
+    },
+    "ОбработкаФормированияПоВерсииИсторииДанных": {
+     "name_en": "GenerateFromDataHistoryVersionProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ДанныеВерсии",
+        "НомерВерсии",
+        "ИсключитьДанные",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "VersionData",
+        "VersionNumber",
+        "ExcludedData",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        false,
+        true
+       ],
+       "required_count": 3
+      }
+     ]
+    },
+    "ПриКопировании": {
+     "name_en": "OnCopy",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ОбъектКопирования"
+       ],
+       "params_en": [
+        "CopiedObject"
+       ],
+       "optional": [
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ПриУстановкеНовогоКода": {
+     "name_en": "OnSetNewCode",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "СтандартнаяОбработка",
+        "Префикс"
+       ],
+       "params_en": [
+        "StandardProcessing",
+        "Prefix"
+       ],
+       "optional": [
+        true,
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ПриЗаписи": {
+     "name_en": "OnWrite",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ"
+       ],
+       "params_en": [
+        "Cancel"
+       ],
+       "optional": [
+        true
+       ],
+       "required_count": 0
+      }
+     ]
+    }
+   }
+  },
+  "Command.CommandModule": {
+   "title_ru": "Модуль команды (Команда)",
+   "title_en": "Command module",
+   "metadata_type": "Command",
+   "module_kind": "CommandModule",
+   "events": {
+    "ОбработкаКоманды": {
+     "name_en": "CommandProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ПараметрКоманды",
+        "ПараметрыВыполненияКоманды"
+       ],
+       "params_en": [
+        "CommandParameter",
+        "CommandExecuteParameters"
+       ],
+       "optional": [
+        false,
+        false
+       ],
+       "required_count": 2
+      }
+     ]
+    }
+   }
+  },
+  "CommonCommand.CommandModule": {
+   "title_ru": "Модуль команды (Общая команда)",
+   "title_en": "Command module",
+   "metadata_type": "CommonCommand",
+   "module_kind": "CommandModule",
+   "events": {
+    "ОбработкаКоманды": {
+     "name_en": "CommandProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ПараметрКоманды",
+        "ПараметрыВыполненияКоманды"
+       ],
+       "params_en": [
+        "CommandParameter",
+        "CommandExecuteParameters"
+       ],
+       "optional": [
+        false,
+        false
+       ],
+       "required_count": 2
+      }
+     ]
+    }
+   }
+  },
+  "Configuration.ExternalConnectionModule": {
+   "title_ru": "Модуль внешнего соединения",
+   "title_en": "Модуль внешнего соединения",
+   "metadata_type": "Configuration",
+   "module_kind": "ExternalConnectionModule",
+   "events": {
+    "ПриЗавершенииРаботыСистемы": {
+     "name_en": "OnExit",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [],
+       "params_en": [],
+       "optional": [],
+       "required_count": 0
+      }
+     ]
+    },
+    "ПриНачалеРаботыСистемы": {
+     "name_en": "OnStart",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [],
+       "params_en": [],
+       "optional": [],
+       "required_count": 0
+      }
+     ]
+    }
+   }
+  },
+  "Configuration.ManagedApplicationModule": {
+   "title_ru": "Модуль управляемого приложения",
+   "title_en": "Модуль управляемого приложения",
+   "metadata_type": "Configuration",
+   "module_kind": "ManagedApplicationModule",
+   "events": {
+    "ОбработкаОтключенияВнешнейКомпонентыПриОшибке": {
+     "name_en": "AddInDetachmentOnErrorProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Местоположение",
+        "Имя"
+       ],
+       "params_en": [
+        "Location",
+        "Name"
+       ],
+       "optional": [
+        false,
+        false
+       ],
+       "required_count": 2
+      }
+     ]
+    },
+    "ПослеОбменаДаннымиСОсновнымСервером": {
+     "name_en": "AfterExchangeDataWithMainServer",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ВключеноОповещениеОСинхронизации",
+        "СтандартнаяОбработка",
+        "ДатаОбмена"
+       ],
+       "params_en": [
+        "NotificationOfSynchrorizationEnabled",
+        "StandardProcessing",
+        "ExchangeDate"
+       ],
+       "optional": [
+        false,
+        true,
+        false
+       ],
+       "required_count": 2
+      }
+     ]
+    },
+    "ПередЗавершениемРаботыСистемы": {
+     "name_en": "BeforeExit",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ",
+        "ТекстПредупреждения"
+       ],
+       "params_en": [
+        "Cancel",
+        "WarningText"
+       ],
+       "optional": [
+        true,
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ПередНачаломРаботыСистемы": {
+     "name_en": "BeforeStart",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ"
+       ],
+       "params_en": [
+        "Cancel"
+       ],
+       "optional": [
+        true
+       ],
+       "required_count": 0
+      }
+     ]
+    },
+    "ОбработкаПриглашенияВнешнегоПользователяСистемыВзаимодействия": {
+     "name_en": "CollaborationSystemExternalUserInvitationProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Обсуждение",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "Conversation",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        true
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ОбработкаВыбораШаблонаСообщенияСистемыВзаимодействия": {
+     "name_en": "CollaborationSystemMessageTemplateChoiceProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Обсуждение",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "Conversation",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        true
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "АвтоПодборПользователейСистемыВзаимодействия": {
+     "name_en": "CollaborationSystemUsersAutoComplete",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Текст",
+        "ДанныеВыбора",
+        "НазначениеВыбора",
+        "Форма",
+        "Обсуждение"
+       ],
+       "params_en": [
+        "Text",
+        "ChoiceData",
+        "ChoicePurpose",
+        "Form",
+        "Conversation"
+       ],
+       "optional": [
+        false,
+        false,
+        false,
+        false,
+        false
+       ],
+       "required_count": 5
+      }
+     ]
+    },
+    "ОбработкаПолученияФормыВыбораПользователейСистемыВзаимодействия": {
+     "name_en": "CollaborationSystemUsersChoiceFormGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "НазначениеВыбора",
+        "Форма",
+        "Обсуждение",
+        "Параметры",
+        "ВыбраннаяФорма",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "ChoicePurpose",
+        "Form",
+        "Conversation",
+        "Parameters",
+        "SelectedForm",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        true
+       ],
+       "required_count": 5
+      }
+     ]
+    },
+    "ОбработкаОтображенияОшибки": {
+     "name_en": "ErrorDisplayProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ИнформацияОбОшибке",
+        "ТребуетсяЗавершениеСеанса",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "ErrorInfo",
+        "NeedRestart",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        false
+       ],
+       "required_count": 3
+      }
+     ]
+    },
+    "ОбработкаВнешнегоСобытия": {
+     "name_en": "ExternEventProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Источник",
+        "Событие",
+        "Данные"
+       ],
+       "params_en": [
+        "Source",
+        "Event",
+        "Data"
+       ],
+       "optional": [
+        false,
+        false,
+        false
+       ],
+       "required_count": 3
+      }
+     ]
+    },
+    "ОбработкаФормированияКомандВходящегоЗапросаПоделиться": {
+     "name_en": "IncomingShareRequestCommandGenerateProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ДанныеЗапросаПоделиться",
+        "Команды"
+       ],
+       "params_en": [
+        "ShareRequestData",
+        "Commands"
+       ],
+       "optional": [
+        false,
+        false
+       ],
+       "required_count": 2
+      }
+     ]
+    },
+    "ОбработкаПереходаПоНавигационнойСсылке": {
+     "name_en": "NavigationByURLProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ДанныеПереходаПоНавигационнойСсылке",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "URLNavigationData",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false
+       ],
+       "required_count": 2
+      }
+     ]
+    },
+    "ПриИзмененииПараметровЭкрана": {
+     "name_en": "OnChangeDisplaySettings",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [],
+       "params_en": [],
+       "optional": [],
+       "required_count": 0
+      }
+     ]
+    },
+    "ПриПробужденииКлиентскогоПриложения": {
+     "name_en": "OnClientApplicationResume",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [],
+       "params_en": [],
+       "optional": [],
+       "required_count": 0
+      }
+     ]
+    },
+    "ПриЗасыпанииКлиентскогоПриложения": {
+     "name_en": "OnClientApplicationSuspend",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [],
+       "params_en": [],
+       "optional": [],
+       "required_count": 0
+      }
+     ]
+    },
+    "ПриВыбореДействияСообщенияСистемыВзаимодействия": {
+     "name_en": "OnCollaborationSystemMessageActionChoice",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Сообщение",
+        "Действие"
+       ],
+       "params_en": [
+        "Message",
+        "Action"
+       ],
+       "optional": [
+        false,
+        false
+       ],
+       "required_count": 2
+      }
+     ]
+    },
+    "ПриНажатииКнопкиПанелиКнопокСообщенияСистемыВзаимодействия": {
+     "name_en": "OnCollaborationSystemMessageButtonPanelButtonClick",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Сообщение",
+        "Кнопка"
+       ],
+       "params_en": [
+        "Message",
+        "Button"
+       ],
+       "optional": [
+        false,
+        false
+       ],
+       "required_count": 2
+      }
+     ]
+    },
+    "ПриЗавершенииРаботыСистемы": {
+     "name_en": "OnExit",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [],
+       "params_en": [],
+       "optional": [],
+       "required_count": 0
+      }
+     ]
+    },
+    "ПриГлобальномПоиске": {
+     "name_en": "OnGlobalSearch",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "СтрокаПоиска",
+        "ПланПоиска"
+       ],
+       "params_en": [
+        "SearchString",
+        "SearchPlan"
+       ],
+       "optional": [
+        false,
+        false
+       ],
+       "required_count": 2
+      }
+     ]
+    },
+    "ПриВыбореДействияРезультатаГлобальногоПоиска": {
+     "name_en": "OnGlobalSearchResultActionChoice",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ЭлементРезультата",
+        "Действие"
+       ],
+       "params_en": [
+        "ResultItem",
+        "Action"
+       ],
+       "optional": [
+        false,
+        false
+       ],
+       "required_count": 2
+      }
+     ]
+    },
+    "ПриВыбореРезультатаГлобальногоПоиска": {
+     "name_en": "OnGlobalSearchResultChoice",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ЭлементРезультата",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "ResultItem",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false
+       ],
+       "required_count": 2
+      }
+     ]
+    },
+    "ПриИзмененииДоступностиОсновногоСервера": {
+     "name_en": "OnMainServerAvailabilityChange",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "НачалоСеансаОсновногоСервера"
+       ],
+       "params_en": [
+        "MainServerSessionStart"
+       ],
+       "optional": [
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ПриВставкеИзБуфераОбмена": {
+     "name_en": "OnPasteFromClipboard",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Значение"
+       ],
+       "params_en": [
+        "Value"
+       ],
+       "optional": [
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ПриНачалеРаботыСистемы": {
+     "name_en": "OnStart",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [],
+       "params_en": [],
+       "optional": [],
+       "required_count": 0
+      }
+     ]
+    }
+   }
+  },
+  "Configuration.OrdinaryApplicationModule": {
+   "title_ru": "Модуль обычного приложения",
+   "title_en": "Модуль обычного приложения",
+   "metadata_type": "Configuration",
+   "module_kind": "OrdinaryApplicationModule",
+   "events": {
+    "ПередЗавершениемРаботыСистемы": {
+     "name_en": "BeforeExit",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ",
+        "ТекстПредупреждения"
+       ],
+       "params_en": [
+        "Cancel",
+        "WarningText"
+       ],
+       "optional": [
+        true,
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ПередНачаломРаботыСистемы": {
+     "name_en": "BeforeStart",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ"
+       ],
+       "params_en": [
+        "Cancel"
+       ],
+       "optional": [
+        true
+       ],
+       "required_count": 0
+      }
+     ]
+    },
+    "ОбработкаВнешнегоСобытия": {
+     "name_en": "ExternEventProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Источник",
+        "Событие",
+        "Данные"
+       ],
+       "params_en": [
+        "Source",
+        "Event",
+        "Data"
+       ],
+       "optional": [
+        false,
+        false,
+        false
+       ],
+       "required_count": 3
+      }
+     ]
+    },
+    "ПриИзмененииПараметровЭкрана": {
+     "name_en": "OnChangeDisplaySettings",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [],
+       "params_en": [],
+       "optional": [],
+       "required_count": 0
+      }
+     ]
+    },
+    "ПриЗавершенииРаботыСистемы": {
+     "name_en": "OnExit",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [],
+       "params_en": [],
+       "optional": [],
+       "required_count": 0
+      }
+     ]
+    },
+    "ПриНачалеРаботыСистемы": {
+     "name_en": "OnStart",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [],
+       "params_en": [],
+       "optional": [],
+       "required_count": 0
+      }
+     ]
+    }
+   }
+  },
+  "Configuration.SessionModule": {
+   "title_ru": "Модуль сеанса",
+   "title_en": "Модуль сеанса",
+   "metadata_type": "Configuration",
+   "module_kind": "SessionModule",
+   "events": {
+    "УстановкаПараметровСеанса": {
+     "name_en": "SessionParametersSetting",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ТребуемыеПараметры"
+       ],
+       "params_en": [
+        "RequiredParameters"
+       ],
+       "optional": [
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    }
+   }
+  },
+  "Constant.ManagerModule": {
+   "title_ru": "Модуль менеджера (Константа)",
+   "title_en": "ConstantManager.<Constant Name>",
+   "metadata_type": "Constant",
+   "module_kind": "ManagerModule",
+   "events": {
+    "ОбработкаПослеЗаписиВерсийИсторииДанных": {
+     "name_en": "AfterWriteDataHistoryVersionsProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ИнформацияОЗаписиВерсий"
+       ],
+       "params_en": [
+        "WriteVersionsInformation"
+       ],
+       "optional": [
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ОбработкаПолученияФормы": {
+     "name_en": "FormGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ВидФормы",
+        "Параметры",
+        "ВыбраннаяФорма",
+        "ДополнительнаяИнформация",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "FormType",
+        "Parameters",
+        "SelectedForm",
+        "AdditionalInformation",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        false,
+        false,
+        true
+       ],
+       "required_count": 4
+      }
+     ]
+    }
+   }
+  },
+  "Constant.ValueManagerModule": {
+   "title_ru": "Модуль менеджера значения (Константа)",
+   "title_en": "ConstantValueManager.<Constant name>",
+   "metadata_type": "Constant",
+   "module_kind": "ValueManagerModule",
+   "events": {
+    "ПередЗаписью": {
+     "name_en": "BeforeWrite",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ"
+       ],
+       "params_en": [
+        "Cancel"
+       ],
+       "optional": [
+        true
+       ],
+       "required_count": 0
+      }
+     ]
+    },
+    "ОбработкаПроверкиЗаполнения": {
+     "name_en": "FillCheckProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ",
+        "ПроверяемыеРеквизиты"
+       ],
+       "params_en": [
+        "Cancel",
+        "CheckedAttributes"
+       ],
+       "optional": [
+        true,
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ОбработкаФормированияПоВерсииИсторииДанных": {
+     "name_en": "GenerateFromDataHistoryVersionProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [],
+       "params_en": [],
+       "optional": [],
+       "required_count": 0
+      }
+     ]
+    },
+    "ПриЗаписи": {
+     "name_en": "OnWrite",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ"
+       ],
+       "params_en": [
+        "Cancel"
+       ],
+       "optional": [
+        true
+       ],
+       "required_count": 0
+      }
+     ]
+    }
+   }
+  },
+  "DataProcessor.ManagerModule": {
+   "title_ru": "Модуль менеджера (Обработка)",
+   "title_en": "DataProcessorManager.<Data processor name>",
+   "metadata_type": "DataProcessor",
+   "module_kind": "ManagerModule",
+   "events": {
+    "ОбработкаПолученияФормы": {
+     "name_en": "FormGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ВидФормы",
+        "Параметры",
+        "ВыбраннаяФорма",
+        "ДополнительнаяИнформация",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "FormType",
+        "Parameters",
+        "SelectedForm",
+        "AdditionalInfo",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        false,
+        false,
+        true
+       ],
+       "required_count": 4
+      }
+     ]
+    }
+   }
+  },
+  "DataProcessor.ObjectModule": {
+   "title_ru": "Модуль объекта (Обработка)",
+   "title_en": "DataProcessorObject.<Data processor name>",
+   "metadata_type": "DataProcessor",
+   "module_kind": "ObjectModule",
+   "events": {
+    "ОбработкаПроверкиЗаполнения": {
+     "name_en": "FillCheckProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ",
+        "ПроверяемыеРеквизиты"
+       ],
+       "params_en": [
+        "Cancel",
+        "CheckedAttributes"
+       ],
+       "optional": [
+        true,
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    }
+   }
+  },
+  "Document.ManagerModule": {
+   "title_ru": "Модуль менеджера (Документ)",
+   "title_en": "DocumentManager.<Document name>",
+   "metadata_type": "Document",
+   "module_kind": "ManagerModule",
+   "events": {
+    "ОбработкаПослеЗаписиВерсийИсторииДанных": {
+     "name_en": "AfterWriteDataHistoryVersionsProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ИнформацияОЗаписиВерсий"
+       ],
+       "params_en": [
+        "WriteVersionsInformation"
+       ],
+       "optional": [
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ОбработкаПолученияДанныхВыбора": {
+     "name_en": "ChoiceDataGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ДанныеВыбора",
+        "Параметры",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "ChoiceData",
+        "Parameters",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        true
+       ],
+       "required_count": 2
+      }
+     ]
+    },
+    "ОбработкаПолученияФормы": {
+     "name_en": "FormGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ВидФормы",
+        "Параметры",
+        "ВыбраннаяФорма",
+        "ДополнительнаяИнформация",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "FormType",
+        "Parameters",
+        "SelectedForm",
+        "AdditionalInfo",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        false,
+        false,
+        true
+       ],
+       "required_count": 4
+      }
+     ]
+    },
+    "ОбработкаПолученияПолейПредставления": {
+     "name_en": "PresentationFieldsGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Поля",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "Fields",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        true
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ОбработкаПолученияПредставления": {
+     "name_en": "PresentationGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Данные",
+        "Представление",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "Data",
+        "Presentation",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        true
+       ],
+       "required_count": 2
+      }
+     ]
+    }
+   }
+  },
+  "Document.ObjectModule": {
+   "title_ru": "Модуль объекта (Документ)",
+   "title_en": "DocumentObject.<Document name>",
+   "metadata_type": "Document",
+   "module_kind": "ObjectModule",
+   "events": {
+    "ПередУдалением": {
+     "name_en": "BeforeDelete",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ"
+       ],
+       "params_en": [
+        "Cancel"
+       ],
+       "optional": [
+        true
+       ],
+       "required_count": 0
+      }
+     ]
+    },
+    "ПередЗаписью": {
+     "name_en": "BeforeWrite",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ",
+        "РежимЗаписи",
+        "РежимПроведения"
+       ],
+       "params_en": [
+        "Cancel",
+        "WriteMode",
+        "PostingMode"
+       ],
+       "optional": [
+        true,
+        false,
+        false
+       ],
+       "required_count": 2
+      }
+     ]
+    },
+    "ОбработкаПроверкиЗаполнения": {
+     "name_en": "FillCheckProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ",
+        "ПроверяемыеРеквизиты"
+       ],
+       "params_en": [
+        "Cancel",
+        "CheckedAttributes"
+       ],
+       "optional": [
+        true,
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ОбработкаЗаполнения": {
+     "name_en": "Filling",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ДанныеЗаполнения",
+        "ТекстЗаполнения",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "FillingData",
+        "FillingText",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        true
+       ],
+       "required_count": 2
+      }
+     ]
+    },
+    "ОбработкаФормированияПоВерсииИсторииДанных": {
+     "name_en": "GenerateFromDataHistoryVersionProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ДанныеВерсии",
+        "НомерВерсии",
+        "ИсключитьДанные",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "VersionData",
+        "VersionNumber",
+        "ExcludedData",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        false,
+        true
+       ],
+       "required_count": 3
+      }
+     ]
+    },
+    "ПриКопировании": {
+     "name_en": "OnCopy",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ОбъектКопирования"
+       ],
+       "params_en": [
+        "CopiedObject"
+       ],
+       "optional": [
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ПриУстановкеНовогоНомера": {
+     "name_en": "OnSetNewNumber",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "СтандартнаяОбработка",
+        "Префикс"
+       ],
+       "params_en": [
+        "StandardProcessing",
+        "Prefix"
+       ],
+       "optional": [
+        true,
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ПриЗаписи": {
+     "name_en": "OnWrite",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ"
+       ],
+       "params_en": [
+        "Cancel"
+       ],
+       "optional": [
+        true
+       ],
+       "required_count": 0
+      }
+     ]
+    },
+    "ОбработкаПроведения": {
+     "name_en": "Posting",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ",
+        "РежимПроведения"
+       ],
+       "params_en": [
+        "Cancel",
+        "PostingMode"
+       ],
+       "optional": [
+        true,
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ОбработкаУдаленияПроведения": {
+     "name_en": "UndoPosting",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ"
+       ],
+       "params_en": [
+        "Cancel"
+       ],
+       "optional": [
+        true
+       ],
+       "required_count": 0
+      }
+     ]
+    }
+   }
+  },
+  "DocumentJournal.ManagerModule": {
+   "title_ru": "Модуль менеджера (Журнал документов)",
+   "title_en": "DocumentJournalManager.<Document journal name>",
+   "metadata_type": "DocumentJournal",
+   "module_kind": "ManagerModule",
+   "events": {
+    "ОбработкаПолученияФормы": {
+     "name_en": "FormGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ВидФормы",
+        "Параметры",
+        "ВыбраннаяФорма",
+        "ДополнительнаяИнформация",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "FormType",
+        "Parameters",
+        "SelectedForm",
+        "AdditionalInformation",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        false,
+        false,
+        true
+       ],
+       "required_count": 4
+      }
+     ]
+    }
+   }
+  },
+  "Enum.ManagerModule": {
+   "title_ru": "Модуль менеджера (Перечисление)",
+   "title_en": "EnumManager.<Enumeration name>",
+   "metadata_type": "Enum",
+   "module_kind": "ManagerModule",
+   "events": {
+    "ОбработкаПолученияДанныхВыбора": {
+     "name_en": "ChoiceDataGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ДанныеВыбора",
+        "Параметры",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "ChoiceData",
+        "Parameters",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        true
+       ],
+       "required_count": 2
+      }
+     ]
+    },
+    "ОбработкаПолученияФормы": {
+     "name_en": "FormGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ВидФормы",
+        "Параметры",
+        "ВыбраннаяФорма",
+        "ДополнительнаяИнформация",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "FormType",
+        "Parameters",
+        "SelectedForm",
+        "AdditionalInfo",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        false,
+        false,
+        true
+       ],
+       "required_count": 4
+      }
+     ]
+    }
+   }
+  },
+  "ExchangePlan.ManagerModule": {
+   "title_ru": "Модуль менеджера (План обмена)",
+   "title_en": "ExchangePlanManager.<Exchange plan name>",
+   "metadata_type": "ExchangePlan",
+   "module_kind": "ManagerModule",
+   "events": {
+    "ОбработкаПослеЗаписиВерсийИсторииДанных": {
+     "name_en": "AfterWriteDataHistoryVersionsProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ИнформацияОЗаписиВерсий"
+       ],
+       "params_en": [
+        "WriteVersionsInformation"
+       ],
+       "optional": [
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ОбработкаПолученияДанныхВыбора": {
+     "name_en": "ChoiceDataGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ДанныеВыбора",
+        "Параметры",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "ChoiceData",
+        "Parameters",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        true
+       ],
+       "required_count": 2
+      }
+     ]
+    },
+    "ОбработкаПолученияФормы": {
+     "name_en": "FormGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ВидФормы",
+        "Параметры",
+        "ВыбраннаяФорма",
+        "ДополнительнаяИнформация",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "FormType",
+        "Parameters",
+        "SelectedForm",
+        "AdditionalInformation",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        false,
+        false,
+        true
+       ],
+       "required_count": 4
+      }
+     ]
+    },
+    "ОбработкаПолученияПолейПредставления": {
+     "name_en": "PresentationFieldsGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Поля",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "Fields",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        true
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ОбработкаПолученияПредставления": {
+     "name_en": "PresentationGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Данные",
+        "Представление",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "Data",
+        "Presentation",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        true
+       ],
+       "required_count": 2
+      }
+     ]
+    }
+   }
+  },
+  "ExchangePlan.ObjectModule": {
+   "title_ru": "Модуль объекта (План обмена)",
+   "title_en": "ExchangePlanObject.<Exchange plan name>",
+   "metadata_type": "ExchangePlan",
+   "module_kind": "ObjectModule",
+   "events": {
+    "ПередНачаломОтправкиДанныхГлавному": {
+     "name_en": "BeforeBeginSendDataToMaster",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ПотокОбменаДанными"
+       ],
+       "params_en": [
+        "DataExchangeStream"
+       ],
+       "optional": [
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ПередНачаломОтправкиДанныхПодчиненному": {
+     "name_en": "BeforeBeginSendDataToSlave",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ПотокОбменаДанными"
+       ],
+       "params_en": [
+        "DataExchangeStream"
+       ],
+       "optional": [
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ПередСозданиемНачальногоОбраза": {
+     "name_en": "BeforeCreateInitialImage",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ТолькоЗарегистрированные",
+        "ПотокДанныхОбмена"
+       ],
+       "params_en": [
+        "OnlyRecorded",
+        "DataExchangeStream"
+       ],
+       "optional": [
+        false,
+        false
+       ],
+       "required_count": 2
+      }
+     ]
+    },
+    "ПередУдалением": {
+     "name_en": "BeforeDelete",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ"
+       ],
+       "params_en": [
+        "Cancel"
+       ],
+       "optional": [
+        true
+       ],
+       "required_count": 0
+      }
+     ]
+    },
+    "ПередЗаписью": {
+     "name_en": "BeforeWrite",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ"
+       ],
+       "params_en": [
+        "Cancel"
+       ],
+       "optional": [
+        true
+       ],
+       "required_count": 0
+      }
+     ]
+    },
+    "ОбработкаПроверкиЗаполнения": {
+     "name_en": "FillCheckProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ",
+        "ПроверяемыеРеквизиты"
+       ],
+       "params_en": [
+        "Cancel",
+        "CheckedAttributes"
+       ],
+       "optional": [
+        true,
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ОбработкаЗаполнения": {
+     "name_en": "Filling",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ДанныеЗаполнения",
+        "ТекстЗаполнения",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "FillingData",
+        "FillingText",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        true
+       ],
+       "required_count": 2
+      }
+     ]
+    },
+    "ОбработкаФормированияПоВерсииИсторииДанных": {
+     "name_en": "GenerateFromDataHistoryVersionProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [],
+       "params_en": [],
+       "optional": [],
+       "required_count": 0
+      }
+     ]
+    },
+    "ПриАвтоматическомСозданииНовогоУзла": {
+     "name_en": "OnAutoCreateNewNode",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ"
+       ],
+       "params_en": [
+        "Cancel"
+       ],
+       "optional": [
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ПриКопировании": {
+     "name_en": "OnCopy",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ОбъектКопирования"
+       ],
+       "params_en": [
+        "CopiedObject"
+       ],
+       "optional": [
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ПриПолученииДанныхОтГлавного": {
+     "name_en": "OnReceiveDataFromMaster",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ЭлементДанных",
+        "ПолучениеЭлемента",
+        "ОтправкаНазад"
+       ],
+       "params_en": [
+        "DataItem",
+        "ItemReceive",
+        "SendBack"
+       ],
+       "optional": [
+        false,
+        true,
+        true
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ПриПолученииДанныхОтПодчиненного": {
+     "name_en": "OnReceiveDataFromSlave",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ЭлементДанных",
+        "ПолучениеЭлемента",
+        "ОтправкаНазад"
+       ],
+       "params_en": [
+        "DataItem",
+        "ItemReceive",
+        "SendBack"
+       ],
+       "optional": [
+        false,
+        true,
+        true
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ПриПолученииДанныхУзлаОтГлавного": {
+     "name_en": "OnReceiveNodeDataFromMaster",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ЭлементДанных",
+        "Игнорировать"
+       ],
+       "params_en": [
+        "DataItem",
+        "Ignore"
+       ],
+       "optional": [
+        false,
+        true
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ПриОтправкеДанныхГлавному": {
+     "name_en": "OnSendDataToMaster",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ЭлементДанных",
+        "ОтправкаЭлемента"
+       ],
+       "params_en": [
+        "DataItem",
+        "ItemSend"
+       ],
+       "optional": [
+        false,
+        true
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ПриОтправкеДанныхПодчиненному": {
+     "name_en": "OnSendDataToSlave",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ЭлементДанных",
+        "ОтправкаЭлемента",
+        "СозданиеНачальногоОбраза"
+       ],
+       "params_en": [
+        "DataItem",
+        "ItemSend",
+        "InitialImageCreating"
+       ],
+       "optional": [
+        false,
+        true,
+        false
+       ],
+       "required_count": 2
+      }
+     ]
+    },
+    "ПриОтправкеДанныхУзлаПодчиненному": {
+     "name_en": "OnSendNodeDataToSlave",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ЭлементДанных",
+        "Игнорировать"
+       ],
+       "params_en": [
+        "DataItem",
+        "Ignore"
+       ],
+       "optional": [
+        false,
+        true
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ПриУстановкеНовогоКода": {
+     "name_en": "OnSetNewCode",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "СтандартнаяОбработка",
+        "Префикс"
+       ],
+       "params_en": [
+        "StandardProcessing",
+        "Prefix"
+       ],
+       "optional": [
+        true,
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ПриЗаписи": {
+     "name_en": "OnWrite",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ"
+       ],
+       "params_en": [
+        "Cancel"
+       ],
+       "optional": [
+        true
+       ],
+       "required_count": 0
+      }
+     ]
+    }
+   }
+  },
+  "ExternalDataProcessor.ObjectModule": {
+   "title_ru": "Модуль объекта (Внешняя обработка)",
+   "title_en": "ExternalDataProcessor",
+   "metadata_type": "ExternalDataProcessor",
+   "module_kind": "ObjectModule",
+   "events": {
+    "ОбработкаПроверкиЗаполнения": {
+     "name_en": "FillCheckProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ",
+        "ПроверяемыеРеквизиты"
+       ],
+       "params_en": [
+        "Cancel",
+        "CheckedAttributes"
+       ],
+       "optional": [
+        true,
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    }
+   }
+  },
+  "ExternalDataSourceCube.ManagerModule": {
+   "title_ru": "Модуль менеджера (Куб внешнего источника данных)",
+   "title_en": "ExternalDataSourceCubeManager.<External source name>.<Cube name>",
+   "metadata_type": "ExternalDataSourceCube",
+   "module_kind": "ManagerModule",
+   "events": {
+    "ОбработкаПолученияФормы": {
+     "name_en": "FormGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ВидФормы",
+        "Параметры",
+        "ВыбраннаяФорма",
+        "ДополнительнаяИнформация",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "FormType",
+        "Parameters",
+        "SelectedForm",
+        "AdditionalInformation",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        false,
+        false,
+        true
+       ],
+       "required_count": 4
+      }
+     ]
+    }
+   }
+  },
+  "ExternalDataSourceCubeDimensionTable.ManagerModule": {
+   "title_ru": "Модуль менеджера (Таблица измерений куба внешнего источника данных)",
+   "title_en": "ExternalDataSourceCubeDimensionTableManager.<External source name>.<Cube name>.<Dimension table name>",
+   "metadata_type": "ExternalDataSourceCubeDimensionTable",
+   "module_kind": "ManagerModule",
+   "events": {
+    "ОбработкаПолученияДанныхВыбора": {
+     "name_en": "ChoiceDataGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ДанныеВыбора",
+        "Параметры",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "ChoiceData",
+        "Parameters",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        true
+       ],
+       "required_count": 2
+      }
+     ]
+    },
+    "ОбработкаПолученияФормы": {
+     "name_en": "FormGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ВидФормы",
+        "Параметры",
+        "ВыбраннаяФорма",
+        "ДополнительнаяИнформация",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "FormType",
+        "Parameters",
+        "SelectedForm",
+        "AdditionalInformation",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        false,
+        false,
+        true
+       ],
+       "required_count": 4
+      }
+     ]
+    },
+    "ОбработкаПолученияПолейПредставления": {
+     "name_en": "PresentationFieldsGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Поля",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "Fields",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        true
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ОбработкаПолученияПредставления": {
+     "name_en": "PresentationGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Данные",
+        "Представление",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "Data",
+        "Presentation",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        true
+       ],
+       "required_count": 2
+      }
+     ]
+    }
+   }
+  },
+  "ExternalDataSourceTable.ManagerModule": {
+   "title_ru": "Модуль менеджера (Таблица внешнего источника данных)",
+   "title_en": "ExternalDataSourceTableManager.<External source name>.<External data source table name>",
+   "metadata_type": "ExternalDataSourceTable",
+   "module_kind": "ManagerModule",
+   "events": {
+    "ОбработкаПолученияДанныхВыбора": {
+     "name_en": "ChoiceDataGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ДанныеВыбора",
+        "Параметры",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "ChoiceData",
+        "Parameters",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        true
+       ],
+       "required_count": 2
+      }
+     ]
+    },
+    "ОбработкаПолученияФормы": {
+     "name_en": "FormGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ВидФормы",
+        "Параметры",
+        "ВыбраннаяФорма",
+        "ДополнительнаяИнформация",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "FormType",
+        "Parameters",
+        "SelectedForm",
+        "AdditionalInformation",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        false,
+        false,
+        true
+       ],
+       "required_count": 4
+      }
+     ]
+    },
+    "ОбработкаПолученияПолейПредставления": {
+     "name_en": "PresentationFieldsGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Поля",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "Fields",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        true
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ОбработкаПолученияПредставления": {
+     "name_en": "PresentationGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Данные",
+        "Представление",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "Data",
+        "Presentation",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        true
+       ],
+       "required_count": 2
+      }
+     ]
+    }
+   }
+  },
+  "ExternalDataSourceTable.ObjectModule": {
+   "title_ru": "Модуль объекта (Таблица внешнего источника данных)",
+   "title_en": "ExternalDataSourceTableObject.<External source name>.<External data source table name>",
+   "metadata_type": "ExternalDataSourceTable",
+   "module_kind": "ObjectModule",
+   "events": {
+    "ПередУдалением": {
+     "name_en": "BeforeDelete",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ"
+       ],
+       "params_en": [
+        "Cancel"
+       ],
+       "optional": [
+        true
+       ],
+       "required_count": 0
+      }
+     ]
+    },
+    "ПередЗаписью": {
+     "name_en": "BeforeWrite",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ"
+       ],
+       "params_en": [
+        "Cancel"
+       ],
+       "optional": [
+        true
+       ],
+       "required_count": 0
+      }
+     ]
+    },
+    "ОбработкаПроверкиЗаполнения": {
+     "name_en": "FillCheckProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ",
+        "ПроверяемыеРеквизиты"
+       ],
+       "params_en": [
+        "Cancel",
+        "CheckedAttributes"
+       ],
+       "optional": [
+        true,
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ОбработкаЗаполнения": {
+     "name_en": "Filling",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "СтандартнаяОбработка",
+        "ДанныеЗаполнения"
+       ],
+       "params_en": [
+        "StandardProcessing",
+        "FillingData"
+       ],
+       "optional": [
+        true,
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ПриКопировании": {
+     "name_en": "OnCopy",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ОбъектКопирования"
+       ],
+       "params_en": [
+        "CopiedObject"
+       ],
+       "optional": [
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ПриЗаписи": {
+     "name_en": "OnWrite",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ"
+       ],
+       "params_en": [
+        "Cancel"
+       ],
+       "optional": [
+        true
+       ],
+       "required_count": 0
+      }
+     ]
+    }
+   }
+  },
+  "ExternalDataSourceTable.RecordSetModule": {
+   "title_ru": "Модуль набора записей (Таблица внешнего источника данных)",
+   "title_en": "ExternalDataSourceTableRecordSet.<External source name>.<External data source table name>",
+   "metadata_type": "ExternalDataSourceTable",
+   "module_kind": "RecordSetModule",
+   "events": {
+    "ПередЗаписью": {
+     "name_en": "BeforeWrite",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ"
+       ],
+       "params_en": [
+        "Cancel"
+       ],
+       "optional": [
+        true
+       ],
+       "required_count": 0
+      }
+     ]
+    },
+    "ОбработкаПроверкиЗаполнения": {
+     "name_en": "FillCheckProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ",
+        "ПроверяемыеРеквизиты"
+       ],
+       "params_en": [
+        "Cancel",
+        "CheckedAttributes"
+       ],
+       "optional": [
+        true,
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ОбработкаЗаполнения": {
+     "name_en": "Filling",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "СтандартнаяОбработка",
+        "ДанныеЗаполнения"
+       ],
+       "params_en": [
+        "StandardProcessing",
+        "FillingData"
+       ],
+       "optional": [
+        true,
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ПриЗаписи": {
+     "name_en": "OnWrite",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ"
+       ],
+       "params_en": [
+        "Cancel"
+       ],
+       "optional": [
+        true
+       ],
+       "required_count": 0
+      }
+     ]
+    }
+   }
+  },
+  "ExternalReport.ObjectModule": {
+   "title_ru": "Модуль объекта (Внешний отчет)",
+   "title_en": "ExternalReport",
+   "metadata_type": "ExternalReport",
+   "module_kind": "ObjectModule",
+   "events": {
+    "ОбработкаПроверкиЗаполнения": {
+     "name_en": "FillCheckProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ",
+        "ПроверяемыеРеквизиты"
+       ],
+       "params_en": [
+        "Cancel",
+        "CheckedAttributes"
+       ],
+       "optional": [
+        true,
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ПриКомпоновкеРезультата": {
+     "name_en": "OnComposeResult",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [],
+       "params_en": [],
+       "optional": [],
+       "required_count": 0
+      }
+     ]
+    }
+   }
+  },
+  "FilterCriterion.ManagerModule": {
+   "title_ru": "Модуль менеджера (Критерий отбора)",
+   "title_en": "FilterCriterionManager.<Criterion name>",
+   "metadata_type": "FilterCriterion",
+   "module_kind": "ManagerModule",
+   "events": {
+    "ОбработкаПолученияФормы": {
+     "name_en": "FormGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ВидФормы",
+        "Параметры",
+        "ВыбраннаяФорма",
+        "ДополнительнаяИнформация",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "FormType",
+        "Parameters",
+        "SelectedForm",
+        "AdditionalInformation",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        false,
+        false,
+        true
+       ],
+       "required_count": 4
+      }
+     ]
+    }
+   }
+  },
+  "HTTPService.Module": {
+   "title_ru": "Модуль (HTTP-сервис)",
+   "title_en": "",
+   "metadata_type": "HTTPService",
+   "module_kind": "Module",
+   "handler_name_arbitrary": true,
+   "events": {}
+  },
+  "InformationRegister.ManagerModule": {
+   "title_ru": "Модуль менеджера (Регистр сведений)",
+   "title_en": "InformationRegisterManager.<Information register name>",
+   "metadata_type": "InformationRegister",
+   "module_kind": "ManagerModule",
+   "events": {
+    "ОбработкаПослеЗаписиВерсийИсторииДанных": {
+     "name_en": "AfterWriteDataHistoryVersionsProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ИнформацияОЗаписиВерсий"
+       ],
+       "params_en": [
+        "WriteVersionsInformation"
+       ],
+       "optional": [
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ОбработкаПолученияФормы": {
+     "name_en": "FormGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ВидФормы",
+        "Параметры",
+        "ВыбраннаяФорма",
+        "ДополнительнаяИнформация",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "FormType",
+        "Parameters",
+        "SelectedForm",
+        "AdditionalInformation",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        false,
+        false,
+        true
+       ],
+       "required_count": 4
+      }
+     ]
+    }
+   }
+  },
+  "InformationRegister.RecordSetModule": {
+   "title_ru": "Модуль набора записей (Регистр сведений)",
+   "title_en": "InformationRegisterRecordSet.<Information register name>",
+   "metadata_type": "InformationRegister",
+   "module_kind": "RecordSetModule",
+   "events": {
+    "ПередЗаписью": {
+     "name_en": "BeforeWrite",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ",
+        "Замещение"
+       ],
+       "params_en": [
+        "Cancel",
+        "Replacing"
+       ],
+       "optional": [
+        true,
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ОбработкаПроверкиЗаполнения": {
+     "name_en": "FillCheckProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ",
+        "ПроверяемыеРеквизиты"
+       ],
+       "params_en": [
+        "Cancel",
+        "CheckedAttributes"
+       ],
+       "optional": [
+        true,
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ОбработкаЗаполнения": {
+     "name_en": "Filling",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ДанныеЗаполнения",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "FillingData",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        true
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ОбработкаФормированияПоВерсииИсторииДанных": {
+     "name_en": "GenerateFromDataHistoryVersionProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ДанныеВерсии",
+        "НомерВерсии",
+        "КлючЗаписи",
+        "ИсключитьДанные",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "VersionData",
+        "VersionNumber",
+        "RecordKey",
+        "ExcludedData",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        false,
+        false,
+        true
+       ],
+       "required_count": 4
+      }
+     ]
+    },
+    "ПриЗаписи": {
+     "name_en": "OnWrite",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ",
+        "Замещение"
+       ],
+       "params_en": [
+        "Cancel",
+        "Replacing"
+       ],
+       "optional": [
+        true,
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    }
+   }
+  },
+  "IntegrationService.Module": {
+   "title_ru": "Модуль (Сервис интеграции)",
+   "title_en": "",
+   "metadata_type": "IntegrationService",
+   "module_kind": "Module",
+   "handler_name_arbitrary": true,
+   "events": {}
+  },
+  "Recalculation.RecordSetModule": {
+   "title_ru": "Модуль набора записей (Перерасчет)",
+   "title_en": "RecalculationRecordSet.<Recalculation name>",
+   "metadata_type": "Recalculation",
+   "module_kind": "RecordSetModule",
+   "events": {
+    "ПередЗаписью": {
+     "name_en": "BeforeWrite",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ",
+        "Замещение"
+       ],
+       "params_en": [
+        "Cancel",
+        "Replacing"
+       ],
+       "optional": [
+        true,
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ОбработкаПроверкиЗаполнения": {
+     "name_en": "FillCheckProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ",
+        "ПроверяемыеРеквизиты"
+       ],
+       "params_en": [
+        "Cancel",
+        "CheckedAttributes"
+       ],
+       "optional": [
+        true,
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ПриЗаписи": {
+     "name_en": "OnWrite",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ",
+        "Замещение"
+       ],
+       "params_en": [
+        "Cancel",
+        "Replacing"
+       ],
+       "optional": [
+        true,
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    }
+   }
+  },
+  "Report.ManagerModule": {
+   "title_ru": "Модуль менеджера (Отчет)",
+   "title_en": "ReportManager.<Report name>",
+   "metadata_type": "Report",
+   "module_kind": "ManagerModule",
+   "events": {
+    "ОбработкаПолученияФормы": {
+     "name_en": "FormGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ВидФормы",
+        "Параметры",
+        "ВыбраннаяФорма",
+        "ДополнительнаяИнформация",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "FormType",
+        "Parameters",
+        "SelectedForm",
+        "AdditionalInfo",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        false,
+        false,
+        true
+       ],
+       "required_count": 4
+      }
+     ]
+    }
+   }
+  },
+  "Report.ObjectModule": {
+   "title_ru": "Модуль объекта (Отчет)",
+   "title_en": "ReportObject.<Report name>",
+   "metadata_type": "Report",
+   "module_kind": "ObjectModule",
+   "events": {
+    "ОбработкаПроверкиЗаполнения": {
+     "name_en": "FillCheckProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ",
+        "ПроверяемыеРеквизиты"
+       ],
+       "params_en": [
+        "Cancel",
+        "CheckedAttributes"
+       ],
+       "optional": [
+        true,
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ПриКомпоновкеРезультата": {
+     "name_en": "OnComposeResult",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ДокументРезультат",
+        "ДанныеРасшифровки",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "ResultDocument",
+        "DetailsData",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        true
+       ],
+       "required_count": 2
+      },
+      {
+       "params_ru": [
+        "ДокументРезультат",
+        "ДанныеРасшифровки",
+        "СтандартнаяОбработка",
+        "АдресХранилища"
+       ],
+       "params_en": [
+        "ResultDocument",
+        "DetailsData",
+        "StandardProcessing",
+        "StorageAddress"
+       ],
+       "optional": [
+        false,
+        false,
+        false,
+        true
+       ],
+       "required_count": 3
+      },
+      {
+       "params_ru": [
+        "ДокументРезультат",
+        "ДанныеРасшифровкиОбъект",
+        "СтандартнаяОбработка",
+        "АдресХранилища"
+       ],
+       "params_en": [
+        "ResultDocument",
+        "DetailsData",
+        "StandardProcessing",
+        "StorageAddress"
+       ],
+       "optional": [
+        false,
+        false,
+        false,
+        true
+       ],
+       "required_count": 3
+      }
+     ]
+    }
+   }
+  },
+  "Sequence.RecordSetModule": {
+   "title_ru": "Модуль набора записей (Последовательность)",
+   "title_en": "SequenceRecordSet.<Sequence name>",
+   "metadata_type": "Sequence",
+   "module_kind": "RecordSetModule",
+   "events": {
+    "ПередЗаписью": {
+     "name_en": "BeforeWrite",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ",
+        "Замещение"
+       ],
+       "params_en": [
+        "Cancel",
+        "Replacing"
+       ],
+       "optional": [
+        true,
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ОбработкаПроверкиЗаполнения": {
+     "name_en": "FillCheckProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ",
+        "ПроверяемыеРеквизиты"
+       ],
+       "params_en": [
+        "Cancel",
+        "CheckedAttributes"
+       ],
+       "optional": [
+        true,
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ПриЗаписи": {
+     "name_en": "OnWrite",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ",
+        "Замещение"
+       ],
+       "params_en": [
+        "Cancel",
+        "Replacing"
+       ],
+       "optional": [
+        true,
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    }
+   }
+  },
+  "SettingsStorage.ManagerModule": {
+   "title_ru": "Модуль менеджера (Хранилище настроек)",
+   "title_en": "SettingsStorageManager.<Storage name>",
+   "metadata_type": "SettingsStorage",
+   "module_kind": "ManagerModule",
+   "events": {
+    "ОбработкаПолученияОписания": {
+     "name_en": "GetDescriptionProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "КлючОбъекта",
+        "КлючНастроек",
+        "ОписаниеНастроек",
+        "Пользователь"
+       ],
+       "params_en": [
+        "ObjectKey",
+        "SettingsKey",
+        "SettingsDescription",
+        "User"
+       ],
+       "optional": [
+        false,
+        false,
+        false,
+        false
+       ],
+       "required_count": 4
+      }
+     ]
+    },
+    "ОбработкаЗагрузки": {
+     "name_en": "LoadProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "КлючОбъекта",
+        "КлючНастроек",
+        "Настройки",
+        "ОписаниеНастроек",
+        "Пользователь"
+       ],
+       "params_en": [
+        "ObjectKey",
+        "SettingsKey",
+        "Settings",
+        "SettingsDescription",
+        "User"
+       ],
+       "optional": [
+        false,
+        false,
+        false,
+        false,
+        false
+       ],
+       "required_count": 5
+      }
+     ]
+    },
+    "ОбработкаСохранения": {
+     "name_en": "SaveProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "КлючОбъекта",
+        "КлючНастроек",
+        "Настройки",
+        "ОписаниеНастроек",
+        "Пользователь"
+       ],
+       "params_en": [
+        "ObjectKey",
+        "SettingsKey",
+        "Settings",
+        "SettingsDescription",
+        "User"
+       ],
+       "optional": [
+        false,
+        false,
+        false,
+        false,
+        false
+       ],
+       "required_count": 5
+      }
+     ]
+    },
+    "ОбработкаУстановкиОписания": {
+     "name_en": "SetDescriptionProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "КлючОбъекта",
+        "КлючНастроек",
+        "ОписаниеНастроек",
+        "Пользователь"
+       ],
+       "params_en": [
+        "ObjectKey",
+        "SettingsKey",
+        "SettingsDescription",
+        "User"
+       ],
+       "optional": [
+        false,
+        false,
+        false,
+        false
+       ],
+       "required_count": 4
+      }
+     ]
+    }
+   }
+  },
+  "Task.ManagerModule": {
+   "title_ru": "Модуль менеджера (Задача)",
+   "title_en": "TaskManager.<Task name>",
+   "metadata_type": "Task",
+   "module_kind": "ManagerModule",
+   "events": {
+    "ОбработкаПослеЗаписиВерсийИсторииДанных": {
+     "name_en": "AfterWriteDataHistoryVersionsProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ИнформацияОЗаписиВерсий"
+       ],
+       "params_en": [
+        "WriteVersionsInformation"
+       ],
+       "optional": [
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ОбработкаПолученияДанныхВыбора": {
+     "name_en": "ChoiceDataGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ДанныеВыбора",
+        "Параметры",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "ChoiceData",
+        "Parameters",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        true
+       ],
+       "required_count": 2
+      }
+     ]
+    },
+    "ОбработкаПолученияФормы": {
+     "name_en": "FormGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ВидФормы",
+        "Параметры",
+        "ВыбраннаяФорма",
+        "ДополнительнаяИнформация",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "FormType",
+        "Parameters",
+        "SelectedForm",
+        "AdditionalInformation",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        false,
+        false,
+        true
+       ],
+       "required_count": 4
+      }
+     ]
+    },
+    "ОбработкаПолученияПолейПредставления": {
+     "name_en": "PresentationFieldsGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Поля",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "Fields",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        true
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ОбработкаПолученияПредставления": {
+     "name_en": "PresentationGetProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Данные",
+        "Представление",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "Data",
+        "Presentation",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        true
+       ],
+       "required_count": 2
+      }
+     ]
+    }
+   }
+  },
+  "Task.ObjectModule": {
+   "title_ru": "Модуль объекта (Задача)",
+   "title_en": "TaskObject.<Task name>",
+   "metadata_type": "Task",
+   "module_kind": "ObjectModule",
+   "events": {
+    "ПередУдалением": {
+     "name_en": "BeforeDelete",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ"
+       ],
+       "params_en": [
+        "Cancel"
+       ],
+       "optional": [
+        true
+       ],
+       "required_count": 0
+      }
+     ]
+    },
+    "ПередВыполнением": {
+     "name_en": "BeforeExecute",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ"
+       ],
+       "params_en": [
+        "Cancel"
+       ],
+       "optional": [
+        true
+       ],
+       "required_count": 0
+      }
+     ]
+    },
+    "ПередИнтерактивнымВыполнением": {
+     "name_en": "BeforeExecuteInteractively",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ"
+       ],
+       "params_en": [
+        "Cancel"
+       ],
+       "optional": [
+        true
+       ],
+       "required_count": 0
+      }
+     ]
+    },
+    "ПередЗаписью": {
+     "name_en": "BeforeWrite",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ"
+       ],
+       "params_en": [
+        "Cancel"
+       ],
+       "optional": [
+        true
+       ],
+       "required_count": 0
+      }
+     ]
+    },
+    "ОбработкаПроверкиЗаполнения": {
+     "name_en": "FillCheckProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ",
+        "ПроверяемыеРеквизиты"
+       ],
+       "params_en": [
+        "Cancel",
+        "CheckedAttributes"
+       ],
+       "optional": [
+        true,
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ОбработкаЗаполнения": {
+     "name_en": "Filling",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ДанныеЗаполнения",
+        "ТекстЗаполнения",
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "FillingData",
+        "FillingText",
+        "StandardProcessing"
+       ],
+       "optional": [
+        false,
+        false,
+        true
+       ],
+       "required_count": 2
+      }
+     ]
+    },
+    "ОбработкаФормированияПоВерсииИсторииДанных": {
+     "name_en": "GenerateFromDataHistoryVersionProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ДанныеВерсии",
+        "НомерВерсии",
+        "СтандартнаяОбработка",
+        "ИсключитьДанные"
+       ],
+       "params_en": [
+        "VersionData",
+        "VersionNumber",
+        "StandardProcessing",
+        "ExcludedData"
+       ],
+       "optional": [
+        false,
+        false,
+        true,
+        false
+       ],
+       "required_count": 3
+      }
+     ]
+    },
+    "ОбработкаИнтерактивнойАктивации": {
+     "name_en": "InteractiveActivationProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "СтандартнаяОбработка"
+       ],
+       "params_en": [
+        "StandardProcessing"
+       ],
+       "optional": [
+        true
+       ],
+       "required_count": 0
+      }
+     ]
+    },
+    "ОбработкаПроверкиВыполнения": {
+     "name_en": "OnCheckExecutionProcessing",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Результат"
+       ],
+       "params_en": [
+        "Result"
+       ],
+       "optional": [
+        true
+       ],
+       "required_count": 0
+      }
+     ]
+    },
+    "ПриКопировании": {
+     "name_en": "OnCopy",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "ОбъектКопирования"
+       ],
+       "params_en": [
+        "CopiedObject"
+       ],
+       "optional": [
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ПриВыполнении": {
+     "name_en": "OnExecute",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ"
+       ],
+       "params_en": [
+        "Cancel"
+       ],
+       "optional": [
+        true
+       ],
+       "required_count": 0
+      }
+     ]
+    },
+    "ПриУстановкеНовогоНомера": {
+     "name_en": "OnSetNewNumber",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "СтандартнаяОбработка",
+        "Префикс"
+       ],
+       "params_en": [
+        "StandardProcessing",
+        "Prefix"
+       ],
+       "optional": [
+        true,
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ПриЗаписи": {
+     "name_en": "OnWrite",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Отказ"
+       ],
+       "params_en": [
+        "Cancel"
+       ],
+       "optional": [
+        true
+       ],
+       "required_count": 0
+      }
+     ]
+    }
+   }
+  },
+  "WebService.Module": {
+   "title_ru": "Модуль (Web-сервис)",
+   "title_en": "",
+   "metadata_type": "WebService",
+   "module_kind": "Module",
+   "handler_name_arbitrary": true,
+   "events": {}
+  },
+  "WebSocketClient.Module": {
+   "title_ru": "Модуль (WebSocket-клиент)",
+   "title_en": "WebSocket client module",
+   "metadata_type": "WebSocketClient",
+   "module_kind": "Module",
+   "events": {
+    "ПередПодключением": {
+     "name_en": "BeforeConnect",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Клиент"
+       ],
+       "params_en": [
+        "Client"
+       ],
+       "optional": [
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    },
+    "ПриЗакрытииСоединения": {
+     "name_en": "OnCloseConnection",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Соединение",
+        "КодЗакрытия"
+       ],
+       "params_en": [
+        "Connection",
+        "CloseCode"
+       ],
+       "optional": [
+        false,
+        false
+       ],
+       "required_count": 2
+      }
+     ]
+    },
+    "ПриОшибке": {
+     "name_en": "OnError",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Соединение",
+        "КодОшибки",
+        "Описание"
+       ],
+       "params_en": [
+        "Connection",
+        "ErrorCode",
+        "Description"
+       ],
+       "optional": [
+        false,
+        false,
+        false
+       ],
+       "required_count": 3
+      }
+     ]
+    },
+    "ПриПолученииСообщения": {
+     "name_en": "OnMessage",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Соединение",
+        "Сообщение"
+       ],
+       "params_en": [
+        "Connection",
+        "Message"
+       ],
+       "optional": [
+        false,
+        false
+       ],
+       "required_count": 2
+      }
+     ]
+    },
+    "ПриОткрытииСоединения": {
+     "name_en": "OnOpenConnection",
+     "kind": "procedure",
+     "signatures": [
+      {
+       "params_ru": [
+        "Соединение"
+       ],
+       "params_en": [
+        "Connection"
+       ],
+       "optional": [
+        false
+       ],
+       "required_count": 1
+      }
+     ]
+    }
+   }
+  }
+ }
+}
