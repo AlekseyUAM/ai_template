@@ -3,9 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
-import shutil
 import subprocess
 import sys
 from dataclasses import dataclass, replace
@@ -18,7 +16,7 @@ from bench_metrics import (aggregate_environment, collect_task_state,
                            cycle_metrics, find_session_files, parse_stream,
                            render_digest, run_static_analyzers, stage_table,
                            summarize_transcripts, write_json_atomic)
-from claude_proc import run_claude_process
+from claude_proc import resolve_command, run_claude_process
 
 
 class BenchError(RuntimeError):
@@ -356,8 +354,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         help="задача: task#001, #001 или 001 (повторяемый)")
     parser.add_argument("--limit", action="append", default=[], dest="limit_args",
                         help="лимит в минутах: task#001=30, #002=120 (повторяемый)")
-    parser.add_argument("--claude-cmd", default="claude-ds",
-                        help="команда агента (по умолчанию claude-ds)")
+    parser.add_argument("--claude-cmd", default=None,
+                        help="команда агента (по умолчанию — "
+                             "AGENTMON_CLAUDE_CMD из test.env)")
     parser.add_argument("--analysis-timeout", type=int, default=30,
                         help="лимит аналитика в минутах (по умолчанию 30)")
     parser.add_argument("--skip-analysis", action="store_true",
@@ -381,14 +380,13 @@ def build_options(ns: argparse.Namespace, repo_root: Path) -> RunOptions:
     limits = apply_limits(selected, ns.limit_args)
     if ns.analysis_timeout < 1:
         raise BenchError("--analysis-timeout должен быть ≥ 1")
-    if not ns.claude_cmd.strip():
-        raise BenchError("--claude-cmd не может быть пустым")
+    cmd = resolve_claude_cmd(ns.claude_cmd, env_path)
     return RunOptions(
         repo_root=repo_root,
         project_dir=project_dir,
         tasks=selected,
         limits=limits,
-        claude_cmd=ns.claude_cmd.strip(),
+        claude_cmd=cmd,
         analysis_timeout_min=ns.analysis_timeout,
         skip_analysis=bool(ns.skip_analysis),
         force=bool(ns.force),
@@ -397,16 +395,24 @@ def build_options(ns: argparse.Namespace, repo_root: Path) -> RunOptions:
     )
 
 
+def resolve_claude_cmd(explicit: str | None, env_path: Path) -> str:
+    """Команда агента: --claude-cmd → AGENTMON_CLAUDE_CMD из test.env → ошибка."""
+    cmd = (explicit or "").strip()
+    if not cmd:
+        cmd = (read_env_file(env_path).get("AGENTMON_CLAUDE_CMD") or "").strip()
+    if not cmd:
+        raise BenchError(
+            f"AGENTMON_CLAUDE_CMD не задан в {env_path}; укажите --claude-cmd")
+    return cmd
+
+
 def ensure_claude_cmd(cmd: str) -> None:
     """Проверить, что команда агента существует и исполняема."""
-    candidate = Path(cmd)
-    if candidate.is_absolute() or os.sep in cmd:
-        resolved = candidate
-    else:
-        found = shutil.which(cmd)
-        resolved = Path(found) if found else candidate
-    if not resolved.is_file() or not os.access(resolved, os.X_OK):
-        raise BenchError(f"команда агента не найдена или не исполняема: {cmd}")
+    try:
+        resolve_command(cmd)
+    except FileNotFoundError:
+        raise BenchError(
+            f"команда агента не найдена или не исполняема: {cmd}") from None
 
 
 def build_task_prompt(folder: str, limit_minutes: int | None = None) -> str:

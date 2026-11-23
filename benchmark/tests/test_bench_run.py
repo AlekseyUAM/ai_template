@@ -12,8 +12,8 @@ from bench_run import (BenchError, TaskInfo, _stream_metrics, _task_aliases,
                        apply_limits, build_options, changed_files,
                        check_freshness, collect_diff, discover_tasks,
                        git_state, parse_args, parse_limit_arg, parse_minutes,
-                       read_env_file, resolve_project_dir, run_claude,
-                       select_tasks)
+                       read_env_file, resolve_claude_cmd, resolve_project_dir,
+                       run_claude, select_tasks)
 from claude_proc import resolve_command, split_command
 
 
@@ -339,7 +339,9 @@ def test_apply_limits_and_duplicates(tmp_path):
 def test_build_options(tmp_path):
     project = make_project(tmp_path)
     env = tmp_path / "test.env"
-    env.write_text(f"BENCH_PROJECT_DIR={project}\n", encoding="utf-8")
+    env.write_text(
+        f"BENCH_PROJECT_DIR={project}\nAGENTMON_CLAUDE_CMD=claude-ds\n",
+        encoding="utf-8")
     ns = parse_args(["--env", str(env), "--task", "#001", "--limit", "#001=30",
                      "--analysis-timeout", "15"])
     opts = build_options(ns, tmp_path)
@@ -348,6 +350,33 @@ def test_build_options(tmp_path):
     assert opts.limits == {"task#001": 30}
     assert opts.analysis_timeout_min == 15
     assert opts.run_dir is None
+    assert opts.claude_cmd == "claude-ds"
+
+
+def test_resolve_claude_cmd_from_env(tmp_path):
+    env = tmp_path / "test.env"
+    env.write_text("AGENTMON_CLAUDE_CMD=claude-ds --flag\n", encoding="utf-8")
+    assert resolve_claude_cmd(None, env) == "claude-ds --flag"
+
+
+def test_resolve_claude_cmd_flag_wins(tmp_path):
+    env = tmp_path / "test.env"
+    env.write_text("AGENTMON_CLAUDE_CMD=claude-ds\n", encoding="utf-8")
+    assert resolve_claude_cmd("claude-local", env) == "claude-local"
+
+
+def test_resolve_claude_cmd_required(tmp_path):
+    env = tmp_path / "test.env"
+    env.write_text("BENCH_PROJECT_DIR=/x\n", encoding="utf-8")
+    with pytest.raises(BenchError, match="AGENTMON_CLAUDE_CMD"):
+        resolve_claude_cmd(None, env)
+
+
+def test_resolve_claude_cmd_empty_value_is_missing(tmp_path):
+    env = tmp_path / "test.env"
+    env.write_text("AGENTMON_CLAUDE_CMD=\n", encoding="utf-8")
+    with pytest.raises(BenchError, match="AGENTMON_CLAUDE_CMD"):
+        resolve_claude_cmd(None, env)
 
 
 def git(project: Path, *args: str) -> str:

@@ -151,6 +151,13 @@ def test_load_config_rejects_relative_project_dir(tmp_path):
         load_config(write_env(tmp_path, BENCH_PROJECT_DIR="relative"), repo_root=tmp_path)
 
 
+def test_load_config_accepts_agentmon_claude_cmd(tmp_path):
+    warnings = []
+    load_config(write_env(tmp_path, AGENTMON_CLAUDE_CMD="claude-ds"),
+                repo_root=tmp_path, warn=warnings.append)
+    assert warnings == []
+
+
 def test_load_config_warns_unknown_key(tmp_path):
     warnings = []
     load_config(

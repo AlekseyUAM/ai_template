@@ -33,7 +33,8 @@ for _stream in (sys.stdout, sys.stderr):
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from bench_run import (BenchError, ensure_claude_cmd,  # noqa: E402
-                       read_env_file, resolve_project_dir)
+                       read_env_file, resolve_claude_cmd,
+                       resolve_project_dir)
 from bench_metrics import parse_stream  # noqa: E402
 from claude_proc import run_claude_process  # noqa: E402
 
@@ -396,8 +397,9 @@ def main() -> int:
     parser.add_argument("--task", required=True, help="task#004, #004 или 004")
     parser.add_argument("--project", help="каталог проекта")
     parser.add_argument("--env", help="env-файл; по умолчанию benchmark/test.env")
-    parser.add_argument("--claude-cmd", default="claude-ds",
-                        help="команда агента (по умолчанию claude-ds)")
+    parser.add_argument("--claude-cmd", default=None,
+                        help="команда агента (по умолчанию — "
+                             "AGENTMON_CLAUDE_CMD из test.env)")
     parser.add_argument("--stages", help="подмножество этапов через запятую")
     parser.add_argument("--limit-stage", action="append", default=[],
                         metavar="ЭТАП=МИНУТЫ", help="лимит этапа (повторяемый)")
@@ -416,7 +418,8 @@ def main() -> int:
         env_path = (repo_root / env_path).resolve()
     try:
         project = resolve_project_dir(args.project, env_path, repo_root)
-        ensure_claude_cmd(args.claude_cmd)
+        cmd = resolve_claude_cmd(args.claude_cmd, env_path)
+        ensure_claude_cmd(cmd)
         folder = task_folder(args.task)
         task_dir = project / "tasks" / folder
         data = read_task(task_dir)
@@ -459,7 +462,7 @@ def main() -> int:
             "started_at": datetime.now().astimezone().isoformat(timespec="seconds"),
             "project": str(project),
             "task": folder,
-            "claude_cmd": args.claude_cmd,
+            "claude_cmd": cmd,
             "stages": [],
             "stopped": None,
         }
@@ -470,7 +473,7 @@ def main() -> int:
             limit_min = limits.get(name, 30)
             print(f"[{datetime.now():%H:%M:%S}] ▶ {name} (лимит {limit_min} мин)")
             result = run_stage(project=project, folder=folder, stage=stage,
-                               claude_cmd=args.claude_cmd, limit_min=limit_min,
+                               claude_cmd=cmd, limit_min=limit_min,
                                run_dir=run_dir, brief=brief)
             run["stages"].append(result)
             metrics = result["metrics"]

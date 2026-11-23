@@ -41,6 +41,7 @@ REQUIRED_KEYS = (
 OPTIONAL_KEYS = (
     "MCP_1C_MD_URL", "MCP_1C_NAPARNIC_URL", "BENCH_DT_PATH",
     "MCP_CODE_INDEX_HOST", "CODE_INDEX_WAIT_MINUTES",
+    "AGENTMON_CLAUDE_CMD",
 )
 _VERSION_RE = re.compile(r"(\d+\.\d+\.\d+\.\d+)")
 _URL_RE = re.compile(r"^https?://", re.IGNORECASE)
