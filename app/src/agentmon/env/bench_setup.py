@@ -258,10 +258,24 @@ def _connection_platform(url: str) -> str:
     return f"\"1c_platform\": {server}"
 
 
-def check_mcp_url(url: str, *, http_ok=default_http_ok, log=print) -> None:
-    if not http_ok(url):
-        raise SetupError(f"1c-md недоступен по адресу {url}")
-    log(f"✓ 1c-md доступен: {url}")
+def check_mcp_url(url: str, *, http_ok=default_http_ok, log=print,
+                  attempts: int = 6, delay: float = 5.0,
+                  sleep=time.sleep) -> None:
+    """Дождаться ответа 1c-md по адресу `url`.
+
+    Сразу после restore-ib веб-публикация 1С поднимается не мгновенно:
+    первый запрос может упереться в таймаут http_ok (5 с) или оборваться.
+    Поэтому пробуем несколько раз, прежде чем объявить сервер недоступным.
+    """
+    for attempt in range(1, attempts + 1):
+        if http_ok(url):
+            log(f"✓ 1c-md доступен: {url}")
+            return
+        if attempt < attempts:
+            log(f"⚠ 1c-md не ответил ({attempt}/{attempts - 1}) — повтор "
+                f"через {delay:g} с")
+            sleep(delay)
+    raise SetupError(f"1c-md недоступен по адресу {url}")
 
 
 def create_project_row(store, cfg: BenchConfig) -> int:
@@ -909,7 +923,8 @@ def run_setup(cfg: BenchConfig, *, repo_root: Path, store, registry,
         for args in base_load_steps(cfg, repo_root):
             batch_run(cfg.project_dir, args, prov=prov, log=log)
         if cfg.one_c_md_url:
-            check_mcp_url(cfg.one_c_md_url, http_ok=http_ok, log=log)
+            check_mcp_url(cfg.one_c_md_url, http_ok=http_ok, log=log,
+                          sleep=sleep)
 
         log("▶ выгрузка cf/cfe")
         for args in base_dump_steps():

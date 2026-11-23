@@ -714,12 +714,25 @@ def test_run_batch_step_retries_db_lock(tmp_path):
 
 
 def test_check_mcp_url_fails_when_unreachable(tmp_path):
+    sleeps = []
     with pytest.raises(SetupError, match="недоступен"):
-        check_mcp_url("http://localhost:9999/hs/mcp", http_ok=lambda url: False)
+        check_mcp_url("http://localhost:9999/hs/mcp", http_ok=lambda url: False,
+                      log=lambda line: None, attempts=3, delay=5.0,
+                      sleep=sleeps.append)
+    assert sleeps == [5.0, 5.0]
 
 
 def test_check_mcp_url_accepts_reachable():
     check_mcp_url("http://localhost:9999/hs/mcp", http_ok=lambda url: True)
+
+
+def test_check_mcp_url_retries_until_reachable():
+    answers = iter([False, False, True])
+    sleeps = []
+    check_mcp_url("http://localhost:9999/hs/mcp",
+                  http_ok=lambda url: next(answers),
+                  log=lambda line: None, sleep=sleeps.append)
+    assert sleeps == [5.0, 5.0]
 
 
 import shutil

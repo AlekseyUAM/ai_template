@@ -113,7 +113,7 @@ def main(argv: list[str] | None = None) -> int:
     problem = docker_problem()
     if problem:
         print(f"✗ Docker недоступен: {problem}", file=sys.stderr)
-        print("  benchmark-окружение поднимает MCP-серверы и code_index "
+        print("  MCP-серверы benchmark (bsl_ls, 1c_platform) запускаются "
               "в Docker,", file=sys.stderr)
         print("  поэтому подготовка без Docker невозможна. Запустите "
               "Docker Desktop", file=sys.stderr)
