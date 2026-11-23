@@ -394,6 +394,130 @@ def test_run_check_bom_mismatch_rejected_before_java():
     assert calls == []
 
 
+# --- завершающий перевод строки: хэш файла и хэш присланного текста ----------
+
+def test_prepare_input_file_newline_code_without_newline_accepted(tmp_path):
+    """Файл оканчивается `\\n`, code прислан без него — хэш файла принимается."""
+    path = tmp_path / "Module.bsl"
+    path.write_text("ВЫБРАТЬ 1\n", encoding="utf-8")
+    file_sha = hashlib.sha256(path.read_bytes()).hexdigest()
+    code, filename, expected, source, error = mod.prepare_input(
+        code="ВЫБРАТЬ 1", file_path=None, sha256=file_sha, filename="Module.bsl")
+    assert error is None
+    assert code == "ВЫБРАТЬ 1"
+    assert expected == _sha("ВЫБРАТЬ 1")
+    assert source == "code"
+
+
+def test_prepare_input_code_with_extra_newline_accepted(tmp_path):
+    """Code прислан с лишним `\\n` в конце — хэш без него принимается."""
+    path = tmp_path / "Module.bsl"
+    path.write_text("ВЫБРАТЬ 1", encoding="utf-8")
+    file_sha = hashlib.sha256(path.read_bytes()).hexdigest()
+    code, filename, expected, source, error = mod.prepare_input(
+        code="ВЫБРАТЬ 1\n", file_path=None, sha256=file_sha, filename="Module.bsl")
+    assert error is None
+    assert code == "ВЫБРАТЬ 1\n"
+    assert expected == _sha("ВЫБРАТЬ 1\n")
+    assert source == "code"
+
+
+def test_prepare_input_newline_tolerance_keeps_bom_variants(tmp_path):
+    """BOM и завершающий `\\n` сочетаются: хэш файла принимается."""
+    path = tmp_path / "Module.bsl"
+    path.write_bytes((BOM + "ВЫБРАТЬ 1\n").encode("utf-8"))
+    file_sha = hashlib.sha256(path.read_bytes()).hexdigest()
+    code, filename, expected, source, error = mod.prepare_input(
+        code=BOM + "ВЫБРАТЬ 1", file_path=None, sha256=file_sha,
+        filename="Module.bsl")
+    assert error is None
+    assert expected == _sha("ВЫБРАТЬ 1")
+
+
+def test_prepare_input_mismatched_hash_still_rejected():
+    code, filename, expected, source, error = mod.prepare_input(
+        code="ВЫБРАТЬ 1", file_path=None, sha256=_sha("ВЫБРАТЬ 2"),
+        filename="Module.bsl")
+    assert code is None
+    assert "sha256" in error
+
+
+def test_run_check_newline_tolerance_and_normalized_sha():
+    """run_check принимает хэш варианта с `\\n`; в ответе — хэш присланного текста."""
+    report = _report([])
+    code = "Код"
+
+    res = mod.run_check(code, "Module.bsl", jar="/opt/x.jar",
+                        expected_sha256=_sha(code + "\n"),
+                        run=_fake_json_run(report))
+    assert res["ok"] is True
+    assert res["sha256"] == _sha(code)
+
+    res = mod.run_check(code + "\n", "Module.bsl", jar="/opt/x.jar",
+                        expected_sha256=_sha(code), run=_fake_json_run(report))
+    assert res["ok"] is True
+    assert res["sha256"] == _sha(code + "\n")
+
+
+def test_run_check_newline_tolerance_mismatch_still_rejected():
+    calls = []
+    res = mod.run_check("Код", "Module.bsl", jar="/opt/x.jar",
+                        expected_sha256=_sha("Другой\n"),
+                        run=lambda *a, **k: calls.append(1))
+    assert res["ok"] is False
+    assert "sha256" in res["summary"]
+    assert calls == []
+
+
+# --- один повтор на транзиентный сбой старта Spring ---------------------------
+
+def test_run_check_retries_once_on_bean_creation_exception():
+    import json as _json
+    calls = []
+    report = _report([])
+
+    def fake_run(cmd, **kwargs):
+        calls.append(cmd)
+
+        class _R:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+
+        if len(calls) == 1:
+            _R.returncode = 1
+            _R.stderr = ("org.springframework.beans.factory.BeanCreationException: "
+                         "Error creating bean with name 'bslLanguageServer'")
+            return _R()
+        outdir = Path(cmd[cmd.index("--outputDir") + 1])
+        outdir.mkdir(parents=True, exist_ok=True)
+        (outdir / "bsl-json.json").write_text(
+            _json.dumps(report), encoding="utf-8")
+        return _R()
+
+    res = mod.run_check("Код", "Module.bsl", jar="/opt/x.jar", run=fake_run)
+    assert res["ok"] is True
+    assert len(calls) == 2
+
+
+def test_run_check_does_not_retry_non_spring_failure():
+    calls = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(cmd)
+
+        class _R:
+            returncode = 1
+            stdout = ""
+            stderr = "ParseError: ожидается выражение"
+        return _R()
+
+    res = mod.run_check("Код", "Module.bsl", jar="/opt/x.jar", run=fake_run)
+    assert res["ok"] is False
+    assert "ParseError" in res["summary"]
+    assert len(calls) == 1
+
+
 def test_counts_in_result():
     report = _report([{"path": "Module.bsl", "diagnostics": [
         {"range": {"start": {"line": 0, "character": 0},

@@ -451,3 +451,48 @@ def test_start_refuses_busy_port_before_spawn(tmp_path, monkeypatch):
     assert probed == ["http://127.0.0.1:8005"]
     assert spawned == []
     assert not (ci / "benchmark-pids.json").exists()
+
+
+# --- bind host: serve принимает только socket-адрес, не hostname ---
+
+def test_start_maps_localhost_to_loopback_for_serve(tmp_path, monkeypatch):
+    ci = tmp_path / "ci"
+    catalog = tmp_path / "catalog"; catalog.mkdir()
+    spawned = []
+    pids = iter([1, 2])
+
+    def fake_download(dest, *, log=None):
+        path = Path(dest) / "bsl-indexer"
+        path.write_text("bin", encoding="utf-8")
+        return path
+
+    def fake_popen(args, **kwargs):
+        spawned.append((list(args), kwargs))
+        return SimpleNamespace(pid=next(pids))
+
+    monkeypatch.setattr(B, "_spawn_kwargs", lambda: {})
+    B.start_code_index(
+        code_index_dir=ci, catalog_dir=catalog, alias="a", port=8005,
+        host="localhost", download=fake_download, popen=fake_popen,
+        run=lambda *a, **k: SimpleNamespace(returncode=0, stdout="",
+                                            stderr=""),
+        tcp_ok=lambda _u: False, log=lambda _m: None)
+    serve_args, serve_kwargs = spawned[1]
+    assert serve_args[serve_args.index("--host") + 1] == "127.0.0.1"
+    assert serve_kwargs["env"]["MCP_HTTP_HOST"] == "127.0.0.1"
+
+
+def test_wait_dead_process_includes_log_tail(tmp_path, monkeypatch):
+    from agentmon.env.bench_setup import SetupError
+    ci = tmp_path / "ci"; ci.mkdir()
+    (ci / "serve.log").write_text(
+        "Error: Некорректный host:port 'localhost:8005'\n", encoding="utf-8")
+    (ci / "daemon.log").write_text("daemon started\n", encoding="utf-8")
+    index = B.NativeIndex(ci, ci / "bsl-indexer", 1, 2)
+    monkeypatch.setattr(B, "_daemon_status", lambda index, run: None)
+    monkeypatch.setattr(B, "_is_our_process", lambda pid, run: False)
+    with pytest.raises(SetupError, match="Некорректный host:port"):
+        B.wait_code_index_ready(index, wait_minutes=1, host="localhost",
+                                port=8005, run=lambda *a, **k: None,
+                                sleep=lambda _s: None, clock=lambda: 0.0,
+                                tcp_ok=lambda _u: False, log=lambda _m: None)

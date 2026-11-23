@@ -63,13 +63,20 @@ additional checks "just in case" nor scenarios for adjacent cases.
 6. If a scenario does not fit into 150 lines - move the common part into helpers or a separate
    module, do not generate everything at once.
 
-**Ready helpers.** In `ЮТ_ТестированиеСервер` there are already checks and data
-creation: `ДвиженияПоРегистратору`, `Проверить`, `ПроверитьНаборДвижений`,
-`ПроверитьОтсутствиеДвижения`, `ТаблицыЗначенийРавны`, `СоздатьДокумент`,
-`СоздатьЭлементСправочника`, `СоздатьЭлементПВХ`, `НоваяТаблицаСтрокНакладной`,
-`ДобавитьСтрокуНакладной`, `СоздатьНакладную`, `СоздатьТестовуюОрганизацию`,
-`СоздатьТестовуюНоменклатуру`, `УстановитьМетодСписанияСебестоимости`,
-`УдалитьМетодСписанияСебестоимости`. Use them, do not duplicate in the test module.
+**Ready helpers.** Use the existing functions of `ЮТ_ТестированиеСервер`, do not duplicate
+them in the test module:
+
+- movements: `ДвиженияПоРегистратору`, `НоваяТаблицаДвижений`,
+  `ПроверитьНаборДвижений`, `ПроверитьОтсутствиеДвижения`;
+- registers and data: `ДобавитьЗаписьРегистраСведений`, `СоздатьДокумент`,
+  `СоздатьЭлементСправочника`, `СоздатьЭлементПВХ`, `ДанныеНовогоЭлемента`;
+- comparison and run: `ТаблицыЗначенийРавны`, `РезультатТеста`, `ЗаписьЖР`,
+  `Тестирование`, `ВыполнениеТеста`, `УдалитьТестовыеЭлементы`.
+
+Helpers take metadata names as parameters (catalog, document, register, attribute) and
+do not reference task#001 objects, so they work for any task's metadata.
+`ДобавитьЗаписьРегистраСведений` accepts only a `Структура`: it checks the fields whose
+metadata fill checking is `ВыдаватьОшибку` and requires `Период` for a periodic register.
 
 **`bsl_ls` diagnostics.** `Information` diagnostics do not block the stage; fix
 only `Error` and `Warning` that point to a real defect.
@@ -94,14 +101,19 @@ only `Error` and `Warning` that point to a real defect.
    ```bsl
    Функция МойСценарий() Экспорт
        РезультатТеста = ЮТ_ТестированиеСервер.РезультатТеста();
+       <подготовка данных и вызов проверяемого кода>
        РезультатТеста.Результат = <проверка>;
-       // при провале — что ожидали и что получили:
-       // РезультатТеста.ОписаниеОшибки = "Ожидали ..., получили ...";
+       Если Не РезультатТеста.Результат Тогда
+           РезультатТеста.ОписаниеОшибки = "Ожидали ..., получили ...";
+       КонецЕсли;
        Возврат РезультатТеста;
    КонецФункции
    ```
    The body - regular 1C code: prepare data, perform the action under test, write
-   the comparison result into `Результат`. Returning a "bare" `Булево` is an error: the runner
+   the comparison result into `Результат`. `РезультатТеста()` returns a successful blank:
+   assign `Результат` from the check. On an early exit because of an error, set
+   `Результат = Ложь` and `ОписаниеОшибки` in that branch; the runner counts a non-empty
+   error with `Результат = true` as a failure. Returning a "bare" `Булево` is an error: the runner
    will write `Тест вернул некорректный результат` and count the test as failed.
 
    In the sample `ЮТ_ТестыПример` there is an example of logging debug information via
@@ -218,6 +230,11 @@ remains the last one - it is checked by the `testing` stage.
 did not start - the extension load failed, this is a defect; do not count the run as
 smoke evidence (a run against the previous version of the test extension would give
 a plausible `EXIT=4`).
+
+Before the smoke, refresh the main configuration in the IB: pointwise for the changed
+modules or the whole `src/cf` via `1c-batch load-config`. The extension load alone does
+not remove an older implementation of the object under test; otherwise the red smoke
+can become falsely green and a real defect will not be caught.
 
 On smoke the expected code is `EXIT=4` (the run took place, all tests are red). `EXIT=2`
 (compilation error), `EXIT=5` (no result) and `1/3/124` are defects, fix until `4`.

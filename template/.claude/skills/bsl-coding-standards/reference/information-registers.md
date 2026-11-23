@@ -44,6 +44,22 @@ Severity as in the other references: `[critical]` = error, `[important]` = warni
 - [important] **There is no slice for a non-periodic register.** Do not design `СрезПоследних`
   for a register without periodicity.
 
+## Reading the slice in BSL
+
+The manager call `РегистрСведений.<Имя>.СрезПоследних(Период, Отбор)` returns a
+`ТаблицаЗначений` of rows. Take the row with `[0]` / `Выбрать()` and read resources
+and attributes by name:
+
+```bsl
+Срез = РегистрСведений.КурсыВалют.СрезПоследних(
+    ТекущаяДата(), Новый Структура("Валюта", Валюта));
+Курс = ?(Срез.Количество() > 0, Срез[0].Курс, 0);
+```
+
+`Период` and `Отбор` are optional; the result always has the shape of a table, even
+for a single row. An empty slice is a table with zero rows - check `Количество()`
+before reading `[0]`.
+
 ## Writing the register
 
 - [important] **The write mode is chosen by task:**

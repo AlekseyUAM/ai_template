@@ -781,6 +781,12 @@ def check_explicit_write_in_posting(ctx):
     performed implicitly by the system when the posting procedure completes" - otherwise with
     parallel work mutual locks are possible. The exception is when the written
     data is needed by subsequent algorithms before exiting posting.
+
+    The whole-collection `Движения.Записать()` is not flagged: it is the documented
+    clearing idiom when the document date is moved forward (movements-deletion.md) -
+    an empty set is written so the deletion is visible to a later query in the same
+    transaction. A write of a specific set (`Движения.<Регистр>.Записать()`) is still
+    flagged.
     """
     out = []
     model = ctx.model
@@ -796,6 +802,10 @@ def check_explicit_write_in_posting(ctx):
         if (toks[k].kind == "op" and toks[k].value == "."
                 and toks[k + 1].kind == "ident" and toks[k + 1].value.upper() == "ЗАПИСАТЬ"
                 and toks[k + 2].kind == "op" and toks[k + 2].value == "("):
+            receiver = toks[k - 1] if k > 0 else None
+            if (receiver is not None and receiver.kind == "ident"
+                    and receiver.value.upper() == "ДВИЖЕНИЯ"):
+                continue
             line = toks[k + 1].line
             for m in posting:
                 if m.header_line <= line <= m.end_line:
@@ -1195,6 +1205,62 @@ def check_system_enum_value(ctx):
             line=member.line,
             message=f"{t.value}.{member.value} не существует — {detail}.",
         ))
+    return out
+
+
+# Query package separator: a line of only slashes, e.g. |////... (10+).
+_QUERY_SEPARATOR_RE = re.compile(r"^\s*\|\s*/{10,}\s*$")
+
+
+@rule(code="comment-in-body", severity="warning",
+      title="Комментарий в теле метода — перенесите пояснение в описание метода")
+def check_comment_in_body(ctx):
+    """Flag explanatory comments inside a method body.
+
+    The standard ([important]) keeps the method body free of comments: the
+    contract is described in the method description before the declaration,
+    implementation notes in DEVELOP.md. A comment token on a line after the
+    method header (header_line < line <= end_line) is in the body.
+
+    Exceptions: comments before the declaration (method description, module
+    header, Перем block), `// BSLLS:` directive comments and mark_changes
+    markers (`-->` / `<--`).
+
+    A multi-line query string token keeps line breaks; a line whose stripped
+    content starts with `|//` is a commented-out query fragment - also flagged.
+    A line consisting only of slashes (`|////////////////` - 10 or more) is a
+    package separator, not a comment, and is not flagged.
+    """
+    out = []
+    reported = set()
+
+    def report(line):
+        if line in reported:
+            return
+        reported.add(line)
+        out.append(Finding(
+            code="comment-in-body",
+            severity="warning",
+            line=line,
+            message=("Комментарий в теле метода: перенеси пояснение в описание "
+                     "метода или в DEVELOP.md."),
+        ))
+
+    model = ctx.model
+    for t in model.tokens:
+        if t.kind == "comment":
+            if any(m.header_line < t.line <= m.end_line for m in model.methods):
+                if t.value.lstrip().startswith("// BSLLS:"):
+                    continue
+                if "-->" in t.value or "<--" in t.value:
+                    continue
+                report(t.line)
+        elif t.kind == "string" and "\n" in t.value:
+            for offset, value_line in enumerate(t.value.split("\n")):
+                if _QUERY_SEPARATOR_RE.match(value_line):
+                    continue
+                if value_line.strip().startswith("|//"):
+                    report(t.line + offset)
     return out
 
 

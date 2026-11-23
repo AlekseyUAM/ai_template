@@ -51,7 +51,8 @@ def test_parse_tool_events_pairs_duration(tmp_path):
 
 def test_classify_bash():
     assert classify_bash("python .claude/tools/run-tests.py x") == "test-run"
-    assert classify_bash("python .claude/tools/run-tests.py --test A > smoke.log") == "test-run"
+    assert classify_bash("python .claude/tools/run-tests.py --test A > smoke.log") == "smoke"
+    assert classify_bash("python .claude/tools/run-tests.py --test A > red-smoke.log") == "smoke"
     assert classify_bash("python x load-extension src/cfe/ЮнитТесты") == "extension-load"
     assert classify_bash("python .claude/tools/load-config-optimized.py") == "config-load"
     assert classify_bash("python analyze_code.py x.bsl") == "static-check"
@@ -236,6 +237,67 @@ def test_mcp_error_and_hook_denial_are_disjoint(tmp_path):
     summary = summarize_events(parse_tool_events(path), tmp_path)
     assert summary["mcp_errors"] == 1
     assert summary["hook_denials"] == 1
+
+
+def test_mcp_result_with_ok_false_counted_as_input_error(tmp_path):
+    """MCP-результат `{"ok": false}` без is_error — ошибка входных данных, не отказ MCP."""
+    path = write_jsonl(tmp_path / "t.jsonl", [
+        tool_use("2026-01-01T00:00:00+00:00", "m1", "mcp__bsl_ls__check", {}),
+        tool_result("2026-01-01T00:00:01+00:00", "m1",
+                    json.dumps({"ok": False, "summary": "sha256 не совпадает"},
+                               ensure_ascii=False)),
+        tool_use("2026-01-01T00:00:02+00:00", "m2", "mcp__bsl_ls__check", {}),
+        tool_result("2026-01-01T00:00:03+00:00", "m2",
+                    json.dumps({"ok": True, "count": 0})),
+    ])
+    summary = summarize_events(parse_tool_events(path), tmp_path)
+    assert summary["tool_errors"] == 0  # is_error в событии нет
+    assert summary["mcp_errors"] == 0
+    assert summary["mcp_input_errors"] == 1
+    env = aggregate_environment([{"transcript": {"main": summary}}])
+    assert env["mcp_errors"] == 0
+    assert env["mcp_input_errors"] == 1
+
+
+def test_indexed_path_denial_is_hook_denial(tmp_path):
+    """Текст code-index-guard («denied on an indexed path») — отказ хука."""
+    path = write_jsonl(tmp_path / "t.jsonl", [
+        tool_use("2026-01-01T00:00:00+00:00", "r1", "Read",
+                 {"file_path": "/p/src/cf/CommonModules/X.bsl"}),
+        tool_result("2026-01-01T00:00:01+00:00", "r1",
+                    "Read is denied on an indexed path (repo='ssl2')", True),
+    ])
+    summary = summarize_events(parse_tool_events(path), tmp_path)
+    assert summary["hook_denials"] == 1
+    assert summary["mcp_errors"] == 0
+
+
+def test_gap_excludes_previous_duration(tmp_path):
+    """Длительная операция не превращается в простой: gap считается от её конца."""
+    path = write_jsonl(tmp_path / "t.jsonl", [
+        tool_use("2026-01-01T00:00:00+00:00", "t1", "Bash",
+                 {"command": "python .claude/tools/load-config-optimized.py"}),
+        tool_result("2026-01-01T00:06:00+00:00", "t1"),
+        tool_use("2026-01-01T00:06:05+00:00", "t2", "Read",
+                 {"file_path": "/p/a.bsl"}),
+        tool_result("2026-01-01T00:06:06+00:00", "t2"),
+    ])
+    summary = summarize_events(parse_tool_events(path), tmp_path)
+    assert summary["gaps"] == []
+
+
+def test_gap_after_previous_end_is_reported(tmp_path):
+    path = write_jsonl(tmp_path / "t.jsonl", [
+        tool_use("2026-01-01T00:00:00+00:00", "t1", "Bash",
+                 {"command": "python .claude/tools/load-config-optimized.py"}),
+        tool_result("2026-01-01T00:06:00+00:00", "t1"),
+        tool_use("2026-01-01T00:12:56+00:00", "t2", "Read",
+                 {"file_path": "/p/a.bsl"}),
+        tool_result("2026-01-01T00:12:57+00:00", "t2"),
+    ])
+    summary = summarize_events(parse_tool_events(path), tmp_path)
+    assert len(summary["gaps"]) == 1
+    assert summary["gaps"][0]["gap_sec"] == 416.0
 
 
 def test_mcp_usage_skill_and_duplicates_counted(tmp_path):
@@ -777,7 +839,8 @@ def test_render_digest_new_metrics_show_skill_and_breakdown():
            "command_not_found": 0, "timeouts": 0}
     text = _digest_with_env(env, main={"mcp_usage_skill_calls": 1})
     assert "- Skill mcp-usage: да (1)" in text
-    assert ("- Ошибок инструментов: 4 (MCP: 1, хуки: 2, прочие: 1)") in text
+    assert ("- Ошибок инструментов: 4 (MCP: 1, входные MCP: 0, "
+            "хуки: 2, прочие: 1)") in text
     assert "- Ошибок MCP: 1" in text
     assert "- Отказов хуков: 2" in text
     # mcp_usage_skill_calls == 0 (ключ есть) — строка «нет (0)» пишется

@@ -10,7 +10,7 @@ import subprocess
 import sys
 from collections import Counter
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 
@@ -172,7 +172,7 @@ def parse_tool_events(path: Path | None) -> list[ToolEvent]:
 
 def classify_bash(command: str) -> str:
     low = (command or "").lower()
-    if "run-tests-smoke" in low:
+    if "run-tests" in low and "smoke" in low:
         return "smoke"
     if "run-tests.py" in low:
         return "test-run"
@@ -204,16 +204,39 @@ def _short_input(event: ToolEvent) -> str:
 
 
 def _is_hook_denial(event: ToolEvent) -> bool:
-    return bool(event.is_error and "hook error" in (event.result_text or "").lower())
+    text = (event.result_text or "").lower()
+    return bool(event.is_error and ("hook error" in text
+                                    or "denied on an indexed path" in text))
+
+
+def _is_ok_false_result(event: ToolEvent) -> bool:
+    """MCP-результат с `"ok": false`: ошибка инструмента без `is_error` в событии.
+
+    MCP-серверы возвращают прикладную ошибку как обычный JSON-результат, поэтому
+    Claude Code помечает такой вызов успешным; для метрики это ошибка MCP.
+    """
+    text = (event.result_text or "").strip()
+    if not text.startswith("{"):
+        return False
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        return False
+    return isinstance(payload, dict) and payload.get("ok") is False
 
 
 def summarize_events(events: list[ToolEvent], project_dir: Path) -> dict:
     tools = Counter(event.name for event in events)
     errors = [event for event in events if event.is_error]
     hook_denials = sum(1 for event in errors if _is_hook_denial(event))
-    mcp_errors = sum(1 for event in errors
-                     if event.name.startswith("mcp__")
-                     and not _is_hook_denial(event))
+    mcp_errors = sum(
+        1 for event in events
+        if event.name.startswith("mcp__")
+        and event.is_error and not _is_hook_denial(event))
+    mcp_input_errors = sum(
+        1 for event in events
+        if event.name.startswith("mcp__")
+        and not event.is_error and _is_ok_false_result(event))
     skill_calls = sum(
         1 for event in events
         if event.name == "Skill"
@@ -246,7 +269,10 @@ def summarize_events(events: list[ToolEvent], project_dir: Path) -> dict:
                    key=lambda event: event.started_at)
     gaps = []
     for previous, current in zip(timed, timed[1:]):
-        gap = (current.started_at - previous.started_at).total_seconds()
+        previous_end = previous.started_at
+        if previous.duration_sec is not None:
+            previous_end += timedelta(seconds=previous.duration_sec)
+        gap = (current.started_at - previous_end).total_seconds()
         if gap > 300:
             gaps.append({
                 "after": previous.name, "before": current.name,
@@ -262,6 +288,7 @@ def summarize_events(events: list[ToolEvent], project_dir: Path) -> dict:
         "tools": dict(tools),
         "tool_errors": len(errors),
         "mcp_errors": mcp_errors,
+        "mcp_input_errors": mcp_input_errors,
         "hook_denials": hook_denials,
         "mcp_usage_skill_calls": skill_calls,
         "duplicate_calls": duplicate_calls,
@@ -317,6 +344,7 @@ def summarize_transcripts(project_dir: Path, session: SessionFiles,
             "tools": summary["tools"],
             "tool_errors": summary["tool_errors"],
             "mcp_errors": summary["mcp_errors"],
+            "mcp_input_errors": summary["mcp_input_errors"],
             "hook_denials": summary["hook_denials"],
             "error_signatures": summary["error_signatures"],
             "test_runs": summary["test_runs"],
@@ -336,6 +364,7 @@ def aggregate_environment(task_metrics: list[dict]) -> dict:
     signatures: Counter = Counter()
     tool_errors = 0
     mcp_errors = 0
+    mcp_input_errors = 0
     hook_denials = 0
     for task in task_metrics:
         transcript = task.get("transcript") if isinstance(task, dict) else None
@@ -351,6 +380,7 @@ def aggregate_environment(task_metrics: list[dict]) -> dict:
         for agent in agents:
             tool_errors += int(agent.get("tool_errors") or 0)
             mcp_errors += int(agent.get("mcp_errors") or 0)
+            mcp_input_errors += int(agent.get("mcp_input_errors") or 0)
             hook_denials += int(agent.get("hook_denials") or 0)
             for item in agent.get("error_signatures") or []:
                 if not isinstance(item, dict):
@@ -365,6 +395,7 @@ def aggregate_environment(task_metrics: list[dict]) -> dict:
         "command_not_found": lowered.count("command not found"),
         "timeouts": _count_timeouts(lowered),
         "mcp_errors": mcp_errors,
+        "mcp_input_errors": mcp_input_errors,
         "hook_denials": hook_denials,
     }
 
@@ -874,11 +905,13 @@ def render_digest(metrics: dict) -> str:
     # старый metrics.json без ключей получает простую строку без нулей.
     if "mcp_errors" in env and "hook_denials" in env:
         mcp_errors = int(env.get("mcp_errors") or 0)
+        mcp_input_errors = int(env.get("mcp_input_errors") or 0)
         hook_denials = int(env.get("hook_denials") or 0)
         others = max(0, int(env.get("tool_errors") or 0) - mcp_errors - hook_denials)
-        env_lines[0] += (f" (MCP: {mcp_errors}, хуки: {hook_denials}, "
-                         f"прочие: {others})")
+        env_lines[0] += (f" (MCP: {mcp_errors}, входные MCP: {mcp_input_errors}, "
+                         f"хуки: {hook_denials}, прочие: {others})")
         env_lines += [f"- Ошибок MCP: {mcp_errors}",
+                      f"- Ошибок входных данных MCP: {mcp_input_errors}",
                       f"- Отказов хуков: {hook_denials}"]
     lines += ["", "## Окружение", "", *env_lines]
     for item in env.get("error_signatures") or []:

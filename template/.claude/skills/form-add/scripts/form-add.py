@@ -340,9 +340,21 @@ def main():
 
     # --- Phase 1: Determine object type ---
 
-    # Resolve ObjectPath (directory → .xml)
+    # Resolve ObjectPath (directory → .xml). A relative path is looked up from the
+    # current directory and from the standard configuration roots: the caller often
+    # passes "Documents/X.xml" while the object lives in "src/cf/Documents/X.xml".
+    searched = []
     if not os.path.isabs(object_path):
-        object_path = os.path.join(os.getcwd(), object_path)
+        candidates = [
+            os.path.join(os.getcwd(), object_path),
+            os.path.join(os.getcwd(), "src", "cf", object_path),
+            os.path.join(os.getcwd(), "src", "cfe", object_path),
+        ]
+        searched = candidates
+        object_path = next((path for path in candidates if os.path.exists(path)),
+                           candidates[0])
+    else:
+        searched = [object_path]
     if os.path.isdir(object_path):
         dir_name = os.path.basename(object_path.rstrip("/\\"))
         candidate = os.path.join(object_path, dir_name + ".xml")
@@ -353,6 +365,12 @@ def main():
             object_path = sibling
     if not os.path.isfile(object_path):
         print(f"Файл объекта не найден: {object_path}", file=sys.stderr)
+        if len(searched) > 1:
+            print("Проверены пути:", file=sys.stderr)
+            for path in searched:
+                print(f"  {path}", file=sys.stderr)
+        print("Укажите путь от корня проекта (src/cf/... или src/cfe/...).",
+              file=sys.stderr)
         sys.exit(1)
 
     object_xml_full = os.path.abspath(object_path)

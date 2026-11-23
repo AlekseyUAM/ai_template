@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import os
 from datetime import datetime
 from pathlib import Path
 import pytest
@@ -275,6 +276,46 @@ def test_cli_restart_review_allowed_without_rework_verdict(tmp_path):
     review = _stage(json.loads((d / "task.json").read_text(encoding="utf-8")),
                     "review")
     assert review["iteration"] == 2
+
+
+def _testing_config(task_dir: Path, result_path: Path) -> None:
+    cfg_dir = task_dir.parent.parent / "configs" / task_dir.name
+    cfg_dir.mkdir(parents=True, exist_ok=True)
+    (cfg_dir / "test.json").write_text(
+        json.dumps({"ИмяМодуля": "M", "ИмяФайлаЛог": str(result_path)},
+                   ensure_ascii=False),
+        encoding="utf-8")
+
+
+def test_testing_done_requires_fresh_result(tmp_path):
+    """testing done без своего прогона не закрывается; свежий result.json — закрывает."""
+    mod = _load()
+    d = _task(tmp_path)
+    result = tmp_path / "logs" / d.name / "result.json"
+    result.parent.mkdir(parents=True)
+    result.write_text("{}", encoding="utf-8")
+    old = datetime.now().timestamp() - 60
+    os.utime(result, (old, old))
+    _testing_config(d, result)
+
+    mod.main([str(d), "testing", "running"])
+    with pytest.raises(SystemExit, match="старше начала этапа"):
+        mod.main([str(d), "testing", "done"])
+
+    os.utime(result, None)
+    mod.main([str(d), "testing", "done"])
+    data = json.loads((d / "task.json").read_text(encoding="utf-8"))
+    assert _stage(data, "testing")["status"] == "done"
+
+
+def test_testing_done_without_result_errors(tmp_path):
+    mod = _load()
+    d = _task(tmp_path)
+    missing = tmp_path / "logs" / d.name / "result.json"
+    _testing_config(d, missing)
+    mod.main([str(d), "testing", "running"])
+    with pytest.raises(SystemExit, match="нет result.json"):
+        mod.main([str(d), "testing", "done"])
 
 
 def _testing_done_task(tmp_path, review_done=False):

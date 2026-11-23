@@ -22,9 +22,12 @@ def build_output(event: dict) -> dict:
             "hookEventName": "PostToolUse",
             "additionalContext": (
                 "[ai1c] BSL module changed - run static analysis "
-                "(skill mcp-usage, MCP bsl_ls, mcp__bsl_ls__check) with the mandatory "
-                "file sha256 (`sha256sum <file>`); do not reprint the module text."
-                " BOM: no manual check - the server strips a leading UTF-8 BOM."),
+                "(skill mcp-usage, MCP bsl_ls, mcp__bsl_ls__check): pass the module "
+                "text as `code` together with `sha256` (`sha256sum <file>`); the "
+                "trailing newline may be kept or dropped - both hashes are accepted. "
+                "Use `file_path` only for paths mounted into the server container; "
+                "in the standard Docker setup pass code+sha256. "
+                "BOM: no manual check - the server strips a leading UTF-8 BOM."),
         }}
     return {}
 

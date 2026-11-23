@@ -39,11 +39,13 @@ the load, one call per changed module and static query text.
    join with balances; static text must open in the Configurator;
    the source query text exactly as written must pass `validate_query`;
    substitution via `СтрЗаменить` - only into valid places (`&ОсобыйПараметр`,
-   `1 = 1`), stubs `!...!`/`%1`/`{0}` are forbidden; a query to a document's tabular section
-   directly instead of unloading it into a value table) and reuse ready BSP functions
+   `1 = 1`), stubs `!...!`/`%1`/`{0}` are forbidden) and reuse ready BSP functions
    instead of manual implementations (`bsp-reuse`). Skills are available via the Skill tool.
    If the query uses `ИТОГИ`, remember: non-aggregated fields on total rows
    are returned as `NULL`.
+   **Posting and the document's tabular sections.** In `ОбработкаПроведения` the document
+   is already written: query `Документ.<Имя>.<ТЧ>` with the filter `Ссылка = &Ссылка`
+   and read the saved rows directly.
    **New metadata and `validate_query`.** If the query references objects that
    are not yet in the IB (they were added in this task), `validate_query` before the load will return
    "Таблица не найдена". This is a deferred check: record it in `DEVELOP.md` and
@@ -79,12 +81,24 @@ the load, one call per changed module and static query text.
    queries to new objects `validate_query` is deferred until the IB load).
    At 0 `bsl_ls` findings proceed to the load; eliminate findings before handing over to
    review; record the result in `DEVELOP.md`.
+   **Queries: `query-analyze` per changed module.** For each changed module with a query
+   run the `query-analyze` analyzer and record the result as a line in `DEVELOP.md`:
+   ```bash
+   python .claude/skills/query-analyze/scripts/extract_queries.py -Path <файл> \
+       | python .claude/skills/query-analyze/scripts/analyze_query.py -
+   ```
+   The line is `query-analyze: <файл> - найдено N (error/warning/info)`; a finding is
+   either fixed or goes into the waiver table (see below).
    **Main configuration compilation check (mandatory).** Before submitting
    the stage run the main configuration modules with the batch configurator - not in
    the background, `timeout: 600000` (10 min):
    ```bash
-   python .claude/skills/1c-batch/scripts/1c-batch.py check-modules --thin-client --server
+   python .claude/tools/check-modules.py
    ```
+   The wrapper runs `1c-batch check-modules --thin-client --server` when at least one
+   changed `.bsl` has code. For a metadata-only task, where every changed module is
+   empty (BOM + newline), it skips the minute-long check. Extension modules are still
+   checked by `run-tests.py`.
    A compilation error in `src/cf` would otherwise pop up as a modal window and hang
    the enterprise; client context errors (for example, `Новый Запрос` in a common
    module with the "Client" flag) fix with code or by clearing the module flag.
@@ -107,16 +121,19 @@ the load, one call per changed module and static query text.
 
 ## Comments in BSL
 
-Do not write comments in the body of `Процедура`/`Функция`, between statements or **inside
-the query text**. Only allowed:
+Place comments at the top of the module and in the method description before the
+declaration:
 
-- module header (brief purpose);
-- method description before the declaration (`// Описание`, `// Параметры`,
-  `// Возвращаемое значение`, `// Пример`).
+- module header - brief purpose of the module;
+- method description before `Процедура`/`Функция` - `// Описание`, `// Параметры`,
+  `// Возвращаемое значение`, `// Пример`.
 
-Do not delete existing comments. Exception - mandatory markers
-`mark_changes` (see the section below). If you need to explain a non-obvious decision or
-a rejected analyzer finding - write in `DEVELOP.md`, not in the code.
+The body of a procedure or function (between statements) and the query text stay
+free of comments. Implementation notes - a non-obvious decision, a rejected analyzer
+finding, why the code is written this way - go into `DEVELOP.md`. Existing comments
+stay in place; the only inline comments are the mandatory markers `mark_changes`
+(see the section below). A query package separator line consisting only of `/`
+(10 or more) is not a comment and may stay.
 
 ## Rejected analyzer findings (waiver)
 

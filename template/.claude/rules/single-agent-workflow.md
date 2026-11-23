@@ -83,9 +83,9 @@ Do not reread `developer.md` in full; for the stage it is enough:
 1. Input: `TASK.md`, `ANALYZE.md`, `ARCHITECT.md`, tests; existing code - via `code_index`.
 2. Metadata - `meta-compile`/`subsystem-compile`/`role-compile`, edits - `meta-edit`; files - by real `src/cf/**` paths.
 3. Accumulation registers: check the registrars (documents with `RegisterRecords`, the register's `<Registrars>`) before the infobase load.
-4. Compilation checks: **mandatory** `check-modules --thin-client --server` (not in the background, `timeout: 600000` - 10 min); fix client-context errors in code or by clearing the «Клиент» flag on the common module.
+4. Compilation checks: **mandatory** `python .claude/tools/check-modules.py` (not in the background, `timeout: 600000` - 10 min); it runs `check-modules --thin-client --server` when at least one changed `.bsl` has code and skips metadata-only edits with empty modules. Fix client-context errors in code or by clearing the «Клиент» flag on the common module.
 5. Metadata names: `check_metadata_names.py --changed` - fix reserved system names before the infobase load.
-6. Tests: skeleton -> one scenario at a time; `Write`/`Edit` <=150 lines; check after each; full `check-modules` once at the end.
+6. Tests: skeleton -> one scenario at a time; `Write`/`Edit` <=150 lines; check after each; full `check-modules.py` once at the end.
 7. Infobase load - per the section above; after success `db-update done`.
 8. Checks after the load: `check` with sha256, `code-analyze`, `validate_query`
    on the static query text (one call); for new objects the check

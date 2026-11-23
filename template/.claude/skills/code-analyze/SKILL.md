@@ -52,7 +52,7 @@ title)`; each returns a list of `Finding`. Codes are meaningful slugs (not `std*
 | `attachable-handler-prefix` | info | Handler from `УстановитьДействие` without the `Подключаемый_` prefix |
 | `record-manager-in-loop` | info | `СоздатьМенеджерЗаписи()` in a loop instead of `НаборЗаписей` |
 | `new-applied-object-via-constructor` | warning | `Новый("ДокументОбъект.…")` instead of the manager method |
-| `explicit-write-in-posting` | warning | Explicit `.Записать()` in `ОбработкаПроведения` |
+| `explicit-write-in-posting` | warning | Explicit `.Записать()` in `ОбработкаПроведения`; the documented whole-collection `Движения.Записать()` clearing is not flagged |
 | `system-enum-value` | error | Nonexistent value of a system enum/value set: `<Тип>.<Значение>` |
 | `reserved-system-name` | error | Variable/parameter/procedure/function/loop label name matches a system enum or value set |
 | `record-set-in-loop` | info | `СоздатьНаборЗаписей()` in a loop instead of writing as one set |
@@ -62,6 +62,7 @@ title)`; each returns a list of `Finding`. Codes are meaningful slugs (not `std*
 | `query-execute-in-loop-via-call` | warning | call in a loop to a local module method that executes a query (depth 1) |
 | `query-new-in-loop-via-call` | warning | call in a loop to a local module method that creates `Новый Запрос` (depth 1) |
 | `user-message-via-constructor` | info | `Новый СообщениеПользователю` instead of `ОбщегоНазначения.СообщитьПользователю` |
+| `comment-in-body` | warning | Comment in a method body (after the header), including `\|//` explanatory lines in query strings - move it to the method description. A query separator line of only `/` (10+) is not flagged |
 | `use-before-assignment` | warning | Variable is initialized only in an `Если` branch without `Иначе` and is used after the block - `Неопределено` is possible |
 
 ## System enums and value sets

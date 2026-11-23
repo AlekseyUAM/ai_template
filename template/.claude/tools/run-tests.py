@@ -67,6 +67,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+_TOOLS_DIR = Path(__file__).resolve().parent
+if str(_TOOLS_DIR) not in sys.path:
+    sys.path.insert(0, str(_TOOLS_DIR))
+
+from module_changes import has_nonempty_changed_bsl  # noqa: E402
+
 for _stream in (sys.stdout, sys.stderr):
     try:
         _stream.reconfigure(encoding="utf-8", errors="replace")
@@ -97,6 +103,7 @@ RC_CHECK_TIMEOUT = -1
 RESULT_DONE_KEY = "Выполнено"
 RESULT_ERROR_KEY = "ОписаниеОшибки"
 RESULT_TESTS_KEY = "РезультатТестов"
+RESULT_JOURNAL_KEY = "ЖурналРегистрацииВсеОшибки"
 
 # Compilation error markers in the Configurator output (/CheckModules). Needed in case
 # the Configurator reports success but wrote an error to the log; on a normal error
@@ -248,6 +255,10 @@ def check_modules(project_root: Path, extension: str | None = None,
     timeout code is obtained via _check_modules_raw (needed by diagnose_timeout).
     """
     source = _check_source_dir(project_root, extension)
+    if extension is None and has_nonempty_changed_bsl(project_root, "src/cf") is False:
+        print(f"⏭️  {title}: нет непустых изменённых .bsl — пропускаю компиляцию.")
+        print()
+        return RC_OK
     source_hash = _tree_hash(source) if use_cache else None
     if _cache_hit(project_root, extension, source_hash):
         print(f"♻️  {title}: исходники не менялись с прошлой успешной проверки "
@@ -535,6 +546,43 @@ def _snapshot_result(path: Path | None) -> None:
     print(f"🗂️  Снимок результата: {target}")
 
 
+def _error_text(value) -> str:
+    """Текст ошибки без None и окружающих пробелов."""
+    return str(value or "").strip()
+
+
+def _test_is_ok(test) -> bool:
+    """Тест пройден: Результат=true и ОписаниеОшибки пустое.
+
+    Непустое ОписаниеОшибки при Результат=true — противоречивый результат:
+    сценарий сообщил об ошибке, но не сбросил Результат. Такой тест — провал.
+    """
+    return (isinstance(test, dict)
+            and test.get("Результат") is True
+            and not _error_text(test.get(RESULT_ERROR_KEY)))
+
+
+def _print_journal_errors(data) -> None:
+    """Напечатать первые строки ошибок журнала регистрации при провале."""
+    journal = data.get(RESULT_JOURNAL_KEY) if isinstance(data, dict) else None
+    if not isinstance(journal, list) or not journal:
+        return
+    lines = []
+    for item in journal:
+        if not isinstance(item, dict):
+            continue
+        text = _error_text(item.get("Комментарий"))
+        if text:
+            lines.append(text.splitlines()[0].strip())
+    if not lines:
+        return
+    print("   Ошибки журнала регистрации:")
+    for line in lines[:10]:
+        print(f"      {line}")
+    if len(lines) > 10:
+        print(f"      … ещё {len(lines) - 10}, полный текст — в result.json")
+
+
 def _read_and_print_result(path: Path | None) -> int:
     """Read result.json, print the summary and return 0/4/5."""
     if path is None:
@@ -557,10 +605,7 @@ def _read_and_print_result(path: Path | None) -> int:
 
     done = data.get(RESULT_DONE_KEY)
     error = data.get(RESULT_ERROR_KEY)
-    passed = sum(
-        1 for test in tests
-        if isinstance(test, dict) and test.get("Результат") is True
-    )
+    passed = sum(1 for test in tests if _test_is_ok(test))
     failed = len(tests) - passed
 
     print()
@@ -571,14 +616,16 @@ def _read_and_print_result(path: Path | None) -> int:
     for test in tests:
         if not isinstance(test, dict):
             continue
-        is_ok = test.get("Результат") is True
+        is_ok = _test_is_ok(test)
         print(f"   {'✓' if is_ok else '✗'} {test.get('Имя', '<без имени>')}")
-        if not is_ok and test.get("ОписаниеОшибки"):
-            print(f"      {test['ОписаниеОшибки']}")
+        if not is_ok and _error_text(test.get(RESULT_ERROR_KEY)):
+            print(f"      {_error_text(test.get(RESULT_ERROR_KEY))}")
+    if failed:
+        _print_journal_errors(data)
     print()
     print(f"ИТОГ: {passed}/{len(tests)} пройдено")
 
-    all_passed = done is True and error is None and failed == 0
+    all_passed = done is True and not _error_text(error) and failed == 0
     return RC_OK if all_passed else RC_TESTS_FAILED
 
 

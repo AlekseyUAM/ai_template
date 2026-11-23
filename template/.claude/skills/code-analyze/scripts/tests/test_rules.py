@@ -311,6 +311,17 @@ def test_explicit_write_in_posting_flagged():
     assert "explicit-write-in-posting" in codes(text)
 
 
+def test_whole_movements_write_in_posting_not_flagged():
+    """Движения.Записать() — документированная очистка перед перепроведением."""
+    text = (
+        "Процедура ОбработкаПроведения(Отказ, РежимПроведения)\n"
+        "    Движения.Записать();\n"
+        "    Движения.Товары.Записывать = Истина;\n"
+        "КонецПроцедуры\n"
+    )
+    assert "explicit-write-in-posting" not in codes(text)
+
+
 def test_write_outside_posting_not_flagged():
     text = (
         "Процедура ЗаписатьДанные()\n"
@@ -846,3 +857,104 @@ def test_reserved_name_comment_and_string_not_flagged():
 def test_normal_name_not_flagged():
     text = "Перем ОбычноеИмяПеременной;\n"
     assert "reserved-system-name" not in codes(text)
+
+
+# ── comment-in-body ──────────────────────────────────────────
+
+def test_comment_in_body_flagged():
+    text = (
+        "Процедура Тест()\n"
+        "    // Обнуляем счётчик\n"
+        "    Счётчик = 0;\n"
+        "КонецПроцедуры\n"
+    )
+    assert "comment-in-body" in codes(text)
+
+
+def test_comment_description_not_flagged():
+    text = (
+        "// Описание метода: выполняет обработку.\n"
+        "Процедура Тест()\n"
+        "    Счётчик = 0;\n"
+        "КонецПроцедуры\n"
+    )
+    assert "comment-in-body" not in codes(text)
+
+
+def test_comment_bslls_directive_not_flagged():
+    text = (
+        "Процедура Тест()\n"
+        "    // BSLLS:MagicNumber-off\n"
+        "    Счётчик = 0;\n"
+        "КонецПроцедуры\n"
+    )
+    assert "comment-in-body" not in codes(text)
+
+
+def test_comment_mark_changes_not_flagged():
+    text = (
+        "Процедура Тест()\n"
+        "    Счётчик = 0; // --> добавлено\n"
+        "    Флаг = Истина; // <-- изменено\n"
+        "КонецПроцедуры\n"
+    )
+    assert "comment-in-body" not in codes(text)
+
+
+def test_query_string_comment_flagged():
+    text = (
+        "Процедура Тест()\n"
+        "    Запрос.Текст = \"ВЫБРАТЬ\n"
+        "    |// закомментированный кусок\n"
+        "    |ИЗ Константы.Настройки\";\n"
+        "КонецПроцедуры\n"
+    )
+    fs = [f for f in findings(text) if f.code == "comment-in-body"]
+    assert len(fs) == 1
+    assert fs[0].line == 3
+    assert fs[0].severity == "warning"
+
+
+def test_query_separator_not_flagged():
+    """Разделительная линия пакета из одних слэшей — не комментарий."""
+    text = (
+        "Процедура Тест()\n"
+        "    Запрос.Текст = \"ВЫБРАТЬ\n"
+        "    |////////////////////////////////////////////////////////////////////////////////\n"
+        "    |ИЗ Константы.Настройки\";\n"
+        "КонецПроцедуры\n"
+    )
+    assert "comment-in-body" not in codes(text)
+
+
+def test_query_short_slashes_flagged():
+    text = (
+        "Процедура Тест()\n"
+        "    Запрос.Текст = \"ВЫБРАТЬ\n"
+        "    |///////// пояснение\n"
+        "    |ИЗ Константы.Настройки\";\n"
+        "КонецПроцедуры\n"
+    )
+    assert "comment-in-body" in codes(text)
+
+
+def test_query_string_without_comment_not_flagged():
+    text = (
+        "Процедура Тест()\n"
+        "    Запрос.Текст = \"ВЫБРАТЬ\n"
+        "    |Константа.Настройки КАК Настройки\";\n"
+        "КонецПроцедуры\n"
+    )
+    assert "comment-in-body" not in codes(text)
+
+
+def test_comment_module_header_not_flagged():
+    text = (
+        "// Модуль менеджера: служебные процедуры.\n"
+        "Перем Кэш;\n"
+        "\n"
+        "Процедура Тест()\n"
+        "    Кэш = 1;\n"
+        "КонецПроцедуры\n"
+    )
+    assert "comment-in-body" not in codes(text)
