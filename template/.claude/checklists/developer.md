@@ -93,8 +93,12 @@ the load, one call per changed module and static query text.
    the stage run the main configuration modules with the batch configurator - not in
    the background, `timeout: 600000` (10 min):
    ```bash
-   python .claude/skills/1c-batch/scripts/1c-batch.py check-modules --thin-client --server
+   python .claude/tools/check-modules.py
    ```
+   The wrapper runs `1c-batch check-modules --thin-client --server` when at least one
+   changed `.bsl` has code. For a metadata-only task, where every changed module is
+   empty (BOM + newline), it skips the minute-long check. Extension modules are still
+   checked by `run-tests.py`.
    A compilation error in `src/cf` would otherwise pop up as a modal window and hang
    the enterprise; client context errors (for example, `Новый Запрос` in a common
    module with the "Client" flag) fix with code or by clearing the module flag.
@@ -128,7 +132,8 @@ The body of a procedure or function (between statements) and the query text stay
 free of comments. Implementation notes - a non-obvious decision, a rejected analyzer
 finding, why the code is written this way - go into `DEVELOP.md`. Existing comments
 stay in place; the only inline comments are the mandatory markers `mark_changes`
-(see the section below).
+(see the section below). A query package separator line consisting only of `/`
+(10 or more) is not a comment and may stay.
 
 ## Rejected analyzer findings (waiver)
 

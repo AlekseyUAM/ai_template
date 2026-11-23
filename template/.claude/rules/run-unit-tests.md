@@ -20,8 +20,12 @@ is connected to the launch parameter `ВыполнитьЗапускЮнитТе
   as failed.
 - Do NOT invent a separate runner and do NOT put test modules in `src/cf` - this violates
   both the framework and the standard task constraint "we do not change extra objects".
-- Load before the run - extensions, not the configuration:
+- Load the test extension before the run:
   `python .claude/skills/1c-batch/scripts/1c-batch.py load-extension src/cfe/ЮнитТесты --name ЮнитТесты`.
+- For the red smoke (tests stage), also refresh the main configuration in the IB - the
+  changed modules or the whole `src/cf` via `1c-batch load-config`. The extension load
+  alone does not remove an older implementation of the object under test; otherwise the
+  red smoke can become falsely green and a real defect will not be caught.
 
 Role details are in the `.claude/checklists/developer-tests.md` checklist (writes tests and
 the launch config, runs the red smoke check and debug runs itself) and the
@@ -159,8 +163,12 @@ found no environment cause.
 runner itself to the `ИмяФайлаЛог` file (JSON). The old file is deleted before the run, so
 after the run any existing `result.json` is fresh. `run-tests.py` prints a
 summary (`Выполнено`, `ОписаниеОшибки`, `✓/✗` per test, `ИТОГ: N/M пройдено`) and
-returns `0/4/5` (see the code table). Tests passed **only if**:
-`Выполнено = true`, `ОписаниеОшибки = null`, and **every** test has `Результат = true`.
+returns `0/4/5` (see the code table). A test passed **only if**:
+`Результат = true` **and** its `ОписаниеОшибки` is empty. A non-empty error with
+`Результат = true` is a failure: the scenario reported an error but did not reset the
+result. The whole run passed only if `Выполнено = true`, the top-level
+`ОписаниеОшибки` is empty, and every test passed. On failure the script also prints
+the first lines of `ЖурналРегистрацииВсеОшибки`; the full text is in `result.json`.
 
 After reading the result the script saves a copy `result.<n>.json` next to
 `result.json` (the next free number) - the run history is not lost on

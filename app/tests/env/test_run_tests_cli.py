@@ -17,6 +17,9 @@ def _load():
     spec = importlib.util.spec_from_file_location("run_tests_cli", CLI)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
+    # Tests patch subprocess.Popen globally; do not let the git probe run through it.
+    # The real probe is covered by app/tests/env/test_module_changes.py.
+    mod.has_nonempty_changed_bsl = lambda project_root, subdir=None: None
     return mod
 
 
@@ -314,6 +317,31 @@ def test_main_check_error_prevents_enterprise(monkeypatch, tmp_path):
     assert enterprise == []
 
 
+def test_main_check_skipped_when_changed_bsl_empty(monkeypatch, tmp_path, capsys):
+    """Метаданные/пустые модули: main-config check-modules не запускается."""
+    mod = _load()
+    monkeypatch.setattr(mod, "has_nonempty_changed_bsl",
+                        lambda root, subdir=None: False)
+    called = []
+    monkeypatch.setattr(mod, "_check_modules_raw",
+                        lambda *a, **k: called.append(True) or mod.RC_OK)
+    assert mod.check_modules(tmp_path, None) == mod.RC_OK
+    assert called == []
+    assert "нет непустых изменённых .bsl" in capsys.readouterr().out
+
+
+def test_extension_check_not_skipped(monkeypatch, tmp_path):
+    """Пропуск относится только к main config; расширение проверяется всегда."""
+    mod = _load()
+    monkeypatch.setattr(mod, "has_nonempty_changed_bsl",
+                        lambda root, subdir=None: False)
+    called = []
+    monkeypatch.setattr(mod, "_check_modules_raw",
+                        lambda *a, **k: called.append(True) or mod.RC_OK)
+    assert mod.check_modules(tmp_path, "ЮнитТесты", use_cache=False) == mod.RC_OK
+    assert called == [True]
+
+
 def test_main_check_timeout_prevents_enterprise(monkeypatch, tmp_path):
     mod = _load()
     result_path = tmp_path / "result.json"
@@ -524,6 +552,37 @@ def test_failed_test_returns_rc4_and_prints_summary(monkeypatch, tmp_path, capsy
     assert "ИТОГ: 0/1 пройдено" in out
     assert "✗ A" in out
     assert "boom" in out
+
+
+def test_result_true_with_error_is_failed(monkeypatch, tmp_path, capsys):
+    """Результат=true при непустом ОписаниеОшибки — противоречие, а не успех."""
+    mod = _load()
+    result_path = tmp_path / "result.json"
+    cfg = _config(tmp_path, result_path)
+    _patch_enterprise(monkeypatch, mod, result_path,
+                      _result([{"Имя": "A", "Результат": True,
+                                "ОписаниеОшибки": "Не удалось записать"}]))
+    assert mod.run_tests(str(cfg), "ЮнитТесты", 10, True) == mod.RC_TESTS_FAILED
+    out = capsys.readouterr().out
+    assert "ИТОГ: 0/1 пройдено" in out
+    assert "✗ A" in out
+    assert "Не удалось записать" in out
+
+
+def test_journal_errors_printed_on_failure(monkeypatch, tmp_path, capsys):
+    """При провале печатается первая строка ошибок журнала регистрации."""
+    mod = _load()
+    result_path = tmp_path / "result.json"
+    cfg = _config(tmp_path, result_path)
+    result = _result([{"Имя": "A", "Результат": False,
+                       "ОписаниеОшибки": "Ошибка выполнения"}])
+    result["ЖурналРегистрацииВсеОшибки"] = [{
+        "Комментарий": "Ошибка при вызове конструктора (ОписаниеТипов)\n{Модуль(394)}"}]
+    _patch_enterprise(monkeypatch, mod, result_path, result)
+    assert mod.run_tests(str(cfg), "ЮнитТесты", 10, True) == mod.RC_TESTS_FAILED
+    out = capsys.readouterr().out
+    assert "Ошибки журнала регистрации:" in out
+    assert "Ошибка при вызове конструктора" in out
 
 
 def test_missing_result_returns_rc5(monkeypatch, tmp_path, capsys):

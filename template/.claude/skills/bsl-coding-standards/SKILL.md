@@ -188,7 +188,9 @@ module method called from the loop (depth 1) are caught automatically by `code-a
 - [important] **Only in headers** - BSL comments are allowed only in the module header
   and in the method description before the declaration. In the body of `Процедура`/`Функция`,
   between statements and inside query text we do not write comments. Do not delete existing
-  comments.
+  comments. Exception: a query package separator line consisting only of `/` (10 or more,
+  e.g. `|////////////////////////////////////////////////////////////////////////////////`)
+  is not a comment and may stay.
 - [minor] **No useless comments** - do not retell the code and do not write
   descriptions that add no information (e.g., "Event handler procedure …"
   for an obvious handler).

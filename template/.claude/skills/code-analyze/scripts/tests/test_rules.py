@@ -311,6 +311,17 @@ def test_explicit_write_in_posting_flagged():
     assert "explicit-write-in-posting" in codes(text)
 
 
+def test_whole_movements_write_in_posting_not_flagged():
+    """Движения.Записать() — документированная очистка перед перепроведением."""
+    text = (
+        "Процедура ОбработкаПроведения(Отказ, РежимПроведения)\n"
+        "    Движения.Записать();\n"
+        "    Движения.Товары.Записывать = Истина;\n"
+        "КонецПроцедуры\n"
+    )
+    assert "explicit-write-in-posting" not in codes(text)
+
+
 def test_write_outside_posting_not_flagged():
     text = (
         "Процедура ЗаписатьДанные()\n"
@@ -902,6 +913,29 @@ def test_query_string_comment_flagged():
     assert len(fs) == 1
     assert fs[0].line == 3
     assert fs[0].severity == "warning"
+
+
+def test_query_separator_not_flagged():
+    """Разделительная линия пакета из одних слэшей — не комментарий."""
+    text = (
+        "Процедура Тест()\n"
+        "    Запрос.Текст = \"ВЫБРАТЬ\n"
+        "    |////////////////////////////////////////////////////////////////////////////////\n"
+        "    |ИЗ Константы.Настройки\";\n"
+        "КонецПроцедуры\n"
+    )
+    assert "comment-in-body" not in codes(text)
+
+
+def test_query_short_slashes_flagged():
+    text = (
+        "Процедура Тест()\n"
+        "    Запрос.Текст = \"ВЫБРАТЬ\n"
+        "    |///////// пояснение\n"
+        "    |ИЗ Константы.Настройки\";\n"
+        "КонецПроцедуры\n"
+    )
+    assert "comment-in-body" in codes(text)
 
 
 def test_query_string_without_comment_not_flagged():

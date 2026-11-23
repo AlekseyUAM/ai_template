@@ -113,6 +113,8 @@ An index of BSL + metadata + call/data graphs. The richest server; it gets a det
 ### 7. Long tail - `bsl_sql`
 Arbitrary **read-only** SQL (SELECT/WITH) over index tables when there is no named tool: filters, joins, aggregations. There is NO need to filter the `repo` column (in each DB it is `'default'`). Key tables: `metadata_objects`, `metadata_modules`, `metadata_forms`, `event_subscriptions`, `proc_call_graph`, `data_links`, `role_rights`, `metadata_code_usages`. Writes/PRAGMA are rejected.
 
+`functions` has no `path` column: join `files` (`functions.file_id = files.id`) and filter `files.path`. On a column error the response contains `query_tables_columns` and `did_you_mean` - use them instead of guessing.
+
 ---
 
 ## `1c_platform` - platform API reference

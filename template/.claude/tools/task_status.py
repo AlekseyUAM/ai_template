@@ -190,6 +190,56 @@ def _db_update_block(data: dict, stage: str, status: str):
     return None
 
 
+def _testing_result_block(s: dict, stage: str, status: str, task_dir: Path):
+    """Error message if `testing` is closed without its own test run.
+
+    `testing done` must be backed by a result.json written during the stage;
+    otherwise the verdict may be based on the develop run or an old run. The
+    config is `configs/<task>/test.json`; its `ИмяФайлаЛог` is compared with the
+    stage start. `logs/<task>/result.json` is a fallback when the config is
+    absent. None - if the stage can be closed.
+    """
+    if stage != "testing" or status != "done":
+        return None
+    started_raw = s.get("started_at")
+    if not started_raw:
+        return ("этап 'testing' нельзя перевести в 'done': не зафиксировано "
+                "начало этапа. Запустите этап через running.")
+    try:
+        started = datetime.fromisoformat(str(started_raw)).timestamp()
+    except ValueError:
+        return (f"этап 'testing' нельзя перевести в 'done': не разобрать "
+                f"started_at {started_raw!r}.")
+
+    project = task_dir.parent.parent
+    config = project / "configs" / task_dir.name / "test.json"
+    result_path = None
+    if config.is_file():
+        try:
+            cfg = json.loads(config.read_text(encoding="utf-8-sig"))
+        except (OSError, ValueError) as exc:
+            return (f"этап 'testing' нельзя перевести в 'done': конфиг "
+                    f"{config} не читается: {exc}.")
+        raw = cfg.get("ИмяФайлаЛог") if isinstance(cfg, dict) else None
+        if raw:
+            result_path = Path(str(raw))
+            if not result_path.is_absolute():
+                result_path = (project / result_path).resolve()
+    if result_path is None or not result_path.is_file():
+        fallback = project / "logs" / task_dir.name / "result.json"
+        if fallback.is_file():
+            result_path = fallback
+    if result_path is None or not result_path.is_file():
+        return (f"этап 'testing' нельзя перевести в 'done': нет result.json "
+                f"(конфиг {config}). Прогон в этом этапе не выполнялся — "
+                f"запустите run-tests.py и повторите.")
+    if result_path.stat().st_mtime + 1 < started:
+        return (f"этап 'testing' нельзя перевести в 'done': {result_path} "
+                f"старше начала этапа ({started_raw}). Прогон в этом этапе "
+                f"не выполнялся — запустите run-tests.py и повторите.")
+    return None
+
+
 # Stages whose return to pending archives the iteration verdicts (TESTING.md,
 # REVIEW.md). DEVELOP.md/TESTS.md are archived by the stage executor itself.
 AUTO_ARCHIVE_STAGES = ("develop", "tests")
@@ -370,6 +420,9 @@ def _apply_update(data: dict, stage: str, status: str, files, task_dir) -> None:
                         raise SystemExit(
                             f"ОШИБКА (done): у этапа '{stage}' нет открытого "
                             f"прогона. Запустите этап через running или restart.")
+                    msg = _testing_result_block(s, stage, status, Path(task_dir))
+                    if msg:
+                        raise SystemExit("ОШИБКА (тесты): " + msg)
                 # Archive verdicts of the previous iteration - BEFORE changing the status: on
                 # a file conflict the stage and files stay as they were.
                 if status == "pending" and stage in AUTO_ARCHIVE_STAGES:
