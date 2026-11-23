@@ -35,7 +35,17 @@
 ## Использование
 
 Конфигурация загружается из `cf/` в `src/cf` проекта, задачи копируются в
-`tasks/` проекта и выполняются через AgentMon.
+`tasks/` проекта. Запускать их можно двумя способами:
+
+- через AgentMon Web UI — команда агента берётся из `AGENTMON_CLAUDE_CMD`
+  в `.ai1c.env`;
+- напрямую раннерами `benchmark/run_benchmark.py` и `benchmark/stage_run.py` —
+  команда берётся из `AGENTMON_CLAUDE_CMD` в `benchmark/test.env`
+  (`--claude-cmd` переопределяет).
+
+Обёртки `claude-ds` (DeepSeek) и `claude-local` (локальная LLM), которые
+кладутся в `PATH`, и инструкция по `AGENTMON_CLAUDE_CMD` —
+[`deploy/claude/README.md`](../deploy/claude/README.md).
 
 ## Подготовка окружения
 
@@ -62,6 +72,11 @@
    `AGENTMON_CLAUDE_CMD=claude-ds` — без него `run_benchmark.py`/`stage_run.py`
    остановятся с ошибкой (если не передан `--claude-cmd`).
 
+   Значение `AGENTMON_CLAUDE_CMD` — короткое имя команды из `PATH` или полный
+   путь; путь с пробелами берите в кавычки. Готовые обёртки — в
+   [`deploy/claude/`](../deploy/claude/README.md); если команды нет, прогон
+   остановится с ошибкой «команда агента не найдена».
+
 2. Запустите из корня репозитория:
 
    ```bash
@@ -81,6 +96,12 @@
    конфигурацию и доступность MCP, затем удаляет его каталог, запись в store и
    реестре и создаёт проект заново. Непустой каталог без признаков
    benchmark-проекта (`.1c-devbase.json`, `.claude`, `tasks`) не удаляется.
+
+   При `BENCH_STRATA_SETTINGS=1` setup **до** удаления существующего проекта
+   получает настройки у `strata connect claude-code --show-key`, а после
+   установки окружения пишет `<проект>/.claude/settings.local.json`. Сбой
+   Strata останавливает setup, не трогая существующий проект; подробности — в
+   разделе «Настройки из Strata».
 
    Скрипт создаст проект, окружение, базу (из `.dt` или из `cf/` +
    расширений), выгрузки `src/cf`/`src/cfe`, задачи в `tasks/` и БД AgentMon,
@@ -135,7 +156,9 @@
 ```
 
 Скрипт выполняет все задачи проекта `tasks/task#*` по очереди в команде из
-`AGENTMON_CLAUDE_CMD` (`benchmark/test.env`).
+`AGENTMON_CLAUDE_CMD` (`benchmark/test.env`). Команда проверяется до старта:
+отсутствующая в `PATH` программа даёт ошибку «команда агента не найдена», а
+незаданный `AGENTMON_CLAUDE_CMD` — подсказку указать `--claude-cmd`.
 Лимит по умолчанию — `max_minutes` из `task.json`; `--limit` переопределяет его.
 Значение `--limit` — целое число минут, без единиц измерения (`120`, не `2ч`).
 Первый `timeout`/`failed`/`incomplete` останавливает следующие задачи, но анализ
@@ -153,6 +176,7 @@
 Полезные флаги:
 
 - `--task task#001` — ограничить набор задач;
+- `--env <файл>` — другой env-файл вместо `benchmark/test.env`;
 - `--skip-analysis` — только выполнить задачи и собрать метрики;
 - `--force` — разрешить прогон на непустом проекте (результат помечается как
   потенциально загрязнённый);
@@ -170,11 +194,12 @@
 `task.json` выполняется отдельным процессом `claude -p` с чистым контекстом,
 состояние передаётся через артефакты задачи и `task.json`.
 
-1. Настройте проект на локальную LLM: скопируйте
+1. Настройте проект на локальную LLM. Проще всего — `BENCH_STRATA_SETTINGS=1`
+   в `test.env`: setup запишет `<проект>/.claude/settings.local.json` сам
+   (см. «Настройки из Strata»). Вручную: скопируйте
    `template/.claude/settings.local.json.example` в
-   `<проект>/.claude/settings.local.json`, подставьте `ANTHROPIC_BASE_URL`,
-   токен и id модели. Файл не коммитится. Если модель обслуживает Strata,
-   значения печатает `strata connect` — см. «Настройки из Strata» ниже.
+   `<проект>/.claude/settings.local.json` и подставьте `ANTHROPIC_BASE_URL`,
+   токен и id модели. Файл не коммитится.
 2. Установите обёртку `claude-local` в `PATH` из `deploy/claude/` — см.
    [`deploy/claude/README.md`](../deploy/claude/README.md). Модель и адрес
    приходят из `settings.local.json`; обёртка сбрасывает унаследованные
@@ -210,8 +235,16 @@ review → docs`. Для локальной модели этапы `analyze`/`d
 
 ### Настройки из Strata
 
-Если локальную модель обслуживает [Strata](https://github.com/Niko1221/Strata),
-готовые параметры подключения печатает её CLI:
+Если локальную модель обслуживает [Strata](https://github.com/Niko1221/Strata):
+
+Самый простой путь — `BENCH_STRATA_SETTINGS=1` в `benchmark/test.env`:
+setup выполнит `strata connect claude-code --show-key` и запишет
+`<проект>/.claude/settings.local.json` (env, `permissions.deny`,
+`claudeMdExcludes`, `modelOverrides`); токен в лог не попадает. Если
+`strata` нет в `PATH`, укажите `STRATA_CMD`. Сервер должен быть запущен
+(`strata launch`), иначе `strata connect` подставит умолчания.
+
+Вручную готовые параметры подключения печатает её CLI:
 
 ```bash
 strata launch                       # запустить сервер, если ещё не запущен
@@ -235,13 +268,6 @@ strata connect claude-code --check  # пробный запрос и вызов 
   контекст и лимит вывода сервера; их же печатает `strata connect`. Без них
   Claude Code считает окно равным 100K и либо не компактит, либо компактит
   каждый ход.
-
-При `BENCH_STRATA_SETTINGS=1` setup сам выполняет
-`strata connect claude-code --show-key` и пишет
-`<проект>/.claude/settings.local.json` (env, `permissions.deny`,
-`claudeMdExcludes`, `modelOverrides`); токен в лог не попадает. Если
-`strata` нет в `PATH`, укажите `STRATA_CMD`. Сервер должен быть запущен
-(`strata launch`), иначе `strata connect` подставит умолчания.
 
 Флаг `--write` записывает настройки в глобальный `~/.claude/settings.json`
 (с резервной копией). Для benchmark предпочтителен проектный
