@@ -591,6 +591,9 @@ def remove_existing_project(cfg: BenchConfig, *, store, registry,
             log(f"✓ удалена запись проекта из реестра: #{project.id} {project.name}")
 
     if project_dir.exists():
+        # Демон code-index держит открытым src/cf/.code-index/index.db:
+        # на Windows rmtree падает с WinError 32, пока он жив.
+        code_index_bench.stop_code_index(cfg.code_index_dir)
         _rmtree_force(project_dir)
         removed = True
         log(f"✓ удалён каталог проекта: {project_dir}")

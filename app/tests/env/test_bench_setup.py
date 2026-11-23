@@ -398,6 +398,32 @@ def test_remove_existing_project_removes_readonly_files(tmp_path):
     assert not project_dir.exists()
 
 
+def test_remove_existing_project_stops_code_index_before_rmtree(
+        tmp_path, monkeypatch):
+    """Демон держит src/cf/.code-index/index.db — на Windows rmtree иначе падает."""
+    from agentmon.env import bench_setup
+    cfg = load_config(write_env(tmp_path), repo_root=tmp_path)
+    project_dir = Path(cfg.project_dir)
+    index_dir = project_dir / "src" / "cf" / ".code-index"
+    index_dir.mkdir(parents=True)
+    (project_dir / ".1c-devbase.json").write_text("{}", encoding="utf-8")
+    (index_dir / "index.db").write_text("db", encoding="utf-8")
+    calls = []
+    monkeypatch.setattr(
+        bench_setup.code_index_bench, "stop_code_index",
+        lambda path, **kwargs: calls.append(("stop", str(path))))
+    monkeypatch.setattr(
+        bench_setup, "_rmtree_force",
+        lambda path: calls.append(("rmtree", str(path))))
+
+    bench_setup.remove_existing_project(
+        cfg, store=make_store(tmp_path), registry=make_registry(tmp_path),
+        log=lambda line: None)
+
+    assert [kind for kind, _ in calls] == ["stop", "rmtree"]
+    assert calls[0][1] == cfg.code_index_dir
+
+
 @pytest.mark.skipif(shutil.which("git") is None, reason="git не установлен")
 def test_remove_existing_project_recovers_git_only_leftover(tmp_path):
     """После сбоя rmtree остался только .git — маркер виден в HEAD."""
