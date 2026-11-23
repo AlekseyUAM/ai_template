@@ -1,4 +1,5 @@
 """Тесты подготовки benchmark-окружения (без 1С, Docker и PostgreSQL)."""
+import json
 import shutil
 import stat
 import subprocess
@@ -6,7 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from agentmon.env.bench_setup import BenchConfig, SetupError, load_config, parse_env_file
+from agentmon.env.bench_setup import (
+    BenchConfig, SetupError, build_strata_settings, fetch_strata_env,
+    load_config, parse_env_file, parse_strata_env, write_strata_settings)
 from agentmon.env import code_index_bench
 from agentmon.env.code_index_bench import NativeIndex
 from agentmon.pycmd import PYTHON_CMD
@@ -1319,3 +1322,133 @@ def test_import_tasks_warns_when_task_md_header_unrecognized(tmp_path):
     md = (Path(cfg.project_dir) / "tasks" / "task#001" / "TASK.md").read_text(
         encoding="utf-8")
     assert md.startswith("Задача без шапки")
+
+
+STRATA_OUTPUT = """
+Claude Code  (messages + tools; tested (Claude Code 2.1.302))
+
+File: ~/.claude/settings.json   (merged with the file if it exists)
+  {
+    "env": {
+      "ANTHROPIC_BASE_URL": "http://127.0.0.1:8080",
+      "ANTHROPIC_AUTH_TOKEN": "strata-local",
+      "ANTHROPIC_MODEL": "qwen3.8-flash-next-iq3_s",
+      "CLAUDE_CODE_MAX_CONTEXT_TOKENS": "262144",
+      "CLAUDE_CODE_MAX_OUTPUT_TOKENS": "32768"
+    }
+  }
+
+Environment:
+  set ANTHROPIC_BASE_URL=http://127.0.0.1:8080
+"""
+
+
+def test_parse_strata_env_reads_json_block():
+    env = parse_strata_env(STRATA_OUTPUT)
+    assert env["ANTHROPIC_MODEL"] == "qwen3.8-flash-next-iq3_s"
+    assert env["ANTHROPIC_BASE_URL"] == "http://127.0.0.1:8080"
+    assert env["ANTHROPIC_AUTH_TOKEN"] == "strata-local"
+
+
+def test_parse_strata_env_rejects_output_without_json():
+    with pytest.raises(SetupError, match="strata connect"):
+        parse_strata_env("Environment:\n  set ANTHROPIC_MODEL=x\n")
+
+
+def test_parse_strata_env_requires_model():
+    with pytest.raises(SetupError, match="ANTHROPIC_MODEL"):
+        parse_strata_env(
+            '{"env": {"ANTHROPIC_BASE_URL": "http://x", '
+            '"ANTHROPIC_AUTH_TOKEN": "t"}}')
+
+
+def test_build_strata_settings_merges_benchmark_defaults():
+    settings = build_strata_settings({
+        "ANTHROPIC_BASE_URL": "http://x",
+        "ANTHROPIC_AUTH_TOKEN": "t",
+        "ANTHROPIC_MODEL": "m",
+        "CLAUDE_CODE_MAX_CONTEXT_TOKENS": "262144",
+    })
+    env = settings["env"]
+    assert env["PYTHONUTF8"] == "1"
+    assert env["PYTHONIOENCODING"] == "utf-8"
+    assert env["CLAUDE_CODE_AUTO_COMPACT_WINDOW"] == "249036"
+    assert settings["modelOverrides"] == {"claude-sonnet-4-6": "m"}
+    assert "Agent" in settings["permissions"]["deny"]
+
+
+def test_build_strata_settings_keeps_strata_values():
+    settings = build_strata_settings({
+        "ANTHROPIC_BASE_URL": "http://x",
+        "ANTHROPIC_AUTH_TOKEN": "t",
+        "ANTHROPIC_MODEL": "m",
+        "PYTHONIOENCODING": "cp1251",
+        "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "100000",
+    })
+    assert settings["env"]["PYTHONIOENCODING"] == "cp1251"
+    assert settings["env"]["CLAUDE_CODE_AUTO_COMPACT_WINDOW"] == "100000"
+
+
+def test_fetch_strata_env_uses_connect_command(tmp_path, monkeypatch):
+    exe = tmp_path / "strata.cmd"
+    exe.write_text("", encoding="utf-8")
+    monkeypatch.setattr(
+        "agentmon.env.bench_setup.shutil.which", lambda name: str(exe))
+    calls = []
+
+    def run(argv, **kwargs):
+        calls.append(argv)
+        return subprocess.CompletedProcess(argv, 0, STRATA_OUTPUT, "")
+
+    env = fetch_strata_env("strata", run=run)
+    assert calls[0][1:] == ["connect", "claude-code", "--show-key"]
+    assert env["ANTHROPIC_MODEL"] == "qwen3.8-flash-next-iq3_s"
+
+
+def test_fetch_strata_env_reports_bad_exit(tmp_path):
+    exe = tmp_path / "strata.cmd"
+    exe.write_text("", encoding="utf-8")
+    with pytest.raises(SetupError, match="strata connect"):
+        fetch_strata_env(
+            str(exe),
+            run=lambda argv, **kw: subprocess.CompletedProcess(
+                argv, 1, "", "server not found"))
+
+
+def test_fetch_strata_env_reports_missing_cli(tmp_path):
+    with pytest.raises(SetupError, match="STRATA_CMD"):
+        fetch_strata_env(str(tmp_path / "nope.cmd"))
+
+
+def test_write_strata_settings_log_has_no_token(tmp_path):
+    lines = []
+    path = write_strata_settings(
+        tmp_path / "project",
+        {"env": {"ANTHROPIC_MODEL": "m", "ANTHROPIC_AUTH_TOKEN": "secret",
+                 "CLAUDE_CODE_MAX_CONTEXT_TOKENS": "1000"}},
+        log=lines.append)
+    assert path == tmp_path / "project" / ".claude" / "settings.local.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert data["env"]["ANTHROPIC_MODEL"] == "m"
+    assert all("secret" not in line for line in lines)
+
+
+def test_load_config_strata_defaults_off(tmp_path):
+    cfg = load_config(write_env(tmp_path), repo_root=tmp_path)
+    assert cfg.strata_settings is False
+    assert cfg.strata_cmd == "strata"
+
+
+def test_load_config_strata_enabled(tmp_path):
+    cfg = load_config(
+        write_env(tmp_path, BENCH_STRATA_SETTINGS="1",
+                  STRATA_CMD="C:/Strata/strata.cmd"),
+        repo_root=tmp_path)
+    assert cfg.strata_settings is True
+    assert cfg.strata_cmd == "C:/Strata/strata.cmd"
+
+
+def test_load_config_rejects_bad_strata_flag(tmp_path):
+    with pytest.raises(SetupError, match="BENCH_STRATA_SETTINGS"):
+        load_config(write_env(tmp_path, BENCH_STRATA_SETTINGS="maybe"),
+                    repo_root=tmp_path)

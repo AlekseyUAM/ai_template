@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import shutil
 import stat
 import subprocess
@@ -41,10 +42,26 @@ REQUIRED_KEYS = (
 OPTIONAL_KEYS = (
     "MCP_1C_MD_URL", "MCP_1C_NAPARNIC_URL", "BENCH_DT_PATH",
     "MCP_CODE_INDEX_HOST", "CODE_INDEX_WAIT_MINUTES",
-    "AGENTMON_CLAUDE_CMD",
+    "AGENTMON_CLAUDE_CMD", "BENCH_STRATA_SETTINGS", "STRATA_CMD",
 )
 _VERSION_RE = re.compile(r"(\d+\.\d+\.\d+\.\d+)")
 _URL_RE = re.compile(r"^https?://", re.IGNORECASE)
+
+# Ключи benchmark-профиля, которые strata connect не задаёт.
+_BENCH_SETTINGS_ENV = {
+    "PYTHONUTF8": "1",
+    "PYTHONIOENCODING": "utf-8",
+    "MAX_MCP_OUTPUT_TOKENS": "8000",
+    "BASH_MAX_OUTPUT_LENGTH": "12000",
+    "CLAUDE_CODE_TOTAL_TOKENS_REMINDER": "off",
+}
+_BENCH_SETTINGS_DENY = [
+    "Agent", "Task", "SendMessage", "Workflow", "ListAgents",
+    "ScheduleWakeup", "mcp__1c-md__execute_query",
+]
+_BENCH_CLAUDE_MD_EXCLUDES = [
+    "**/cyclic-review-workflow.md", "**/run-unit-tests.md",
+]
 
 
 class SetupError(RuntimeError):
@@ -72,6 +89,8 @@ class BenchConfig:
     one_c_md_url: str | None
     one_c_naparnic_url: str | None
     dt_path: str | None
+    strata_settings: bool = False
+    strata_cmd: str = "strata"
 
 
 def parse_env_file(path: Path) -> dict[str, str]:
@@ -99,6 +118,121 @@ def load_env_file(path: Path, env: dict[str, str]) -> None:
         key, sep, value = line.partition("=")
         if sep:
             env[key.strip()] = value.strip()
+
+
+def _split_command(cmd: str) -> list[str]:
+    posix = os.name != "nt" and "\\" not in cmd
+    argv = shlex.split(cmd, posix=posix)
+    if not posix:
+        argv = [a[1:-1] if len(a) >= 2 and a[0] == a[-1] == '"' else a
+                for a in argv]
+    return [a for a in argv if a]
+
+
+def _resolve_command(cmd: str) -> list[str]:
+    """argv[0] → путь (PATH + PATHEXT на Windows); FileNotFoundError."""
+    raw = (cmd or "").strip()
+    if not raw:
+        raise FileNotFoundError("пустая команда")
+    if Path(raw).is_file():
+        return [raw]
+    argv = _split_command(raw)
+    if not argv:
+        raise FileNotFoundError("пустая команда")
+    exe = argv[0]
+    path = Path(exe)
+    if path.is_absolute() or os.sep in exe or (os.altsep and os.altsep in exe):
+        resolved = str(path)
+    else:
+        found = shutil.which(exe)
+        if not found:
+            raise FileNotFoundError(f"команда не найдена: {exe}")
+        resolved = found
+    if not os.path.isfile(resolved) or not os.access(resolved, os.X_OK):
+        raise FileNotFoundError(f"команда не найдена: {cmd}")
+    return [resolved, *argv[1:]]
+
+
+def parse_strata_env(output: str) -> dict[str, str]:
+    """Вытащить env-блок из вывода `strata connect claude-code`."""
+    idx = (output or "").find("{")
+    if idx < 0:
+        raise SetupError("strata connect: в выводе нет JSON-блока настроек")
+    try:
+        data, _ = json.JSONDecoder().raw_decode(output[idx:])
+    except json.JSONDecodeError as exc:
+        raise SetupError(
+            f"strata connect: не удалось разобрать JSON: {exc}") from None
+    env = data.get("env") if isinstance(data, dict) else None
+    if not isinstance(env, dict) or not env:
+        raise SetupError("strata connect: в JSON нет непустого блока env")
+    result = {str(key): str(value) for key, value in env.items()}
+    for key in ("ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN",
+                "ANTHROPIC_MODEL"):
+        if not result.get(key):
+            raise SetupError(f"strata connect: в env нет {key}")
+    return result
+
+
+def fetch_strata_env(strata_cmd: str = "strata", *,
+                     run=subprocess.run,
+                     timeout: float = 60.0) -> dict[str, str]:
+    """Получить env у `strata connect claude-code --show-key`."""
+    try:
+        argv = _resolve_command(strata_cmd)
+    except FileNotFoundError:
+        raise SetupError(
+            f"не найдена команда Strata: {strata_cmd} "
+            "(укажите STRATA_CMD — путь к strata.cmd)") from None
+    argv += ["connect", "claude-code", "--show-key"]
+    try:
+        result = run(argv, capture_output=True, text=True,
+                     encoding="utf-8", errors="replace", timeout=timeout)
+    except FileNotFoundError:
+        raise SetupError(f"не найдена команда Strata: {strata_cmd}") from None
+    except subprocess.TimeoutExpired:
+        raise SetupError(
+            f"strata connect не ответила за {timeout:g} с") from None
+    if result.returncode != 0:
+        raise SetupError(
+            f"strata connect завершилась с ошибкой (код "
+            f"{result.returncode}); запустите её вручную для диагностики")
+    return parse_strata_env(result.stdout or "")
+
+
+def build_strata_settings(env: dict[str, str]) -> dict:
+    """settings.local.json: env от Strata + benchmark-профиль."""
+    merged = dict(env)
+    for key, value in _BENCH_SETTINGS_ENV.items():
+        merged.setdefault(key, value)
+    try:
+        context = int(merged.get("CLAUDE_CODE_MAX_CONTEXT_TOKENS", ""))
+    except ValueError:
+        context = 0
+    if context > 0:
+        merged.setdefault("CLAUDE_CODE_AUTO_COMPACT_WINDOW",
+                          str(context * 95 // 100))
+    settings: dict = {
+        "env": merged,
+        "permissions": {"deny": list(_BENCH_SETTINGS_DENY)},
+        "claudeMdExcludes": list(_BENCH_CLAUDE_MD_EXCLUDES),
+    }
+    model = merged.get("ANTHROPIC_MODEL")
+    if model:
+        settings["modelOverrides"] = {"claude-sonnet-4-6": model}
+    return settings
+
+
+def write_strata_settings(project_dir: str | Path, settings: dict, *,
+                          log: Callable[[str], None] = print) -> Path:
+    path = Path(project_dir) / ".claude" / "settings.local.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(settings, ensure_ascii=False, indent=2) + "\n",
+                    encoding="utf-8")
+    env = settings.get("env", {})
+    log(f"✓ настройки Strata: модель {env.get('ANTHROPIC_MODEL', '—')}, "
+        f"контекст {env.get('CLAUDE_CODE_MAX_CONTEXT_TOKENS', '—')} → {path}")
+    return path
 
 
 def _resolve_platform(raw: Path) -> Path:
@@ -195,6 +329,15 @@ def load_config(env_path: Path, *, repo_root: Path,
             dt = repo_root / dt
         dt_path = str(dt.resolve())
 
+    strata_raw = (data.get("BENCH_STRATA_SETTINGS") or "").strip()
+    if strata_raw in ("", "0"):
+        strata_settings = False
+    elif strata_raw == "1":
+        strata_settings = True
+    else:
+        raise SetupError("BENCH_STRATA_SETTINGS должен быть 0 или 1")
+    strata_cmd = (data.get("STRATA_CMD") or "strata").strip() or "strata"
+
     db_connection = data["BENCH_DB_CONNECTION"].strip()
     return BenchConfig(
         project_name=data["BENCH_PROJECT_NAME"].strip(),
@@ -217,6 +360,8 @@ def load_config(env_path: Path, *, repo_root: Path,
         one_c_naparnic_url=(
             data.get("MCP_1C_NAPARNIC_URL") or "").strip() or None,
         dt_path=dt_path,
+        strata_settings=strata_settings,
+        strata_cmd=strata_cmd,
     )
 
 
