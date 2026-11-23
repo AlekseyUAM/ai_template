@@ -175,36 +175,25 @@
    `<проект>/.claude/settings.local.json`, подставьте `ANTHROPIC_BASE_URL`,
    токен и id модели. Файл не коммитится. Если модель обслуживает Strata,
    значения печатает `strata connect` — см. «Настройки из Strata» ниже.
-2. Скопируйте обёртку в корень проекта; модель и адрес приходят из
-   `settings.local.json`:
-
-   ```bash
-   # Linux / macOS
-   cp benchmark/claude-local.sh.example <проект>/claude-local.sh
-   chmod +x <проект>/claude-local.sh
-   ```
-
-   ```bat
-   :: Windows (cmd)
-   copy benchmark\claude-local.bat.example <проект>\claude-local.bat
-   ```
-
-   Обёртка сбрасывает унаследованные `ANTHROPIC_*` (чтобы не подхватить
-   `claude-ds` из внешнего окружения) и запускает `claude` с
-   `--dangerously-skip-permissions`.
+2. Установите обёртку `claude-local` в `PATH` из `deploy/claude/` — см.
+   [`deploy/claude/README.md`](../deploy/claude/README.md). Модель и адрес
+   приходят из `settings.local.json`; обёртка сбрасывает унаследованные
+   `ANTHROPIC_*` (чтобы не подхватить `claude-ds` из внешнего окружения) и не
+   меняет cwd, поэтому запускайте её из каталога проекта (раннер передаёт его
+   сам).
 3. Запустите этапы (лимиты по умолчанию — в `DEFAULT_STAGE_LIMITS`):
 
    ```bash
    # Linux / macOS
    .venv/bin/python benchmark/stage_run.py \
      --task task#004 --project ~/projects/test \
-     --claude-cmd ~/projects/test/claude-local.sh \
+     --claude-cmd claude-local \
      --stages plan,tests --limit-stage tests=30
    ```
 
    ```bat
    :: Windows (cmd) — одной строкой
-   .venv\Scripts\python.exe benchmark\stage_run.py --task task#004 --project D:\projects\test --claude-cmd D:\projects\test\claude-local.bat --stages plan,tests --limit-stage tests=30
+   .venv\Scripts\python.exe benchmark\stage_run.py --task task#004 --project D:\projects\test --claude-cmd claude-local --stages plan,tests --limit-stage tests=30
    ```
 
    Раннер останавливается, если этап не дошёл до `done`, не создал артефакт

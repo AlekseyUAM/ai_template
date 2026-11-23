@@ -230,7 +230,7 @@ Docker-рецепт описан как legacy в [docs/mcp/code-index.md](docs/
 | `AGENTMON_DB` | путь к SQLite-реестру | `agentmon.db` |
 | `AI1C_PG_MODE` | `host` (портативная PG) или `docker` (контейнер) | `host` |
 | `AI1C_PG_SHA256` | ожидаемый SHA256 архива PostgreSQL | — |
-| `AGENTMON_CLAUDE_CMD` | команда запуска агента | `claude --dangerously-skip-permissions .` |
+| `AGENTMON_CLAUDE_CMD` | команда запуска агента; обёртки `claude-ds`/`claude-local` и настройка — [deploy/claude/README.md](deploy/claude/README.md) | `claude --dangerously-skip-permissions .` |
 | `AGENTMON_TG_TOKEN` | токен Telegram-бота (пусто → интеграция выключена) | — |
 | `AGENTMON_TG_CHAT_IDS` | разрешённые chat_id через запятую | — |
 
