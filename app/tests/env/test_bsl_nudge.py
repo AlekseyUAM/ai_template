@@ -44,6 +44,8 @@ def test_bsl_edit_runs_all_analyzers(monkeypatch):
     assert "analyze_code.py" in text
     assert "check_event_handlers.py" in text
     assert "query-analyze" in text
+    assert ("extract_queries.py -Path <file> | analyze_query.py -" in text)
+    assert "analyze_query.py takes the extracted query text" in text
     assert "Findings: error=1, warning=1, info=1." in text
     assert [c[0] for c in calls] == [
         "analyze_code.py", "check_event_handlers.py",

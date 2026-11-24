@@ -160,6 +160,9 @@ def _hook_output(title: str, sections: list[tuple[str, str]],
 BSL_FOOTER = (
     "bsl_ls static analysis is still mandatory separately: MCP bsl_ls, "
     "mcp__bsl_ls__check, pass code+sha256. "
+    "query-analyze is a pipeline: extract_queries.py -Path <file> | "
+    "analyze_query.py -; analyze_query.py takes the extracted query text, "
+    "not the .bsl file. "
     "BOM: no manual check - the server strips a leading UTF-8 BOM."
 )
 METADATA_FOOTER = (
