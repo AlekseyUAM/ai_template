@@ -51,20 +51,24 @@ _URL_RE = re.compile(r"^https?://", re.IGNORECASE)
 _BENCH_SETTINGS_ENV = {
     "PYTHONUTF8": "1",
     "PYTHONIOENCODING": "utf-8",
-    # Claude Code defaults: MCP 25000 токенов, Bash 30000 символов
-    # (допустимо 4000-128000). Для BSL LS и логов 1c-batch даём запас.
-    "MAX_MCP_OUTPUT_TOKENS": "50000",
-    "BASH_MAX_OUTPUT_LENGTH": "100000",
+    # Дефолтные лимиты Claude Code: увеличенные (50000/100000) локальной
+    # 3-битной модели только мешают.
+    "MAX_MCP_OUTPUT_TOKENS": "25000",
+    "BASH_MAX_OUTPUT_LENGTH": "30000",
     "CLAUDE_CODE_TOTAL_TOKENS_REMINDER": "off",
-    "CLAUDE_CODE_EFFORT_LEVEL": "max",
 }
+# CLAUDE_CODE_EFFORT_LEVEL не задаём: Strata трактует high и max одинаково,
+# а другим провайдерам max может навредить. Если уровень нужен — его задаёт
+# strata connect или settings.local.json вручную.
 _BENCH_SETTINGS_DENY = [
     "Agent", "Task", "SendMessage", "Workflow", "ListAgents",
     "ScheduleWakeup", "mcp__1c-md__execute_query",
 ]
-# Правила review/test грузим: для локальной модели дополнительный контекст
-# дисциплины важнее экономии токенов.
-_BENCH_CLAUDE_MD_EXCLUDES: list[str] = []
+# Правила review/test не грузим на старте: для локальной модели стартовый
+# контекст важнее, файлы остаются доступны через чек-листы.
+_BENCH_CLAUDE_MD_EXCLUDES = [
+    "**/cyclic-review-workflow.md", "**/run-unit-tests.md",
+]
 
 
 class SetupError(RuntimeError):

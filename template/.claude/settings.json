@@ -20,6 +20,15 @@
             "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/bsl_nudge.py\""
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/stage_checklist.py\""
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [

@@ -48,9 +48,9 @@ def apply_settings(cfg, *, fetch=None, build=None, write=None, log=print):
     """Записать settings.local.json в существующий проект без пересоздания.
 
     Профиль собирает `build_strata_settings` из `agentmon.env.bench_setup`
-    (effort=max, лимиты вывода, без claudeMdExcludes). Проект, store и
-    реестр не трогаются — это безопасный способ обновить настройки после
-    сбоя setup.
+    (умеренные лимиты вывода, claudeMdExcludes для review/test). Проект,
+    store и реестр не трогаются — это безопасный способ обновить настройки
+    после сбоя setup.
     """
     from agentmon.env.bench_setup import (
         SetupError, build_strata_settings, fetch_strata_env,

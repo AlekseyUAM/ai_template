@@ -11,6 +11,11 @@
 Остановка: если этап не дошёл до статуса done, не создал артефакт или упал по
 таймауту, раннер останавливается и печатает диагностику; следующие этапы не
 запускаются.
+
+Бюджет: `max_minutes` задачи — общий на все этапы. Каждый этап получает
+остаток бюджета (или явный `--limit-stage`, если он меньше), а после этапа
+остаток уменьшается на фактическую длительность; неизрасходованные минуты
+переходят следующим. `DEFAULT_STAGE_LIMITS` действуют только без `max_minutes`.
 """
 from __future__ import annotations
 
@@ -106,21 +111,60 @@ def select_stages(stages: list[dict], raw: str | None) -> list[dict]:
     return [s for s in stages if s.get("name") in wanted]
 
 
-def parse_stage_limits(raw_values: list[str]) -> dict[str, int]:
-    limits = dict(DEFAULT_STAGE_LIMITS)
+def parse_stage_overrides(raw_values: list[str]) -> dict[str, int]:
+    """Explicit --limit-stage values (only the stages named by the user)."""
+    overrides: dict[str, int] = {}
     for raw in raw_values:
         if "=" not in raw:
             raise BenchError(f"--limit-stage: ожидается этап=минуты, получено {raw!r}")
         name, value = raw.split("=", 1)
         name = name.strip()
+        if not name:
+            raise BenchError(f"--limit-stage: пустое имя этапа в {raw!r}")
         try:
             minutes = int(value.strip())
         except ValueError:
             raise BenchError(f"--limit-stage: не число минут в {raw!r}") from None
         if minutes <= 0:
             raise BenchError(f"--limit-stage: минуты должны быть > 0: {raw!r}")
-        limits[name] = minutes
+        overrides[name] = minutes
+    return overrides
+
+
+def parse_stage_limits(raw_values: list[str]) -> dict[str, int]:
+    limits = dict(DEFAULT_STAGE_LIMITS)
+    limits.update(parse_stage_overrides(raw_values))
     return limits
+
+
+def task_budget_minutes(task_data: dict) -> int | None:
+    """`max_minutes` задачи or None when it is absent/invalid."""
+    try:
+        value = int(task_data.get("max_minutes"))
+    except (TypeError, ValueError):
+        return None
+    return value if value > 0 else None
+
+
+def stage_limit_minutes(name: str, remaining_min: float | None,
+                        overrides: dict[str, int] | None = None) -> int:
+    """Per-stage hard limit from the shared task budget.
+
+    With `max_minutes`, the whole remaining budget belongs to the current
+    stage; default per-stage limits are not applied (a stage may take as much
+    as it needs, at the expense of the following stages). `--limit-stage`
+    remains an optional explicit cap. Without `max_minutes` the stage falls
+    back to its default limit. Returns 0 when the budget is spent.
+    """
+    explicit = (overrides or {}).get(name)
+    if remaining_min is None:
+        return explicit if explicit is not None else DEFAULT_STAGE_LIMITS.get(name, 30)
+    if remaining_min < 1:
+        return 0
+    limit = int(remaining_min)
+    if explicit is not None:
+        limit = min(explicit, limit)
+    return limit
 
 
 def set_status(project: Path, folder: str, stage: str, status: str) -> None:
@@ -427,7 +471,9 @@ def main() -> int:
         stages = select_stages(all_stages, args.stages)
         if not stages:
             raise BenchError("нет выбранных enabled-этапов")
-        limits = parse_stage_limits(args.limit_stage)
+        overrides = parse_stage_overrides(args.limit_stage)
+        budget = task_budget_minutes(data)
+        remaining = float(budget) if budget is not None else None
         brief = args.brief
         if args.brief_file:
             brief_path = Path(args.brief_file).expanduser()
@@ -446,12 +492,23 @@ def main() -> int:
                     f"предыдущий этап «{prior.get('name')}» не done "
                     f"(статус {prior.get('status')!r}); сначала заверши его")
         if args.dry_run:
+            if budget is not None:
+                print(f"Бюджет задачи: {budget} мин на все этапы; "
+                      f"ниже — верхние границы этапов.")
             for stage in stages:
                 name = str(stage.get("name") or "?")
-                limit_min = limits.get(name, 30)
-                print(f"=== {name} (лимит {limit_min} мин) ===")
+                limit_min = stage_limit_minutes(name, remaining, overrides)
+                if limit_min <= 0:
+                    print(f"=== {name} (бюджет задачи исчерпан) ===")
+                    break
+                suffix = (f"лимит до {limit_min} мин"
+                          if budget is not None else f"лимит {limit_min} мин")
+                print(f"=== {name} ({suffix}) ===")
                 print(stage_prompt(project, folder, stage, limit_min, brief))
                 print()
+            if budget is not None:
+                print("Фактический лимит этапа = остаток бюджета на старте "
+                      "этапа (или явный --limit-stage, если он меньше).")
             return 0
         run_id = args.run_id or datetime.now().strftime("%Y%m%d-%H%M%S")
         run_dir = project / "tmp" / "stage-runs" / run_id
@@ -463,6 +520,7 @@ def main() -> int:
             "project": str(project),
             "task": folder,
             "claude_cmd": cmd,
+            "task_budget_minutes": budget,
             "stages": [],
             "stopped": None,
         }
@@ -470,11 +528,20 @@ def main() -> int:
               f"этапы: {', '.join(str(s.get('name')) for s in stages)}")
         for stage in stages:
             name = str(stage.get("name") or "?")
-            limit_min = limits.get(name, 30)
-            print(f"[{datetime.now():%H:%M:%S}] ▶ {name} (лимит {limit_min} мин)")
+            limit_min = stage_limit_minutes(name, remaining, overrides)
+            if limit_min <= 0:
+                run["stopped"] = "бюджет задачи исчерпан"
+                break
+            left = (f", остаток {remaining:.1f} мин"
+                    if remaining is not None else "")
+            print(f"[{datetime.now():%H:%M:%S}] ▶ {name} "
+                  f"(лимит {limit_min} мин{left})")
             result = run_stage(project=project, folder=folder, stage=stage,
                                claude_cmd=cmd, limit_min=limit_min,
                                run_dir=run_dir, brief=brief)
+            if remaining is not None:
+                remaining = max(0.0, remaining - result["duration_sec"] / 60)
+                result["budget_remaining_after"] = round(remaining, 1)
             run["stages"].append(result)
             metrics = result["metrics"]
             print(f"[{datetime.now():%H:%M:%S}] {'■' if result['timed_out'] else '✓' if result['status_after'] == 'done' else '✗'} "

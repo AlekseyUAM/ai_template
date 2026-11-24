@@ -81,6 +81,20 @@ def test_settings_registers_hook(prov, tmp_path):
     assert "bsl_nudge.py" in cmd
 
 
+def test_settings_registers_stage_checklist_hook(prov, tmp_path):
+    content.deploy_content(prov, cfg(tmp_path, []), update=False)
+    data = json.loads((tmp_path / ".claude" / "settings.json")
+                      .read_text(encoding="utf-8"))
+    commands = [hook["command"]
+                for entry in data["hooks"]["PostToolUse"]
+                for hook in entry["hooks"]]
+    stage = [command for command in commands if "stage_checklist.py" in command]
+    assert stage, "PostToolUse must register stage_checklist.py"
+    py = content._shell_path(content.venv_python(prov, str(tmp_path)))
+    assert stage[0].startswith(f'"{py}" ')
+    assert (tmp_path / ".claude" / "hooks" / "stage_checklist.py").is_file()
+
+
 def test_settings_sets_utf8_env(prov, tmp_path):
     content.deploy_content(prov, cfg(tmp_path, []), update=False)
     data = json.loads((tmp_path / ".claude" / "settings.json")

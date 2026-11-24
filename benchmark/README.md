@@ -229,6 +229,19 @@
    (`run.json`, `summary.md`, `<этап>.stream.jsonl`, `<этап>.prompt.txt`).
    `--dry-run` печатает промпты этапов без запуска.
 
+   Если в `task.json` задан `max_minutes`, это **общий бюджет задачи** на все
+   выбранные этапы. Каждый этап получает весь остаток бюджета; после этапа
+   остаток уменьшается на фактическую длительность. Этап, который закончил
+   раньше, оставляет минуты следующим; этап, которому нужно больше, может их
+   забрать — суммарно прогон не превышает `max_minutes`. `--limit-stage`
+   остаётся необязательным явным капом этапа. Если бюджет исчерпан, раннер
+   останавливается до следующего этапа. Если `max_minutes` нет, действуют
+   `DEFAULT_STAGE_LIMITS` и `--limit-stage`.
+
+   В single-session режиме (`bench_run.py`) тот же эффект свежести даёт хук
+   `stage_checklist.py`: после `task_status.py ... <stage> running` он
+   инжектит полный текст чеклиста этапа в контекст.
+
 Порядок этапов по умолчанию: `analyze → plan → tests → develop → testing →
 review → docs`. Для локальной модели этапы `analyze`/`docs` можно отключить в
 `task.json` (`enabled: false`) — раннер выполнит только включённые. Сейчас
@@ -243,10 +256,12 @@ review → docs`. Для локальной модели этапы `analyze`/`d
 Самый простой путь — `BENCH_STRATA_SETTINGS=1` в `benchmark/test.env`:
 setup выполнит `strata connect claude-code --show-key` и запишет
 `<проект>/.claude/settings.local.json` (env, `permissions.deny`,
-`modelOverrides`); токен в лог не попадает. В env добавляются
-`CLAUDE_CODE_EFFORT_LEVEL=max` и увеличенные лимиты вывода
-(`MAX_MCP_OUTPUT_TOKENS=50000`, `BASH_MAX_OUTPUT_LENGTH=100000`), правила
-review/test не исключаются. Если `strata` нет в `PATH`, укажите `STRATA_CMD`.
+`modelOverrides`); токен в лог не попадает. В env добавляются дефолтные
+лимиты вывода (`MAX_MCP_OUTPUT_TOKENS=25000`, `BASH_MAX_OUTPUT_LENGTH=30000`),
+а правила review/test (`cyclic-review-workflow.md`, `run-unit-tests.md`)
+исключаются через `claudeMdExcludes`. `CLAUDE_CODE_EFFORT_LEVEL` профиль не
+задаёт: для Strata high и max равнозначны, а другим провайдерам max может
+навредить. Если `strata` нет в `PATH`, укажите `STRATA_CMD`.
 Сервер должен быть запущен (`strata launch`), иначе `strata connect` подставит
 умолчания.
 

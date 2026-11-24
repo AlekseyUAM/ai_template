@@ -13,6 +13,11 @@ This holds the content of the Claude agent environment that is deployed into the
   - `bsl_nudge.py` - hints when editing BSL;
   - `route_to_checklists.py` - UserPromptSubmit hook: enables single-agent mode and
     lists the task's enabled stages as checklists (respecting `TASK_STAGE`);
+  - `stage_checklist.py` - PostToolUse hook: after
+    `task_status.py ... <stage> running` it injects the full stage checklist into
+    context, so the checklist is fresh at the stage boundary instead of relying on a
+    copy read at task start. In stage-scoped mode (`TASK_STAGE` is set) it stays
+    silent - the stage prompt already names the checklist;
   - `code_index_guard.py` - PreToolUse hook: redirects native
     Read/Grep/Glob/Bash/PowerShell on indexed directories to the `code_index` tools.
     The `code-index-guard.toml` config is generated during environment deployment;

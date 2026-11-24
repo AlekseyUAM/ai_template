@@ -1112,10 +1112,11 @@ def test_run_setup_writes_strata_settings(tmp_path):
     data = json.loads(path.read_text(encoding="utf-8"))
     assert data["env"]["ANTHROPIC_MODEL"] == "local-model"
     assert data["env"]["PYTHONUTF8"] == "1"
-    assert data["env"]["CLAUDE_CODE_EFFORT_LEVEL"] == "max"
-    assert data["env"]["MAX_MCP_OUTPUT_TOKENS"] == "50000"
-    assert data["env"]["BASH_MAX_OUTPUT_LENGTH"] == "100000"
-    assert "claudeMdExcludes" not in data
+    assert "CLAUDE_CODE_EFFORT_LEVEL" not in data["env"]
+    assert data["env"]["MAX_MCP_OUTPUT_TOKENS"] == "25000"
+    assert data["env"]["BASH_MAX_OUTPUT_LENGTH"] == "30000"
+    assert data["claudeMdExcludes"] == [
+        "**/cyclic-review-workflow.md", "**/run-unit-tests.md"]
 
 
 def test_run_setup_writes_given_strata_settings(tmp_path):
@@ -1499,12 +1500,13 @@ def test_build_strata_settings_merges_benchmark_defaults():
     assert env["PYTHONUTF8"] == "1"
     assert env["PYTHONIOENCODING"] == "utf-8"
     assert env["CLAUDE_CODE_AUTO_COMPACT_WINDOW"] == "249036"
-    assert env["MAX_MCP_OUTPUT_TOKENS"] == "50000"
-    assert env["BASH_MAX_OUTPUT_LENGTH"] == "100000"
-    assert env["CLAUDE_CODE_EFFORT_LEVEL"] == "max"
+    assert env["MAX_MCP_OUTPUT_TOKENS"] == "25000"
+    assert env["BASH_MAX_OUTPUT_LENGTH"] == "30000"
+    assert "CLAUDE_CODE_EFFORT_LEVEL" not in env
     assert settings["modelOverrides"] == {"claude-sonnet-4-6": "m"}
     assert "Agent" in settings["permissions"]["deny"]
-    assert "claudeMdExcludes" not in settings
+    assert settings["claudeMdExcludes"] == [
+        "**/cyclic-review-workflow.md", "**/run-unit-tests.md"]
 
 
 def test_build_strata_settings_keeps_strata_values():
@@ -1514,9 +1516,12 @@ def test_build_strata_settings_keeps_strata_values():
         "ANTHROPIC_MODEL": "m",
         "PYTHONIOENCODING": "cp1251",
         "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "100000",
+        "CLAUDE_CODE_EFFORT_LEVEL": "high",
     })
     assert settings["env"]["PYTHONIOENCODING"] == "cp1251"
     assert settings["env"]["CLAUDE_CODE_AUTO_COMPACT_WINDOW"] == "100000"
+    # Уровень effort задаёт провайдер; benchmark-профиль его не навязывает.
+    assert settings["env"]["CLAUDE_CODE_EFFORT_LEVEL"] == "high"
 
 
 def test_fetch_strata_env_uses_connect_command(tmp_path, monkeypatch):

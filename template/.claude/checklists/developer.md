@@ -44,8 +44,8 @@ a layer is a process defect; record the final counts in `DEVELOP.md`.
    - [locks](../skills/bsl-coding-standards/reference/locks.md);
    - [boundary and point in time](../skills/bsl-coding-standards/reference/boundary-and-moment.md);
    - [movement deletion](../skills/bsl-coding-standards/reference/movements-deletion.md).
-   **Registers.** Any task that touches registers - read the relevant reference in full
-   before designing the solution:
+   **Registers.** If the task reads or writes a register (including a read-only
+   or slice query), read the relevant reference in full **before writing code**:
    - accumulation registers - [accumulation registers](../skills/bsl-coding-standards/reference/accumulation-registers.md);
    - information registers - [information registers](../skills/bsl-coding-standards/reference/information-registers.md).
    **Queries** - write per the `query-review` checklist (indexes; `ЕСТЬNULL` on a left
