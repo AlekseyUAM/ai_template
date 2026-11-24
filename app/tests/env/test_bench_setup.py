@@ -1,5 +1,6 @@
 """Тесты подготовки benchmark-окружения (без 1С, Docker и PostgreSQL)."""
 import json
+import os
 import shutil
 import stat
 import subprocess
@@ -422,6 +423,36 @@ def test_remove_existing_project_stops_code_index_before_rmtree(
 
     assert [kind for kind, _ in calls] == ["stop", "rmtree"]
     assert calls[0][1] == cfg.code_index_dir
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows блокирует открытый файл")
+def test_remove_existing_project_keeps_records_when_index_locked(
+        tmp_path, monkeypatch):
+    """Занятый index.db: setup не удаляет ни записи, ни каталог проекта."""
+    from agentmon.env import bench_setup
+    cfg = load_config(write_env(tmp_path), repo_root=tmp_path)
+    project_dir = Path(cfg.project_dir)
+    index_dir = project_dir / "src" / "cf" / ".code-index"
+    index_dir.mkdir(parents=True)
+    (project_dir / ".1c-devbase.json").write_text("{}", encoding="utf-8")
+    index_db = index_dir / "index.db"
+    index_db.write_text("db", encoding="utf-8")
+    store, registry = make_store(tmp_path), make_registry(tmp_path)
+    create_project_row(store, cfg)
+    registry.add(name=cfg.project_name, path=cfg.project_dir, backend="local")
+    monkeypatch.setattr(
+        bench_setup.code_index_bench, "stop_code_index",
+        lambda path, **kwargs: None)
+
+    with index_db.open("ab"):
+        with pytest.raises(SetupError, match="занят"):
+            remove_existing_project(cfg, store=store, registry=registry,
+                                    log=lambda line: None)
+
+    assert ProjectRepo(store).list()
+    assert registry.list()
+    assert (project_dir / ".1c-devbase.json").exists()
+    assert index_db.exists()
 
 
 @pytest.mark.skipif(shutil.which("git") is None, reason="git не установлен")
@@ -1081,6 +1112,36 @@ def test_run_setup_writes_strata_settings(tmp_path):
     data = json.loads(path.read_text(encoding="utf-8"))
     assert data["env"]["ANTHROPIC_MODEL"] == "local-model"
     assert data["env"]["PYTHONUTF8"] == "1"
+    assert data["env"]["CLAUDE_CODE_EFFORT_LEVEL"] == "max"
+    assert data["env"]["MAX_MCP_OUTPUT_TOKENS"] == "50000"
+    assert data["env"]["BASH_MAX_OUTPUT_LENGTH"] == "100000"
+    assert "claudeMdExcludes" not in data
+
+
+def test_run_setup_writes_given_strata_settings(tmp_path):
+    """Профиль, собранный CLI, пишется без повторного опроса Strata."""
+    root = make_repo_root(tmp_path)
+    make_tasks(root)
+    cfg = load_config(
+        write_env(tmp_path, BENCH_STRATA_SETTINGS="1"), repo_root=root)
+    store, registry = make_store(tmp_path), make_registry(tmp_path)
+    settings = {"env": {
+        "ANTHROPIC_MODEL": "from-cli",
+        "CLAUDE_CODE_EFFORT_LEVEL": "max",
+    }}
+
+    run_setup(
+        cfg, repo_root=root, store=store, registry=registry,
+        prov=OrchestratorProv(), tcp_ok=lambda url: True,
+        http_ok=lambda url: True, install_env=fake_install_env,
+        batch_run=lambda project_dir, args, **kwargs: None,
+        launch_index=lambda **kwargs: NATIVE_INDEX,
+        wait_index=lambda index, **kwargs: None,
+        strata_settings=settings, log=lambda line: None,
+    )
+
+    path = Path(cfg.project_dir) / ".claude" / "settings.local.json"
+    assert json.loads(path.read_text(encoding="utf-8")) == settings
 
 
 def test_run_setup_recreate_removes_old_project(tmp_path):
@@ -1438,8 +1499,12 @@ def test_build_strata_settings_merges_benchmark_defaults():
     assert env["PYTHONUTF8"] == "1"
     assert env["PYTHONIOENCODING"] == "utf-8"
     assert env["CLAUDE_CODE_AUTO_COMPACT_WINDOW"] == "249036"
+    assert env["MAX_MCP_OUTPUT_TOKENS"] == "50000"
+    assert env["BASH_MAX_OUTPUT_LENGTH"] == "100000"
+    assert env["CLAUDE_CODE_EFFORT_LEVEL"] == "max"
     assert settings["modelOverrides"] == {"claude-sonnet-4-6": "m"}
     assert "Agent" in settings["permissions"]["deny"]
+    assert "claudeMdExcludes" not in settings
 
 
 def test_build_strata_settings_keeps_strata_values():

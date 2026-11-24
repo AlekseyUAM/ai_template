@@ -12,6 +12,19 @@ allowed-tools:
 Finds violations of the development standards for optimal queries (ITS).
 Works in two steps: extracting query text from `.bsl`/DCS-XML and running the
 registry of automatic checks.
+
+## Mandatory usage
+
+For every changed query text run **both** steps - a run without one of them is not
+a completed check:
+
+```bash
+python "${CLAUDE_SKILL_DIR}/scripts/extract_queries.py" -Path <файл> \
+    | python "${CLAUDE_SKILL_DIR}/scripts/analyze_query.py" -
+```
+
+Exit code `2` from `extract_queries.py` means the query was not extracted - it is
+not a clean result.
 <!-- @if 1c-md -->
 
 ## Priority check: `validate_query`

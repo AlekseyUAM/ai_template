@@ -17,6 +17,17 @@ This is the first review step. Requirements that a script cannot check (metadata
 task semantics, configuration context) are moved to the manual checklist of the
 `bsl-coding-standards` skill.
 
+## Mandatory usage
+
+For any changed `.bsl` run **both** scripts - a run without one of them is not a
+completed check:
+
+- `analyze_code.py` - general rules;
+- `check_event_handlers.py` - standard event handlers.
+
+For changed metadata XML run `check_metadata_names.py --changed` - it is mandatory,
+but it is **not** a substitute for the two module checks above.
+
 ## Module analysis
 
 ```bash

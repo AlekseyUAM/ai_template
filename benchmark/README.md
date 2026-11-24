@@ -177,6 +177,9 @@
 
 - `--task task#001` — ограничить набор задач;
 - `--env <файл>` — другой env-файл вместо `benchmark/test.env`;
+- `--settings-only` — записать `<проект>/.claude/settings.local.json` по
+  текущему профилю и выйти, не пересоздавая проект (нужен
+  `BENCH_STRATA_SETTINGS=1`; удобно после сбоя setup);
 - `--skip-analysis` — только выполнить задачи и собрать метрики;
 - `--force` — разрешить прогон на непустом проекте (результат помечается как
   потенциально загрязнённый);
@@ -240,9 +243,12 @@ review → docs`. Для локальной модели этапы `analyze`/`d
 Самый простой путь — `BENCH_STRATA_SETTINGS=1` в `benchmark/test.env`:
 setup выполнит `strata connect claude-code --show-key` и запишет
 `<проект>/.claude/settings.local.json` (env, `permissions.deny`,
-`claudeMdExcludes`, `modelOverrides`); токен в лог не попадает. Если
-`strata` нет в `PATH`, укажите `STRATA_CMD`. Сервер должен быть запущен
-(`strata launch`), иначе `strata connect` подставит умолчания.
+`modelOverrides`); токен в лог не попадает. В env добавляются
+`CLAUDE_CODE_EFFORT_LEVEL=max` и увеличенные лимиты вывода
+(`MAX_MCP_OUTPUT_TOKENS=50000`, `BASH_MAX_OUTPUT_LENGTH=100000`), правила
+review/test не исключаются. Если `strata` нет в `PATH`, укажите `STRATA_CMD`.
+Сервер должен быть запущен (`strata launch`), иначе `strata connect` подставит
+умолчания.
 
 Вручную готовые параметры подключения печатает её CLI:
 

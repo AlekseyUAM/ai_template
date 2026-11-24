@@ -4,6 +4,11 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+
+from agentmon.env.bench_setup import SetupError
 
 SCRIPT = Path(__file__).resolve().parents[1] / "setup_benchmark.py"
 
@@ -145,3 +150,88 @@ def test_gives_up_after_attempts():
         raise AssertionError("ожидали ошибку")
     assert len(attempts) == 2
     assert sleeps == [5]
+
+
+def test_settings_summary_lists_profile_values():
+    mod = _load()
+    summary = mod.settings_summary({"env": {
+        "CLAUDE_CODE_EFFORT_LEVEL": "max",
+        "MAX_MCP_OUTPUT_TOKENS": "20000",
+        "ANTHROPIC_AUTH_TOKEN": "secret",
+    }})
+    assert "CLAUDE_CODE_EFFORT_LEVEL=max" in summary
+    assert "MAX_MCP_OUTPUT_TOKENS=20000" in summary
+    assert "secret" not in summary
+
+
+def test_apply_settings_writes_only_settings(tmp_path):
+    mod = _load()
+    project = tmp_path / "project"
+    project.mkdir()
+    cfg = SimpleNamespace(strata_settings=True, strata_cmd="strata",
+                          project_dir=str(project))
+    written = {}
+
+    def write(project_dir, settings, *, log):
+        written["dir"] = project_dir
+        written["settings"] = settings
+        return Path(project_dir) / ".claude" / "settings.local.json"
+
+    path = mod.apply_settings(
+        cfg,
+        fetch=lambda cmd: {"ANTHROPIC_MODEL": "m"},
+        build=lambda env: {"env": {
+            **env,
+            "CLAUDE_CODE_EFFORT_LEVEL": "max",
+            "MAX_MCP_OUTPUT_TOKENS": "20000",
+        }},
+        write=write,
+        log=lambda _line: None)
+
+    assert written["dir"] == str(project)
+    assert written["settings"]["env"]["CLAUDE_CODE_EFFORT_LEVEL"] == "max"
+    assert written["settings"]["env"]["ANTHROPIC_MODEL"] == "m"
+    assert path.name == "settings.local.json"
+
+
+def test_apply_settings_requires_strata(tmp_path):
+    mod = _load()
+    cfg = SimpleNamespace(strata_settings=False, strata_cmd="strata",
+                          project_dir=str(tmp_path))
+    with pytest.raises(SetupError, match="BENCH_STRATA_SETTINGS"):
+        mod.apply_settings(
+            cfg, fetch=lambda *_: {}, build=lambda env: {},
+            write=lambda *a, **k: None, log=lambda _line: None)
+
+
+def test_apply_settings_rejects_missing_project(tmp_path):
+    mod = _load()
+    cfg = SimpleNamespace(strata_settings=True, strata_cmd="strata",
+                          project_dir=str(tmp_path / "absent"))
+    with pytest.raises(SetupError, match="каталог проекта"):
+        mod.apply_settings(
+            cfg, fetch=lambda *_: {}, build=lambda env: {},
+            write=lambda *a, **k: None, log=lambda _line: None)
+
+
+def test_main_settings_only_skips_docker_and_store(monkeypatch, capsys,
+                                                   tmp_path):
+    mod = _load()
+    cfg = SimpleNamespace(strata_settings=True, strata_cmd="strata",
+                          project_dir=str(tmp_path))
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(mod, "load_repo_env", lambda: None)
+    monkeypatch.setattr(
+        mod, "apply_settings",
+        lambda config, log=print: Path(config.project_dir) / "settings.json")
+    monkeypatch.setattr(
+        mod, "docker_problem",
+        lambda *a, **kw: (_ for _ in ()).throw(
+            AssertionError("Docker не должен проверяться")))
+    from agentmon.env import bench_setup
+    monkeypatch.setattr(
+        bench_setup, "load_config", lambda path, *, repo_root: cfg)
+
+    assert mod.main(["--env", "test.env", "--settings-only"]) == 0
+    out = capsys.readouterr().out
+    assert "настройки записаны" in out

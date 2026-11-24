@@ -34,7 +34,8 @@ def test_extracted_blocks_are_analyzed_separately():
     text = ("# f.bsl:1\nВЫБРАТЬ 1\n--- 8< ---\n"
             "# f.bsl:5\nВЫБРАТЬ 2\n")
     proc = subprocess.run([sys.executable, str(SCRIPT), "-"],
-                          input=text, text=True, capture_output=True)
+                          input=text, text=True, encoding="utf-8",
+                          capture_output=True)
     output = proc.stdout + proc.stderr
     assert "query-not-parseable" not in output
     assert "# f.bsl:1" in output

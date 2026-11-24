@@ -147,13 +147,25 @@ files/queries are marked `не менялось с итерации N`, not rech
    before the call compute it (`sha256sum <файл>` or `shasum -a 256 <файл>`) and
    pass it together with the text; do not retype the module manually. Do not rely on
    the numbers from `DEVELOP.md`, but verify them; a discrepancy is recorded as a finding.
-3. **Automatic `code-analyze` checks** - the `code-analyze` skill (Skill
-   tool) over the changed `.bsl`: finds standard violations that bsl_ls does not have.
-4. **Automatic query checks `query-analyze`** - the `query-analyze` skill over
-   changed query texts. For each query literal, check `validate_query` **yourself,
-   independently**, exactly as it is written in the source (including
-   stubs and every concatenation part). The substituted variant does not replace this
-   check; an invalid literal is a finding even if the substituted variant is valid.
+3. **Automatic `code-analyze` checks** - invoke the `code-analyze` skill (Skill
+   tool) and run **all** its scripts over the changed `.bsl`:
+   `analyze_code.py` (general rules) and `check_event_handlers.py` (standard event
+   handlers: export, parameter count/names, wrong module view; it prints the correct
+   signature). `check_event_handlers.py` is mandatory for object/manager/recordset/
+   application modules - `bsl_ls` does not check this in the deployed environment.
+   A script that was not run is a critical finding "layer did not run". Verify the
+   numbers yourself, do not rely on `DEVELOP.md`.
+   **Metadata names** - for changed metadata XML run
+   `check_metadata_names.py --changed` yourself; a missing run is the same critical
+   finding.
+4. **Automatic query checks `query-analyze`** - invoke the `query-analyze` skill and
+   run **both** scripts (`extract_queries.py` + `analyze_query.py`) over every changed
+   query text. Exit code `2` from `extract_queries.py` means the query was not
+   extracted - a critical finding, not a clean result. For each query literal, check
+   `validate_query` **yourself, independently**, exactly as it is written in the source
+   (including stubs and every concatenation part). The substituted variant does not
+   replace this check; an invalid literal is a finding even if the substituted variant
+   is valid.
 5. **Manual checklist `bsl-coding-standards`** - walk it by eye: requirements that
    cannot be scripted (semantics, data flow, metadata).
 6. **Manual query checklist `query-review`** - manual query check (DB
@@ -218,7 +230,9 @@ write the content with the Write tool (not a shell redirect).
   |---|---|---|---|---|---|
 
   The numbers are taken from the tool output, not from prose. For `bsl_ls` -
-  `sha256` and `summary`; for `code-analyze`/`query-analyze` - counts by the lines
+  `sha256` and `summary`; for `code-analyze` - **separate rows** for
+  `analyze_code.py` and `check_event_handlers.py`; for `query-analyze` - rows for
+  `extract_queries.py` and `analyze_query.py`; counts are taken from the lines
   `severity | код | строка`. An unavailable layer - a row with `—` and a critical
   finding "layer did not run". Writing "0 errors" without this table is forbidden.
 - **checklist** - all items of step 2 with a result for each (or "not applicable");

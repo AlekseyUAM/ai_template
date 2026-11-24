@@ -55,8 +55,10 @@ additional checks "just in case" nor scenarios for adjacent cases.
 1. First the skeleton: `Сценарии()` and common helpers - no more than 120 lines per one `Write`.
 2. Then one scenario at a time: one test function per step, `Write`/`Edit` no more than
    150 lines.
-3. After each scenario - check only the changed file (`bsl_ls`/`check`);
-   full `check-modules` - once at the end.
+3. After each scenario - check only the changed file: `bsl_ls`/`check`, invoke the
+   `code-analyze` skill and run **all** its scripts (`analyze_code.py` +
+   `check_event_handlers.py`); full `check-modules` - once at the end. A skipped
+   analyzer is a process defect.
 4. The next scenario - only after successful check of the previous one.
 5. Do not rewrite the module entirely and do not re-read it after each edit: edit
    pointwise (`Edit`), `Read` - only the needed range.
@@ -84,7 +86,8 @@ only `Error` and `Warning` that point to a real defect.
 1. Add to the `ЮнитТесты` extension a new common module of test scenarios following the sample
    `ЮТ_ТестыПример`. Name - meaningful (for example, `ЮТ_<Задача>`). Create the module
    metadata with the `meta-compile` skill (CommonModule in the extension); do not edit
-   `Configuration.xml`/`ConfigDumpInfo.xml` manually.
+   `Configuration.xml`/`ConfigDumpInfo.xml` manually. After `meta-compile` run
+   `check_metadata_names.py --changed` (mandatory for every metadata change).
 2. In the common module declare an export function `Сценарии()` - it returns `Массив`
    of names of export test functions of this module:
    ```bsl
@@ -313,10 +316,13 @@ all `Результат=false` and red ones fail on an assertion.
    and the code gives something else, record the discrepancy, do not rewrite the check. If in doubt
    about the API, check against the configuration code.
 7. **Check queries in the test module with `query-analyze`.** Every written/changed
-   query text (including helper queries) run with the `query-analyze` skill and
-   `validate_query` on the literal exactly as it is written in the source. Stubs
-   `!...!`, `%1`, `{0}` in the query text are forbidden; substitution - only into valid
-   places (`&ОсобыйПараметр`, `1 = 1`). Record the result in the `TESTS.md` report.
+   query text (including helper queries) run with the `query-analyze` skill: **both**
+   scripts (`extract_queries.py` + `analyze_query.py`) and `validate_query` on the
+   literal exactly as it is written in the source. Exit code `2` from
+   `extract_queries.py` means the query was not extracted - not a clean result.
+   Stubs `!...!`, `%1`, `{0}` in the query text are forbidden; substitution - only
+   into valid places (`&ОсобыйПараметр`, `1 = 1`). Record the result in the
+   `TESTS.md` report.
 8. **Failure of `validate_query` call.** If the tool ends with a transport/server
    error (for example, `Тип не определен ...`), do not repeat it
    endlessly: at most one retry, then consider the query valid,

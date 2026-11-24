@@ -133,20 +133,24 @@ def _sha256_hex(text: str) -> str:
 
 
 def _sha256_variants(*texts: str) -> set[str]:
-    """Допустимые SHA-256: с BOM и без, с одним завершающим `\n` и без него.
+    """Допустимые SHA-256: с BOM и без, с завершающим `\n`/`\r\n` и без него.
 
     Файл модуля часто заканчивается переводом строки, а текст в аргументе `code`
-    приходит без него (и наоборот). Принимаем оба варианта плюс BOM-формы —
-    `sha256sum Module.bsl` продолжает работать независимо от последней строки.
+    приходит без него (и наоборот). На Windows текстовый режим пишет `\r\n`,
+    поэтому принимаем оба варианта плюс BOM-формы — `sha256sum Module.bsl`
+    продолжает работать независимо от последней строки и платформы.
     """
     variants: set[str] = set()
     for text in texts:
         for candidate in (text, _strip_bom(text)):
-            variants.add(_sha256_hex(candidate))
-            if candidate.endswith("\n"):
-                variants.add(_sha256_hex(candidate[:-1]))
-            else:
-                variants.add(_sha256_hex(candidate + "\n"))
+            bodies = {candidate}
+            if candidate.endswith("\r\n"):
+                bodies.add(candidate[:-2])
+            elif candidate.endswith("\n"):
+                bodies.add(candidate[:-1])
+            for body in bodies:
+                for suffix in ("", "\n", "\r\n"):
+                    variants.add(_sha256_hex(body + suffix))
     return variants
 
 

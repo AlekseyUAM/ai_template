@@ -51,17 +51,20 @@ _URL_RE = re.compile(r"^https?://", re.IGNORECASE)
 _BENCH_SETTINGS_ENV = {
     "PYTHONUTF8": "1",
     "PYTHONIOENCODING": "utf-8",
-    "MAX_MCP_OUTPUT_TOKENS": "8000",
-    "BASH_MAX_OUTPUT_LENGTH": "12000",
+    # Claude Code defaults: MCP 25000 токенов, Bash 30000 символов
+    # (допустимо 4000-128000). Для BSL LS и логов 1c-batch даём запас.
+    "MAX_MCP_OUTPUT_TOKENS": "50000",
+    "BASH_MAX_OUTPUT_LENGTH": "100000",
     "CLAUDE_CODE_TOTAL_TOKENS_REMINDER": "off",
+    "CLAUDE_CODE_EFFORT_LEVEL": "max",
 }
 _BENCH_SETTINGS_DENY = [
     "Agent", "Task", "SendMessage", "Workflow", "ListAgents",
     "ScheduleWakeup", "mcp__1c-md__execute_query",
 ]
-_BENCH_CLAUDE_MD_EXCLUDES = [
-    "**/cyclic-review-workflow.md", "**/run-unit-tests.md",
-]
+# Правила review/test грузим: для локальной модели дополнительный контекст
+# дисциплины важнее экономии токенов.
+_BENCH_CLAUDE_MD_EXCLUDES: list[str] = []
 
 
 class SetupError(RuntimeError):
@@ -229,8 +232,9 @@ def build_strata_settings(env: dict[str, str]) -> dict:
     settings: dict = {
         "env": merged,
         "permissions": {"deny": list(_BENCH_SETTINGS_DENY)},
-        "claudeMdExcludes": list(_BENCH_CLAUDE_MD_EXCLUDES),
     }
+    if _BENCH_CLAUDE_MD_EXCLUDES:
+        settings["claudeMdExcludes"] = list(_BENCH_CLAUDE_MD_EXCLUDES)
     model = merged.get("ANTHROPIC_MODEL")
     if model:
         settings["modelOverrides"] = {"claude-sonnet-4-6": model}
@@ -561,12 +565,35 @@ def _rmtree_force(path: Path) -> None:
     shutil.rmtree(path)
 
 
+def _assert_index_not_locked(project_dir: Path) -> None:
+    """Проверить, что code-index не держит индекс проекта.
+
+    Windows не удаляет открытый файл. Проверка переименованием дешевле и
+    надёжнее, чем надеяться на PID-файл: serve мог пережить остановку демона
+    и остаться без записи в `benchmark-pids.json`.
+    """
+    db = Path(project_dir) / "src" / "cf" / ".code-index" / "index.db"
+    if not db.is_file():
+        return
+    probe = db.with_name(db.name + ".probe")
+    try:
+        db.rename(probe)
+    except OSError as exc:
+        raise SetupError(
+            f"файл индекса занят процессом code-index: {db}. "
+            "Остановите bsl-indexer (serve/daemon) и повторите; "
+            "каталог и записи проекта не тронуты.") from exc
+    probe.rename(db)
+
+
 def remove_existing_project(cfg: BenchConfig, *, store, registry,
                             log=print) -> None:
     """Удалить существующий benchmark-проект: каталог, store и реестр.
 
     Используется режимом пересоздания setup'а. MCP-карточки не удаляются:
-    они переиспользуются по точному совпадению подключения.
+    они переиспользуются по точному совпадению подключения. Сначала проверяем,
+    что каталог можно удалить (code-index не держит индекс), и только потом
+    трогаем store и реестр — иначе сбой rmtree оставляет проект без записей.
     """
     project_dir = Path(cfg.project_dir)
     if project_dir.exists():
@@ -574,6 +601,10 @@ def remove_existing_project(cfg: BenchConfig, *, store, registry,
             raise SetupError(f"путь проекта не является каталогом: {project_dir}")
         if any(project_dir.iterdir()):
             _assert_deletable(project_dir)
+        # Демон code-index держит открытым src/cf/.code-index/index.db:
+        # на Windows rmtree падает с WinError 32, пока он жив.
+        code_index_bench.stop_code_index(cfg.code_index_dir)
+        _assert_index_not_locked(project_dir)
 
     removed = False
     project_repo = ProjectRepo(store)
@@ -591,9 +622,6 @@ def remove_existing_project(cfg: BenchConfig, *, store, registry,
             log(f"✓ удалена запись проекта из реестра: #{project.id} {project.name}")
 
     if project_dir.exists():
-        # Демон code-index держит открытым src/cf/.code-index/index.db:
-        # на Windows rmtree падает с WinError 32, пока он жив.
-        code_index_bench.stop_code_index(cfg.code_index_dir)
         _rmtree_force(project_dir)
         removed = True
         log(f"✓ удалён каталог проекта: {project_dir}")
@@ -1042,6 +1070,7 @@ def run_setup(cfg: BenchConfig, *, repo_root: Path, store, registry,
               batch_run=run_batch_step, launch_index=start_code_index,
               wait_index=wait_code_index_ready,
               strata_env: dict[str, str] | None = None,
+              strata_settings: dict | None = None,
               recreate: bool = False) -> SetupResult:
     """Полный сценарий подготовки проекта. Ошибка → откат записей БД.
 
@@ -1083,10 +1112,12 @@ def run_setup(cfg: BenchConfig, *, repo_root: Path, store, registry,
             log(f"[{event.step}] {event.status}{detail}")
 
         if cfg.strata_settings:
-            settings_env = (strata_env if strata_env is not None
-                            else fetch_strata_env(cfg.strata_cmd))
+            if strata_settings is None:
+                settings_env = (strata_env if strata_env is not None
+                                else fetch_strata_env(cfg.strata_cmd))
+                strata_settings = build_strata_settings(settings_env)
             write_strata_settings(
-                cfg.project_dir, build_strata_settings(settings_env), log=log)
+                cfg.project_dir, strata_settings, log=log)
 
         log("▶ база 1С")
         ensure_base(cfg, prov=prov, log=log)

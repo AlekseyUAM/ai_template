@@ -17,8 +17,13 @@ Use the task's existing artifacts: `ANALYZE.md` (specification), `ARCHITECT.md` 
 **Stage priority.** Working code first: module -> `check-modules` -> infobase load
 (`db-update start`, `load-config-optimized.py`, `db-update done`) -> run
 `run-tests.py` and bring tests to green -> `DEVELOP.md`.
-Static analysis (`bsl_ls`, `query-analyze`, `code-analyze`) and `validate_query` - after
-the load, one call per changed module and static query text.
+**Analysis is mandatory.** The `bsl_nudge` hook runs after `Edit`/`Write` and
+`meta-*` commands and injects the findings: `code-analyze`
+(`analyze_code.py` + `check_event_handlers.py`), `query-analyze`
+(`extract_queries.py` + `analyze_query.py`) and `check_metadata_names.py --changed`
+for metadata. `bsl_ls` remains a separate mandatory MCP call. Fix all error/warning
+before handover; if the hook did not run, use the fallback commands below. Skipping
+a layer is a process defect; record the final counts in `DEVELOP.md`.
 
 > **Accumulation registers.** If you create an accumulation register, before the IB load
 > check the registrars: documents with `RegisterRecords` and the register's `<Registrars>`.
@@ -75,20 +80,23 @@ the load, one call per changed module and static query text.
    `shasum -a 256 <файл>`) and pass it to `check`. Without `sha256` the tool
    will reject the call. Do not retype the module manually. The server strips a
    leading UTF-8 BOM itself; do not spend a turn checking the BOM manually.
-   For changed modules run `code-analyze`; for static query text
-   from the source - one `validate_query` call (substitution of the sort direction
-   via `СтрЗаменить` into a valid place does not require a separate validation; for
-   queries to new objects `validate_query` is deferred until the IB load).
-   At 0 `bsl_ls` findings proceed to the load; eliminate findings before handing over to
-   review; record the result in `DEVELOP.md`.
-   **Queries: `query-analyze` per changed module.** For each changed module with a query
-   run the `query-analyze` analyzer and record the result as a line in `DEVELOP.md`:
+   **Code and query analysis are run by the `bsl_nudge` hook after each edit**
+   (its output is the source of truth). If the hook did not run, execute the fallback
+   commands:
    ```bash
+   python .claude/skills/code-analyze/scripts/analyze_code.py <файл>
+   python .claude/skills/code-analyze/scripts/check_event_handlers.py <файл>
    python .claude/skills/query-analyze/scripts/extract_queries.py -Path <файл> \
        | python .claude/skills/query-analyze/scripts/analyze_query.py -
    ```
-   The line is `query-analyze: <файл> - найдено N (error/warning/info)`; a finding is
-   either fixed or goes into the waiver table (see below).
+   Exit code `2` from `extract_queries.py` means the query was not extracted - not a
+   clean result. Record the results in `DEVELOP.md`; a finding is either fixed or goes
+   into the waiver table (see below). A skipped layer is a process defect.
+   For static query text from the source - one `validate_query` call (substitution of
+   the sort direction via `СтрЗаменить` into a valid place does not require a separate
+   validation; for queries to new objects `validate_query` is deferred until the IB load).
+   At 0 `bsl_ls` findings proceed to the load; eliminate findings before handing over to
+   review; record the result in `DEVELOP.md`.
    **Main configuration compilation check (mandatory).** Before submitting
    the stage run the main configuration modules with the batch configurator - not in
    the background, `timeout: 600000` (10 min):
@@ -106,12 +114,14 @@ the load, one call per changed module and static query text.
    `run-tests.py` return code `3` - environment/license or module check timeout (600 s),
    including diagnostics after a session timeout - not a compilation error;
    `124` - a real session timeout.
-   **Metadata names.** After `meta-compile`/`meta-edit` check the changed
+   **Metadata names (mandatory for every metadata change).** After
+   `meta-compile`/`meta-edit`/`subsystem-compile`/`role-compile` check the changed
    XML for reserved system names:
    ```bash
    python .claude/skills/code-analyze/scripts/check_metadata_names.py --changed
    ```
-   Rename `reserved-system-name` findings before the IB load.
+   A metadata change without this run is a process defect; rename
+   `reserved-system-name` findings before the IB load.
 4. Bring tests to "green". Perform the configuration load into the IB,
    the DB update and the test run yourself per the `single-agent-workflow` rule:
    after `db-update done` run `.claude/tools/run-tests.py configs/task#<id>/test.json`,

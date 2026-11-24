@@ -84,15 +84,18 @@ Do not reread `developer.md` in full; for the stage it is enough:
 2. Metadata - `meta-compile`/`subsystem-compile`/`role-compile`, edits - `meta-edit`; files - by real `src/cf/**` paths.
 3. Accumulation registers: check the registrars (documents with `RegisterRecords`, the register's `<Registrars>`) before the infobase load.
 4. Compilation checks: **mandatory** `python .claude/tools/check-modules.py` (not in the background, `timeout: 600000` - 10 min); it runs `check-modules --thin-client --server` when at least one changed `.bsl` has code and skips metadata-only edits with empty modules. Fix client-context errors in code or by clearing the «Клиент» flag on the common module.
-5. Metadata names: `check_metadata_names.py --changed` - fix reserved system names before the infobase load.
+5. Metadata names (**mandatory for every metadata change**): `check_metadata_names.py --changed` - fix reserved system names before the infobase load.
 6. Tests: skeleton -> one scenario at a time; `Write`/`Edit` <=150 lines; check after each; full `check-modules.py` once at the end.
 7. Infobase load - per the section above; after success `db-update done`.
-8. Checks after the load: `check` with sha256, `code-analyze`, `validate_query`
-   on the static query text (one call); for new objects the check
+8. Checks after the load (**all layers are mandatory**): `bsl_ls` check with sha256;
+   **all** `code-analyze` scripts (`analyze_code.py` + `check_event_handlers.py`)
+   on every changed `.bsl`; `check_metadata_names.py --changed` for metadata;
+   **all** `query-analyze` steps (`extract_queries.py` + `analyze_query.py`) and
+   `validate_query` on the static query text (one call); for new objects the check
    is postponed. `validate_query: valid` - the text is accepted; `valid: false` -
    a defect in the text, fix it and check again; absence of the `valid` field
-   (transport/server) - one retry and record it in `DEVELOP.md`.
-   `Information` diagnostics of `bsl_ls` are not blocking.
+   (transport/server) - one retry and record it in `DEVELOP.md`. A missing layer is a
+   stage defect. `Information` diagnostics of `bsl_ls` are not blocking.
 9. Test run: `.claude/tools/run-tests.py configs/task#<id>/test.json`;
    fix red scenarios in the application code; the goal is all scenarios green
    within the stage limit. The run result and `validate_query: valid` go to `DEVELOP.md`.

@@ -60,3 +60,23 @@ def test_rules_present_and_valid():
         fm = _frontmatter(text)
         assert fm["name"] == name
         assert fm["description"]
+
+
+def test_mandatory_analyzers_are_documented():
+    """Все обязательные скрипты явно названы в чеклистах и навыках."""
+    code_scripts = ("analyze_code.py", "check_event_handlers.py")
+    query_scripts = ("extract_queries.py", "analyze_query.py")
+    for name in ("developer", "reviewer", "developer-tests"):
+        text = (CONTENT / "checklists" / f"{name}.md").read_text(encoding="utf-8")
+        for needle in code_scripts + query_scripts:
+            assert needle in text, f"{name}.md: нет {needle}"
+        assert "check_metadata_names.py --changed" in text, \
+            f"{name}.md: нет check_metadata_names.py --changed"
+    code_skill = (CONTENT / "skills" / "code-analyze" / "SKILL.md").read_text(
+        encoding="utf-8")
+    for needle in code_scripts + ("check_metadata_names.py --changed",):
+        assert needle in code_skill, f"code-analyze/SKILL.md: нет {needle}"
+    query_skill = (CONTENT / "skills" / "query-analyze" / "SKILL.md").read_text(
+        encoding="utf-8")
+    for needle in query_scripts:
+        assert needle in query_skill, f"query-analyze/SKILL.md: нет {needle}"

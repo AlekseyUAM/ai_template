@@ -25,6 +25,48 @@ ROOT = Path(__file__).resolve().parents[1]
 
 _LOCK_MARK = "Ошибка исключительной блокировки информационной базы"
 
+# Ключи профиля, которые печатаем после записи settings.local.json.
+_SETTINGS_SUMMARY_KEYS = (
+    "CLAUDE_CODE_EFFORT_LEVEL",
+    "MAX_MCP_OUTPUT_TOKENS",
+    "BASH_MAX_OUTPUT_LENGTH",
+    "CLAUDE_CODE_MAX_OUTPUT_TOKENS",
+    "CLAUDE_CODE_AUTO_COMPACT_WINDOW",
+)
+
+
+def settings_summary(settings: dict) -> str:
+    """Короткая строка действующего профиля (без секретов)."""
+    env = settings.get("env") if isinstance(settings, dict) else None
+    if not isinstance(env, dict):
+        return "—"
+    return ", ".join(f"{key}={env[key]}" for key in _SETTINGS_SUMMARY_KEYS
+                     if key in env)
+
+
+def apply_settings(cfg, *, fetch=None, build=None, write=None, log=print):
+    """Записать settings.local.json в существующий проект без пересоздания.
+
+    Профиль собирает `build_strata_settings` из `agentmon.env.bench_setup`
+    (effort=max, лимиты вывода, без claudeMdExcludes). Проект, store и
+    реестр не трогаются — это безопасный способ обновить настройки после
+    сбоя setup.
+    """
+    from agentmon.env.bench_setup import (
+        SetupError, build_strata_settings, fetch_strata_env,
+        write_strata_settings)
+    if not cfg.strata_settings:
+        raise SetupError(
+            "BENCH_STRATA_SETTINGS=1 не задан: профиль настроек не из чего "
+            "собрать. Включите его в test.env или настройте "
+            "settings.local.json вручную.")
+    if not Path(cfg.project_dir).is_dir():
+        raise SetupError(f"каталог проекта не найден: {cfg.project_dir}")
+    env = (fetch or fetch_strata_env)(cfg.strata_cmd)
+    settings = (build or build_strata_settings)(env)
+    log(f"  профиль: {settings_summary(settings)}")
+    return (write or write_strata_settings)(cfg.project_dir, settings, log=log)
+
 
 def run_setup_with_lock_retry(run_setup, *, attempts: int = 2,
                               delay: float = 30.0, sleep=time.sleep,
@@ -88,6 +130,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--env", default=str(ROOT / "benchmark" / "test.env"),
         help="путь к test.env (по умолчанию benchmark/test.env)")
+    parser.add_argument(
+        "--settings-only", action="store_true",
+        help="только записать <проект>/.claude/settings.local.json "
+             "и выйти, не пересоздавая проект (нужен BENCH_STRATA_SETTINGS=1)")
     args = parser.parse_args(argv)
 
     os.chdir(ROOT)
@@ -96,8 +142,9 @@ def main(argv: list[str] | None = None) -> int:
     try:
         from agentmon import config
         from agentmon.backends.local import LocalProvisioner
-        from agentmon.env.bench_setup import (SetupError, fetch_strata_env,
-                                               load_config, run_setup)
+        from agentmon.env.bench_setup import (SetupError, build_strata_settings,
+                                               fetch_strata_env, load_config,
+                                               run_setup)
         from agentmon.registry import ProjectRegistry, open_db
         from agentmon.store.db import connect
         from agentmon.store.schema import init_schema
@@ -117,16 +164,28 @@ def main(argv: list[str] | None = None) -> int:
         print(f"✗ {exc}", file=sys.stderr)
         return 1
 
+    if args.settings_only:
+        try:
+            path = apply_settings(cfg)
+        except SetupError as exc:
+            print(f"✗ {exc}", file=sys.stderr)
+            return 1
+        print(f"✓ настройки записаны: {path}")
+        return 0
+
     strata_env = None
+    strata_settings = None
     if cfg.strata_settings:
         try:
             strata_env = fetch_strata_env(cfg.strata_cmd)
+            strata_settings = build_strata_settings(strata_env)
         except SetupError as exc:
             print(f"✗ {exc}", file=sys.stderr)
             return 1
         print(f"✓ Strata: модель {strata_env.get('ANTHROPIC_MODEL', '—')}, "
               f"контекст "
               f"{strata_env.get('CLAUDE_CODE_MAX_CONTEXT_TOKENS', '—')}")
+        print(f"  профиль: {settings_summary(strata_settings)}")
 
     problem = docker_problem()
     if problem:
@@ -165,7 +224,7 @@ def main(argv: list[str] | None = None) -> int:
             lambda: run_setup(
                 cfg, repo_root=ROOT, store=store, registry=registry,
                 prov=LocalProvisioner(), strata_env=strata_env,
-                recreate=True),
+                strata_settings=strata_settings, recreate=True),
             log=print)
     except SetupError as exc:
         print(f"✗ {exc}", file=sys.stderr)
