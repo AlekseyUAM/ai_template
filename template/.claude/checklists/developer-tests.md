@@ -163,7 +163,8 @@ only `Error` and `Warning` that point to a real defect.
    is green before implementation; red ones fail on an assertion (expected/actual) or on
    the expected absence of not-yet-written functionality; the call under test is not
    wrapped in `Попытка` (the exception must reach the runner, except for the scenario with
-   expected refusal). A test that checks an expected value (for example,
+   expected refusal) and is made directly - no `ФоновыеЗадания.Выполнить`, `Выполнить`,
+   `Вычислить` or invented dynamic calls. A test that checks an expected value (for example,
    `СтоимостьРасход = 300`), on empty code is red: 0/`NULL` is not equal to 300; green before
    implementation can only be a test comparing state before/after ("did not
    change") - it must be strengthened.
@@ -264,6 +265,8 @@ the full set again last.
 - red ones return `Результат = Ложь` on an assertion, and `ОписаниеОшибки` records
   the expectation/actual (or an exception of the expected absence of functionality);
 - the call under test is not wrapped in `Попытка` (except the expected-refusal scenario);
+- the code under test is called directly: the test module contains no
+  `ФоновыеЗадания.Выполнить`, `Выполнить`, `Вычислить` and no invented dynamic calls;
 - a test comparing state before/after ("did not change") cannot be green before
   implementation - strengthen it;
 - **on an empty implementation, absence of movements is a normal red result.**
@@ -300,38 +303,28 @@ all `Результат=false` and red ones fail on an assertion.
    (`ЮТ_ТестированиеСервер.Тестирование`) already wraps each scenario in `Попытка` and
    writes the exception text into `ОписаниеОшибки`. A wrapper hides the failure cause from
    `result.json` and makes diagnostics expensive.
-2. **`Попытка` - only for expected refusal** (the scenario checks that posting/writing
+2. **Only direct calls of the code under test - no dynamic execution.** In the test code
+   of the `ЮнитТесты` extension the constructs `ФоновыеЗадания.Выполнить`, `Выполнить`
+   and `Вычислить` are forbidden, as are invented wrappers and dynamic calls like
+   `Новый("Модуль", "Функция")`. Call the code under test directly by name
+   (`ИмяМодуля.ИмяФункции(...)`), even if the function is not written yet: a call to a
+   missing common-module method compiles and fails only at run time - this is the normal
+   Red result.
+3. **`Попытка` - only for expected refusal** (the scenario checks that posting/writing
    is rejected); in all other cases the exception must reach the runner.
-3. **Do not declare procedures/functions with platform names** (for example,
+4. **Do not declare procedures/functions with platform names** (for example,
    `ПодробноеОписаниеОшибки`): a local function shadows the global one, and a call inside its body
    becomes recursion (stack overflow, session hang). For the error text use
    `ОписаниеОшибки()` or `ПодробноеПредставлениеОшибки(ИнформацияОбОшибке())`.
-4. **Check signatures** before use: `1c_platform` (rule `mcp-usage`);
-5. **Clarify metadata names via `code_index`, do not guess**: full names of
-   catalogs, documents, registers, attributes and their types check against the configuration
-   code index. A guessed name does not exist in the infobase - the test fails at runtime.
-6. Do not weaken checks and expected values for a "green" run and do not adjust
+5. Do not weaken checks and expected values for a "green" run and do not adjust
    the check to the actual implementation: if the expectation follows from the TS or the platform
    model (for example, for a balance register - `ВидДвижения` and `Обороты.РесурсРасход`),
    and the code gives something else, record the discrepancy, do not rewrite the check. If in doubt
    about the API, check against the configuration code.
-7. **Check queries in the test module with `query-analyze`.** Every written/changed
-   query text (including helper queries) run with the `query-analyze` skill: **both**
-   scripts (`extract_queries.py` + `analyze_query.py`) and `validate_query` on the
-   literal exactly as it is written in the source. Exit code `2` from
-   `extract_queries.py` means the query was not extracted - not a clean result.
-   Stubs `!...!`, `%1`, `{0}` in the query text are forbidden; substitution - only
-   into valid places (`&ОсобыйПараметр`, `1 = 1`). Record the result in the
-   `TESTS.md` report.
-8. **Failure of `validate_query` call.** If the tool ends with a transport/server
-   error (for example, `Тип не определен ...`), do not repeat it
-   endlessly: at most one retry, then consider the query valid,
-   record the failure in `TESTS.md` and continue.
-9. **`bsl_ls` and dates.** `bsl_ls` does not parse date literals `#...#` (ParseError);
-   use `Дата(Год, Месяц, День)` or `Дата(Год, Месяц, День, Час, Мин, Сек)`.
-   Do not waste time on a diagnostic probe of this limitation.
-10. **Arrays.** `Массив` has no `Соединить` method; use
-    `СтрСоединить(Массив, Разделитель)`.
+
+Common coding errors - signatures and collections, metadata names, query checks,
+`validate_query` failures, `bsl_ls` date literals - are mandatory as well: see
+[typical coding errors](../rules/coding-errors.md).
 
 ## Output
 `TESTS.md` file in the task directory: created tests, test module name, path to the run

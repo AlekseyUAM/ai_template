@@ -23,6 +23,9 @@ Severity as in the other references: `[critical]` = error, `[important]` = warni
 
 ## Slice queries
 
+- [critical] **Do not emulate the slice by hand.** If the task needs the record(s) that are
+  current as of a date or the latest record per dimension combination, use
+  `СрезПоследних`/`СрезПервых`.
 - [critical] **Dimension filters - in the virtual table parameters, not in `ГДЕ`
   after the slice.** `СрезПоследних(&Дата, Измерение1 = &Значение1)` filters records before
   computing the slice; the same filter in `ГДЕ` forces the platform to first read all
@@ -97,6 +100,8 @@ before reading `[0]`.
 
 ## Checklist before submission
 
+- [ ] The latest record per dimension combination is taken with `СрезПоследних`/`СрезПервых`,
+      not by a hand-written `МАКСИМУМ(Период)` join.
 - [ ] Dimension filters are in the parameters of `СрезПоследних`/`СрезПервых`.
 - [ ] If the slice is always by date, the slice totals table is not enabled without a reason.
 - [ ] For history the register itself is used, not a slice.

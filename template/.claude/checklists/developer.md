@@ -30,6 +30,10 @@ a layer is a process defect; record the final counts in `DEVELOP.md`.
 > Without matched registrars the load fails ("Ни один из документов не
 > является регистратором").
 
+**Common coding errors.** Signatures and collections, metadata names, query checks,
+`validate_query` failures, `bsl_ls` date literals - see
+[typical coding errors](../rules/coding-errors.md); they are mandatory at this stage.
+
 1. Search for existing code before writing new (rule search-before-write).
 2. Write minimal BSL code per the standards (skill bsl-coding-standards).
    **Posting logic** - implement per `ARCHITECT.md`: it already accounts for
@@ -40,6 +44,10 @@ a layer is a process defect; record the final counts in `DEVELOP.md`.
    - [locks](../skills/bsl-coding-standards/reference/locks.md);
    - [boundary and point in time](../skills/bsl-coding-standards/reference/boundary-and-moment.md);
    - [movement deletion](../skills/bsl-coding-standards/reference/movements-deletion.md).
+   **Registers.** Any task that touches registers - read the relevant reference in full
+   before designing the solution:
+   - accumulation registers - [accumulation registers](../skills/bsl-coding-standards/reference/accumulation-registers.md);
+   - information registers - [information registers](../skills/bsl-coding-standards/reference/information-registers.md).
    **Queries** - write per the `query-review` checklist (indexes; `ЕСТЬNULL` on a left
    join with balances; static text must open in the Configurator;
    the source query text exactly as written must pass `validate_query`;
@@ -70,9 +78,7 @@ a layer is a process defect; record the final counts in `DEVELOP.md`.
    via `Write`/`Edit` at real paths. `tmp/` - for generated JSON and
    intermediate data; write the final version of the module directly into the target file.
    **DCS and reports** - before editing the schema/report read in full
-   [DCS specifics](../skills/bsl-coding-standards/reference/skd-specifics.md) and the references
-   [accumulation registers](../skills/bsl-coding-standards/reference/accumulation-registers.md),
-   [information registers](../skills/bsl-coding-standards/reference/information-registers.md).
+   [DCS specifics](../skills/bsl-coding-standards/reference/skd-specifics.md).
    Implement per the TS and these rules; before submitting, perform the checks from `skd-specifics.md`
    (`skd-validate -ExpectedFields`, `skd-info -Mode variant`).
 3. After edits run static analysis (rule verify-with-syntax-checker);
