@@ -25,9 +25,14 @@ from `.bsl-language-server.json`) and eliminate the found errors before moving t
 next step. Do not call the `bsl-language-server` binary directly. Do not consider the
 task done until static analysis is clean.
 
-Before the call compute the file's sha256 (`sha256sum <файл>` or
-`shasum -a 256 <файл>`) and pass it to `check`. Without `sha256` the tool
-will reject the call. Do not retype the module manually.
+Pass the module text in `code` together with `sha256` of that exact text.
+Without `sha256` the tool will reject the call. Do not retype the module manually.
+
+**Do not use `file_path`.** The MCP server runs in a stateless Docker container
+without the project filesystem: it cannot read project files, and the call fails
+with "не удалось прочитать file_path". Compute `sha256` from the exact text you
+send (`sha256sum <файл>` or `shasum -a 256 <файл>` is fine when the text is sent
+unchanged; if the text was edited, hash the edited text).
 
 **BOM:** the server strips the leading UTF-8 BOM itself before analysis (BSL LS crashes on
 it with `ParseError`). Both the `sha256` of the file with a BOM (`sha256sum`) and of the

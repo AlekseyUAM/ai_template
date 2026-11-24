@@ -7,7 +7,8 @@ SKILLS = {"mcp-usage", "bsl-coding-standards", "sdd-tdd-workflow",
           "query-analyze", "query-review"}
 RULES = {"search-before-write", "verify-with-syntax-checker", "task-artifacts",
          "task-lifecycle", "cyclic-review-workflow", "optimized-config-loading",
-         "run-unit-tests", "user-feedback", "single-agent-workflow"}
+         "run-unit-tests", "user-feedback", "single-agent-workflow",
+         "coding-errors"}
 
 
 def _frontmatter(text: str) -> dict:

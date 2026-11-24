@@ -14,9 +14,11 @@ Use the task's existing artifacts: `ANALYZE.md` (specification), `ARCHITECT.md` 
 
 ## Steps
 
-**Stage priority.** Working code first: module -> `check-modules` -> infobase load
-(`db-update start`, `load-config-optimized.py`, `db-update done`) -> run
-`run-tests.py` and bring tests to green -> `DEVELOP.md`.
+**Stage priority.** Working code first: module -> infobase load
+(`db-update start`, `load-config-optimized.py`, `db-update done`) ->
+`check-modules` -> run `run-tests.py` and bring tests to green -> `DEVELOP.md`.
+`/CheckModules` checks the configuration loaded in the IB, so it must run after
+the load - otherwise it checks the previous state instead of the current changes.
 **Analysis is mandatory.** The `bsl_nudge` hook runs after `Edit`/`Write` and
 `meta-*` commands and injects the findings: `code-analyze`
 (`analyze_code.py` + `check_event_handlers.py`), `query-analyze`
@@ -77,15 +79,20 @@ a layer is a process defect; record the final counts in `DEVELOP.md`.
    **Final files - in place.** Create and edit `src/cf/**/*.bsl` and `src/cfe/**`
    via `Write`/`Edit` at real paths. `tmp/` - for generated JSON and
    intermediate data; write the final version of the module directly into the target file.
+   A module file created by `meta-compile` is empty (BOM + newline): `Read` it before
+   the first `Write`, otherwise the `Write` is rejected and the text has to be
+   generated again.
    **DCS and reports** - before editing the schema/report read in full
    [DCS specifics](../skills/bsl-coding-standards/reference/skd-specifics.md).
    Implement per the TS and these rules; before submitting, perform the checks from `skd-specifics.md`
    (`skd-validate -ExpectedFields`, `skd-info -Mode variant`).
 3. After edits run static analysis (rule verify-with-syntax-checker);
-   before the call compute the file's sha256 (`sha256sum <файл>` or
-   `shasum -a 256 <файл>`) and pass it to `check`. Without `sha256` the tool
-   will reject the call. Do not retype the module manually. The server strips a
-   leading UTF-8 BOM itself; do not spend a turn checking the BOM manually.
+   pass the text in `code` with the `sha256` of exactly that text
+   (`sha256sum <файл>` or `shasum -a 256 <файл>` when the file is sent unchanged).
+   Without `sha256` the tool will reject the call. Do not pass `file_path`: the
+   server container does not see the project filesystem. Do not retype the module
+   manually. The server strips a leading UTF-8 BOM itself; do not spend a turn
+   checking the BOM manually.
    **Code and query analysis are run by the `bsl_nudge` hook after each edit**
    (its output is the source of truth). If the hook did not run, execute the fallback
    commands:
@@ -103,23 +110,6 @@ a layer is a process defect; record the final counts in `DEVELOP.md`.
    validation; for queries to new objects `validate_query` is deferred until the IB load).
    At 0 `bsl_ls` findings proceed to the load; eliminate findings before handing over to
    review; record the result in `DEVELOP.md`.
-   **Main configuration compilation check (mandatory).** Before submitting
-   the stage run the main configuration modules with the batch configurator - not in
-   the background, `timeout: 600000` (10 min):
-   ```bash
-   python .claude/tools/check-modules.py
-   ```
-   The wrapper runs `1c-batch check-modules --thin-client --server` when at least one
-   changed `.bsl` has code. For a metadata-only task, where every changed module is
-   empty (BOM + newline), it skips the minute-long check. Extension modules are still
-   checked by `run-tests.py`.
-   A compilation error in `src/cf` would otherwise pop up as a modal window and hang
-   the enterprise; client context errors (for example, `Новый Запрос` in a common
-   module with the "Client" flag) fix with code or by clearing the module flag.
-   The `run-tests.py` precheck complements this check but does not replace it. The
-   `run-tests.py` return code `3` - environment/license or module check timeout (600 s),
-   including diagnostics after a session timeout - not a compilation error;
-   `124` - a real session timeout.
    **Metadata names (mandatory for every metadata change).** After
    `meta-compile`/`meta-edit`/`subsystem-compile`/`role-compile` check the changed
    XML for reserved system names:
@@ -129,8 +119,27 @@ a layer is a process defect; record the final counts in `DEVELOP.md`.
    A metadata change without this run is a process defect; rename
    `reserved-system-name` findings before the IB load.
 4. Bring tests to "green". Perform the configuration load into the IB,
-   the DB update and the test run yourself per the `single-agent-workflow` rule:
-   after `db-update done` run `.claude/tools/run-tests.py configs/task#<id>/test.json`,
+   the DB update and the test run yourself per the `single-agent-workflow` rule.
+   **Order: load -> `check-modules.py` -> `run-tests.py`**: the compile check
+   must see the loaded configuration.
+   **Main configuration compilation check (mandatory).** After `db-update done`
+   run the main configuration modules with the batch configurator - not in
+   the background, `timeout: 600000` (10 min):
+   ```bash
+   python .claude/tools/check-modules.py
+   ```
+   The wrapper runs `1c-batch check-modules --thin-client --server` when at least one
+   changed `.bsl` has code. For a metadata-only task, where every changed module is
+   empty (BOM + newline), it skips the minute-long check. The successful result is
+   cached by the source-tree hash; `run-tests.py` reuses that cache and still checks
+   the extension modules itself.
+   A compilation error in `src/cf` would otherwise pop up as a modal window and hang
+   the enterprise; client context errors (for example, `Новый Запрос` in a common
+   module with the "Client" flag) fix with code or by clearing the module flag. The
+   `run-tests.py` return code `3` - environment/license or module check timeout
+   (600 s), including diagnostics after a session timeout - not a compilation error;
+   `124` - a real session timeout.
+   Then run `.claude/tools/run-tests.py configs/task#<id>/test.json`,
    fix red tests in the applied code and repeat the run until all scenarios
    become green (within the stage limit). Leave the test module unchanged.
    Record the run result and `validate_query: valid` in `DEVELOP.md`.

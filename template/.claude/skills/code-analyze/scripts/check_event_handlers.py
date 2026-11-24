@@ -42,6 +42,9 @@ import bsl_model  # noqa: E402
 
 DATA_PATH = Path(__file__).with_name("event_handlers.json")
 
+# Модули форм не проверяются в v1: это не ошибка вида модуля, а осознанный пропуск.
+FORM_MODULE_SKIP = "модуль формы (в v1 не проверяется)"
+
 TYPE_DIRS = {
     "Catalogs": "Catalog", "Documents": "Document",
     "DocumentJournals": "DocumentJournal", "Enums": "Enum",
@@ -110,7 +113,7 @@ def infer_module_key(path: str):
     lower = [p.lower() for p in parts]
 
     if "forms" in lower or "commonforms" in lower:
-        return None, None, "модуль формы (в v1 не проверяется)"
+        return None, None, FORM_MODULE_SKIP
     if base in APP_MODULES:
         return APP_MODULES[base], None, ""
     for i, part in enumerate(lower):
@@ -137,7 +140,7 @@ def infer_module_key(path: str):
             return "CommonModule.Module", obj, ""
         return None, obj, "общий модуль: не Module.bsl"
     if meta == "CommonForm":
-        return None, obj, "модуль формы (в v1 не проверяется)"
+        return None, obj, FORM_MODULE_SKIP
     if "Ext" in parts[found + 2:]:
         kind = MODULE_FILES.get(base)
         if kind:
@@ -444,6 +447,9 @@ def main(argv=None) -> int:
         if args.object_name:
             obj = args.object_name
     if key is None:
+        if reason == FORM_MODULE_SKIP:
+            print(f"⏭️  {source}: {reason}.")
+            return 0
         print(f"Не удалось определить вид модуля: {reason}. "
               f"Укажите --module-type (см. --list-module-types).",
               file=sys.stderr)

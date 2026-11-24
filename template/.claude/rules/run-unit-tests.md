@@ -126,6 +126,12 @@ the cache is invalidated by any change of `.bsl`/`.xml` in the checked directory
 main configuration smoke check use `--no-check-main`: it does not change at the
 `tests` stage, while the extension is always checked.
 
+The same `logs/.check-modules-cache/cf.json` is written by
+`.claude/tools/check-modules.py` after the infobase load. The sources are already
+loaded at that point, so `run-tests.py` reuses the result and does not compile the
+main configuration a second time. Do not run `check-modules.py` before the load:
+`/CheckModules` would check the previous configuration state.
+
 ### Session timeout
 
 The enterprise is started with a timeout of `--timeout СЕК` (default `600`). After it expires

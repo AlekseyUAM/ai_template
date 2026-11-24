@@ -258,6 +258,26 @@ def test_cli_infers_type_from_path(tmp_path, capsys):
     assert "Заказ" in out
 
 
+def test_cli_form_module_is_skipped_with_zero(tmp_path, capsys):
+    ext = tmp_path / "src" / "cf" / "Documents" / "Заказ" / "Forms" / "ФормаДокумента" / "Ext" / "Form"
+    ext.mkdir(parents=True)
+    module = ext / "Module.bsl"
+    module.write_text("&НаКлиенте\nПроцедура ПриОткрытии(Отказ)\nКонецПроцедуры\n",
+                      encoding="utf-8")
+    rc = ceh.main([str(module)])
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert "не проверяется" in (captured.out + captured.err)
+
+
+def test_cli_unknown_module_kind_is_environment_error(tmp_path):
+    ext = tmp_path / "src" / "cf" / "Documents" / "Заказ" / "Ext"
+    ext.mkdir(parents=True)
+    module = ext / "UnknownModule.bsl"
+    module.write_text("Процедура А()\nКонецПроцедуры\n", encoding="utf-8")
+    assert ceh.main([str(module)]) == 2
+
+
 def test_cli_stdin_requires_module_type(monkeypatch, capsys):
     monkeypatch.setattr(sys, "stdin", io.StringIO(
         "Процедура ОбработкаПроведения(Отказ, РежимПроведения)\n"

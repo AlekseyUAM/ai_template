@@ -58,7 +58,10 @@ additional checks "just in case" nor scenarios for adjacent cases.
 3. After each scenario - check only the changed file: `bsl_ls`/`check`, invoke the
    `code-analyze` skill and run **all** its scripts (`analyze_code.py` +
    `check_event_handlers.py`); full `check-modules` - once at the end. A skipped
-   analyzer is a process defect.
+   analyzer is a process defect. If the scenario text contains a query, run the
+   full `query-analyze` chain on it: `extract_queries.py` + `analyze_query.py`
+   (plus `validate_query` when available) - the same mandatory layer as in the
+   `develop` checklist.
 4. The next scenario - only after successful check of the previous one.
 5. Do not rewrite the module entirely and do not re-read it after each edit: edit
    pointwise (`Edit`), `Read` - only the needed range.
@@ -86,7 +89,9 @@ only `Error` and `Warning` that point to a real defect.
 1. Add to the `ЮнитТесты` extension a new common module of test scenarios following the sample
    `ЮТ_ТестыПример`. Name - meaningful (for example, `ЮТ_<Задача>`). Create the module
    metadata with the `meta-compile` skill (CommonModule in the extension); do not edit
-   `Configuration.xml`/`ConfigDumpInfo.xml` manually. After `meta-compile` run
+   `Configuration.xml`/`ConfigDumpInfo.xml` manually. The created `Module.bsl` is empty:
+   `Read` it before the first `Write`, otherwise the `Write` is rejected and the text
+   has to be generated again. After `meta-compile` run
    `check_metadata_names.py --changed` (mandatory for every metadata change).
 2. In the common module declare an export function `Сценарии()` - it returns `Массив`
    of names of export test functions of this module:

@@ -83,11 +83,10 @@ Do not reread `developer.md` in full; for the stage it is enough:
 1. Input: `TASK.md`, `ANALYZE.md`, `ARCHITECT.md`, tests; existing code - via `code_index`.
 2. Metadata - `meta-compile`/`subsystem-compile`/`role-compile`, edits - `meta-edit`; files - by real `src/cf/**` paths.
 3. Accumulation registers: check the registrars (documents with `RegisterRecords`, the register's `<Registrars>`) before the infobase load.
-4. Compilation checks: **mandatory** `python .claude/tools/check-modules.py` (not in the background, `timeout: 600000` - 10 min); it runs `check-modules --thin-client --server` when at least one changed `.bsl` has code and skips metadata-only edits with empty modules. Fix client-context errors in code or by clearing the «Клиент» flag on the common module.
-5. Metadata names (**mandatory for every metadata change**): `check_metadata_names.py --changed` - fix reserved system names before the infobase load.
-6. Tests: skeleton -> one scenario at a time; `Write`/`Edit` <=150 lines; check after each; full `check-modules.py` once at the end.
-7. Infobase load - per the section above; after success `db-update done`.
-8. Checks after the load (**all layers are mandatory**): `bsl_ls` check with sha256;
+4. Metadata names (**mandatory for every metadata change**): `check_metadata_names.py --changed` - fix reserved system names before the infobase load.
+5. Tests: skeleton -> one scenario at a time; `Write`/`Edit` <=150 lines; check after each; full compile check once at the end (after the load, step 7).
+6. Infobase load - per the section above; after success `db-update done`.
+7. Checks after the load (**all layers are mandatory**). First the main-config compile check - **mandatory** `python .claude/tools/check-modules.py` (not in the background, `timeout: 600000` - 10 min): `/CheckModules` sees only the configuration loaded in the IB, so it must run after the load; before the load it would check the previous state. The successful result is cached by the source-tree hash and reused by `run-tests.py`; metadata-only edits with empty modules are skipped. Fix client-context errors in code or by clearing the «Клиент» flag on the common module. Then `bsl_ls` check with sha256;
    **all** `code-analyze` scripts (`analyze_code.py` + `check_event_handlers.py`)
    on every changed `.bsl`; `check_metadata_names.py --changed` for metadata;
    **all** `query-analyze` steps (`extract_queries.py` + `analyze_query.py`) and
@@ -96,12 +95,12 @@ Do not reread `developer.md` in full; for the stage it is enough:
    a defect in the text, fix it and check again; absence of the `valid` field
    (transport/server) - one retry and record it in `DEVELOP.md`. A missing layer is a
    stage defect. `Information` diagnostics of `bsl_ls` are not blocking.
-9. Test run: `.claude/tools/run-tests.py configs/task#<id>/test.json`;
+8. Test run: `.claude/tools/run-tests.py configs/task#<id>/test.json`;
    fix red scenarios in the application code; the goal is all scenarios green
    within the stage limit. The run result and `validate_query: valid` go to `DEVELOP.md`.
-10. `DEVELOP.md`: changes, checks, waivers, postponed checks; then
+9. `DEVELOP.md`: changes, checks, waivers, postponed checks; then
     `develop done --files <файлы>`.
-11. Do not read `Configuration.xml` and `ConfigDumpInfo.xml` in full - only the required range or `meta-info`/`cf-info`.
+10. Do not read `Configuration.xml` and `ConfigDumpInfo.xml` in full - only the required range or `meta-info`/`cf-info`.
 
 ## Tests (`testing: true`)
 Run `.claude/tools/run-tests.py` (see the `run-unit-tests` rule), log in

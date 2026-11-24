@@ -16,6 +16,7 @@ The servers are listed below, each covers its own class of tasks. The general pr
 | Structure/composition/links of a metadata object | `code_index` | `get_object_profile` / `get_object_structure` |
 | Platform API reference (types, methods, properties, constructors) | `1c_platform` | `search` → `info` |
 <!-- @if 1c-md -->
+| Metadata of the current infobase (objects, structure, data) | `1c-md` | `list_metadata_objects` / `execute_query` |
 | Validate query syntax against infobase metadata | `1c-md` | `validate_query` |
 <!-- @endif -->
 <!-- @if 1c_naparnic -->
@@ -136,10 +137,25 @@ A 1C extension with the `mcp_APIBackend` HTTP service on the infobase web public
 `code_index`, it works not with XML sources but with the **current infobase
 metadata**.
 
+- **`list_metadata_objects`** (`metaType` - required, e.g. `Catalogs`, `Documents`,
+  `InformationRegisters`; `nameMask` - substring in name or synonym; `maxItems` -
+  100 by default) - metadata objects with full names and synonyms. This tool does
+  **not** exist in `code_index`: `mcp__code_index__list_metadata_objects` will fail.
+  There the object list is `get_object_structure(name_like=...)` or `bsl_sql`.
+- **`get_metadata_structure`** (`metaType`, `name` without the type prefix) -
+  attributes, tabular sections, register dimensions/resources with their types.
+  Use it before building a query.
+- **`execute_query`** (`queryText`, `parameters`, `limit` up to 1000) - executes a
+  SELECT and returns data; reference fields come as `{_objectRef,
+  УникальныйИдентификатор, ТипОбъекта, Представление}` and can be passed to the next
+  query. The call may be disabled by the access policy (benchmark deny-list) - then
+  use `code_index.bsl_sql`.
 - **`validate_query`** (`queryText` - query text) - syntax validation
   by the platform (`СхемаЗапроса.УстановитьТекстЗапроса`), without execution and without
   accessing data. Returns `valid` and `message`. This is the most accurate layer of
   syntax and name validation: the platform itself validates against the current infobase composition.
+- **`parse_nav_link`** (`navLink`) and **`get_nav_link`** (`objectDescription`) -
+  convert an `e1cib/data/...` navigation link to an object description and back.
 
 **Text format:** `queryText` is the concatenated query text **without leading
 `|`** and without outer quotes; the tool is not a 1C literal parser. A literal

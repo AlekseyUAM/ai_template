@@ -21,7 +21,11 @@ the platform (for incremental dump).
 
 1. Compose JSON using the syntax below -> write it to a temporary file.
 2. Run the script.
-3. Modify the created object - `/meta-edit`; validate - `/meta-validate`.
+3. The script creates empty module files (BOM + newline) and prints their paths as
+   `Module: ...`. Before the first `Write` into a created module, `Read` it:
+   `Write` into an existing file that has not been read is rejected ("File has not
+   been read yet"), and the whole module text has to be generated again.
+4. Modify the created object - `/meta-edit`; validate - `/meta-validate`.
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/meta-compile.py" -JsonPath "<json>" -OutputDir "<ConfigDir>"

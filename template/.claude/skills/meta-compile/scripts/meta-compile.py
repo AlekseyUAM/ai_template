@@ -5964,6 +5964,10 @@ if details:
 for mc in modules_created:
     print(f'     Module: {mc}')
 
+if any(str(mc).lower().endswith('.bsl') for mc in modules_created):
+    print('[HINT] Модули созданы пустыми: перед первым Write прочитайте файл '
+          '(Read) — Write в непрочитанный существующий файл отклоняется.')
+
 if reg_result == 'added':
     print(f'     Configuration.xml: <{child_tag}>{obj_name}</{child_tag}> added to ChildObjects')
 elif reg_result == 'already':
