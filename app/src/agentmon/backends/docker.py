@@ -5,11 +5,14 @@
 чтобы тесты шли без реального докера.
 """
 import hashlib
+import json
 import logging
+import os
 import posixpath
 import re
 import shlex
 import subprocess
+import sys
 import tempfile
 import time
 from pathlib import Path
@@ -17,6 +20,7 @@ from pathlib import Path
 from . import BUFFER_LIMIT, Backend, RunResult, is_cruft
 from ..models import FileRef
 from .. import pty_process
+from ..env.agent_setup import container_command
 
 logger = logging.getLogger(__name__)
 
@@ -170,7 +174,7 @@ class _DockerContainer:
         self._claude_volume = claude_volume
         self._claude_home = claude_home
         self._add_hosts = add_hosts if add_hosts is not None else ["host.docker.internal:host-gateway"]
-        self._env = {"DISPLAY": ":99", **(env or {})}
+        self._env = {"DISPLAY": ":99", "HOME": "/root", **(env or {})}
         self._extra_volumes = list(extra_volumes or [])
         self._extra_run_args = list(extra_run_args or [])
         self._run = run
@@ -359,13 +363,16 @@ class _DockerContainer:
     # ------------------------------------------------------------------
 
     def exec_run(self, argv: list[str], cwd: str | None = None,
-                 timeout: float | None = None) -> RunResult:
+                 timeout: float | None = None,
+                 env: dict | None = None) -> RunResult:
         """Выполнить команду внутри контейнера через ``docker exec``.
 
         Возвращает ``RunResult(returncode, stdout, stderr)``.
         При timeout → ``RunResult(124, ..., ...\\n<timeout>)``.
         """
         tail = ["exec"]
+        for key, value in (env or {}).items():
+            tail += ["-e", f"{key}={value}"]
         if cwd:
             tail += ["-w", cwd]
         tail.append(self._name)
@@ -377,6 +384,37 @@ class _DockerContainer:
             stdout = (e.stdout or "") if isinstance(e.stdout, str) else ""
             stderr = (e.stderr or "") if isinstance(e.stderr, str) else ""
             return RunResult(124, stdout, stderr + "\n<timeout>")
+        return RunResult(
+            returncode=r.returncode,
+            stdout=(r.stdout or ""),
+            stderr=(r.stderr or ""),
+        )
+
+    def exec_detached(self, argv: list[str], cwd: str | None = None,
+                      env: dict | None = None) -> RunResult:
+        """Запустить процесс в контейнере detached (``docker exec -d``)."""
+        tail = ["exec", "-d"]
+        for key, value in (env or {}).items():
+            tail += ["-e", f"{key}={value}"]
+        if cwd:
+            tail += ["-w", cwd]
+        tail.append(self._name)
+        tail.extend(argv)
+        r = self._run(self._argv(tail), capture_output=True, text=True)
+        return RunResult(
+            returncode=r.returncode,
+            stdout=(r.stdout or ""),
+            stderr=(r.stderr or ""),
+        )
+
+    def copy_in(self, local_path, dst: str) -> RunResult:
+        """Скопировать файл с хоста в контейнер (``docker cp``)."""
+        parent = posixpath.dirname(dst)
+        if parent:
+            self.exec_run(["mkdir", "-p", parent])
+        r = self._run(
+            self._argv(["cp", str(local_path), f"{self._name}:{dst}"]),
+            capture_output=True, text=True)
         return RunResult(
             returncode=r.returncode,
             stdout=(r.stdout or ""),
@@ -440,9 +478,12 @@ class DockerProvisioner:
     Перед каждой операцией вызывает ``_ensure()`` — контейнер поднимается лениво.
     """
 
-    def __init__(self, container: _DockerContainer, workdir: str = DEFAULT_WORKDIR):
+    def __init__(self, container: _DockerContainer, workdir: str = DEFAULT_WORKDIR,
+                 seed_trust_project: str | None = None):
         self._container = container
         self._workdir = workdir
+        self._seed_project = seed_trust_project
+        self._trust_seeded = False
 
     # ------------------------------------------------------------------
     # Вспомогательный метод
@@ -451,6 +492,40 @@ class DockerProvisioner:
     def _ensure(self) -> None:
         """Убедиться, что контейнер запущен (вызывается в начале каждой операции)."""
         self._container.ensure()
+        self._seed_trust()
+
+    def _seed_trust(self) -> None:
+        """Отметить каталог проекта доверенным для claude (best-effort)."""
+        if self._trust_seeded or not self._seed_project:
+            return
+        try:
+            res = self._container.exec_run(["sh", "-c", 'printf %s "$HOME"'])
+            home = (res.stdout or "").strip() or "/root"
+            path = f"{home.rstrip('/')}/.claude.json"
+            data = {}
+            if self._container.exec_run(["test", "-e", path]).returncode == 0:
+                raw = self._container.exec_run(["cat", path]).stdout or ""
+                try:
+                    data = json.loads(raw)
+                except ValueError:
+                    data = {}
+            if not isinstance(data, dict):
+                data = {}
+            projects = data.setdefault("projects", {})
+            if not isinstance(projects, dict):
+                projects = data["projects"] = {}
+            entry = projects.setdefault(str(self._seed_project), {})
+            if not isinstance(entry, dict):
+                entry = projects[str(self._seed_project)] = {}
+            entry["hasTrustDialogAccepted"] = True
+            payload = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
+            res = self._container.exec_input(
+                ["sh", "-c", f"cat > {shlex.quote(path)}"],
+                payload.encode("utf-8"))
+            if res.returncode == 0:
+                self._trust_seeded = True
+        except Exception:                              # noqa: BLE001
+            pass
 
     # ------------------------------------------------------------------
     # Файловые операции
@@ -570,10 +645,24 @@ class DockerProvisioner:
     # ------------------------------------------------------------------
 
     def run(self, cmd: list[str], cwd: str | None = None,
-            timeout: float | None = None) -> RunResult:
+            timeout: float | None = None,
+            env: dict | None = None) -> RunResult:
         """Выполнить команду внутри контейнера. При timeout → RunResult(124, ..., ...\\n<timeout>)."""
         self._ensure()
-        return self._container.exec_run(cmd, cwd, timeout=timeout)
+        if env is None:
+            return self._container.exec_run(cmd, cwd, timeout=timeout)
+        return self._container.exec_run(cmd, cwd, timeout=timeout, env=env)
+
+    def exec_detached(self, argv: list[str], cwd: str | None = None,
+                      env: dict | None = None) -> RunResult:
+        self._ensure()
+        return self._container.exec_detached(argv, cwd, env=env)
+
+    def copy_in(self, local_path, dst: str) -> None:
+        self._ensure()
+        result = self._container.copy_in(local_path, dst)
+        if result.returncode != 0:
+            self._raise_if_down(result, f"copy_in {dst}")
 
     def which(self, tool: str) -> str | None:
         """Найти исполняемый файл в контейнере через ``command -v``."""
@@ -638,7 +727,7 @@ class DockerRunner:
         if proc is not None and proc.alive:
             return agent_id
         self._container.ensure()
-        cmd = project.claude_cmd or self.claude_cmd
+        cmd = container_command(project.claude_cmd or self.claude_cmd)
         dh = self._container.docker_host
         host_flag = f" -H {shlex.quote(dh)}" if dh else ""
         wrapped = (
@@ -912,10 +1001,18 @@ class DockerBackend(Backend):
         spawn_fn=pty_process.spawn,
         home: str | None = None,
         docker_host: str | None = None,
+        license_dir: str | None = None,
     ):
         name = container_name(project_path)
         volume = f"{name}-work"
         claude_volume = f"{name}-claude"
+        extra_volumes = [f"{name}-codeindex:/code-index"]
+        if license_dir:
+            extra_volumes.append(f"{license_dir}:/var/1C/licenses")
+        extra_run_args = []
+        if (os.name == "posix" and sys.platform.startswith("linux")
+                and not docker_host):
+            extra_run_args += ["--network", "host"]
         # Ключ реестра: "docker|{host_token}|{path}".
         # host_token извлекается единственной реализацией docker_host_token().
         # При docker_host=None → token="" → "docker||{path}" (локальный демон).
@@ -928,10 +1025,14 @@ class DockerBackend(Backend):
             claude_volume=claude_volume,
             run=run,
             docker_host=docker_host,
+            extra_volumes=extra_volumes,
+            extra_run_args=extra_run_args,
         )
         self.runner = DockerRunner(self._container, claude_cmd, workdir=workdir, spawn_fn=spawn_fn)
         self.files = DockerFiles(self._container, home=home)
-        self.provisioner = DockerProvisioner(self._container, workdir=workdir)
+        self.provisioner = DockerProvisioner(
+            self._container, workdir=workdir,
+            seed_trust_project=project_path)
 
     @property
     def is_broken(self) -> bool:

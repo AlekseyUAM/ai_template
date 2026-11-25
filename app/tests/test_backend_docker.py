@@ -4,6 +4,7 @@
 FakeRun позволяет задавать разные ответы на разные команды по ключевому
 слову из argv (подстрока в строке вида «docker inspect», «docker images» и т.д.).
 """
+import json
 import subprocess
 import types
 
@@ -988,6 +989,8 @@ class _FakeContainer:
         self.ensure_count = 0
         self.exec_calls: list[dict] = []   # {'argv': [...], 'cwd': ...}
         self.input_calls: list[dict] = []  # {'argv': [...], 'data': ...}
+        self.detached_calls: list[dict] = []
+        self.copy_calls: list[tuple] = []
         self._default = RunResult(default_rc, default_stdout, default_stderr)
         self._next_results: list[RunResult] = []
 
@@ -1004,8 +1007,20 @@ class _FakeContainer:
             return self._next_results.pop(0)
         return self._default
 
-    def exec_run(self, argv: list[str], cwd=None, timeout=None) -> RunResult:
-        self.exec_calls.append({"argv": list(argv), "cwd": cwd})
+    def exec_run(self, argv: list[str], cwd=None, timeout=None,
+                 env=None) -> RunResult:
+        call = {"argv": list(argv), "cwd": cwd}
+        if env is not None:
+            call["env"] = dict(env)
+        self.exec_calls.append(call)
+        return self._pop_result()
+
+    def exec_detached(self, argv: list[str], cwd=None, env=None) -> RunResult:
+        self.detached_calls.append({"argv": list(argv), "env": dict(env or {})})
+        return self._pop_result()
+
+    def copy_in(self, local_path, dst) -> RunResult:
+        self.copy_calls.append((str(local_path), dst))
         return self._pop_result()
 
     def exec_input(self, argv: list[str], data: bytes) -> RunResult:
@@ -2907,3 +2922,136 @@ class TestProvisionerErrors:
         c.set_result(RunResult(1, "", "No such container"))
         with pytest.raises(RuntimeError, match="недоступен"):
             p.write_bytes("/workspace/f", b"data")
+
+
+# ---------------------------------------------------------------------------
+# Docker-схема проекта: code-index том, лицензии, сеть, copy_in, seed trust
+# ---------------------------------------------------------------------------
+
+def test_exec_run_supports_env():
+    fake = FakeRun()
+    c = _make_container(fake, name="ai1c-env")
+    c.exec_run(["sh", "-c", "echo $X"], env={"X": "1"})
+    cmd = fake.called_with("docker exec")[0]
+    assert "-e" in cmd and "X=1" in cmd
+    assert cmd.index("-e") < cmd.index("ai1c-env")
+
+
+def test_exec_detached_has_d_flag_and_env():
+    fake = FakeRun()
+    c = _make_container(fake, name="ai1c-det")
+    c.exec_detached(["daemon"], env={"CODE_INDEX_HOME": "/ci"})
+    cmd = fake.called_with("docker exec")[0]
+    assert cmd[2] == "-d"
+    assert "CODE_INDEX_HOME=/ci" in cmd
+
+
+def test_copy_in_uses_docker_cp(tmp_path):
+    fake = FakeRun()
+    c = _make_container(fake, name="ai1c-cp")
+    local = tmp_path / "bsl-indexer"
+    local.write_bytes(b"bin")
+    c.copy_in(str(local), "/code-index/bsl-indexer")
+    cp = fake.called_with("docker cp")
+    assert cp and cp[0][-2:] == [str(local), "ai1c-cp:/code-index/bsl-indexer"]
+
+
+class _TrustContainer(_FakeContainer):
+    def __init__(self):
+        super().__init__()
+        self.set_result(RunResult(0, "/root\n", ""))          # echo $HOME
+        self.set_result(RunResult(0, "", ""))                # test -e
+        self.set_result(RunResult(0, '{"projects": {"/other": {}}}', ""))
+        # exec_input → rc=0 по умолчанию
+
+    def exec_run(self, argv, cwd=None, timeout=None, env=None):
+        return super().exec_run(argv, cwd, timeout)
+
+
+def test_provisioner_seed_trust_merges_json():
+    container = _TrustContainer()
+    prov = DockerProvisioner(container, seed_trust_project="/workspace")
+    prov.mkdirs(["/workspace"])
+    data = json.loads(container.input_calls[0]["data"].decode("utf-8"))
+    assert data["projects"]["/workspace"]["hasTrustDialogAccepted"] is True
+    assert "/other" in data["projects"]
+    prov.mkdirs(["/workspace"])
+    assert len(container.input_calls) == 1
+
+
+def test_backend_container_spec_has_codeindex_and_network():
+    fake = FakeRun(routes=[
+        ("docker images -q", 0, "abc\n", ""),
+        ("docker inspect", 1, "", "No such object"),
+    ])
+
+    def fake_spawn(cmd, cwd, env=None):
+        return _FakePty(cmd, cwd)
+
+    backend = DockerBackend("/workspace", claude_cmd="claude", run=fake,
+                            spawn_fn=fake_spawn)
+    backend.check()
+    cmd = fake.called_with("docker run")[0]
+    joined = " ".join(cmd)
+    name = backend._container.name
+    assert f"{name}-codeindex:/code-index" in joined
+    assert f"{name}-claude:/root/.claude" in joined
+    assert "HOME=/root" in joined
+    assert "--network host" in joined
+
+
+def test_backend_container_spec_license_bind(tmp_path):
+    fake = FakeRun(routes=[
+        ("docker images -q", 0, "abc\n", ""),
+        ("docker inspect", 1, "", "No such object"),
+    ])
+
+    def fake_spawn(cmd, cwd, env=None):
+        return _FakePty(cmd, cwd)
+
+    lic = tmp_path / "licenses"
+    lic.mkdir()
+    backend = DockerBackend("/workspace", claude_cmd="claude", run=fake,
+                            spawn_fn=fake_spawn, license_dir=str(lic))
+    backend.check()
+    joined = " ".join(fake.called_with("docker run")[0])
+    assert f"{lic}:/var/1C/licenses" in joined
+
+
+def test_remote_backend_no_host_network():
+    fake = FakeRun(routes=[
+        ("images -q", 0, "abc\n", ""),
+        ("inspect", 1, "", "No such object"),
+    ])
+
+    def fake_spawn(cmd, cwd, env=None):
+        return _FakePty(cmd, cwd)
+
+    backend = DockerBackend("/workspace", claude_cmd="claude", run=fake,
+                            spawn_fn=fake_spawn, docker_host="ssh://u@h")
+    backend.check()
+    assert "--network host" not in " ".join(fake.called_with("run")[0])
+
+
+def test_windows_backend_no_host_network(monkeypatch):
+    import agentmon.backends.docker as docker_mod
+    monkeypatch.setattr(docker_mod.sys, "platform", "win32")
+    fake = FakeRun(routes=[
+        ("docker images -q", 0, "abc\n", ""),
+        ("docker inspect", 1, "", "No such object"),
+    ])
+
+    def fake_spawn(cmd, cwd, env=None):
+        return _FakePty(cmd, cwd)
+
+    backend = DockerBackend("/workspace", claude_cmd="claude", run=fake,
+                            spawn_fn=fake_spawn)
+    backend.check()
+    assert "--network host" not in " ".join(fake.called_with("docker run")[0])
+
+
+def test_runner_normalizes_host_claude_path():
+    runner, _, spawned = _make_runner(claude_cmd="claude --go")
+    runner.start(_project(claude_cmd='"/opt/My Tools/claude" --flag'))
+    assert "claude --flag" in spawned[0].cmd
+    assert "/opt/My Tools" not in spawned[0].cmd

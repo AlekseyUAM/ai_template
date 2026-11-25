@@ -21,6 +21,7 @@ class BackendRegistry:
                 project.path,
                 claude_cmd=claude_cmd,
                 image=(project.conn or {}).get("image") or DEFAULT_IMAGE,
+                license_dir=(project.conn or {}).get("license_dir"),
                 docker_host=docker_host_from_conn(project.conn),
             )
         )
