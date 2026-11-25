@@ -63,6 +63,8 @@ def deploy(prov, *, code_index_dir, catalog_dir, alias, port,
     text = merge_path(text, alias=alias, path=str(catalog_dir))
     text = ensure_sections(text, int(port))
     prov.write_text(toml_path, text)
+    prov.write_text(f"{ci}/service.json",
+                    json.dumps({"port": int(port), "version": 1}) + "\n")
     yield f"✓ daemon.toml: alias={alias}, path={catalog_dir}"
     _stop_processes(prov)
     _spawn(prov, ci, "daemon run", "daemon")

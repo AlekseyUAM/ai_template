@@ -23,6 +23,8 @@ def test_deploy_installs_binary_and_starts_processes():
         r["argv"] for r in prov.runs]
     toml = prov.writes["/code-index/daemon.toml"]
     assert 'alias = "demo"' in toml and 'path = "/workspace/src/cf"' in toml
+    service = prov.writes["/code-index/service.json"]
+    assert '"port": 8005' in service
     assert len(prov.detached) == 2
     assert prov.detached[0]["env"]["CODE_INDEX_HOME"] == "/code-index"
     assert prov.detached[1]["env"]["MCP_HTTP_PORT"] == "8005"
