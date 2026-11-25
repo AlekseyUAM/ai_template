@@ -280,3 +280,67 @@ def test_docker_create_no_platform_dir_other_backend(tmp_path):
     r = client.post("/api/env/projects/create", json=body)
     assert r.status_code == 400, r.text
     assert "platform_dir" in r.json()["detail"]
+
+
+# ─── code index в docker-проекте ────────────────────────────────────────────
+
+@pytest.fixture(autouse=True)
+def _no_agent_prepare(monkeypatch):
+    from agentmon.env import agent_setup
+    monkeypatch.setattr(agent_setup, "prepare", lambda *a, **kw: None)
+
+
+def _docker_code_index_selection():
+    from agentmon.env.config_schema import McpSelection
+    return McpSelection(
+        id="code-index-docker", enabled=True, mode="managed",
+        connection='"code_index": {"type": "http", "url": "http://localhost:8005/mcp"}',
+        catalog_dir="/workspace/src/cf", project_name="dockerproject",
+        code_index_dir="/code-index")
+
+
+def test_docker_create_attaches_code_index(tmp_path, monkeypatch):
+    from agentmon.env import code_index_project as cip
+    seen = {"resolve": [], "wait": []}
+
+    monkeypatch.setattr(cip, "pick_port", lambda read, **kw: 8005)
+    monkeypatch.setattr(cip, "container_service_port", lambda prov, d: None)
+    monkeypatch.setattr(cip, "service_is_new", lambda b, **kw: True)
+
+    def resolve(repo, **kw):
+        seen["resolve"].append(kw)
+        return 1, _docker_code_index_selection(), True
+
+    monkeypatch.setattr(cip, "resolve_card", resolve)
+    monkeypatch.setattr(cip, "deploy", lambda backend, **kw: iter(["deploy\n"]))
+    monkeypatch.setattr(cip, "wait_ready",
+                        lambda backend, **kw: seen["wait"].append(kw))
+
+    rec = RecordingProvisioner()
+    backends = BackendRegistry(
+        "claude", docker_factory=lambda project: SimpleNamespace(provisioner=rec))
+    monitor = SimpleNamespace(backends=backends)
+    client, registry, store = make_client(tmp_path, monitor)
+    body = {
+        "name": "dockerproject",
+        "path": "/workspace",
+        "identifier": "dev001",
+        "email": "dev@example.com",
+        "platform_version": "8.3.25",
+        "db_kind": "file",
+        "db_connection": "File=/data/base",
+        "web_publication": "",
+        "mcp_ids": [],
+        "agents": [],
+        "backend": "docker",
+        "conn": {"image": "ai1c-agent:latest"},
+        "code_index": {
+            "enabled": True,
+            "catalog_dir": "/workspace/src/cf",
+            "code_index_dir": "/code-index",
+        },
+    }
+    r = client.post("/api/env/projects/create", json=body)
+    assert r.status_code == 200, r.text
+    assert seen["resolve"], "resolve_card не вызван"
+    assert seen["wait"], "wait_ready не вызван"

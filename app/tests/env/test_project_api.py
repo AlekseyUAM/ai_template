@@ -961,3 +961,87 @@ def test_license_dir_rejected_for_local(tmp_path):
     r = c.post("/api/env/projects/create", json=body)
     assert r.status_code == 400
     assert "только для docker" in r.json()["detail"]
+
+
+# ─── создание с code index ───────────────────────────────────────────────────
+
+def _code_index_selection(project_name="codeproj"):
+    from agentmon.env.config_schema import McpSelection
+    return McpSelection(
+        id="code-index", enabled=True, mode="managed",
+        connection='"code_index": {"type": "http", "url": "http://localhost:8005/mcp"}',
+        catalog_dir="/x/src/cf", project_name=project_name,
+        code_index_dir="/x-code-index")
+
+
+def _fake_code_index(monkeypatch):
+    from agentmon.env import code_index_project as cip
+    seen = {"resolve": [], "deploy": [], "wait": [], "stop": []}
+
+    def do_deploy(backend, **kw):
+        seen["deploy"].append(kw)
+        return iter(["deploy\n"])
+
+    def do_wait(backend, **kw):
+        seen["wait"].append(kw)
+
+    def do_stop(backend, **kw):
+        seen["stop"].append(kw)
+
+    def resolve(repo, **kw):
+        seen["resolve"].append(kw)
+        return 99, _code_index_selection(kw["project_name"]), True
+
+    monkeypatch.setattr(cip, "pick_port_for_local", lambda d, **kw: 8005)
+    monkeypatch.setattr(cip, "pick_port", lambda read, **kw: 8005)
+    monkeypatch.setattr(cip, "container_service_port", lambda prov, d: None)
+    monkeypatch.setattr(cip, "service_is_new", lambda b, **kw: True)
+    monkeypatch.setattr(cip, "resolve_card", resolve)
+    monkeypatch.setattr(cip, "deploy", do_deploy)
+    monkeypatch.setattr(cip, "wait_ready", do_wait)
+    monkeypatch.setattr(cip, "stop_new_service", do_stop)
+    return seen
+
+
+@pytest.fixture(autouse=True)
+def _no_agent_prepare(monkeypatch):
+    from agentmon.env import agent_setup
+    monkeypatch.setattr(agent_setup, "prepare", lambda *a, **kw: None)
+
+
+def test_local_create_with_code_index_creates_card_and_waits(tmp_path, monkeypatch):
+    seen = _fake_code_index(monkeypatch)
+    c, _, _ = make_client(tmp_path)
+    body = _local_body(
+        tmp_path,
+        code_index={"enabled": True,
+                    "catalog_dir": str(tmp_path / "proj" / "src" / "cf"),
+                    "code_index_dir": str(tmp_path / "proj-code-index")})
+    r = c.post("/api/env/projects/create", json=body)
+    assert r.status_code == 200, r.text
+    assert seen["resolve"] and seen["resolve"][0]["project_name"] == "codeproj"
+    assert seen["deploy"] and seen["deploy"][0]["port"] == 8005
+    assert seen["wait"], "wait_ready должен быть вызван"
+    assert r.json()["project"]["name"] == "codeproj"
+
+
+def test_local_create_code_index_error_rolls_back(tmp_path, monkeypatch):
+    from agentmon.env import code_index_project as cip
+    seen = _fake_code_index(monkeypatch)
+
+    def boom(backend, **kw):
+        raise cip.CodeIndexError("index boom")
+
+    monkeypatch.setattr(cip, "wait_ready", boom)
+    c, _, _ = make_client(tmp_path)
+    body = _local_body(
+        tmp_path,
+        code_index={"enabled": True,
+                    "catalog_dir": str(tmp_path / "proj" / "src" / "cf"),
+                    "code_index_dir": str(tmp_path / "proj-code-index")})
+    r = c.post("/api/env/projects/create/stream", json=body)
+    assert r.status_code == 200
+    assert "index boom" in r.text
+    names = [p["name"] for p in c.get("/api/env/projects").json()["projects"]]
+    assert "codeproj" not in names
+    assert seen["stop"], "новый сервис должен быть остановлен при откате"

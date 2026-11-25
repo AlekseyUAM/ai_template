@@ -2,6 +2,7 @@
 import os
 import re
 import subprocess
+import sys
 import threading
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -9,7 +10,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
-from . import code_index_project
+from . import agent_setup, code_index_project
 from .code_index_project import CodeIndexError, CodeIndexRequest
 from .config_schema import SCHEMA_VERSION, EnvConfig, McpSelection, AgentModel
 from .installer import install_environment
@@ -297,7 +298,42 @@ def build_project_router(store, registry, monitor=None,
             license_server=body.get("license_server"),
         )
         plan = CreatePlan(code_index=ci_request, license_dir=license_dir)
+        if ci_request is not None and backend == "local":
+            _attach_code_index(pid, config, plan, backend=backend,
+                               prov=prov, conn=conn)
         return pid, config, prov, backend, conn, docker_build, plan
+
+    def _attach_code_index(pid, env_config, plan, *, backend, prov, conn):
+        """Порт + карточка MCP code-index; карточка нужна до .mcp.json."""
+        req = plan.code_index
+        if req is None or plan.code_index_port is not None:
+            return
+        if backend == "docker":
+            host_check = (os.name == "posix"
+                          and sys.platform.startswith("linux")
+                          and docker_host_from_conn(conn) is None)
+            port = code_index_project.pick_port(
+                lambda: code_index_project.container_service_port(
+                    prov, req.code_index_dir),
+                host_check=host_check)
+        else:
+            port = code_index_project.pick_port_for_local(req.code_index_dir)
+        _, mcp_repo = get_repos()
+        mid, selection, created = code_index_project.resolve_card(
+            mcp_repo, project_id=pid, project_name=env_config.project_name,
+            backend=backend, request=req, port=port)
+        if created:
+            plan.created_mcp_ids.append(mid)
+        if not any(s.connection == selection.connection
+                   for s in env_config.mcp):
+            env_config.mcp.append(selection)
+        links = [row["id"] for row in mcp_repo.for_project(pid)]
+        if mid not in links:
+            mcp_repo.set_for_project(pid, [*links, mid])
+        plan.code_index_port = port
+        plan.code_index_mid = mid
+        plan.code_index_new_service = code_index_project.service_is_new(
+            backend, prov=prov, code_index_dir=req.code_index_dir)
 
     def _install_iter(config, body, prov, backend, conn):
         return install_environment(
@@ -314,7 +350,7 @@ def build_project_router(store, registry, monitor=None,
             check_empty=(backend != "docker"),
         )
 
-    def _rollback_project(pid, path=""):
+    def _rollback_project(pid, path="", *, plan=None, backend="local", prov=None):
         """Удалить незавершённый проект (стаб) при ошибке создания.
 
         Иначе строка в БД (name/path UNIQUE) заблокирует повторную попытку —
@@ -326,6 +362,12 @@ def build_project_router(store, registry, monitor=None,
                 mcp_repo.set_for_project(pid, [])
             except Exception:
                 pass
+            if plan is not None:
+                for mid in plan.created_mcp_ids:
+                    try:
+                        mcp_repo.delete(mid)
+                    except Exception:
+                        pass
             project_repo.delete(pid)
             if path:
                 for p in registry.list():
@@ -334,22 +376,52 @@ def build_project_router(store, registry, monitor=None,
                         break
         except Exception:
             pass
+        if (plan is not None and plan.code_index is not None
+                and plan.code_index_new_service):
+            try:
+                code_index_project.stop_new_service(
+                    backend, prov=prov,
+                    code_index_dir=plan.code_index.code_index_dir)
+            except Exception:
+                pass
 
     # ── create project (блокирующе) ───────────────────────────────────────────
 
     @router.post("/api/env/projects/create")
     def create_project(body: dict):
-        pid, config, prov, backend, conn, docker_build, plan = _prepare_install(body)
+        pid, env_config, prov, backend, conn, docker_build, plan = _prepare_install(body)
         try:
             if docker_build is not None:
                 # собрать образ до установки окружения; лог не стримим
                 for _ in build_image_fn(docker_build[0], docker_build[1],
                                         docker_host=docker_build[2]):
                     pass
-            events = list(_install_iter(config, body, prov, backend, conn))
+            if plan.code_index is not None and backend == "docker":
+                prov.mkdirs([env_config.project_dir])
+                _attach_code_index(pid, env_config, plan, backend=backend,
+                                   prov=prov, conn=conn)
+            events = list(_install_iter(env_config, body, prov, backend, conn))
+            failed = any(e.status == "error" for e in events)
+            if not failed and backend == "docker":
+                agent_setup.prepare(
+                    prov, env_config.project_dir,
+                    body.get("claude_cmd") or config.CLAUDE_CMD)
+            if not failed and plan.code_index is not None:
+                for _ in code_index_project.deploy(
+                        backend, prov=prov,
+                        code_index_dir=plan.code_index.code_index_dir,
+                        catalog_dir=plan.code_index.catalog_dir,
+                        project_name=env_config.project_name,
+                        port=plan.code_index_port, mid=plan.code_index_mid):
+                    pass
+                code_index_project.wait_ready(
+                    backend, prov=prov,
+                    code_index_dir=plan.code_index.code_index_dir,
+                    port=plan.code_index_port)
         except BaseException:
             # Включая KeyboardInterrupt: стаб не должен остаться в БД.
-            _rollback_project(pid, config.project_dir)
+            _rollback_project(pid, env_config.project_dir, plan=plan,
+                              backend=backend, prov=prov)
             raise
         project_repo, _ = get_repos()
         project = project_repo.get(pid)
@@ -378,11 +450,43 @@ def build_project_router(store, registry, monitor=None,
                         for line in build_image_fn(docker_build[0], docker_build[1],
                                                    docker_host=docker_build[2]):
                             yield line
+                    if plan.code_index is not None and backend == "docker":
+                        # ensure контейнера: из тома читается service.json
+                        prov.mkdirs([env_config.project_dir])
+                        _attach_code_index(pid, env_config, plan,
+                                           backend=backend, prov=prov, conn=conn)
+                        yield "✓ code-index подключён к проекту\n"
                     for ev in _install_iter(env_config, body, prov, backend, conn):
                         detail = f" {ev.detail}" if ev.detail else ""
                         yield f"[{ev.step}] {ev.status}{detail}\n"
                         if ev.status == "error":
                             failed = True
+                    if not failed and backend == "docker":
+                        lines = []
+                        agent_setup.prepare(
+                            prov, env_config.project_dir,
+                            body.get("claude_cmd") or config.CLAUDE_CMD,
+                            log=lines.append)
+                        for line in lines:
+                            yield line + "\n"
+                    if not failed and plan.code_index is not None:
+                        yield "▶ code-index\n"
+                        for line in code_index_project.deploy(
+                                backend, prov=prov,
+                                code_index_dir=plan.code_index.code_index_dir,
+                                catalog_dir=plan.code_index.catalog_dir,
+                                project_name=env_config.project_name,
+                                port=plan.code_index_port,
+                                mid=plan.code_index_mid):
+                            yield line + "\n"
+                        wait_lines = []
+                        code_index_project.wait_ready(
+                            backend, prov=prov,
+                            code_index_dir=plan.code_index.code_index_dir,
+                            port=plan.code_index_port,
+                            log=wait_lines.append)
+                        for line in wait_lines:
+                            yield line + "\n"
                 except Exception as exc:                   # noqa: BLE001
                     failed = True
                     yield f"✗ Ошибка: {exc}\n"
@@ -395,7 +499,8 @@ def build_project_router(store, registry, monitor=None,
                 # Без отката стаб проекта заблокирует повторную попытку:
                 # следующий create того же имени/пути упрётся в UNIQUE.
                 if not created:
-                    _rollback_project(pid, env_config.project_dir)
+                    _rollback_project(pid, env_config.project_dir, plan=plan,
+                                      backend=backend, prov=prov)
         return produce
 
     def _stream_job_response(job: StreamJob, pid: int) -> StreamingResponse:
