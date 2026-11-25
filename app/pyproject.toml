@@ -21,6 +21,7 @@ dependencies = [
 dev = [
     "pytest",
     "pytest-asyncio",
+    "playwright",
 ]
 
 [tool.setuptools.packages.find]
