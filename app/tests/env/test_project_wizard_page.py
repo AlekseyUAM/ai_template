@@ -203,6 +203,13 @@ def test_container_aware_label_spans_present():
     assert 'id="platformDirLabelText"' in h, "Нет span подписи пути к платформе"
 
 
+def test_hidden_attribute_wins_over_flex_classes():
+    """hidden у .field-group/.checkbox-item иначе перекрывается display:flex."""
+    h = _html()
+    assert "[hidden]" in h
+    assert "display: none !important" in h
+
+
 def test_html_has_code_index_controls():
     h = _html()
     assert 'id="codeIndexEnabled"' in h

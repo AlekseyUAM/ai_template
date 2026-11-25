@@ -17,6 +17,8 @@
       margin-bottom: 1rem;
     }
     .section[hidden] { display: none; }
+    /* Атрибут hidden должен побеждать display:flex у .field-group/.checkbox-item */
+    [hidden] { display: none !important; }
     .section h2 {
       margin-top: 0;
       font-size: 1.25rem;
