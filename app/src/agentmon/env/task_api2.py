@@ -279,6 +279,60 @@ def build_task2_router(store) -> APIRouter:
         task = task_repo.get(tid)
         return {"task": task}
 
+    # ── POST /api/env/tasks/{id}/feedback — замечание и возврат на этап ──────
+
+    @router.post("/api/env/tasks/{tid}/feedback")
+    def stage_feedback(tid: int, body: dict):
+        task_repo, project_repo = get_repos()
+        db = require_store()
+        task = task_or_404(task_repo, tid)
+
+        stage_name = (body.get("stage") or "").strip()
+        text = (body.get("text") or "").strip()
+        if not stage_name:
+            raise HTTPException(status_code=400, detail="поле stage обязательно")
+        if not text:
+            raise HTTPException(status_code=400, detail=(
+                "текст замечания не может быть пустым"))
+
+        stages = json.loads(task.get("stages_json") or "[]")
+        stage = next((s for s in stages if s.get("name") == stage_name), None)
+        if stage is None:
+            raise HTTPException(status_code=400,
+                                detail=f"неизвестный этап: {stage_name}")
+        # Замечание имеет смысл только на гейте, который ждёт подтверждения.
+        if not (stage.get("gate") and stage.get("status") == "done"
+                and not stage.get("approved")):
+            raise HTTPException(status_code=400, detail=(
+                "замечание можно оставить только на неподтверждённом гейте "
+                "(этап done и approved=false)"))
+
+        project = project_repo.get(task["project_id"])
+        if project is None:
+            raise HTTPException(status_code=400, detail="проект не найден")
+
+        # 1. Замечание — в БД и USER_FEEDBACK.md: агент читает его по правилу
+        #    user-feedback перед каждым этапом.
+        from agentmon.env.feedback import save_feedback
+        save_feedback(db, project["path"], task, "web", text)
+
+        # 2. Возврат на ТОТ ЖЕ этап: task.json — источник истины оркестратора,
+        #    без его правки следующий прогон не увидит этап доступным.
+        from .task_sync import write_stage_rework
+        if not write_stage_rework(project["path"], task, stage_name):
+            raise HTTPException(status_code=500, detail=(
+                "замечание сохранено, но task.json задачи не обновлён"))
+
+        # 3. Зеркалим то же состояние в БД (дерево/стек читают её).
+        stage["status"] = "pending"
+        stage["approved"] = False
+        stage["finished_at"] = None
+        new_overall = overall_status(stages)
+        task_repo.update(tid, stages_json=json.dumps(stages, ensure_ascii=False),
+                         finished_at=None)
+        task_repo.set_status(tid, new_overall, stage=stage_name)
+        return {"task": task_repo.get(tid)}
+
     # ── GET /api/env/tasks/{id}/overall ───────────────────────────────────────
 
     @router.get("/api/env/tasks/{tid}/overall")

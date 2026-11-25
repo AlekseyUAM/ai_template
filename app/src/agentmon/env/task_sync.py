@@ -107,6 +107,38 @@ def sync_task_from_file(store, project_path, task, now_fn=time.time,
     return fields
 
 
+def write_stage_rework(project_path, task, stage_name) -> bool:
+    """Возвращает этап в pending в task.json после замечания пользователя.
+
+    Замечание означает доработку ТОГО ЖЕ этапа, а не переход к следующему:
+    оркестратор (task_status.py) должен увидеть этап снова доступным для
+    запуска, иначе задача после замечания не возобновится. Возвращает True,
+    если файл обновлён.
+    """
+    folder = task_folder_name(task["id"], task.get("identifier"))
+    tj = Path(project_path) / "tasks" / folder / "task.json"
+    if not tj.exists():
+        return False
+
+    def rework(data):
+        for s in data.get("stages", []):
+            if s.get("name") == stage_name:
+                s["status"] = "pending"
+                s["approved"] = False
+                s["finished_at"] = None
+                data["stage"] = stage_name
+                data["finished_at"] = None
+                data["status"] = overall_status(data.get("stages", []))
+                return True
+        return False
+
+    try:
+        # lock+os.replace: параллельный task_status.py не потеряет правку.
+        return bool(update_json(tj, rework))
+    except (OSError, ValueError, TimeoutError):
+        return False
+
+
 def write_stage_approval(project_path, task, stage_name) -> bool:
     """Ставит approved=true указанному этапу в task.json и пересчитывает status.
 

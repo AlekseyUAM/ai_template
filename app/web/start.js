@@ -252,7 +252,13 @@ async function renderStacks() {
                           item.task_status === "done" ? "status-done" : "";
             const open = expandedTasks.has(Number(item.task_id));
             const stageInfo = item.stage ? ` · ${escHtml(stageNameLabel(item.stage))}` : "";
-            const stagesRows = (item.stages || []).map(s => {
+            const stages = item.stages || [];
+            // Блокирующий гейт: этап done, не approved, и после него есть
+            // включённый pending. Условие зеркалит overall_status/notifier.
+            const gateStage = stages.find((s, i) => s.gate && s.status === "done"
+              && !s.approved
+              && stages.slice(i + 1).some(x => x.enabled && x.status === "pending"));
+            const stagesRows = stages.map(s => {
               // Кнопка «Отчёт» — у любого этапа с существующим артефактом,
               // а не только у последнего завершённого.
               const rep = s.artifact_exists
@@ -260,8 +266,19 @@ async function renderStacks() {
                 : "";
               return `<tr><td>${escHtml(stageNameLabel(s.name))}</td><td>${escHtml(stageStatusLabel(s.status || ""))}</td>`
                 + `<td>${s.iteration || 1}</td><td>${fmtClock(s.started_at)}</td>`
-                + `<td>${fmtClock(s.finished_at)}</td><td>${rep}</td></tr>`;
+                + `<td>${fmtClock(s.finished_at)}</td><td class="stage-report">${rep}</td></tr>`;
             }).join("");
+            // Действия гейта — отдельной панелью под таблицей: кнопки в один
+            // ряд и одинаковой ширины, а не в тесной колонке «Отчёт».
+            const gateBar = gateStage
+              ? `<div class="gate-bar">
+                   <span class="gate-label">Гейт «${escHtml(stageNameLabel(gateStage.name))}» ждёт подтверждения</span>
+                   <div class="gate-buttons">
+                     <button class="approve-btn" data-stage="${escHtml(gateStage.name)}" title="Подтвердить гейт и продолжить">Одобрить</button>
+                     <button class="note-btn" data-stage="${escHtml(gateStage.name)}" title="Вернуть этап на доработку с замечанием">Замечание</button>
+                   </div>
+                 </div>`
+              : "";
             const dbRow = item.db_update
               ? `<div>Обновление БД: ${fmtTime(item.db_update.started_at)} → ${fmtTime(item.db_update.finished_at)}</div>`
               : "";
@@ -275,6 +292,7 @@ async function renderStacks() {
                 ${dbRow}
                 <table class="stage-table"><thead><tr><th>Этап</th><th>Статус</th><th>Ит.</th><th>Нач.</th><th>Оконч.</th><th></th></tr></thead>
                 <tbody>${stagesRows}</tbody></table>
+                ${gateBar}
               </div>`;
             // Убрать из стека можно только запланированную задачу.
             const planned = item.task_status === "planned";
@@ -349,6 +367,24 @@ async function renderStacks() {
           const stage = btn.dataset.stage;
           const id = btn.closest(".stack-item").dataset.taskId;
           openReport(Number(id), stage);
+        });
+      });
+
+      item.querySelectorAll(".approve-btn").forEach(btn => {
+        btn.addEventListener("click", (event) => {
+          event.stopPropagation();
+          const stage = btn.dataset.stage;
+          const id = btn.closest(".stack-item").dataset.taskId;
+          approveGate(Number(id), stage);
+        });
+      });
+
+      item.querySelectorAll(".note-btn").forEach(btn => {
+        btn.addEventListener("click", (event) => {
+          event.stopPropagation();
+          const stage = btn.dataset.stage;
+          const id = btn.closest(".stack-item").dataset.taskId;
+          openNoteModal(Number(id), stage);
         });
       });
 
@@ -590,6 +626,83 @@ function toggleTaskDetails(taskId) {
   renderStacks();
 }
 
+// Замечание к гейту: модалка с полем ввода. После отправки задача
+// возвращается на тот же этап (бэкенд /feedback), агент читает USER_FEEDBACK.md.
+let _noteTarget = null;
+
+function openNoteModal(taskId, stage) {
+  _noteTarget = { taskId, stage };
+  document.getElementById("note-stage").textContent = stageNameLabel(stage);
+  const text = document.getElementById("note-text");
+  text.value = "";
+  document.getElementById("note-modal").hidden = false;
+  text.focus();
+}
+
+function closeNoteModal() {
+  _noteTarget = null;
+  document.getElementById("note-modal").hidden = true;
+}
+
+async function sendNote() {
+  if (!_noteTarget) return;
+  const noteText = document.getElementById("note-text");
+  const text = noteText.value.trim();
+  if (!text) {
+    noteText.focus();
+    return;
+  }
+  const sendBtn = document.getElementById("note-send");
+  const { taskId, stage } = _noteTarget;
+  sendBtn.disabled = true;
+  try {
+    const r = await fetch(`/api/env/tasks/${taskId}/feedback`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stage, text }),
+    });
+    if (!r.ok) {
+      let detail = r.status;
+      try { detail = (await r.json()).detail || detail; } catch (_) {}
+      alert("Не удалось отправить замечание: " + detail);
+      return;
+    }
+    closeNoteModal();
+    await renderTree();
+    await renderStacks();
+  } catch (e) {
+    console.error("send note error", e);
+    alert("Ошибка соединения");
+  } finally {
+    sendBtn.disabled = false;
+  }
+}
+
+// Подтверждение гейта из веб-интерфейса — тот же маршрут, что у кнопок Telegram.
+async function approveGate(taskId, stage) {
+  if (!confirm(`Подтвердить гейт этапа «${stageNameLabel(stage)}»? Агент продолжит со следующего этапа.`)) {
+    return;
+  }
+  try {
+    const r = await fetch(`/api/env/tasks/${taskId}/approve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stage }),
+    });
+    if (!r.ok) {
+      let detail = r.status;
+      try { detail = (await r.json()).detail || detail; } catch (_) {}
+      alert("Не удалось подтвердить гейт: " + detail);
+      return;
+    }
+    await renderTree();
+    await renderStacks();
+  } catch (e) {
+    console.error("approve gate error", e);
+    alert("Ошибка соединения");
+  }
+}
+
 async function openReport(taskId, stage) {
   try {
     const r = await fetch(`/api/env/tasks/${taskId}/open-report`, {
@@ -665,5 +778,20 @@ document.addEventListener("DOMContentLoaded", () => {
   const btnCreateStack = document.getElementById("btn-create-stack");
   if (btnCreateStack) {
     btnCreateStack.addEventListener("click", createStack);
+  }
+
+  // Модалка замечания к гейту
+  const noteCancel = document.getElementById("note-cancel");
+  const noteSend = document.getElementById("note-send");
+  const noteModal = document.getElementById("note-modal");
+  if (noteCancel) noteCancel.addEventListener("click", closeNoteModal);
+  if (noteSend) noteSend.addEventListener("click", sendNote);
+  if (noteModal) {
+    noteModal.addEventListener("click", (event) => {
+      if (event.target === noteModal) closeNoteModal();
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !noteModal.hidden) closeNoteModal();
+    });
   }
 });

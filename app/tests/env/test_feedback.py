@@ -2,7 +2,7 @@ from pathlib import Path
 from agentmon.store.db import connect
 from agentmon.store.schema import init_schema
 from agentmon.store.telegram_store import FeedbackRepo
-from agentmon.telegram.feedback import save_feedback
+from agentmon.env.feedback import save_feedback
 
 
 def test_save_feedback_writes_db_and_file(tmp_path):

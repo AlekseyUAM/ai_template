@@ -7,7 +7,7 @@ from agentmon.store.stacks import StackRepo
 from agentmon.store.projects import ProjectRepo
 from agentmon.telegram import reports as rep
 from agentmon.telegram.client import inline_keyboard
-from agentmon.telegram.feedback import save_feedback
+from agentmon.env.feedback import save_feedback
 
 logger = logging.getLogger(__name__)
 

@@ -164,9 +164,39 @@
     .stage-table th:nth-child(3), .stage-table td:nth-child(3) { width:26px; text-align:center; }
     .stage-table th:nth-child(4), .stage-table td:nth-child(4),
     .stage-table th:nth-child(5), .stage-table td:nth-child(5) { width:48px; }
-    .stage-table th:nth-child(6), .stage-table td:nth-child(6) { width:46px; }
+    .stage-table th:nth-child(6), .stage-table td:nth-child(6) { width:56px; }
+    .stage-report { white-space:nowrap; }
     .report-btn { font-size:10px; padding:1px 6px; cursor:pointer; background:#21262d; color:#c9d1d9; border:1px solid #30363d; border-radius:4px; }
     .report-btn:hover { background:#30363d; }
+    /* Действия гейта — отдельная панель: кнопки в ряд и одной ширины. */
+    .gate-bar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:8px;
+                padding:6px 8px; background:rgba(210,153,34,0.1); border:1px solid #9e6a03;
+                border-radius:6px; }
+    .gate-label { font-size:11px; color:#d29922; }
+    .gate-buttons { display:flex; gap:6px; margin-left:auto; }
+    .gate-buttons button { min-width:96px; text-align:center; white-space:nowrap;
+                           font-size:10px; padding:3px 8px; border-radius:4px; cursor:pointer; }
+    .approve-btn { background:#238636; color:#fff; border:1px solid #2ea043; }
+    .approve-btn:hover { background:#2ea043; }
+    .note-btn { background:#21262d; color:#c9d1d9; border:1px solid #30363d; }
+    .note-btn:hover { background:#30363d; }
+
+    /* Модалка замечания к гейту */
+    .modal-overlay { position:fixed; inset:0; background:rgba(1,4,9,0.7);
+                     display:flex; align-items:center; justify-content:center; z-index:50; }
+    .modal-overlay[hidden] { display:none; }
+    .modal-box { width:min(480px, 90vw); background:#161b22; border:1px solid #30363d;
+                 border-radius:8px; padding:16px; }
+    .modal-title { margin:0 0 10px; font-size:14px; color:#c9d1d9; }
+    .modal-box textarea { width:100%; box-sizing:border-box; min-height:110px; padding:8px 10px;
+                          border:1px solid #30363d; border-radius:6px; background:#0d1117;
+                          color:#c9d1d9; font:inherit; font-size:12px; resize:vertical; }
+    .modal-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:12px; }
+    .modal-actions button { padding:6px 14px; border-radius:6px; border:1px solid #30363d;
+                            background:#21262d; color:#c9d1d9; cursor:pointer; font-size:12px; }
+    .modal-actions button:hover { background:#30363d; }
+    .modal-actions .modal-primary { background:#238636; border-color:#2ea043; color:#fff; }
+    .modal-actions .modal-primary:hover { background:#2ea043; }
     .stack-item-del { margin-left:auto; font-size:11px; line-height:1; padding:0 4px; cursor:pointer; background:none; color:var(--muted); border:none; }
     .stack-item-del:hover { color:#f85149; }
 
@@ -209,6 +239,17 @@
         <div id="stacks-container" class="stacks-container">
           <div class="placeholder">Загрузка стеков…</div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="note-modal" class="modal-overlay" hidden>
+    <div class="modal-box">
+      <h3 class="modal-title">Замечание к этапу «<span id="note-stage"></span>»</h3>
+      <textarea id="note-text" rows="5" placeholder="Что нужно поправить..."></textarea>
+      <div class="modal-actions">
+        <button type="button" id="note-cancel">Отмена</button>
+        <button type="button" id="note-send" class="modal-primary">Отправить</button>
       </div>
     </div>
   </div>

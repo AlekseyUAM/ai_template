@@ -42,6 +42,34 @@ def test_start_js_has_expand_and_report(tmp_path):
     assert "5 * 60 * 1000" in js          # таймер синка 5 минут
 
 
+def test_start_js_has_gate_approve_button(tmp_path):
+    client = _client(tmp_path)
+    js = client.get("/static/start.js").text
+    # подтверждение гейта из UI идёт тем же маршрутом, что из Telegram
+    assert "function approveGate" in js
+    assert "approve-btn" in js
+    assert "/approve" in js
+    # кнопка — только у блокирующего гейта (done, не approved, есть pending после)
+    assert "gateStage" in js
+    assert 's.gate && s.status === "done"' in js
+    assert '!s.approved' in js
+
+
+def test_start_js_has_gate_note_modal(tmp_path):
+    client = _client(tmp_path)
+    js = client.get("/static/start.js").text
+    # замечание к гейту: модалка → POST /feedback → этап вернулся в работу
+    assert "function openNoteModal" in js
+    assert "function sendNote" in js
+    assert "/feedback" in js
+    assert "note-btn" in js
+    assert "gate-bar" in js
+    html = client.get("/").text
+    assert 'id="note-modal"' in html
+    assert 'id="note-text"' in html
+    assert 'id="note-send"' in html
+
+
 def test_start_js_has_remove_from_stack(tmp_path):
     client = _client(tmp_path)
     js = client.get("/static/start.js").text

@@ -654,6 +654,101 @@ def test_approve_task_not_found(tmp_path):
     assert r.status_code == 404
 
 
+# ─── POST /api/env/tasks/{id}/feedback ───────────────────────────────────────
+
+def test_feedback_returns_stage_to_pending(tmp_path):
+    """Замечание сохраняется и возвращает задачу на тот же этап (pending)."""
+    client, store = make_client(tmp_path)
+    pid, project_path = seed_project(store, tmp_path)
+
+    r_create = client.post("/api/env/tasks", json={
+        "project_id": pid,
+        "name": "Feedback задача",
+        "identifier": "F-1",
+        "goal": "Цель",
+        "plan": "План",
+        "constraints": "Ограничения",
+        "tests": "",
+        "enabled_stages": ["analyze", "plan"],
+        "gated_stages": ["analyze"],
+    })
+    tid = r_create.json()["task"]["id"]
+
+    # БД: analyze done → awaiting_user (как после прогона агента).
+    client.post(f"/api/env/tasks/{tid}/stage",
+                json={"stage": "analyze", "status": "running"})
+    client.post(f"/api/env/tasks/{tid}/stage",
+                json={"stage": "analyze", "status": "done"})
+    assert client.get(f"/api/env/tasks/{tid}").json()["task"]["status"] == "awaiting_user"
+
+    # task.json — источник истины оркестратора: агент пометил этап done.
+    task_dir = project_path / "tasks" / "task#F-1"
+    tj = task_dir / "task.json"
+    data = json.loads(tj.read_text(encoding="utf-8"))
+    analyze = next(s for s in data["stages"] if s["name"] == "analyze")
+    analyze["status"] = "done"
+    analyze["approved"] = False
+    data["status"] = "awaiting_user"
+    data["stage"] = "analyze"
+    tj.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+                  encoding="utf-8")
+
+    text = "Уточни требования к полю Имя"
+    r = client.post(f"/api/env/tasks/{tid}/feedback",
+                    json={"stage": "analyze", "text": text})
+    assert r.status_code == 200, r.text
+    task = r.json()["task"]
+    assert task["status"] == "planned"
+    assert task["stage"] == "analyze"
+    stages = json.loads(task["stages_json"])
+    analyze = next(s for s in stages if s["name"] == "analyze")
+    assert analyze["status"] == "pending"
+    assert analyze["approved"] is False
+    assert analyze["finished_at"] is None
+
+    # Замечание сохранено и в БД, и в USER_FEEDBACK.md.
+    rows = store.query("SELECT text FROM task_feedback WHERE task_id=?", [tid])
+    assert [row["text"] for row in rows] == [text]
+    feedback = (task_dir / "USER_FEEDBACK.md").read_text(encoding="utf-8")
+    assert text in feedback
+
+    # task.json вернулся на тот же этап — оркестратор увидит его доступным.
+    data = json.loads(tj.read_text(encoding="utf-8"))
+    analyze = next(s for s in data["stages"] if s["name"] == "analyze")
+    assert analyze["status"] == "pending"
+    assert analyze["approved"] is False
+    assert analyze["finished_at"] is None
+    assert data["status"] == "planned"
+    assert data["stage"] == "analyze"
+
+
+def test_feedback_rejects_empty_text_and_non_gate_stage(tmp_path):
+    """Пустой текст и этап без подтверждаемого гейта → 400."""
+    client, store = make_client(tmp_path)
+    pid, _ = seed_project(store, tmp_path)
+    r_create = client.post("/api/env/tasks", json={
+        "project_id": pid,
+        "name": "Feedback 400",
+        "identifier": "F-2",
+        "goal": "Цель",
+        "plan": "План",
+        "constraints": "Ограничения",
+        "tests": "",
+        "enabled_stages": ["analyze", "plan"],
+        "gated_stages": ["analyze"],
+    })
+    tid = r_create.json()["task"]["id"]
+
+    r = client.post(f"/api/env/tasks/{tid}/feedback",
+                    json={"stage": "analyze", "text": "   "})
+    assert r.status_code == 400
+
+    # analyze ещё pending — это не неподтверждённый done-гейт.
+    r = client.post(f"/api/env/tasks/{tid}/feedback",
+                    json={"stage": "analyze", "text": "замечание"})
+    assert r.status_code == 400
+
+
 # ─── GET /api/env/tasks/{id}/overall ─────────────────────────────────────────
 
 def test_get_overall(tmp_path):
