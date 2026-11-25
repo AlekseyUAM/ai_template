@@ -32,6 +32,27 @@ query valid and do not loop.
    `python .claude/tools/task_status.py tasks/task#<id> <этап> running`
    and after completion - `... <этап> done --files <файлы>`.
 
+## Gates
+A stage may have `gate: true` - the user must confirm it before the next enabled stage
+starts. `gate`/`approved` belong to the task wizard and the application; never change
+them yourself.
+
+Whole-task mode (no `TASK_STAGE`):
+1. Complete the gated stage as usual and mark it `done`.
+2. **Stop the run.** Do not move the next stage to `running` and do not `approve`
+   (neither via the tool nor by editing `task.json`): the task must go to
+   `awaiting_user` so the monitor shows the gate and Telegram sends the confirmation
+   request. Waiting for the user is the whole point of the gate.
+3. Reply with the finished stage and its artifact - the user reviews the result and
+   confirms in the monitor or Telegram.
+4. The application writes `approved: true` and starts a new run. In it continue from
+   the first enabled stage that is not `done`; completed stages are not repeated.
+5. If `task_status.py` refuses to start the next stage with a "гейт не пройден" error,
+   that is the gate, not an obstacle to work around: stop and end the run.
+
+Stage-scoped mode (`TASK_STAGE` is set): the runner starts one stage per process and
+handles gates itself; complete your stage and stop as usual.
+
 ## Environment
 - `.claude/**` - tools and checklists: read only, do not change.
 - Run all Python commands with the project `.venv` interpreter (in the deployed environment

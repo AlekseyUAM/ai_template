@@ -69,6 +69,18 @@ def test_injects_checklist_on_stage_running(tmp_path):
     assert "DEVELOP.md" in text
 
 
+def test_double_hash_task_folder(tmp_path):
+    """identifier="#001" → каталог task##001: хук обязан его распознавать."""
+    m = _load()
+    root = _project(tmp_path)
+    (root / "tasks" / "task#100001").rename(root / "tasks" / "task##001")
+    text = _context(m.build_output(_event(
+        root, "python .claude/tools/task_status.py tasks/task##001 "
+              "develop running")))
+    assert 'Stage "develop" started' in text
+    assert "REGISTER-RULE" in text
+
+
 def test_ignores_done(tmp_path):
     m = _load()
     root = _project(tmp_path)

@@ -162,9 +162,11 @@ def _gate_block(data: dict, target_stage: str):
         if (s.get("status") == "done" and _truthy(s.get("gate"))
                 and not _truthy(s.get("approved"))):
             return (
-                f"гейт не пройден: этап '{s['name']}' требует подтверждения перед "
-                f"запуском '{target_stage}'. Подтвердите командой:\n"
-                f"  python .claude/tools/task_status.py <task_dir> {s['name']} approve")
+                f"гейт не пройден: этап '{s['name']}' требует подтверждения "
+                f"пользователя перед запуском '{target_stage}'. Остановите работу "
+                f"и завершите прогон: подтверждение даёт пользователь в мониторе "
+                f"или Telegram, приложение само проставит approved. Не вызывайте "
+                f"approve самостоятельно.")
     return None
 
 

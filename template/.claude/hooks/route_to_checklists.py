@@ -11,14 +11,29 @@ import sys
 from pathlib import Path
 
 # The path separator depends on the OS: a Windows user types `tasks\task#`.
-_TASK_PROMPT_RE = re.compile(r"tasks[\\/](task#\d+)", re.IGNORECASE)
+# task##001 — каталог задачи с identifier="#001": task_folder_name клеит
+# "task#" + identifier, поэтому решёток может быть две.
+_TASK_PROMPT_RE = re.compile(r"tasks[\\/](task#+\d+)", re.IGNORECASE)
 
 
-def _checklist_lines(task_dir: Path, only_stage: str | None = None) -> list[str]:
+def _task_data(task_dir: Path) -> dict:
     try:
         data = json.loads((task_dir / "task.json").read_text(encoding="utf-8"))
     except Exception:
-        return []
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _has_gates(task_dir: Path) -> bool:
+    """True if any enabled stage has `gate: true` - the run must pause after it."""
+    for stage in _task_data(task_dir).get("stages") or []:
+        if isinstance(stage, dict) and stage.get("enabled") and stage.get("gate"):
+            return True
+    return False
+
+
+def _checklist_lines(task_dir: Path, only_stage: str | None = None) -> list[str]:
+    data = _task_data(task_dir)
     lines = []
     for stage in data.get("stages") or []:
         if not isinstance(stage, dict) or not stage.get("enabled"):
@@ -78,6 +93,13 @@ def build_output(event: dict) -> dict:
         "[ai1c] Single-agent mode: do not call Agent/Task; work per rule "
         "single-agent-workflow.",
         f"Task tasks/{folder}: execute the checklist stages yourself, in order, in this thread.",
+    ]
+    if _has_gates(root / "tasks" / folder):
+        parts.append(
+            "Gates: after a stage with gate: true is done, STOP the run - the user "
+            "confirms in the monitor/Telegram and the app writes approved; never "
+            "call approve or edit approved yourself.")
+    parts += [
         f"Work per tasks/{folder}/TASK.md, changes - in src/cf/**; `.claude/**` - "
         "tools and checklists, read only, do not modify.",
         "Python - the project `.venv` interpreter; object creation - skill `meta-compile` "

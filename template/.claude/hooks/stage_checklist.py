@@ -29,7 +29,9 @@ MAX_CHARS = 40000
 _SINGLE_AGENT_RULE = Path(".claude") / "rules" / "single-agent-workflow.md"
 _STAGE_STATUS_RE = re.compile(
     r"task_status\.py\s+\S+\s+(\w+)\s+running\b")
-_TASK_FOLDER_RE = re.compile(r"tasks[\\/](task#\d+)", re.IGNORECASE)
+# task##001 — каталог задачи с identifier="#001": task_folder_name клеит
+# "task#" + identifier, поэтому решёток может быть две.
+_TASK_FOLDER_RE = re.compile(r"tasks[\\/](task#+\d+)", re.IGNORECASE)
 
 
 def _project_root(event: dict, override: Path | None) -> Path | None:

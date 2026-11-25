@@ -74,6 +74,46 @@ def test_stage_scoped_first_action_is_mcp_usage(tmp_path, monkeypatch):
     assert "mcp-usage" in context
 
 
+def _set_first_stage_gate(root):
+    path = root / "tasks" / "task#100001" / "task.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["stages"][0]["gate"] = True
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+
+def test_gate_reminder_only_when_task_has_gates(tmp_path):
+    m = _load()
+    root = _project(tmp_path)
+    out = m.build_output(
+        {"prompt": "Выполни задачу tasks/task#100001 ...", "cwd": str(root)})
+    assert "Gates:" not in out["hookSpecificOutput"]["additionalContext"]
+
+    _set_first_stage_gate(root)
+    out = m.build_output(
+        {"prompt": "Выполни задачу tasks/task#100001 ...", "cwd": str(root)})
+    context = out["hookSpecificOutput"]["additionalContext"]
+    assert "Gates:" in context
+    assert "STOP the run" in context
+    assert "never call approve" in context
+
+
+def test_double_hash_task_folder(tmp_path):
+    """identifier="#001" → task##001: чеклисты и напоминание о гейте доходят."""
+    m = _load()
+    task = tmp_path / "tasks" / "task##001"
+    task.mkdir(parents=True)
+    (task / "task.json").write_text(json.dumps({"stages": [
+        {"name": "analyze", "enabled": True, "subagent": "analyst",
+         "artifact": "ANALYZE.md", "gate": True},
+    ]}), encoding="utf-8")
+    out = m.build_output(
+        {"prompt": "Выполни задачу tasks/task##001 по этапам из её task.json.",
+         "cwd": str(tmp_path)})
+    context = out["hookSpecificOutput"]["additionalContext"]
+    assert ".claude/checklists/analyst.md" in context
+    assert "Gates:" in context
+
+
 def test_windows_task_prompt_routes_to_checklists(tmp_path):
     """Windows-путь с обратными слэшами — тот же каталог задачи."""
     m = _load()

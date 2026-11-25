@@ -496,6 +496,19 @@ def test_done_unapproved_gate_blocks_next_stage(tmp_path):
         mod.update(str(d), "develop", "running")
 
 
+def test_gate_error_tells_to_stop_not_self_approve(tmp_path):
+    """Ошибка гейта не должна быть рецептом self-approve: агент обязан остановиться."""
+    mod = _load()
+    d = _gated_task(tmp_path, "done")
+    with pytest.raises(SystemExit) as exc:
+        mod.update(str(d), "develop", "running")
+    msg = str(exc.value)
+    assert "гейт не пройден" in msg            # контракт для человека
+    assert "останов" in msg.lower()
+    assert "не вызывайте approve" in msg.lower()
+    assert "<task_dir>" not in msg             # нет готовой команды approve
+
+
 def test_overall_status_awaiting_user(tmp_path):
     mod = _load()
     d = _gated_task(tmp_path, "done")

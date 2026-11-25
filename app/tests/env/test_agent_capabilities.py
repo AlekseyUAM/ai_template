@@ -36,6 +36,18 @@ def test_single_agent_rule_handles_db_load():
     assert "update_db" in text
 
 
+def test_single_agent_rule_documents_gates():
+    # Регрессия 2026-11-21: при переходе на single-agent правило потеряло
+    # протокол гейта из удалённого навыка task-orchestration, и агент сам
+    # вызывал approve вместо остановки на подтверждение пользователя.
+    text = (RULES / "single-agent-workflow.md").read_text(encoding="utf-8")
+    assert "## Gates" in text
+    assert "gate: true" in text
+    assert "awaiting_user" in text
+    assert "Stop the run" in text
+    assert "do not `approve`" in text
+
+
 def test_long_operations_are_synchronous():
     # В `claude -p` ход завершается по end_turn, и фоновые задачи убиваются:
     # загрузка/тесты должны запускаться синхронно, а не через run_in_background.
