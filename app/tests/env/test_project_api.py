@@ -901,3 +901,63 @@ def test_open_report_rejects_path_traversal(tmp_path):
     r = c.post(f"/api/env/tasks/{tid}/open-report", json={"stage": "analyze"})
     assert r.status_code == 400
     assert "вне каталога" in r.json()["detail"]
+
+
+# ─── code_index/license_dir: валидация и дефолты ─────────────────────────────
+
+def test_requirements_license_dir_posix():
+    from agentmon.env.project_api import license_dir_default
+    assert license_dir_default(os_name="posix", environ={}) == "/var/1C/licenses"
+
+
+def test_requirements_license_dir_windows():
+    from agentmon.env.project_api import license_dir_default
+    got = license_dir_default(os_name="nt", environ={"PROGRAMDATA": r"D:\PD"})
+    assert got == r"D:\PD\1C\licenses"
+
+
+def test_requirements_endpoint_includes_license_dir(tmp_path):
+    c, _, _ = make_client(tmp_path)
+    r = c.get("/api/env/projects/requirements")
+    assert r.status_code == 200
+    assert r.json()["license_dir"]
+
+
+def _local_body(tmp_path, **extra):
+    d = tmp_path / "proj"
+    d.mkdir()
+    return {
+        "name": "codeproj", "path": str(d),
+        "identifier": "dev", "email": "dev@example.com",
+        "platform_dir": "/opt/1cv8", "platform_version": "8.3.25",
+        "db_connection": "", "backend": "local", **extra,
+    }
+
+
+def test_code_index_rejected_for_ssh(tmp_path):
+    c, _, _ = make_client(tmp_path)
+    body = _local_body(tmp_path, backend="ssh", conn={"host": "h"},
+                       code_index={"enabled": True,
+                                   "catalog_dir": "/x/src/cf",
+                                   "code_index_dir": "/x-ci"})
+    r = c.post("/api/env/projects/create", json=body)
+    assert r.status_code == 400
+    assert "local и docker" in r.json()["detail"]
+
+
+def test_code_index_requires_both_paths(tmp_path):
+    c, _, _ = make_client(tmp_path)
+    body = _local_body(tmp_path, code_index={"enabled": True,
+                                             "catalog_dir": "",
+                                             "code_index_dir": "/x-ci"})
+    r = c.post("/api/env/projects/create", json=body)
+    assert r.status_code == 400
+    assert "заполните" in r.json()["detail"]
+
+
+def test_license_dir_rejected_for_local(tmp_path):
+    c, _, _ = make_client(tmp_path)
+    body = _local_body(tmp_path, license_dir="/var/1C/licenses")
+    r = c.post("/api/env/projects/create", json=body)
+    assert r.status_code == 400
+    assert "только для docker" in r.json()["detail"]

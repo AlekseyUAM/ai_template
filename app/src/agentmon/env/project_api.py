@@ -1,13 +1,16 @@
 """API-роутер мастера создания проекта и справочника проектов."""
+import os
 import re
 import subprocess
 import threading
-from dataclasses import asdict
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
+from . import code_index_project
+from .code_index_project import CodeIndexError, CodeIndexRequest
 from .config_schema import SCHEMA_VERSION, EnvConfig, McpSelection, AgentModel
 from .installer import install_environment
 from .project_checks import (validate_name, requirements, check_db,
@@ -25,6 +28,26 @@ _REQUIRED_FIELDS = ("name", "path", "identifier", "email",
                     "platform_dir", "platform_version")
 # db_connection может быть пустой строкой (файловая БД), но поле должно присутствовать
 _PRESENT_FIELDS = ("db_connection",)
+
+
+def license_dir_default(*, os_name=None, environ=None) -> str:
+    """Каталог лицензий 1С по умолчанию для хоста AgentMon."""
+    name = os_name if os_name is not None else os.name
+    env = environ if environ is not None else os.environ
+    if name == "nt":
+        base = (env.get("PROGRAMDATA") or r"C:\ProgramData").rstrip("\\/")
+        return f"{base}\\1C\\licenses"
+    return "/var/1C/licenses"
+
+
+@dataclass
+class CreatePlan:
+    code_index: CodeIndexRequest | None = None
+    license_dir: str | None = None
+    code_index_port: int | None = None
+    code_index_mid: int | None = None
+    code_index_new_service: bool = False
+    created_mcp_ids: list[int] = field(default_factory=list)
 
 
 def build_project_router(store, registry, monitor=None,
@@ -95,7 +118,8 @@ def build_project_router(store, registry, monitor=None,
 
     @router.get("/api/env/projects/requirements")
     def get_requirements():
-        return {"requirements": requirements(LocalProvisioner())}
+        return {"requirements": requirements(LocalProvisioner()),
+                "license_dir": license_dir_default()}
 
     # ── check-db ─────────────────────────────────────────────────────────────
 
@@ -134,10 +158,11 @@ def build_project_router(store, registry, monitor=None,
     def _prepare_install(body: dict):
         """Валидирует тело, сохраняет проект+MCP в БД, строит EnvConfig.
 
-        Возвращает (pid, config, prov, backend, conn, docker_build). Бросает HTTPException при ошибке ввода.
+        Возвращает (pid, config, prov, backend, conn, docker_build, plan).
+        Бросает HTTPException при ошибке ввода.
 
-        docker_build — кортеж (distr_path, version, docker_host), если нужна сборка образа,
-        либо None, если образ уже существует или backend не docker.
+        docker_build — кортеж (distr_path, version, docker_host), если нужна
+        сборка образа, либо None, если образ уже существует или backend не docker.
         """
         # Docker: образ тегируется версией платформы и переиспользуется.
         # platform_dir вшит в образ (single source of truth: docker.py).
@@ -174,6 +199,39 @@ def build_project_router(store, registry, monitor=None,
 
         backend = body.get("backend", "local")
         conn = body.get("conn")
+
+        # Валидация code-index/license_dir — до создания Provisioner: для ssh
+        # или некорректных путей не нужно поднимать контейнер/соединение.
+        license_server = (body.get("license_server") or "").strip()
+        license_dir = (body.get("license_dir") or "").strip() or None
+        if license_dir:
+            if backend != "docker":
+                raise HTTPException(
+                    status_code=400,
+                    detail="license_dir поддерживается только для docker")
+            if license_server:
+                license_dir = None
+            elif (docker_host_from_conn(conn) is None
+                  and not Path(license_dir).is_dir()):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"каталог лицензий не найден: {license_dir}")
+            else:
+                conn = {**dict(conn or {}), "license_dir": license_dir}
+                body = {**body, "conn": conn}
+
+        ci_raw = body.get("code_index") or {}
+        ci_request = None
+        if ci_raw.get("enabled"):
+            try:
+                ci_request = code_index_project.validate_request(
+                    backend, body["path"],
+                    CodeIndexRequest(
+                        catalog_dir=ci_raw.get("catalog_dir") or "",
+                        code_index_dir=ci_raw.get("code_index_dir") or ""))
+            except CodeIndexError as exc:
+                raise HTTPException(status_code=400, detail=str(exc))
+
         prov = _provisioner_for(backend, conn, body.get("path", ""))
 
         # Для docker каталог проекта — это том внутри контейнера. Проверить его
@@ -238,7 +296,8 @@ def build_project_router(store, registry, monitor=None,
             agents=[AgentModel(**a) for a in body.get("agents", [])],
             license_server=body.get("license_server"),
         )
-        return pid, config, prov, backend, conn, docker_build
+        plan = CreatePlan(code_index=ci_request, license_dir=license_dir)
+        return pid, config, prov, backend, conn, docker_build, plan
 
     def _install_iter(config, body, prov, backend, conn):
         return install_environment(
@@ -280,7 +339,7 @@ def build_project_router(store, registry, monitor=None,
 
     @router.post("/api/env/projects/create")
     def create_project(body: dict):
-        pid, config, prov, backend, conn, docker_build = _prepare_install(body)
+        pid, config, prov, backend, conn, docker_build, plan = _prepare_install(body)
         try:
             if docker_build is not None:
                 # собрать образ до установки окружения; лог не стримим
@@ -299,7 +358,7 @@ def build_project_router(store, registry, monitor=None,
     # ── create project со стримингом лога ──────────────────────────────────────
 
     def _create_produce(pid, env_config, body, prov, backend, conn,
-                        docker_build):
+                        docker_build, plan):
         """Генератор журнала создания проекта.
 
         Выполняется в фоновом потоке StreamJob: обрыв HTTP-стрима больше не
@@ -350,13 +409,13 @@ def build_project_router(store, registry, monitor=None,
     @router.post("/api/env/projects/create/stream")
     def create_project_stream(body: dict):
         # Валидация и запись в БД — до стрима (чтобы 400 возвращался статусом)
-        pid, env_config, prov, backend, conn, docker_build = _prepare_install(body)
+        pid, env_config, prov, backend, conn, docker_build, plan = _prepare_install(body)
         safe_name = re.sub(r"[^\w.-]+", "_", env_config.project_name or "project")
         job = StreamJob(logs_dir / f"{pid}-{safe_name}.log")
         with create_jobs_lock:
             create_jobs[pid] = job
         job.start(_create_produce(pid, env_config, body, prov, backend, conn,
-                                  docker_build))
+                                  docker_build, plan))
         return _stream_job_response(job, pid)
 
     @router.get("/api/env/projects/create/stream/{pid}")
