@@ -1025,6 +1025,27 @@ def test_local_create_with_code_index_creates_card_and_waits(tmp_path, monkeypat
     assert r.json()["project"]["name"] == "codeproj"
 
 
+def test_local_create_code_index_attach_error_rolls_back(tmp_path, monkeypatch):
+    from agentmon.env import code_index_project as cip
+    _fake_code_index(monkeypatch)
+
+    def no_port(*a, **kw):
+        raise cip.CodeIndexError("no port")
+
+    monkeypatch.setattr(cip, "pick_port_for_local", no_port)
+    c, _, _ = make_client(tmp_path)
+    body = _local_body(
+        tmp_path,
+        code_index={"enabled": True,
+                    "catalog_dir": str(tmp_path / "proj" / "src" / "cf"),
+                    "code_index_dir": str(tmp_path / "proj-code-index")})
+    r = c.post("/api/env/projects/create", json=body)
+    assert r.status_code == 400
+    assert "no port" in r.json()["detail"]
+    names = [p["name"] for p in c.get("/api/env/projects").json()["projects"]]
+    assert "codeproj" not in names
+
+
 def test_local_create_code_index_error_rolls_back(tmp_path, monkeypatch):
     from agentmon.env import code_index_project as cip
     seen = _fake_code_index(monkeypatch)

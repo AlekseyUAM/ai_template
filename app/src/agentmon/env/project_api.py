@@ -299,8 +299,15 @@ def build_project_router(store, registry, monitor=None,
         )
         plan = CreatePlan(code_index=ci_request, license_dir=license_dir)
         if ci_request is not None and backend == "local":
-            _attach_code_index(pid, config, plan, backend=backend,
-                               prov=prov, conn=conn)
+            try:
+                _attach_code_index(pid, config, plan, backend=backend,
+                                   prov=prov, conn=conn)
+            except Exception as exc:                   # noqa: BLE001
+                # Проект уже записан: без отката остался бы стаб.
+                _rollback_project(pid, config.project_dir, plan=plan,
+                                  backend=backend, prov=prov)
+                raise HTTPException(
+                    status_code=400, detail=f"code-index: {exc}") from None
         return pid, config, prov, backend, conn, docker_build, plan
 
     def _attach_code_index(pid, env_config, plan, *, backend, prov, conn):
