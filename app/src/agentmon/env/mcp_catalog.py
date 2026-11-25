@@ -82,7 +82,8 @@ def _server_name(sel) -> str:
     return sel.id
 
 
-_PRELOAD_IDS = frozenset({"code-index", "code-index-local", "bsl-ls"})
+_PRELOAD_IDS = frozenset({"code-index", "code-index-local",
+                          "code-index-docker", "bsl-ls"})
 _PRELOAD_NAMES = frozenset({"code_index", "bsl_ls"})
 
 

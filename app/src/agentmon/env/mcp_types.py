@@ -162,6 +162,26 @@ MCP_TYPES: list[McpType] = [
                       "port": "Порт code_index"},
     ),
     McpType(
+        key="code-index-docker",
+        title="Индексированная кодовая база (в контейнере проекта)",
+        fields=("name", "mcp_name", "purpose", "url", "port",
+                "catalog_dir", "project_name", "code_index_dir", "connection"),
+        connection_template=_HTTP_PORT,
+        defaults={
+            "mcp_name": "code_index",
+            "url": "localhost",
+            "port": 8005,
+            "purpose": ("Полнотекстовый поиск по функциям и классам, граф "
+                        "вызовов, паспорт объекта"),
+        },
+        action=None,
+        required=("catalog_dir", "project_name", "code_index_dir", "port"),
+        field_labels={"project_name": "Имя проекта (alias репозитория)",
+                      "code_index_dir": "Каталог code_index",
+                      "port": "Порт code_index"},
+        hidden=True,
+    ),
+    McpType(
         key="code-index-local",
         title="Индексированная кодовая база (локально, legacy)",
         fields=("name", "mcp_name", "purpose", "url", "port",

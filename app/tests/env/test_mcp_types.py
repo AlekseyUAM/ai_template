@@ -2,11 +2,12 @@ from agentmon.env.mcp_types import MCP_TYPES, get_type, build_connection, types_
 from agentmon.pycmd import PYTHON_CMD
 
 
-def test_eight_types_present():
+def test_expected_types_present():
     keys = {t.key for t in MCP_TYPES}
     assert keys == {
         "custom", "1c-md", "1c-md-queries", "bsl-ls",
         "1c-platform", "1c-naparnic", "code-index", "code-index-local",
+        "code-index-docker",
     }
 
 
@@ -164,3 +165,11 @@ def test_docker_launch_validates_port():
             launch_cmd("name", "img", bad)
     cmd = launch_cmd("name", "img", 8000)
     assert "127.0.0.1:8000:8000" in " ".join(cmd)
+
+
+def test_code_index_docker_is_hidden_without_action():
+    from agentmon.env.mcp_types import get_type
+    t = get_type("code-index-docker")
+    assert t.hidden is True
+    assert t.action is None
+    assert t.defaults["mcp_name"] == "code_index"

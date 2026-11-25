@@ -62,3 +62,10 @@ def test_js_rebuilds_table_and_has_form_actions(tmp_path):
 def test_mcp_page_has_required_asterisk_style(tmp_path):
     html = _client(tmp_path).get("/mcp").text
     assert ".required::after" in html and "--danger" in html
+
+
+def test_js_does_not_offer_deploy_for_docker_code_index(tmp_path):
+    js = _client(tmp_path).get("/static/mcp.js").text
+    assert "code-index-docker" in js
+    idx = js.index("code-index-docker")
+    assert "managedCodeIndex" in js[idx - 400: idx + 400]

@@ -346,8 +346,12 @@ async function showMcpCard(mcpId) {
   const isCfe = (type && type.has_cfe) || mcp.kind === "extension";
   const isDocker = type ? type.action === "docker" : mcp.kind === "docker";
   const isLocal = type ? type.action === "local" : mcp.kind === "local";
+  // Сервисом docker-проекта управляет создание проекта, а не страница MCP.
+  const managedCodeIndex = mcp.standard_key === "code-index-docker";
 
-  if (isCfe) {
+  if (managedCodeIndex) {
+    controlsHtml = "";
+  } else if (isCfe) {
     controlsHtml = `<button type="button" onclick="downloadCfe('${mcp.id}')">Скачать cfe</button>`;
   } else if (isDocker) {
     controlsHtml = `<button type="button" onclick="launchMcp('${mcp.id}')">Развернуть в Docker локально</button>`;
