@@ -271,3 +271,10 @@ curl -s -H 'Accept: text/event-stream' http://127.0.0.1:8005/mcp
 Из агента: `health`, `get_stats`, затем `search_terms` с
 `repo="<имя проекта>"`. Ответ `daemon_offline` — проверьте, что демон жив и
 `CODE_INDEX_HOME` у демона и `serve` одинаковый.
+
+## Code index в docker-проекте
+
+Для docker-проекта code-index разворачивается не на хосте, а внутри
+контейнера проекта (том `/code-index`). Агент обращается к нему по
+`http://localhost:<порт>/mcp`; alias — имя проекта. Управление — через
+создание проекта; карточка `code-index-docker` кнопки «Развернуть» не имеет.

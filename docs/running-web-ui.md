@@ -80,6 +80,31 @@ python -m agentmon
 | `/create-task` | Мастер «Создать задачу» |
 | `/run-tasks` | «Выполнить задачи» — запуск списка задач |
 
+### Code index и docker в мастере проекта
+
+В секции «MCP-серверы» мастера есть галочка **code index**. При включении:
+
+- «Каталог кодовой базы» автозаполняется `<каталог проекта>/src/cf`;
+- «Каталог code_index» для local по умолчанию `<каталог проекта>-code-index`,
+  для docker — `/code-index`.
+
+При создании проекта AgentMon создаёт (или переиспользует) карточку
+`code-index`, добавляет её в `.mcp.json` и разворачивает сервис; создание
+завершается после готовности индекса. Один каталог `code_index` может
+обслуживать несколько баз: alias всегда равен имени проекта. Для docker
+сервис работает внутри контейнера проекта, карточка — `code-index-docker`
+(кнопки host-развёртывания нет).
+
+Docker-проект поднимается по схеме benchmark: тома `/workspace` и
+`/code-index`, `HOME=/root` с томом `.claude`, локальный Docker на Linux —
+`--network host`, на Windows/macOS — bridge + `host.docker.internal`. Команда
+агента берётся из `AGENTMON_CLAUDE_CMD`: для `claude-ds` в контейнер
+копируется ключ DeepSeek, для `claude-local` — настройки Strata.
+
+Если «Сервер лицензий» пуст, для docker показывается поле «Каталог лицензий
+1С» (по умолчанию `/var/1C/licenses` на Linux, `C:\ProgramData\1C\licenses`
+на Windows); каталог монтируется в контейнер как `/var/1C/licenses`.
+
 ---
 
 ## Переменные окружения
@@ -94,7 +119,7 @@ python -m agentmon
 | `AGENTMON_DB` | путь к SQLite-реестру проектов/очереди | `agentmon.db` |
 | `AI1C_PG_MODE` | `host` или `docker` | `host` |
 | `AI1C_PG_SHA256` | SHA256 архива PostgreSQL | — |
-| `AGENTMON_CLAUDE_CMD` | команда запуска агента (только `claude`) | `claude --dangerously-skip-permissions .` |
+| `AGENTMON_CLAUDE_CMD` | команда запуска агента; обёртки `claude-ds`/`claude-local` — `deploy/claude/README.md` | `claude --dangerously-skip-permissions .` |
 | `AGENTMON_TG_TOKEN` | токен Telegram-бота (пусто → интеграция выключена) | — |
 | `AGENTMON_TG_CHAT_IDS` | разрешённые chat_id через запятую | — |
 
