@@ -99,7 +99,7 @@ import pytest
 
 from agentmon.env import agent_setup
 from agentmon.env.agent_setup import AgentSetupError
-from fakes_code_index import FakeProvisioner
+from env.fakes_code_index import FakeProvisioner
 
 
 def _repo(tmp_path):
@@ -796,7 +796,7 @@ import json
 import pytest
 
 from agentmon.env import code_index_docker
-from fakes_code_index import FakeProvisioner
+from env.fakes_code_index import FakeProvisioner
 
 
 class _Err(RuntimeError):
@@ -1096,7 +1096,7 @@ import pytest
 from agentmon.env import code_index_project
 from agentmon.env.code_index_project import (
     CodeIndexError, CodeIndexRequest, pick_port, resolve_card, validate_request)
-from fakes_code_index import FakeProvisioner
+from env.fakes_code_index import FakeProvisioner
 
 
 class _Repo:
