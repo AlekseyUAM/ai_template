@@ -631,11 +631,22 @@ def _utf8_env() -> dict[str, str]:
     return env
 
 
-def _run_script(argv: list[str], cwd: Path, stdin_text: str | None = None) -> dict:
+def _run_script(argv: list[str], cwd: Path, stdin_text: str | None = None,
+                exec_prefix: list[str] | None = None) -> dict:
+    """Запустить скрипт; exec_prefix — например, `docker exec -w ...`.
+
+    При exec_prefix команда исполняется в контейнере: cwd клиента — хостовый
+    (проект в томе, пути вроде /workspace на хосте нет), рабочий каталог
+    задаёт `-w` в самом префиксе.
+    """
     stdin_kwargs = ({"input": stdin_text} if stdin_text is not None
                     else {"stdin": subprocess.DEVNULL})
+    # exec_prefix (docker exec) задаёт рабочий каталог внутри контейнера:
+    # хостовый cwd проекта (/workspace) не существует и уронил бы Popen.
+    host_cwd = None if exec_prefix else cwd
     try:
-        proc = subprocess.run(argv, cwd=cwd, text=True, capture_output=True,
+        proc = subprocess.run([*(exec_prefix or []), *argv], cwd=host_cwd,
+                              text=True, capture_output=True,
                               encoding="utf-8", errors="replace",
                               env=_utf8_env(), timeout=180, **stdin_kwargs)
         return {"returncode": proc.returncode, "stdout": proc.stdout,
@@ -654,28 +665,68 @@ def _findings(output: str) -> dict[str, int]:
 
 
 def run_static_analyzers(project_dir: Path, files: list[str],
-                         reference: Path | None, out_dir: Path) -> dict:
+                         reference: Path | None, out_dir: Path,
+                         exec_prefix: list[str] | None = None) -> dict:
+    """Статические анализаторы по изменённым файлам.
+
+    ``exec_prefix`` — префикс запуска (`docker exec`): .venv проекта создан
+    интерпретатором контейнера и на хосте может не запускаться.
+    """
     analyzers_dir = out_dir / "analyzers"
     analyzers_dir.mkdir(parents=True, exist_ok=True)
+    container_mode = exec_prefix is not None
     targets = []
     for raw in files:
+        if container_mode:
+            # Файлы проекта — в контейнере: не проверяем их с хоста.
+            if not str(raw).lower().endswith(".bsl"):
+                continue
+            path = (Path(raw) if Path(raw).is_absolute()
+                    else Path(project_dir) / raw)
+            targets.append(path)
+            continue
         path = (project_dir / raw).resolve() if not Path(raw).is_absolute() else Path(raw)
         if path.is_file() and path.suffix.lower() == ".bsl":
             targets.append(path)
     if reference is not None and reference.is_file():
         targets.append(reference.resolve())
     targets = sorted(set(targets))
-    python = _python(project_dir)
+    if container_mode:
+        # .venv проекта — в томе контейнера (на хосте его нет): интерпретатор
+        # проверяем и берём из контейнера, иначе sys.executable хоста не подойдёт.
+        venv_python = str(project_dir / ".venv" / "bin" / "python")
+        probe = _run_script(["test", "-x", venv_python], project_dir,
+                            exec_prefix=exec_prefix)
+        python = venv_python if probe["returncode"] == 0 else "python3"
+    else:
+        python = _python(project_dir)
     code_script = project_dir / ".claude" / "skills" / "code-analyze" / "scripts" / "analyze_code.py"
     extract_script = project_dir / ".claude" / "skills" / "query-analyze" / "scripts" / "extract_queries.py"
     query_script = project_dir / ".claude" / "skills" / "query-analyze" / "scripts" / "analyze_query.py"
-    code_result = {"available": code_script.is_file(),
-                   "skipped": None if code_script.is_file() else "analyze_code.py не найден",
+
+    def _script_exists(path: Path) -> bool:
+        if not container_mode:
+            return path.is_file()
+        # docker: файлы проекта — в контейнере, проверяем через docker exec.
+        probe = _run_script(["test", "-f", str(path)], project_dir,
+                            exec_prefix=exec_prefix)
+        return probe["returncode"] == 0
+
+    code_available = _script_exists(code_script)
+    extract_available = _script_exists(extract_script)
+    query_available = _script_exists(query_script)
+    code_result = {"available": code_available,
+                   "skipped": None if code_available else "analyze_code.py не найден",
                    "results": {}}
-    node_available = shutil.which("node") is not None
+    if exec_prefix:
+        probe = _run_script(["sh", "-c", "command -v node"], project_dir,
+                            exec_prefix=exec_prefix)
+        node_available = probe["returncode"] == 0 and bool(probe["stdout"].strip())
+    else:
+        node_available = shutil.which("node") is not None
     query_result = {
-        "available": extract_script.is_file() and query_script.is_file(),
-        "skipped": None if extract_script.is_file() and query_script.is_file()
+        "available": extract_available and query_available,
+        "skipped": None if extract_available and query_available
         else "analyze_query.py/extract_queries.py не найден",
         "ast": {"available": node_available,
                 "reason": None if node_available else "node не найден в PATH"},
@@ -684,9 +735,9 @@ def run_static_analyzers(project_dir: Path, files: list[str],
     }
     for target in targets:
         key = str(target)
-        if code_script.is_file():
+        if code_available:
             run = _run_script([python, str(code_script), str(target), "-NoFail"],
-                              project_dir)
+                              project_dir, exec_prefix=exec_prefix)
             output = run["stdout"] + run["stderr"]
             output_path = analyzers_dir / f"{_safe_name(target)}.code.txt"
             output_path.write_text(output, encoding="utf-8")
@@ -696,11 +747,12 @@ def run_static_analyzers(project_dir: Path, files: list[str],
                 "output_path": str(output_path),
                 "warnings": run["stderr"].strip()[:1000],
             }
-        if extract_script.is_file() and query_script.is_file():
+        if extract_available and query_available:
             extracted = _run_script([python, str(extract_script), "-Path", str(target)],
-                                    project_dir)
+                                    project_dir, exec_prefix=exec_prefix)
             analyzed = _run_script([python, str(query_script), "-"], project_dir,
-                                   stdin_text=extracted["stdout"])
+                                   stdin_text=extracted["stdout"],
+                                   exec_prefix=exec_prefix)
             output = extracted["stdout"] + extracted["stderr"] + analyzed["stdout"] + analyzed["stderr"]
             output_path = analyzers_dir / f"{_safe_name(target)}.query.txt"
             output_path.write_text(output, encoding="utf-8")

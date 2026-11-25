@@ -38,7 +38,7 @@ for _stream in (sys.stdout, sys.stderr):
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from bench_run import (BenchError, ensure_claude_cmd,  # noqa: E402
-                       read_env_file, resolve_claude_cmd,
+                       read_env_file, resolve_claude_cmd, resolve_placement,
                        resolve_project_dir)
 from bench_metrics import parse_stream  # noqa: E402
 from claude_proc import run_claude_process  # noqa: E402
@@ -279,8 +279,12 @@ def project_slug(project: Path) -> str:
             .replace(":", "-").replace("\\", "-").replace("/", "-"))
 
 
-def find_session_file(project: Path, started_epoch: float) -> Path | None:
-    root = Path.home() / ".claude" / "projects" / project_slug(project)
+def find_session_file(project: Path, started_epoch: float,
+                      projects_root: Path | None = None) -> Path | None:
+    """Сессии claude; для docker-размещения — в HOME контейнера на хосте."""
+    base = (Path(projects_root) if projects_root
+            else Path.home() / ".claude" / "projects")
+    root = base / project_slug(project)
     if not root.is_dir():
         return None
     candidates = [p for p in root.glob("*.jsonl")
@@ -362,7 +366,10 @@ def artifact_exists(task_dir: Path, artifact: str) -> bool:
 
 
 def run_stage(*, project: Path, folder: str, stage: dict, claude_cmd: str,
-              limit_min: int, run_dir: Path, brief: str | None = None) -> dict:
+              limit_min: int, run_dir: Path, brief: str | None = None,
+              prefix_argv: list[str] | None = None,
+              sessions_root: Path | None = None,
+              kill_agent=None) -> dict:
     name = str(stage.get("name") or "?")
     artifact = str(stage.get("artifact") or "")
     task_dir = project / "tasks" / folder
@@ -379,13 +386,16 @@ def run_stage(*, project: Path, folder: str, stage: dict, claude_cmd: str,
     process = run_claude_process(
         cmd=claude_cmd, prompt=prompt, cwd=project,
         timeout_sec=limit_min * 60, stdout_path=stream_path,
-        stderr_path=stderr_path, env=env)
+        stderr_path=stderr_path, env=env, prefix_argv=prefix_argv)
     exit_code = process.exit_code
     timed_out = process.timed_out
     duration = process.duration_sec
+    if timed_out and kill_agent is not None:
+        kill_agent()
     metrics = stream_metrics(stream_path)
     if metrics.get("assistant_events", 0) == 0:
-        session_file = find_session_file(project, started_epoch)
+        session_file = find_session_file(project, started_epoch,
+                                         projects_root=sessions_root)
         if session_file:
             metrics = session_metrics(session_file)
     else:
@@ -464,6 +474,7 @@ def main() -> int:
         project = resolve_project_dir(args.project, env_path, repo_root)
         cmd = resolve_claude_cmd(args.claude_cmd, env_path)
         ensure_claude_cmd(cmd)
+        placement, docker_image = resolve_placement(env_path)
         folder = task_folder(args.task)
         task_dir = project / "tasks" / folder
         data = read_task(task_dir)
@@ -510,6 +521,14 @@ def main() -> int:
                 print("Фактический лимит этапа = остаток бюджета на старте "
                       "этапа (или явный --limit-stage, если он меньше).")
             return 0
+        # Поэтапный режим работает только с хостовым каталогом проекта:
+        # при BENCH_PLACEMENT=docker проект живёт в томе контейнера.
+        if placement == "docker":
+            raise BenchError(
+                "stage_run.py не поддерживает BENCH_PLACEMENT=docker — "
+                "используйте run_benchmark.py (он умеет docker)")
+        bench_docker = None
+        docker_ctx = None
         run_id = args.run_id or datetime.now().strftime("%Y%m%d-%H%M%S")
         run_dir = project / "tmp" / "stage-runs" / run_id
         run_dir.mkdir(parents=True, exist_ok=True)
@@ -520,6 +539,7 @@ def main() -> int:
             "project": str(project),
             "task": folder,
             "claude_cmd": cmd,
+            "placement": placement,
             "task_budget_minutes": budget,
             "stages": [],
             "stopped": None,
@@ -536,9 +556,20 @@ def main() -> int:
                     if remaining is not None else "")
             print(f"[{datetime.now():%H:%M:%S}] ▶ {name} "
                   f"(лимит {limit_min} мин{left})")
-            result = run_stage(project=project, folder=folder, stage=stage,
-                               claude_cmd=cmd, limit_min=limit_min,
-                               run_dir=run_dir, brief=brief)
+            prefix = None
+            kill_agent = None
+            if docker_ctx is not None:
+                prefix = bench_docker.agent_prefix(
+                    project, repo_root, docker_image, docker_ctx.host_cmd,
+                    {"TASK_STAGE": name})
+                kill_agent = lambda: bench_docker.kill_agent(project)  # noqa: E731
+            result = run_stage(
+                project=project, folder=folder, stage=stage,
+                claude_cmd=cmd, limit_min=limit_min,
+                run_dir=run_dir, brief=brief, prefix_argv=prefix,
+                sessions_root=(docker_ctx.sessions_root
+                               if docker_ctx is not None else None),
+                kill_agent=kill_agent)
             if remaining is not None:
                 remaining = max(0.0, remaining - result["duration_sec"] / 60)
                 result["budget_remaining_after"] = round(remaining, 1)

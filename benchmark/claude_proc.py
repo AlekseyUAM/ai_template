@@ -149,10 +149,16 @@ def run_claude_process(*, cmd: str, prompt: str, cwd: Path,
                        timeout_sec: float, stdout_path: Path,
                        stderr_path: Path,
                        extra_args: tuple[str, ...] = (),
-                       env: dict[str, str] | None = None) -> ProcessResult:
-    """Запустить `claude -p` с промптом в stdin; таймаут убивает группу."""
-    argv = resolve_command(cmd) + ["-p", "--output-format", "stream-json",
-                                   "--verbose", *extra_args]
+                       env: dict[str, str] | None = None,
+                       prefix_argv: list[str] | None = None) -> ProcessResult:
+    """Запустить `claude -p` с промптом в stdin; таймаут убивает группу.
+
+    ``prefix_argv`` — готовый argv-префикс (например, ``docker exec -i ...``)
+    вместо локального разрешения ``cmd``; флаги `-p ...` дописываются к нему.
+    """
+    base = prefix_argv if prefix_argv is not None else resolve_command(cmd)
+    argv = [*base, "-p", "--output-format", "stream-json",
+            "--verbose", *extra_args]
     stdout_path.parent.mkdir(parents=True, exist_ok=True)
     stderr_path.parent.mkdir(parents=True, exist_ok=True)
     started = time.monotonic()

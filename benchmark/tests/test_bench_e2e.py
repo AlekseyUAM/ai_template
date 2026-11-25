@@ -118,9 +118,13 @@ def env(tmp_path):
 
 
 def run_cli(project, fake, values, *extra):
+    # Свой пустой test.env: реальный benchmark/test.env не должен влиять на
+    # e2e (например, BENCH_PLACEMENT=docker у пользователя).
+    env_file = project.parent / "e2e.env"
+    env_file.write_text("", encoding="utf-8")
     return subprocess.run(
         [sys.executable, str(CLI), "--project", str(project),
-         "--claude-cmd", str(fake), *extra],
+         "--env", str(env_file), "--claude-cmd", str(fake), *extra],
         cwd=REPO, env=values, capture_output=True, text=True,
         encoding="utf-8", timeout=120)
 

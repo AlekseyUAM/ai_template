@@ -24,3 +24,8 @@ dist/
 logs/
 *.log
 /benchmark/test.env
+# HOME агента при docker-размещении benchmark-проекта (сессии, конфиг claude).
+/benchmark/.bench-claude/
+# Прогоны и снапшоты проекта (docker: проект в томе, копии — для метрик).
+/benchmark/.bench-runs/
+/benchmark/.bench-snap/

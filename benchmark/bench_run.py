@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shutil
 import subprocess
 import sys
 from dataclasses import dataclass, replace
@@ -48,6 +49,10 @@ class RunOptions:
     force: bool
     run_dir: Path | None
     env_file: Path
+    # "local" — агент на хосте; "docker" — в контейнере проекта.
+    placement: str = "local"
+    docker_image: str | None = None
+    pre_snapshot: Path | None = None   # docker: снимок проекта до прогона
 
 
 @dataclass(frozen=True)
@@ -63,7 +68,10 @@ _ARTIFACT_GLOBS = (
 
 
 def _git(project_dir: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess:
-    proc = subprocess.run(["git", *args], cwd=project_dir, text=True,
+    # safe.directory: после docker-размещения .git мог быть создан контейнером
+    # от другого/хостового uid — иначе git откажется работать с репозиторием.
+    proc = subprocess.run(["git", "-c", f"safe.directory={project_dir}", *args],
+                          cwd=project_dir, text=True,
                           capture_output=True, encoding="utf-8",
                           errors="replace")
     if check and proc.returncode != 0:
@@ -75,6 +83,70 @@ def _git(project_dir: Path, *args: str, check: bool = True) -> subprocess.Comple
 def git_state(project_dir: Path) -> GitState:
     head = _git(project_dir, "rev-parse", "HEAD").stdout.strip()
     status = _git(project_dir, "status", "--porcelain").stdout
+    return GitState(head=head, status=status)
+
+
+@dataclass(frozen=True)
+class DockerContext:
+    """Как обращаться к docker-проекту из раннера."""
+    agent_prefix: list[str]      # docker exec -i ... <cmd>
+    exec_prefix: list[str]       # docker exec -w ... (анализаторы)
+    sessions_root: Path          # каталог сессий claude (в контейнере — host-каталог)
+    host_cmd: list[str]          # argv команды агента на хосте
+    project_dir: Path
+    repo_root: Path
+    docker_image: str
+
+
+def resolve_placement(env_path: Path) -> tuple[str, str | None]:
+    """(placement, docker_image) из env-файла — общая логика раннеров."""
+    env_values = read_env_file(env_path)
+    placement = (env_values.get("BENCH_PLACEMENT") or "local").strip().lower()
+    if placement not in ("local", "docker"):
+        raise BenchError(
+            f"BENCH_PLACEMENT должен быть local или docker, получено {placement!r}")
+    docker_image = None
+    if placement == "docker":
+        docker_image = (env_values.get("BENCH_DOCKER_IMAGE") or "").strip() or None
+        if not docker_image:
+            match = re.search(r"(\d+\.\d+\.\d+\.\d+)",
+                              env_values.get("BENCH_PLATFORM_PATH", ""))
+            if not match:
+                raise BenchError(
+                    "BENCH_DOCKER_IMAGE не задан, и версию платформы не удалось "
+                    "определить из BENCH_PLATFORM_PATH")
+            docker_image = f"ai1c-agent:{match.group(1)}"
+    return placement, docker_image
+
+
+def docker_context(project_dir: Path, repo_root: Path, claude_cmd: str,
+                   docker_image: str) -> DockerContext:
+    """Поднять контейнер проекта и собрать префиксы docker exec."""
+    import bench_docker
+
+    try:
+        host_cmd = bench_docker.host_argv(claude_cmd)
+        bench_docker.ensure_container(project_dir, repo_root,
+                                      docker_image, host_cmd)
+    except (FileNotFoundError, RuntimeError) as exc:
+        raise BenchError(str(exc)) from None
+    return DockerContext(
+        agent_prefix=bench_docker.agent_prefix(
+            project_dir, repo_root, docker_image, host_cmd),
+        exec_prefix=bench_docker.exec_prefix(project_dir),
+        sessions_root=bench_docker.sessions_root(repo_root),
+        host_cmd=host_cmd,
+        project_dir=project_dir,
+        repo_root=repo_root,
+        docker_image=docker_image,
+    )
+
+
+def _docker_git_state(project_dir: Path) -> GitState:
+    """git-состояние проекта в контейнере (без снапшота — только exec)."""
+    import bench_docker
+    head = bench_docker.git(project_dir, "rev-parse", "HEAD").stdout.strip()
+    status = bench_docker.git(project_dir, "status", "--porcelain").stdout
     return GitState(head=head, status=status)
 
 
@@ -172,14 +244,16 @@ class ClaudeRun:
 
 def run_claude(*, cmd: str, prompt: str, cwd: Path, timeout_sec: float,
                stream_path: Path, stderr_path: Path,
-               extra_args: tuple[str, ...] = ()) -> ClaudeRun:
+               extra_args: tuple[str, ...] = (),
+               prefix_argv: list[str] | None = None,
+               projects_root: Path | None = None) -> ClaudeRun:
     """Запустить claude в отдельной сессии и вернуть результат."""
     result = run_claude_process(
         cmd=cmd, prompt=prompt, cwd=cwd, timeout_sec=timeout_sec,
         stdout_path=stream_path, stderr_path=stderr_path,
-        extra_args=extra_args)
+        extra_args=extra_args, prefix_argv=prefix_argv)
     stream = parse_stream(stream_path)
-    session = find_session_files(stream.session_id)
+    session = find_session_files(stream.session_id, projects_root)
     return ClaudeRun(exit_code=result.exit_code, timed_out=result.timed_out,
                      duration_sec=result.duration_sec, stream_path=stream_path,
                      stderr_path=stderr_path, stream=stream, session=session)
@@ -230,7 +304,7 @@ def read_env_file(path: Path) -> dict[str, str]:
 
 
 def resolve_project_dir(cli_project: str | None, env_path: Path,
-                        repo_root: Path) -> Path:
+                        repo_root: Path, placement: str = "local") -> Path:
     raw = cli_project
     if not raw:
         raw = read_env_file(env_path).get("BENCH_PROJECT_DIR")
@@ -241,9 +315,35 @@ def resolve_project_dir(cli_project: str | None, env_path: Path,
     if not path.is_absolute():
         path = repo_root / path
     path = path.resolve()
-    if not path.is_dir():
+    # docker: путь проекта — внутри контейнера (/workspace), на хосте его нет.
+    if placement != "docker" and not path.is_dir():
         raise BenchError(f"каталог проекта не найден: {path}")
     return path
+
+
+def _task_info(folder: str, path: Path, raw: str) -> TaskInfo:
+    """Разобрать task.json в TaskInfo (общая логика local/docker)."""
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise BenchError(f"{folder}/task.json: {exc}") from exc
+    data = data if isinstance(data, dict) else {}
+    try:
+        max_minutes = int(data.get("max_minutes"))
+    except (TypeError, ValueError) as exc:
+        raise BenchError(
+            f"{folder}/task.json: max_minutes должен быть целым числом") from exc
+    if max_minutes < 1:
+        raise BenchError(f"{folder}/task.json: max_minutes должен быть ≥ 1")
+    identifier = str(data.get("identifier") or folder.removeprefix("task#"))
+    return TaskInfo(
+        folder=folder,
+        path=path,
+        identifier=identifier,
+        max_minutes=max_minutes,
+        status=str(data.get("status") or ""),
+        raw=data,
+    )
 
 
 def discover_tasks(project_dir: Path) -> list[TaskInfo]:
@@ -258,27 +358,28 @@ def discover_tasks(project_dir: Path) -> list[TaskInfo]:
         if not task_json.is_file():
             raise BenchError(f"{path.name}: нет task.json")
         try:
-            data = json.loads(task_json.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
+            raw = task_json.read_text(encoding="utf-8")
+        except OSError as exc:
             raise BenchError(f"{path.name}/task.json: {exc}") from exc
-        data = data if isinstance(data, dict) else {}
+        tasks.append(_task_info(path.name, path, raw))
+    if not tasks:
+        raise BenchError(f"в {tasks_root} нет задач task#*")
+    return tasks
 
+
+def discover_tasks_docker(project_dir: Path) -> list[TaskInfo]:
+    """Задачи проекта в контейнере (через docker exec, без снапшота)."""
+    import bench_docker
+    tasks_root = f"{project_dir}/tasks"
+    names = [name for name in bench_docker.list_dir(project_dir, tasks_root)
+             if name.startswith("task#")]
+    tasks: list[TaskInfo] = []
+    for name in sorted(names):
         try:
-            max_minutes = int(data.get("max_minutes"))
-        except (TypeError, ValueError) as exc:
-            raise BenchError(
-                f"{path.name}/task.json: max_minutes должен быть целым числом") from exc
-        if max_minutes < 1:
-            raise BenchError(f"{path.name}/task.json: max_minutes должен быть ≥ 1")
-        identifier = str(data.get("identifier") or path.name.removeprefix("task#"))
-        tasks.append(TaskInfo(
-            folder=path.name,
-            path=path,
-            identifier=identifier,
-            max_minutes=max_minutes,
-            status=str(data.get("status") or ""),
-            raw=data,
-        ))
+            raw = bench_docker.read_text(project_dir, f"{tasks_root}/{name}/task.json")
+        except OSError as exc:
+            raise BenchError(f"{name}: нет task.json ({exc})") from None
+        tasks.append(_task_info(name, Path(tasks_root) / name, raw))
     if not tasks:
         raise BenchError(f"в {tasks_root} нет задач task#*")
     return tasks
@@ -334,8 +435,28 @@ def apply_limits(tasks: list[TaskInfo], limit_args: list[str]) -> dict[str, int]
     return limits
 
 
-def prepare_run_dir(project_dir: Path) -> Path:
-    base = project_dir / "tmp" / "benchmark"
+def _write_report(options: RunOptions, run_dir: Path, text: str,
+                  docker_ctx: "DockerContext | None") -> Path:
+    """Записать RESULT.md: локально — в проект, docker — в прогон и в контейнер."""
+    if docker_ctx is None:
+        return write_report(options.project_dir, text)
+    target = run_dir / "RESULT.md"
+    target.write_text(text if text.endswith("\n") else text + "\n",
+                      encoding="utf-8")
+    import bench_docker
+    bench_docker.write_text(options.project_dir,
+                            f"{options.project_dir}/tmp/RESULT.md", text)
+    return target
+
+
+def prepare_run_dir(project_dir: Path, *, repo_root: Path | None = None,
+                    placement: str = "local") -> Path:
+    if placement == "docker":
+        # docker: проект в томе, а прогон виден и хосту, и контейнеру —
+        # каталог в репозитории (он смонтирован в контейнер по тому же пути).
+        base = Path(repo_root) / "benchmark" / ".bench-runs"
+    else:
+        base = project_dir / "tmp" / "benchmark"
     base.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     candidate = base / stamp
@@ -378,8 +499,25 @@ def build_options(ns: argparse.Namespace, repo_root: Path) -> RunOptions:
             env_path = (repo_root / env_path).resolve()
     else:
         env_path = repo_root / "benchmark" / "test.env"
-    project_dir = resolve_project_dir(ns.project, env_path, repo_root)
-    tasks = discover_tasks(project_dir)
+    placement, docker_image = resolve_placement(env_path)
+    project_dir = resolve_project_dir(ns.project, env_path, repo_root,
+                                      placement=placement)
+    pre_snapshot = None
+    if placement == "docker":
+        # Проект живёт в томе контейнера: для чтения задач снимаем снапшот.
+        import bench_docker
+        try:
+            host_cmd = bench_docker.host_argv(
+                resolve_claude_cmd(ns.claude_cmd, env_path))
+            bench_docker.ensure_container(project_dir, repo_root,
+                                          docker_image, host_cmd)
+        except (FileNotFoundError, RuntimeError) as exc:
+            raise BenchError(str(exc)) from None
+        pre_snapshot = _new_snapshot_dir(repo_root)
+        bench_docker.snapshot(project_dir, pre_snapshot)
+        tasks = discover_tasks(pre_snapshot)
+    else:
+        tasks = discover_tasks(project_dir)
     selected = select_tasks(tasks, ns.task_selectors)
     limits = apply_limits(selected, ns.limit_args)
     if ns.analysis_timeout < 1:
@@ -396,7 +534,20 @@ def build_options(ns: argparse.Namespace, repo_root: Path) -> RunOptions:
         force=bool(ns.force),
         run_dir=None,
         env_file=env_path,
+        placement=placement,
+        docker_image=docker_image,
+        pre_snapshot=pre_snapshot,
     )
+
+
+def _new_snapshot_dir(repo_root: Path) -> Path:
+    """Временный каталог снапшота (в .gitignore: benchmark/.bench-snap)."""
+    base = Path(repo_root) / "benchmark" / ".bench-snap"
+    base.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+    candidate = base / stamp
+    candidate.mkdir(parents=True)
+    return candidate
 
 
 def resolve_claude_cmd(explicit: str | None, env_path: Path) -> str:
@@ -507,9 +658,28 @@ def _inputs_manifest(path: Path, project_dir: Path, repo_root: Path,
 
 
 def execute(options: RunOptions) -> int:
+    try:
+        return _execute(options)
+    finally:
+        if options.pre_snapshot is not None:
+            shutil.rmtree(options.pre_snapshot, ignore_errors=True)
+
+
+def _execute(options: RunOptions) -> int:
     ensure_claude_cmd(options.claude_cmd)
-    ensure_fresh(options.project_dir, list(options.tasks), force=options.force)
-    run_dir = prepare_run_dir(options.project_dir)
+    # Для docker снимок проекта — рабочая копия на хосте: git, свежесть,
+    # метрики и отчёты считаются по ней; агент работает в контейнере.
+    work_project = (options.pre_snapshot if options.placement == "docker"
+                    else options.project_dir)
+    ensure_fresh(work_project, list(options.tasks), force=options.force)
+    docker_ctx = None
+    docker_mod = None
+    if options.placement == "docker":
+        import bench_docker as docker_mod  # noqa: F401
+        docker_ctx = docker_context(options.project_dir, options.repo_root,
+                                    options.claude_cmd, options.docker_image)
+    run_dir = prepare_run_dir(options.project_dir, repo_root=options.repo_root,
+                              placement=options.placement)
     options = replace(options, run_dir=run_dir)
     log = RunLog(run_dir / "run.log")
     reference = options.repo_root / "benchmark" / "example.bsl"
@@ -526,6 +696,7 @@ def execute(options: RunOptions) -> int:
             "project_dir": str(options.project_dir),
             "repo_root": str(options.repo_root),
             "claude_cmd": options.claude_cmd,
+            "placement": options.placement,
             "force": options.force,
             "contaminated": bool(options.force),
             "skip_analysis": options.skip_analysis,
@@ -544,33 +715,53 @@ def execute(options: RunOptions) -> int:
     if options.force:
         log("⚠ --force: проект не проверялся на свежесть")
     stopped = False
+    report_tasks: list[TaskInfo] = []
     for task in options.tasks:
         log(f"▶ {task.folder}: старт (лимит {options.limits[task.folder]} мин)")
         task_started = _iso_now()
-        before = git_state(options.project_dir)
+        before = git_state(work_project)
         stream_path = run_dir / "transcripts" / f"{task.folder}.stream.jsonl"
         stderr_path = run_dir / "transcripts" / f"{task.folder}.stderr.log"
         run = run_claude(
             cmd=options.claude_cmd,
             prompt=build_task_prompt(task.folder, options.limits[task.folder]),
-            cwd=options.project_dir,
+            # docker exec работает в контейнере; cwd клиента — валидный хостовый.
+            cwd=(run_dir if docker_ctx else options.project_dir),
             timeout_sec=options.limits[task.folder] * 60,
             stream_path=stream_path,
             stderr_path=stderr_path,
+            prefix_argv=docker_ctx.agent_prefix if docker_ctx else None,
+            projects_root=docker_ctx.sessions_root if docker_ctx else None,
         )
-        after = git_state(options.project_dir)
+        if docker_ctx and run.timed_out:
+            # docker exec без TTY не убивает процесс при убийстве клиента.
+            docker_mod.kill_agent(options.project_dir)
+        if docker_ctx:
+            # Снимаем состояние проекта из тома и работаем по нему на хосте.
+            work_project = docker_mod.snapshot(
+                options.project_dir, run_dir / "snapshots" / task.folder)
+            post_tasks = {t.folder: t for t in discover_tasks(work_project)}
+            post_task = post_tasks.get(task.folder, task)
+            report_tasks.append(post_task)
+        else:
+            post_task = task
+        after = git_state(work_project)
         diff_path = run_dir / "diffs" / f"{task.folder}.diff"
         stat_path = run_dir / "diffs" / f"{task.folder}.stat.txt"
-        changed = collect_diff(options.project_dir, before.head, diff_path, stat_path)
+        changed = collect_diff(work_project, before.head, diff_path, stat_path)
         try:
-            task_json = json.loads((task.path / "task.json").read_text(encoding="utf-8"))
+            task_json = json.loads((post_task.path / "task.json")
+                                   .read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             task_json = {}
-        state = collect_task_state(options.project_dir, task)
-        transcript = summarize_transcripts(options.project_dir, run.session,
-                                          run.stream_path)
-        analyzers = run_static_analyzers(options.project_dir, changed, reference,
-                                         run_dir / task.folder)
+        state = collect_task_state(work_project, task)
+        transcript = summarize_transcripts(
+            Path(options.project_dir) if docker_ctx else options.project_dir,
+            run.session, run.stream_path)
+        analyzers = run_static_analyzers(
+            Path(options.project_dir) if docker_ctx else options.project_dir,
+            changed, reference, run_dir / task.folder,
+            exec_prefix=docker_ctx.exec_prefix if docker_ctx else None)
         outcome = _outcome(run, task_json)
         task_finished = _iso_now()
         task_metrics = {
@@ -617,7 +808,7 @@ def execute(options: RunOptions) -> int:
         report = deterministic_report(
             run_id=run_dir.name, project_dir=options.project_dir,
             run_dir=run_dir, metrics=run_metrics, skipped=True)
-        target = write_report(options.project_dir, report)
+        target = _write_report(options, run_dir, report, docker_ctx)
         run_metrics["analysis"] = {"performed": False, "skipped": True,
                                    "result_path": str(target)}
         write_json_atomic(metrics_path, run_metrics)
@@ -629,7 +820,7 @@ def execute(options: RunOptions) -> int:
                             digest_path=digest_path)
     _inputs_manifest(manifest_path, options.project_dir, options.repo_root,
                      run_dir, inputs["metrics_path"], inputs["digest_path"],
-                     reference, options.tasks)
+                     reference, report_tasks or options.tasks)
     prompt = build_prompt(
         run_id=run_dir.name,
         project_dir=options.project_dir,
@@ -643,20 +834,28 @@ def execute(options: RunOptions) -> int:
         task_folders=[task.folder for task in options.tasks],
     )
     (run_dir / "analysis-prompt.md").write_text(prompt, encoding="utf-8")
-    project_before = git_state(options.project_dir)
+    # Проверка «аналитик не изменил проект» — по git в контейнере: снапшот
+    # всего проекта на 300+ МБ тут не нужен.
+    project_before = (_docker_git_state(options.project_dir) if docker_ctx
+                      else git_state(work_project))
     repo_before = _safe_git_state(options.repo_root)
     analyst = run_claude(
         cmd=options.claude_cmd,
         prompt=prompt,
-        cwd=options.project_dir,
+        cwd=(run_dir if docker_ctx else options.project_dir),
         timeout_sec=options.analysis_timeout_min * 60,
         stream_path=run_dir / "analysis-transcripts" / "analyst.stream.jsonl",
         stderr_path=run_dir / "analysis-transcripts" / "analyst.stderr.log",
         extra_args=("--add-dir", str(options.repo_root),
                     "--disallowedTools", "Edit", "MultiEdit", "NotebookEdit",
                     "Write", "Agent"),
+        prefix_argv=docker_ctx.agent_prefix if docker_ctx else None,
+        projects_root=docker_ctx.sessions_root if docker_ctx else None,
     )
-    project_after = git_state(options.project_dir)
+    if docker_ctx and analyst.timed_out:
+        docker_mod.kill_agent(options.project_dir)
+    project_after = (_docker_git_state(options.project_dir) if docker_ctx
+                     else git_state(options.project_dir))
     repo_after = _safe_git_state(options.repo_root)
     text = extract_analyst_text(analyst.stream)
     error = None
@@ -690,7 +889,7 @@ def execute(options: RunOptions) -> int:
                  + " и `git status`; отчёт мог быть построен на изменённых "
                  "данных.\n")
         log("⚠ аналитик изменил git-состояние проекта или репозитория template")
-    target = write_report(options.project_dir, text)
+    target = _write_report(options, run_dir, text, docker_ctx)
     run_metrics["analysis"] = {
         "performed": True,
         "skipped": False,

@@ -13,8 +13,9 @@ import shlex
 import shutil
 import stat
 import subprocess
+import tempfile
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Callable
 
@@ -43,9 +44,11 @@ OPTIONAL_KEYS = (
     "MCP_1C_MD_URL", "MCP_1C_NAPARNIC_URL", "BENCH_DT_PATH",
     "MCP_CODE_INDEX_HOST", "CODE_INDEX_WAIT_MINUTES",
     "AGENTMON_CLAUDE_CMD", "BENCH_STRATA_SETTINGS", "STRATA_CMD",
+    "BENCH_PLACEMENT", "BENCH_DOCKER_IMAGE",
 )
 _VERSION_RE = re.compile(r"(\d+\.\d+\.\d+\.\d+)")
 _URL_RE = re.compile(r"^https?://", re.IGNORECASE)
+PLACEMENTS = ("local", "docker")
 
 # Ключи benchmark-профиля, которые strata connect не задаёт.
 _BENCH_SETTINGS_ENV = {
@@ -98,6 +101,12 @@ class BenchConfig:
     dt_path: str | None
     strata_settings: bool = False
     strata_cmd: str = "strata"
+    # "local" — проект на хосте; "docker" — в контейнере (install/агент).
+    # Контейнер benchmark-проекта работает с --network host, поэтому
+    # localhost в БД/MCP-адресах означает хост и в контейнере.
+    placement: str = "local"
+    docker_image: str | None = None       # только для placement=docker
+    claude_cmd: str = ""                  # AGENTMON_CLAUDE_CMD
 
 
 def parse_env_file(path: Path) -> dict[str, str]:
@@ -360,6 +369,16 @@ def load_config(env_path: Path, *, repo_root: Path,
         raise SetupError("BENCH_STRATA_SETTINGS должен быть 0 или 1")
     strata_cmd = (data.get("STRATA_CMD") or "strata").strip() or "strata"
 
+    placement = (data.get("BENCH_PLACEMENT") or "local").strip().lower()
+    if placement not in PLACEMENTS:
+        raise SetupError(
+            f"BENCH_PLACEMENT должен быть local или docker, получено "
+            f"{placement!r}")
+    docker_image = (data.get("BENCH_DOCKER_IMAGE") or "").strip() or None
+    if placement == "docker" and not docker_image:
+        from .docker_image import image_tag
+        docker_image = image_tag(version.group(1))
+
     db_connection = data["BENCH_DB_CONNECTION"].strip()
     return BenchConfig(
         project_name=data["BENCH_PROJECT_NAME"].strip(),
@@ -384,6 +403,9 @@ def load_config(env_path: Path, *, repo_root: Path,
         dt_path=dt_path,
         strata_settings=strata_settings,
         strata_cmd=strata_cmd,
+        placement=placement,
+        docker_image=docker_image,
+        claude_cmd=(data.get("AGENTMON_CLAUDE_CMD") or "").strip(),
     )
 
 
@@ -591,16 +613,24 @@ def _assert_index_not_locked(project_dir: Path) -> None:
 
 
 def remove_existing_project(cfg: BenchConfig, *, store, registry,
-                            log=print) -> None:
+                            log=print, remove_project_dir=None) -> None:
     """Удалить существующий benchmark-проект: каталог, store и реестр.
 
     Используется режимом пересоздания setup'а. MCP-карточки не удаляются:
     они переиспользуются по точному совпадению подключения. Сначала проверяем,
     что каталог можно удалить (code-index не держит индекс), и только потом
     трогаем store и реестр — иначе сбой rmtree оставляет проект без записей.
+
+    ``remove_project_dir`` — для docker: удаляет контейнер и тома проекта
+    (файлов проекта на хосте нет), вместо проверок и rmtree каталога.
     """
     project_dir = Path(cfg.project_dir)
-    if project_dir.exists():
+    removed = False
+    if remove_project_dir is not None:
+        remove_project_dir(str(cfg.project_dir))
+        removed = True
+        log("✓ контейнер и тома проекта удалены")
+    elif project_dir.exists():
         if not project_dir.is_dir():
             raise SetupError(f"путь проекта не является каталогом: {project_dir}")
         if any(project_dir.iterdir()):
@@ -620,12 +650,13 @@ def remove_existing_project(cfg: BenchConfig, *, store, registry,
             log(f"✓ удалена запись проекта из store: #{row['id']} {row['name']}")
 
     for project in list(registry.list()):
-        if same_path(project.path, cfg.project_dir):
+        if (project.name == cfg.project_name
+                or same_path(project.path, cfg.project_dir)):
             registry.delete(project.id)
             removed = True
             log(f"✓ удалена запись проекта из реестра: #{project.id} {project.name}")
 
-    if project_dir.exists():
+    if remove_project_dir is None and project_dir.exists():
         _rmtree_force(project_dir)
         removed = True
         log(f"✓ удалён каталог проекта: {project_dir}")
@@ -635,6 +666,8 @@ def remove_existing_project(cfg: BenchConfig, *, store, registry,
 
 
 def build_mcp_plans(cfg: BenchConfig) -> list[McpPlan]:
+    # Контейнер benchmark-проекта работает с --network host, поэтому адреса
+    # localhost одинаково валидны и на хосте, и в контейнере.
     bsl_host, bsl_port = url_host_port(cfg.bsl_ls_url)
     plans = [
         McpPlan(
@@ -1075,11 +1108,15 @@ def run_setup(cfg: BenchConfig, *, repo_root: Path, store, registry,
               wait_index=wait_code_index_ready,
               strata_env: dict[str, str] | None = None,
               strata_settings: dict | None = None,
-              recreate: bool = False) -> SetupResult:
+              recreate: bool = False, docker_ops=None) -> SetupResult:
     """Полный сценарий подготовки проекта. Ошибка → откат записей БД.
 
     recreate=True: предварительно проверить конфигурацию и удалить существующий
     проект (каталог, запись store и реестра), затем создать заново.
+
+    ``docker_ops`` — для BENCH_PLACEMENT=docker: объект с методами
+    ``remove_project`` / ``push_tree``; файлов проекта на хосте нет, все
+    операции с ними идут через контейнер.
     """
     if prov is None:
         from ..backends.local import LocalProvisioner
@@ -1088,14 +1125,21 @@ def run_setup(cfg: BenchConfig, *, repo_root: Path, store, registry,
     if recreate:
         preflight(cfg, repo_root=repo_root, store=store, registry=registry,
                   tcp_ok=tcp_ok, http_ok=http_ok, allow_existing=True)
-        remove_existing_project(cfg, store=store, registry=registry, log=log)
+        remove_existing_project(
+            cfg, store=store, registry=registry, log=log,
+            remove_project_dir=(docker_ops.remove_project
+                                if docker_ops is not None else None))
     preflight(cfg, repo_root=repo_root, store=store, registry=registry,
               tcp_ok=tcp_ok, http_ok=http_ok)
 
     state = RollbackState(project_dir=cfg.project_dir)
     try:
         log(f"▶ проект «{cfg.project_name}» ({cfg.project_dir})")
-        Path(cfg.project_dir).mkdir(parents=True)
+        if docker_ops is None:
+            Path(cfg.project_dir).mkdir(parents=True)
+        else:
+            # контейнер с чистыми томами + владелец томов = хостовый uid
+            docker_ops.prepare_project()
 
         project_id = create_project_row(store, cfg)
         state.project_id = project_id
@@ -1108,20 +1152,28 @@ def run_setup(cfg: BenchConfig, *, repo_root: Path, store, registry,
         config = build_env_config(cfg, plans)
 
         log("▶ окружение проекта")
+        install_failed = False
         for event in install_env(
                 config, update=False, register=lambda cfg_: None,
                 dump_cf=False, dump_cfe=False, git_init=False,
                 db_user=cfg.db_user, db_password=cfg.db_password, prov=prov):
             detail = f" {event.detail}" if event.detail else ""
             log(f"[{event.step}] {event.status}{detail}")
+            if event.status == "error":
+                install_failed = True
+        if install_failed:
+            raise SetupError("установка окружения проекта завершилась с ошибкой")
 
         if cfg.strata_settings:
             if strata_settings is None:
                 settings_env = (strata_env if strata_env is not None
                                 else fetch_strata_env(cfg.strata_cmd))
                 strata_settings = build_strata_settings(settings_env)
-            write_strata_settings(
-                cfg.project_dir, strata_settings, log=log)
+            if docker_ops is not None:
+                docker_ops.write_settings(strata_settings)
+            else:
+                write_strata_settings(
+                    cfg.project_dir, strata_settings, log=log)
 
         log("▶ база 1С")
         ensure_base(cfg, prov=prov, log=log)
@@ -1147,8 +1199,22 @@ def run_setup(cfg: BenchConfig, *, repo_root: Path, store, registry,
         commit_init(cfg, prov)
 
         log("▶ задачи benchmark")
-        tasks = import_tasks(project_id=project_id, cfg=cfg,
-                             repo_root=repo_root, store=store, log=log)
+        if docker_ops is not None:
+            # Файлов проекта на хосте нет: готовим tasks/ во временном каталоге
+            # и заливаем в контейнер.
+            staging = Path(tempfile.mkdtemp(prefix="bench-tasks-"))
+            try:
+                tasks = import_tasks(
+                    project_id=project_id,
+                    cfg=replace(cfg, project_dir=str(staging)),
+                    repo_root=repo_root, store=store, log=log)
+                docker_ops.push_tree(str(staging / "tasks"),
+                                     f"{cfg.project_dir}/tasks")
+            finally:
+                shutil.rmtree(staging, ignore_errors=True)
+        else:
+            tasks = import_tasks(project_id=project_id, cfg=cfg,
+                                 repo_root=repo_root, store=store, log=log)
         state.task_ids = [task.task_id for task in tasks]
         commit_baseline(cfg, tasks, prov)
 
@@ -1157,8 +1223,12 @@ def run_setup(cfg: BenchConfig, *, repo_root: Path, store, registry,
                    host=cfg.code_index_host, port=cfg.code_index_port,
                    run=run, sleep=sleep, clock=clock, log=log)
 
-        registry.add(name=cfg.project_name, path=cfg.project_dir,
-                     backend="local")
+        if cfg.placement == "docker":
+            registry.add(name=cfg.project_name, path=cfg.project_dir,
+                         backend="docker", conn={"image": cfg.docker_image})
+        else:
+            registry.add(name=cfg.project_name, path=cfg.project_dir,
+                         backend="local")
         return SetupResult(
             project_id=project_id,
             task_ids=[task.task_id for task in tasks],

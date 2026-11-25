@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import subprocess
 import sys
@@ -15,9 +16,12 @@ import time
 from pathlib import Path
 
 # Windows-консоль часто cp1251/cp866: «✓» и «→» в логах роняют print.
+# line_buffering — прогресс виден сразу и при перенаправлении вывода в файл:
+# docker-размещение идёт минутами, буфер 8 КБ скрывал ход установки.
 for _stream in (sys.stdout, sys.stderr):
     try:
-        _stream.reconfigure(encoding="utf-8", errors="replace")
+        _stream.reconfigure(encoding="utf-8", errors="replace",
+                            line_buffering=True)
     except (AttributeError, ValueError):
         pass
 
@@ -60,6 +64,16 @@ def apply_settings(cfg, *, fetch=None, build=None, write=None, log=print):
             "BENCH_STRATA_SETTINGS=1 не задан: профиль настроек не из чего "
             "собрать. Включите его в test.env или настройте "
             "settings.local.json вручную.")
+    if getattr(cfg, "placement", "local") == "docker":
+        env = (fetch or fetch_strata_env)(cfg.strata_cmd)
+        settings = (build or build_strata_settings)(env)
+        log(f"  профиль: {settings_summary(settings)}")
+        from bench_docker import write_text
+        path = f"{cfg.project_dir}/.claude/settings.local.json"
+        write_text(cfg.project_dir, path,
+                   json.dumps(settings, ensure_ascii=False, indent=2) + "\n")
+        log(f"✓ настройки записаны в контейнер: {path}")
+        return Path(path)
     if not Path(cfg.project_dir).is_dir():
         raise SetupError(f"каталог проекта не найден: {cfg.project_dir}")
     env = (fetch or fetch_strata_env)(cfg.strata_cmd)
@@ -122,6 +136,103 @@ def docker_problem(timeout: float = 10.0) -> str | None:
     if result.returncode != 0:
         return "демон не отвечает (docker info завершился с ошибкой)"
     return None
+
+
+class _DockerOps:
+    """Операции docker-размещения, которые нужны установщику.
+
+    Проект лежит в томе контейнера (`/workspace`), файлов на хосте нет:
+    задачи заливаются в контейнер, code-index запускается внутри.
+    """
+
+    def __init__(self, project_dir, repo_root, image, host_cmd):
+        self.project_dir = str(project_dir)
+        self.repo_root = repo_root
+        self.image = image
+        self.host_cmd = host_cmd
+
+    def container(self):
+        from bench_docker import container_for
+        return container_for(self.project_dir, self.repo_root,
+                             self.image, self.host_cmd)
+
+    def remove_project(self, project_dir, log=print):
+        from bench_docker import remove_project
+        remove_project(project_dir)
+
+    def push_tree(self, local_src, dst):
+        from bench_docker import copy_tree_in
+        copy_tree_in(self.project_dir, Path(local_src), dst)
+
+    def prepare_project(self):
+        """Создать контейнер с чистыми томами и отдать их пользователю.
+
+        Вызывается после remove_project: Docker создаёт корень тома от root,
+        поэтому нужен chown, иначе установка не сможет писать в /workspace.
+        """
+        from bench_docker import fix_ownership
+        self.container().ensure()
+        fix_ownership(self.project_dir)
+
+    def start_index(self, *, code_index_dir, catalog_dir, alias, port,
+                    host="127.0.0.1", run=None, log=print):
+        from bench_docker import start_code_index
+        return start_code_index(
+            self.project_dir, code_index_dir=code_index_dir,
+            catalog_dir=catalog_dir, alias=alias, port=port, host=host,
+            log=log)
+
+    def wait_index(self, index, *, wait_minutes, host, port, run=None,
+                   sleep=None, clock=None, log=print):
+        import time
+        from bench_docker import wait_code_index_ready
+        return wait_code_index_ready(
+            index, project_dir=self.project_dir, wait_minutes=wait_minutes,
+            host=host, port=port, sleep=sleep or time.sleep,
+            clock=clock or time.monotonic, log=log)
+
+    def kill_leftovers(self):
+        """Погасить code-index и агента в старом контейнере перед удалением."""
+        from bench_docker import kill_agent, stop_code_index
+        try:
+            stop_code_index(self.project_dir)
+            kill_agent(self.project_dir)
+        except Exception:                               # noqa: BLE001
+            pass
+
+    def write_settings(self, settings):
+        """Записать .claude/settings.local.json внутрь контейнера."""
+        from bench_docker import write_text
+        write_text(self.project_dir,
+                   f"{self.project_dir}/.claude/settings.local.json",
+                   json.dumps(settings, ensure_ascii=False, indent=2) + "\n")
+        print(f"✓ настройки Strata записаны в контейнер: "
+              f"{self.project_dir}/.claude/settings.local.json")
+
+
+def _docker_provisioner(cfg):
+    """(provisioner, docker_ops) для benchmark-проекта в контейнере."""
+    from agentmon.backends.docker import DockerProvisioner
+    from bench_docker import host_argv, image_present
+
+    image = cfg.docker_image
+    if not image_present(image):
+        raise SetupError(
+            f"образ {image} не найден в Docker. Соберите его в мастере "
+            "AgentMon (бэкенд «В Docker-контейнере») или через docker build "
+            "app/docker/agent-image/Dockerfile.")
+    host_cmd = None
+    if cfg.claude_cmd:
+        try:
+            host_cmd = host_argv(cfg.claude_cmd)
+        except FileNotFoundError:
+            print(f"⚠ команда агента не найдена ({cfg.claude_cmd}): обёртка "
+                  "не будет смонтирована в контейнер", file=sys.stderr)
+    ops = _DockerOps(cfg.project_dir, ROOT, image, host_cmd)
+    container = ops.container()
+    print(f"✓ Docker: контейнер {container.name}, образ {image}, "
+          f"проект в томе {container.name}-work:{cfg.project_dir}")
+    return DockerProvisioner(container, workdir=cfg.project_dir), ops
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -219,12 +330,25 @@ def main(argv: list[str] | None = None) -> int:
               file=sys.stderr)
         return 1
 
+    prov = LocalProvisioner()
+    docker_ops = None
+    index_kwargs = {}
+    if cfg.placement == "docker":
+        try:
+            prov, docker_ops = _docker_provisioner(cfg)
+        except SetupError as exc:
+            print(f"✗ {exc}", file=sys.stderr)
+            return 1
+        index_kwargs = {"launch_index": docker_ops.start_index,
+                        "wait_index": docker_ops.wait_index}
+
     try:
         result = run_setup_with_lock_retry(
             lambda: run_setup(
                 cfg, repo_root=ROOT, store=store, registry=registry,
-                prov=LocalProvisioner(), strata_env=strata_env,
-                strata_settings=strata_settings, recreate=True),
+                prov=prov, strata_env=strata_env,
+                strata_settings=strata_settings, recreate=True,
+                docker_ops=docker_ops, **index_kwargs),
             log=print)
     except SetupError as exc:
         print(f"✗ {exc}", file=sys.stderr)
@@ -235,6 +359,8 @@ def main(argv: list[str] | None = None) -> int:
 
     print("\n✓ Готово")
     print(f"  проект:      #{result.project_id} {cfg.project_name}")
+    print(f"  размещение:  {cfg.placement}"
+          + (f" (образ {cfg.docker_image})" if cfg.placement == "docker" else ""))
     print(f"  каталог:     {result.project_dir}")
     print(f"  задачи:      {', '.join(f'#{tid}' for tid in result.task_ids)}")
     print(f"  code_index:  {result.code_index} (native)")
