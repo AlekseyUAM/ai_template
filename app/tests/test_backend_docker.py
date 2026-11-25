@@ -949,6 +949,17 @@ class TestXvfb:
         full = " ".join(xvfb_calls[0])
         assert "pgrep" in full
 
+    def test_xvfb_pgrep_does_not_match_its_own_cmdline(self):
+        """Регресс: `pgrep -f 'Xvfb :99'` находил сам `sh -c` (строка есть в его
+        cmdline) → Xvfb не стартовал → dump-cf падал с GTK-ошибкой.
+        Проверка должна быть по имени процесса, без шаблона 'Xvfb :99'."""
+        fake = self._fake_for_absent()
+        c = _make_container(fake)
+        c.ensure()
+        full = " ".join(fake.called_with("docker exec")[0])
+        assert "pgrep -x Xvfb" in full
+        assert "pgrep -f 'Xvfb :99'" not in full
+
     def test_xvfb_also_called_on_exited_start(self):
         fake = FakeRun(routes=[
             ("docker images -q", 0, "abc\n", ""),

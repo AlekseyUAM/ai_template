@@ -32,10 +32,12 @@ RUN apt-get update -o Acquire::ForceIPv4=true -o Acquire::Retries=3 \
     libodbc2 \
     fonts-dejavu \
     fonts-liberation \
+    git \
     nodejs \
     unzip \
     python3 \
     python3-pip \
+    python3-venv \
     python-is-python3 \
   && echo "ru_RU.UTF-8 UTF-8" >> /etc/locale.gen \
   && locale-gen \

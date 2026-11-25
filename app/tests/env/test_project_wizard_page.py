@@ -138,6 +138,39 @@ def test_js_sends_distr_path_on_create():
     assert "distr_path" in _js()
 
 
+def test_html_has_image_exists_hint():
+    """Когда образ уже собран, вместо поля дистрибутива — пояснение."""
+    assert 'id="imageExistsHint"' in _html(), "Нет пояснения «образ уже собран»"
+
+
+def test_js_shows_image_exists_hint():
+    assert "imageExistsHint" in _js(), (
+        "refreshDistrField должен показывать пояснение о готовом образе"
+    )
+
+
+# ── индикация занятости при создании ────────────────────────────────────────
+
+def test_html_has_create_status_and_disabled_style():
+    h = _html()
+    assert 'id="createStatus"' in h, "Нет индикатора выполнения рядом с кнопкой"
+    assert "button:disabled" in h, (
+        "Заблокированная кнопка должна визуально отличаться"
+    )
+
+
+def test_js_toggles_busy_state():
+    js = _js()
+    assert "setBusy(true" in js, "createProject должен блокировать кнопку"
+    assert "setBusy(false" in js, "и разблокировать её по завершении"
+
+
+def test_html_has_docker_db_hint():
+    """Для docker сервер 1С на хосте — host.docker.internal, а не localhost."""
+    assert 'id="dbDockerHint"' in _html()
+    assert "host.docker.internal" in _html()
+
+
 # ── docker: версия платформы переносится в docker-блок ───────────────────────
 
 def test_html_has_docker_version_slot():

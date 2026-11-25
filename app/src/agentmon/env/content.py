@@ -326,12 +326,29 @@ def provision_venv(prov, config, *, update: bool) -> str | None:
     venv_dir = f"{project_dir}/.venv"
     py = prov.venv_python(project_dir)
     req = TEMPLATE_DIR / "requirements.txt"
-    if not prov.exists(venv_dir):
+
+    def _create_venv() -> str | None:
         res = prov.run(prov.python_cmd() + ["-m", "venv", venv_dir])
         if res.returncode != 0:
             return (f"не удалось подготовить .venv ({res.stderr.strip()}); "
                     f"зависимости навыков не установлены. "
                     f"Доустановите: python setup-venv.py")
+        return None
+
+    had_venv = prov.exists(venv_dir)
+    # Битое venv (например, создано без python3-venv — в нём нет pip) нельзя
+    # переиспользовать: pip install падал бы на каждом прогоне. Пересоздаём.
+    broken = had_venv and prov.run([py, "-m", "pip", "--version"]).returncode != 0
+    if broken:
+        prov.run(prov.python_cmd() + [
+            "-c",
+            "import shutil,sys; shutil.rmtree(sys.argv[1], ignore_errors=True)",
+            venv_dir,
+        ])
+    if not had_venv or broken:
+        error = _create_venv()
+        if error:
+            return error
     if req.is_file():
         # requirements.txt — исходник на мониторе; заливаем его на цель внутри
         # .venv (не в корень проекта — чтобы не нарушать byte-for-byte инвариант

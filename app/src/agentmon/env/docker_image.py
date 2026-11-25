@@ -11,6 +11,8 @@ import tempfile
 import time
 from pathlib import Path
 
+from .. import config
+
 AGENT_IMAGE_PREFIX = "ai1c-agent"
 
 # app/src/agentmon/env/docker_image.py → parents[3] == app/
@@ -50,6 +52,22 @@ def _docker_argv(docker_host, tail):
     return ["docker"] + (["-H", docker_host] if docker_host else []) + tail
 
 
+def _context_parent() -> str | None:
+    """Каталог для build-контекста на диске (не в /tmp).
+
+    /tmp часто tmpfs: os.link с диска даёт EXDEV, и многогигабайтный
+    дистрибутив копируется в RAM (на 3-ГБ zip — 3 ГБ памяти на сборку).
+    Рядом с БД (RUNS_DIR) hardlink обычно срабатывает; если каталог
+    недоступен — падаем обратно на системный temp.
+    """
+    try:
+        d = config.RUNS_DIR / "build-contexts"
+        d.mkdir(parents=True, exist_ok=True)
+        return str(d)
+    except OSError:
+        return None
+
+
 def image_tag(platform_version: str) -> str:
     """Тег образа из версии платформы: ai1c-agent:<sanitized>.
 
@@ -85,7 +103,7 @@ def build_agent_image(distr_path, platform_version, docker_host=None,
         raise ValueError(f"дистрибутив должен быть .zip: {distr_path!r}")
 
     tag = image_tag(platform_version)
-    ctx = tempfile.mkdtemp(prefix="ai1c-build-")
+    ctx = tempfile.mkdtemp(prefix="ai1c-build-", dir=_context_parent())
     try:
         staged = os.path.join(ctx, "distr.zip")
         try:

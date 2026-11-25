@@ -341,6 +341,24 @@ def test_provision_venv_requirements_inside_venv(tmp_path):
     )
 
 
+def test_provision_venv_recreates_broken_venv_without_pip(tmp_path):
+    """venv без pip (создан без python3-venv) пересоздаётся, а не переиспользуется."""
+    class _NoPipProv(_FakeProv):
+        def run(self, cmd, cwd=None):
+            self.calls.append(cmd)
+            if cmd[1:4] == ["-m", "pip", "--version"]:
+                return RunResult(returncode=1, stderr="No module named pip")
+            return RunResult(returncode=0)
+
+    prov = _NoPipProv(venv_exists=True)
+    result = content.provision_venv(prov, cfg(tmp_path, []), update=False)
+    assert result is None
+    assert any("rmtree" in " ".join(c) for c in prov.calls), (
+        "битый .venv должен удаляться перед пересозданием")
+    assert any(c[1:3] == ["-m", "venv"] for c in prov.calls), (
+        "venv должен создаваться заново")
+
+
 def test_provision_venv_warns_on_pip_failure(tmp_path):
     class _FailPipProv(_FakeProv):
         def run(self, cmd, cwd=None):

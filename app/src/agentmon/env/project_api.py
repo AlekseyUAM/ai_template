@@ -1,6 +1,9 @@
 """API-роутер мастера создания проекта и справочника проектов."""
+import re
 import subprocess
+import threading
 from dataclasses import asdict
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
@@ -9,7 +12,9 @@ from .config_schema import SCHEMA_VERSION, EnvConfig, McpSelection, AgentModel
 from .installer import install_environment
 from .project_checks import (validate_name, requirements, check_db,
                              current_env_version, is_empty_dir, infer_db_kind)
+from .stream_job import StreamJob
 from .task_schema import task_folder_name
+from .. import config
 from ..backends.local import LocalProvisioner
 from ..backends.docker import DEFAULT_PLATFORM_DIR, docker_host_from_conn
 from ..paths import same_path
@@ -25,15 +30,22 @@ _PRESENT_FIELDS = ("db_connection",)
 def build_project_router(store, registry, monitor=None,
                          popen=subprocess.Popen,
                          image_exists_fn=docker_image.image_exists,
-                         build_image_fn=docker_image.build_agent_image) -> APIRouter:
+                         build_image_fn=docker_image.build_agent_image,
+                         create_logs_dir=None) -> APIRouter:
     """Строит APIRouter для /api/env/projects/* и /api/env/version.
 
     store — объект Db (P1.1) или None.
     Если store is None, все операции с БД возвращают 503.
     registry — ProjectRegistry (для регистрации при создании).
     popen — неблокирующий запуск подпроцесса (для открытия VS Code; замена в тестах).
+    create_logs_dir — каталог журналов создания; по умолчанию config.RUNS_DIR/create.
     """
     router = APIRouter()
+    logs_dir = Path(create_logs_dir) if create_logs_dir else config.RUNS_DIR / "create"
+    # Фоновые задания создания: pid → StreamJob. Живут дольше HTTP-стрима —
+    # обрыв соединения не должен останавливать сборку/установку.
+    create_jobs: dict[int, StreamJob] = {}
+    create_jobs_lock = threading.Lock()
 
     def require_store():
         if store is None:
@@ -286,26 +298,19 @@ def build_project_router(store, registry, monitor=None,
 
     # ── create project со стримингом лога ──────────────────────────────────────
 
-    @router.post("/api/env/projects/create/stream")
-    def create_project_stream(body: dict):
-        # Валидация и запись в БД — до стрима (чтобы 400 возвращался статусом)
-        pid, config, prov, backend, conn, docker_build = _prepare_install(body)
+    def _create_produce(pid, env_config, body, prov, backend, conn,
+                        docker_build):
+        """Генератор журнала создания проекта.
 
-        def gen():
+        Выполняется в фоновом потоке StreamJob: обрыв HTTP-стрима больше не
+        останавливает работу. Откат стаба — в finally, т.е. при любом исходе,
+        кроме успешного создания.
+        """
+        def produce():
             created = False
-            rolled_back = False
-
-            def rollback_once():
-                nonlocal rolled_back
-                if not rolled_back:
-                    rolled_back = True
-                    # откатить стаб проекта, иначе повторная попытка упрётся
-                    # в UNIQUE (name/path)
-                    _rollback_project(pid, config.project_dir)
-
             try:
-                yield (f"▶ Создание проекта «{config.project_name}» "
-                       f"({config.project_dir})\n")
+                yield (f"▶ Создание проекта «{env_config.project_name}» "
+                       f"({env_config.project_dir})\n")
                 failed = False
                 try:
                     if docker_build is not None:
@@ -314,7 +319,7 @@ def build_project_router(store, registry, monitor=None,
                         for line in build_image_fn(docker_build[0], docker_build[1],
                                                    docker_host=docker_build[2]):
                             yield line
-                    for ev in _install_iter(config, body, prov, backend, conn):
+                    for ev in _install_iter(env_config, body, prov, backend, conn):
                         detail = f" {ev.detail}" if ev.detail else ""
                         yield f"[{ev.step}] {ev.status}{detail}\n"
                         if ev.status == "error":
@@ -323,18 +328,51 @@ def build_project_router(store, registry, monitor=None,
                     failed = True
                     yield f"✗ Ошибка: {exc}\n"
                 if failed:
-                    rollback_once()
                     yield "\n✗ Установка завершилась с ошибкой\n"
                 else:
                     created = True
                     yield "\n✓ Проект создан\n"
             finally:
-                # Сюда попадаем и при GeneratorExit (клиент закрыл вкладку):
-                # без отката стаб проекта заблокирует повторную попытку.
+                # Без отката стаб проекта заблокирует повторную попытку:
+                # следующий create того же имени/пути упрётся в UNIQUE.
                 if not created:
-                    rollback_once()
+                    _rollback_project(pid, env_config.project_dir)
+        return produce
 
-        return StreamingResponse(gen(), media_type="text/plain; charset=utf-8")
+    def _stream_job_response(job: StreamJob, pid: int) -> StreamingResponse:
+        headers = {"X-Project-Id": str(pid)}
+        log_path = str(job.log_path)
+        if log_path.isascii():                  # заголовки — только latin-1
+            headers["X-Log-Path"] = log_path
+        return StreamingResponse(job.iter_log(), media_type="text/plain; charset=utf-8",
+                                 headers=headers)
+
+    @router.post("/api/env/projects/create/stream")
+    def create_project_stream(body: dict):
+        # Валидация и запись в БД — до стрима (чтобы 400 возвращался статусом)
+        pid, env_config, prov, backend, conn, docker_build = _prepare_install(body)
+        safe_name = re.sub(r"[^\w.-]+", "_", env_config.project_name or "project")
+        job = StreamJob(logs_dir / f"{pid}-{safe_name}.log")
+        with create_jobs_lock:
+            create_jobs[pid] = job
+        job.start(_create_produce(pid, env_config, body, prov, backend, conn,
+                                  docker_build))
+        return _stream_job_response(job, pid)
+
+    @router.get("/api/env/projects/create/stream/{pid}")
+    def attach_create_stream(pid: int):
+        """Переподключение к журналу создания после обрыва стрима.
+
+        Задание продолжает работать в фоне; здесь отдаётся журнал с начала,
+        пока задание не завершится (после — тоже отдаётся полностью).
+        """
+        with create_jobs_lock:
+            job = create_jobs.get(pid)
+        if job is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"нет журнала создания для проекта {pid}")
+        return _stream_job_response(job, pid)
 
     # ── list projects ────────────────────────────────────────────────────────
 

@@ -32,6 +32,18 @@ def test_creates_current_symlink():
     assert "/opt/1cv8/current" in _text()
 
 
+def test_image_has_tools_used_by_installer():
+    """Установка окружения внутри контейнера требует git и python3-venv.
+
+    Без git падает шаг prepare-src («git init не удался»), без python3-venv
+    venv создаётся без pip («No module named pip»).
+    """
+    t = _text()
+    assert "\n    git \\" in t, "в образе нет git — git init проекта упадёт"
+    assert "\n    python3-venv \\" in t, (
+        "без python3-venv .venv проекта создаётся без pip")
+
+
 def test_sets_ru_locale():
     assert "ru_RU.UTF-8" in _text()
 

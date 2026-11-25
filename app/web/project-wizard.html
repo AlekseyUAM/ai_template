@@ -46,9 +46,14 @@
       max-height: 200px;
       overflow-y: auto;
       color: var(--fg-muted);
+      /* Сохранять переносы \n: без этого журнал схлопывается в одну
+         строку и при копировании теряет разбиение. */
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
     }
     .controls {
       display: flex;
+      align-items: center;
       gap: 8px;
       margin-top: 20px;
       justify-content: flex-start;
@@ -60,6 +65,9 @@
       border-color: var(--accent);
     }
     button.primary:hover { background-color: var(--accent-hover); }
+    /* Заблокированная кнопка должна выглядеть заблокированной: иначе
+       непонятно, что создание уже идёт. */
+    button:disabled { opacity: 0.55; cursor: not-allowed; }
     .checkbox-group {
       display: flex;
       flex-direction: column;
@@ -180,6 +188,8 @@
               Образа этой версии ещё нет — укажите дистрибутив, образ соберётся при создании проекта.
             </p>
           </div>
+          <!-- Образ уже собран: вместо поля дистрибутива показываем пояснение -->
+          <p id="imageExistsHint" class="mcp-hint" style="display:none; margin-top:8px;"></p>
           <label><span class="label-text">Docker-хост (удалённый, необязательно)</span>
             <input id="dockerDaemonHost" type="text" placeholder="server.example.com"></label>
           <label><span class="label-text">Пользователь</span>
@@ -257,6 +267,11 @@
           <span class="label-text">Строка подключения <span class="req">*</span></span>
           <input id="dbConnection" type="text" placeholder="File=/data/base или Srvr=host;Ref=base" required>
         </label>
+        <p id="dbDockerHint" class="mcp-hint" style="display:none;">
+          Для docker: сервер 1С на хосте доступен как <code>host.docker.internal</code> —
+          например, <code>Srvr=host.docker.internal;Ref=base</code>
+          (localhost указывает внутрь контейнера, а не на хост).
+        </p>
         <div class="grid2">
           <label>
             <span class="label-text">Пользователь</span>
@@ -336,6 +351,7 @@
 
     <div class="controls">
       <button type="button" id="createBtn" class="primary" onclick="createProject()">Создать</button>
+      <span id="createStatus" class="mcp-hint"></span>
     </div>
 
     <div id="createLog"></div>

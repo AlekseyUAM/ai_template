@@ -70,6 +70,10 @@ document.addEventListener("DOMContentLoaded", async () => {
       platLbl.textContent = inContainer ? "Путь к платформе 1С в контейнере"
                                         : "Путь к платформе 1С";
     }
+    // Для docker строка подключения к серверу 1С на хосте — через
+    // host.docker.internal; иначе localhost укажет внутрь контейнера.
+    const dbDockerHint = document.getElementById("dbDockerHint");
+    if (dbDockerHint) dbDockerHint.style.display = inContainer ? "block" : "none";
     // При переключении на docker предзаполняем пустые поля path и platformDir
     // разумными дефолтами для контейнера. Делаем это только здесь (при смене
     // бэкенда), не при каждом вводе, чтобы не затирать уже введённые значения.
@@ -191,6 +195,14 @@ async function refreshDistrField() {
   const backend = document.getElementById("backend").value;
   const distrFields = document.getElementById("distrFields");
   const distrPath = document.getElementById("distrPath");
+  const imageHint = document.getElementById("imageExistsHint");
+  const showImageHint = (tag) => {
+    if (!imageHint) return;
+    imageHint.textContent =
+      `✓ Образ ${tag} уже собран — дистрибутив не нужен, сборка не потребуется.`;
+    imageHint.style.display = "block";
+  };
+  if (imageHint) imageHint.style.display = "none";
   // Не docker — поле не нужно; снимаем required, иначе скрытое required-поле
   // заблокирует сабмит формы.
   if (backend !== "docker") {
@@ -220,13 +232,14 @@ async function refreshDistrField() {
       }),
     });
     const data = await resp.json();
-    // образа нет → поле обязательно и видимо; есть → прячем
+    // образа нет → поле обязательно и видимо; есть → прячем и поясняем почему
     distrFields.style.display = data.exists ? "none" : "block";
-    document.getElementById("distrPath").required = !data.exists;
+    distrPath.required = !data.exists;
+    if (data.exists) showImageHint(data.tag || `ai1c-agent:${platformVersion}`);
   } catch (e) {
     // при ошибке проверки показываем поле (безопаснее требовать дистрибутив)
     distrFields.style.display = "block";
-    document.getElementById("distrPath").required = true;
+    distrPath.required = true;
   }
 }
 
@@ -422,6 +435,57 @@ function renderAgents() {
 
 // ─── Создать проект ───────────────────────────────────────────────────────────
 
+const CREATE_RECONNECT_TRIES = 3;
+
+function formatElapsed(ms) {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return m ? `${m} мин ${s} с` : `${s} с`;
+}
+
+let busyTimer = null;
+
+// Визуально заблокировать кнопку и показать, сколько уже идёт работа.
+// Долгие шаги (content, сборка образа) молчат в журнале — без таймера
+// непонятно, жив ли процесс.
+function setBusy(busy, label) {
+  const btn = document.getElementById("createBtn");
+  const status = document.getElementById("createStatus");
+  if (busyTimer) {
+    clearInterval(busyTimer);
+    busyTimer = null;
+  }
+  if (!btn) return;
+  if (busy) {
+    if (!btn.dataset.idleLabel) btn.dataset.idleLabel = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = label || "Выполняется…";
+    const startedAt = Date.now();
+    const tick = () => {
+      if (status) status.textContent = `выполняется… ${formatElapsed(Date.now() - startedAt)}`;
+    };
+    tick();
+    busyTimer = setInterval(tick, 1000);
+  } else {
+    btn.disabled = false;
+    if (btn.dataset.idleLabel) btn.textContent = btn.dataset.idleLabel;
+    if (status) status.textContent = "";
+  }
+}
+
+// Прочитать журнал стрима до конца. Бросает при обрыве соединения.
+async function readStreamText(r, logElem) {
+  const reader = r.body.getReader();
+  const decoder = new TextDecoder();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    logElem.textContent += decoder.decode(value, { stream: true });
+    logElem.scrollTop = logElem.scrollHeight;
+  }
+}
+
 async function createProject() {
   // Режим обновления окружения проекта
   if (updateProjectId !== null) {
@@ -462,35 +526,60 @@ async function createProject() {
   logElem.style.color = "";
   logElem.textContent = "";
 
-  const createBtn = document.getElementById("createBtn");
-  createBtn.disabled = true;
+  setBusy(true, "Создание…");
+  // Создание идёт в фоне на сервере, а стрим — только журнал: обрыв
+  // соединения не прерывает работу. На обрыве переподключаемся к журналу.
+  let jobId = null;        // pid из X-Project-Id — нужен для переподключения
+  let logPath = null;      // путь к журналу на сервере (X-Log-Path)
+  let reconnects = 0;
   try {
-    // Живой стриминг лога установки — видно каждый шаг по мере выполнения.
-    const r = await fetch("/api/env/projects/create/stream", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    if (!r.ok || !r.body) {
-      let detail = r.statusText;
-      try { detail = (await r.json()).detail || detail; } catch (e) {}
-      logElem.textContent = `✗ Ошибка: ${detail}`;
-      logElem.style.color = "var(--danger)";
-      return;
-    }
-    const reader = r.body.getReader();
-    const decoder = new TextDecoder();
     for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      logElem.textContent += decoder.decode(value, { stream: true });
-      logElem.scrollTop = logElem.scrollHeight;
+      const r = jobId === null
+        ? await fetch("/api/env/projects/create/stream", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          })
+        : await fetch(`/api/env/projects/create/stream/${jobId}`);
+      if (!r.ok || !r.body) {
+        let detail = r.statusText;
+        try { detail = (await r.json()).detail || detail; } catch (e) {}
+        if (jobId !== null) {
+          throw new Error(detail);
+        }
+        logElem.textContent = `✗ Ошибка: ${detail}`;
+        logElem.style.color = "var(--danger)";
+        return;
+      }
+      const pidHeader = r.headers.get("X-Project-Id");
+      if (pidHeader) jobId = pidHeader;
+      logPath = r.headers.get("X-Log-Path") || logPath;
+      if (reconnects > 0) {
+        // Переподключение отдаёт журнал с начала — перерисовываем целиком.
+        logElem.textContent = "";
+      }
+      try {
+        await readStreamText(r, logElem);
+        return;                                // стрим завершился штатно
+      } catch (e) {
+        reconnects += 1;
+        if (jobId === null || reconnects > CREATE_RECONNECT_TRIES) throw e;
+        logElem.textContent +=
+          `\n…связь с сервером прервалась (${e.message}), переподключаюсь к журналу...\n`;
+        logElem.scrollTop = logElem.scrollHeight;
+        await new Promise(res => setTimeout(res, 1500));
+      }
     }
   } catch (e) {
-    logElem.textContent += `\n✗ Ошибка: ${e.message}`;
+    let hint = "";
+    if (jobId !== null) {
+      hint = "\nСоздание продолжается на сервере — проект появится в списке «Проекты».";
+      if (logPath) hint += `\nЖурнал: ${logPath}`;
+    }
+    logElem.textContent += `\n✗ Связь с сервером прервалась: ${e.message}${hint}`;
     logElem.style.color = "var(--danger)";
   } finally {
-    createBtn.disabled = false;
+    setBusy(false);
   }
 }
 
@@ -509,8 +598,7 @@ async function updateEnv() {
   logElem.style.color = "";
   logElem.textContent = "Обновление окружения...";
 
-  const createBtn = document.getElementById("createBtn");
-  if (createBtn) createBtn.disabled = true;
+  setBusy(true, "Обновление…");
   try {
     const r = await fetch(`/api/env/projects/${updateProjectId}/update-env`, {
       method: "POST",
@@ -530,13 +618,14 @@ async function updateEnv() {
     for (const evt of (data.events || [])) {
       html += `\n[${escapeHtml(evt.step)}] ${escapeHtml(evt.status)}${evt.detail ? " " + escapeHtml(evt.detail) : ""}`;
     }
-    logElem.innerHTML = html.replace(/\n/g, "<br>");
+    // .log-output имеет white-space: pre-wrap — переносы \n рендерятся сами.
+    logElem.innerHTML = html;
     logElem.style.color = "var(--success)";
   } catch (e) {
     logElem.textContent = `✗ Ошибка: ${e.message}`;
     logElem.style.color = "var(--danger)";
   } finally {
-    if (createBtn) createBtn.disabled = false;
+    setBusy(false);
   }
 }
 

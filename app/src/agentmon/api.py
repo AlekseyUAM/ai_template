@@ -38,7 +38,8 @@ class _NoCacheStatic(StaticFiles):
 
 
 def create_app(registry, queue, monitor, lifespan=None, store=None,
-               popen=None, image_exists_fn=None, build_image_fn=None):
+               popen=None, image_exists_fn=None, build_image_fn=None,
+               create_logs_dir=None):
     app = FastAPI(lifespan=lifespan)
 
     @app.middleware("http")
@@ -69,6 +70,8 @@ def create_app(registry, queue, monitor, lifespan=None, store=None,
         router_kwargs["image_exists_fn"] = image_exists_fn
     if build_image_fn is not None:
         router_kwargs["build_image_fn"] = build_image_fn
+    if create_logs_dir is not None:
+        router_kwargs["create_logs_dir"] = create_logs_dir
     app.include_router(build_project_router(store, registry, monitor, **router_kwargs))
     from .env.task_api2 import build_task2_router
     app.include_router(build_task2_router(store))

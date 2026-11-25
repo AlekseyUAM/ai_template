@@ -139,6 +139,8 @@ class _DockerContainer:
         claude_home: str = "/root/.claude",
         add_hosts: list[str] | None = None,
         env: dict | None = None,
+        extra_volumes: list[str] | None = None,
+        extra_run_args: list[str] | None = None,
         run=subprocess.run,
         clock=time.monotonic,
         retry_seconds: float = DEFAULT_RETRY_SECONDS,
@@ -153,6 +155,10 @@ class _DockerContainer:
         ``/root/.claude`` — совпадает с ``HOME`` образа при запуске без ``-u``.
         Для образов с непривилегированным пользователем используйте escape-hatch
         ``claude_home=...``.
+        ``extra_volumes`` — дополнительные спецификации ``-v`` как есть
+        (например, bind-mount каталога хоста с данными для бенчмарка).
+        ``extra_run_args`` — дополнительные флаги ``docker run`` (например,
+        ``--user uid:gid``), вставляются перед именем образа.
         ``docker_host`` — адрес удалённого docker-демона (например, ``ssh://user@host``).
         Если задан, все docker-команды будут содержать ``-H <docker_host>`` сразу
         после ``docker``. Если ``None`` — поведение локальное, без изменений.
@@ -165,6 +171,8 @@ class _DockerContainer:
         self._claude_home = claude_home
         self._add_hosts = add_hosts if add_hosts is not None else ["host.docker.internal:host-gateway"]
         self._env = {"DISPLAY": ":99", **(env or {})}
+        self._extra_volumes = list(extra_volumes or [])
+        self._extra_run_args = list(extra_run_args or [])
         self._run = run
         self._clock = clock
         self._retry_seconds = retry_seconds
@@ -308,9 +316,11 @@ class _DockerContainer:
             cmd += ["-v", f"{self._volume}:{self._workdir}"]
             if self._claude_volume is not None:
                 cmd += ["-v", f"{self._claude_volume}:{self._claude_home}"]
+            for spec in self._extra_volumes:
+                cmd += ["-v", spec]
             for k, v in self._env.items():
                 cmd += ["-e", f"{k}={v}"]
-            cmd += [self._image, "sleep", "infinity"]
+            cmd += [*self._extra_run_args, self._image, "sleep", "infinity"]
             r = self._run(cmd, capture_output=True, text=True)
         elif state == "exited":
             r = self._run(
@@ -329,8 +339,11 @@ class _DockerContainer:
 
         # Xvfb — на каждом ensure (идемпотентно): контейнер мог быть уже
         # запущен, но его Xvfb мог умереть. 1С Конфигуратор требует X-дисплей.
+        # pgrep -x (по имени процесса), а не -f: шаблон вида 'Xvfb :99'
+        # встречается в cmdline самого `sh -c`, и pgrep -f находил бы себя —
+        # Xvfb не запускался, а выгрузка падала с «Unable to initialize GTK+».
         xvfb_cmd = (
-            "pgrep -f 'Xvfb :99' >/dev/null 2>&1 "
+            "pgrep -x Xvfb >/dev/null 2>&1 "
             "|| setsid Xvfb :99 -screen 0 1024x768x24 >/tmp/xvfb.log 2>&1"
         )
         self._run(

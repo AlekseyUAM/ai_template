@@ -26,7 +26,8 @@ def make_client(tmp_path):
     mon = Monitor(registry, FakeBackends(None), generating_window=10.0, now_fn=lambda: 1.0)
     store = connect(str(tmp_path / "store.db"))
     init_schema(store)
-    app = create_app(registry=registry, queue=queue, monitor=mon, store=store)
+    app = create_app(registry=registry, queue=queue, monitor=mon, store=store,
+                     create_logs_dir=tmp_path / "create-logs")
     return TestClient(app), registry, store
 
 
@@ -359,6 +360,44 @@ def test_create_stream_validation_400(tmp_path):
     assert r.status_code == 400
 
 
+def test_create_stream_exposes_job_and_reattach_returns_log(tmp_path):
+    """Стрим отдаёт pid журнала; GET переподключения возвращает журнал целиком.
+
+    Журнал живёт в фоне: переподключение после обрыва стрима должно отдать
+    тот же текст с начала и с переносами строк.
+    """
+    from pathlib import Path
+
+    project_dir = tmp_path / "attachproj"
+    project_dir.mkdir()
+    client, _, _ = make_client(tmp_path)
+    body = {
+        "name": "attachproj", "path": str(project_dir),
+        "identifier": "dev", "email": "dev@example.com",
+        "platform_dir": "/opt/1c", "platform_version": "8.3",
+        "db_connection": "", "mcp_ids": [], "agents": [],
+        "dump_cf": False, "dump_cfe": False, "install_tools": False,
+        "git_init": False,
+    }
+    r = client.post("/api/env/projects/create/stream", json=body)
+    assert r.status_code == 200
+    pid = r.headers["x-project-id"]
+    log_path = Path(r.headers["x-log-path"])
+    assert log_path.name.startswith(f"{pid}-")
+    assert "\n" in log_path.read_text(encoding="utf-8")
+
+    r2 = client.get(f"/api/env/projects/create/stream/{pid}")
+    assert r2.status_code == 200
+    assert r2.text == r.text
+    assert "✓ Проект создан" in r2.text
+
+
+def test_attach_create_stream_unknown_404(tmp_path):
+    client, _, _ = make_client(tmp_path)
+    r = client.get("/api/env/projects/create/stream/9999")
+    assert r.status_code == 404
+
+
 def test_update_env_stream_streams_steps(tmp_path):
     project_dir = tmp_path / "updstream"
     project_dir.mkdir()
@@ -449,7 +488,8 @@ def _docker_client(tmp_path, *, exists, build_lines=None, build_rc_ok=True,
             raise RuntimeError("build failed")
 
     app = create_app(registry=registry, queue=queue, monitor=mon, store=store,
-                     image_exists_fn=fake_exists, build_image_fn=fake_build)
+                     image_exists_fn=fake_exists, build_image_fn=fake_build,
+                     create_logs_dir=tmp_path / "create-logs")
     return TestClient(app), registry
 
 
@@ -804,8 +844,12 @@ def test_docker_create_stream_rolls_back_project_on_failure(tmp_path):
     assert "dockerproj" not in names        # стаб откатан
 
 
-def test_create_stream_disconnect_rolls_back_stub(tmp_path, monkeypatch):
-    """GeneratorExit (клиент закрыл вкладку) не оставляет стаб проекта в БД."""
+def test_create_stream_abnormal_abort_rolls_back_stub(tmp_path, monkeypatch):
+    """Аварийное прерывание задания не оставляет стаб проекта в БД.
+
+    Обрыв HTTP-стрима задание больше не прерывает (см. test_stream_job),
+    поэтому GeneratorExit здесь — имитация сбоя самой установки.
+    """
     from agentmon.env import project_api as project_api_module
     from agentmon.env.installer import ProgressEvent
     from agentmon.store.projects import ProjectRepo
