@@ -203,6 +203,40 @@ def test_container_aware_label_spans_present():
     assert 'id="platformDirLabelText"' in h, "Нет span подписи пути к платформе"
 
 
+def test_html_has_code_index_controls():
+    h = _html()
+    assert 'id="codeIndexEnabled"' in h
+    assert 'id="codeIndexCatalogDir"' in h
+    assert 'id="codeIndexDir"' in h
+    assert 'id="licenseDir"' in h
+
+
+def test_js_sends_code_index_and_license_dir():
+    js = _js()
+    assert "code_index:" in js and "license_dir" in js
+    assert "updateCodeIndexDefaults" in js
+    assert "src/cf" in js and "/code-index" in js
+    assert "-code-index" in js
+
+
+def test_js_hides_code_index_for_ssh_and_update():
+    js = _js()
+    assert 'backend === "ssh"' in js
+    assert "updateProjectId !== null" in js
+    assert "syncCodeIndexUi" in js
+
+
+def test_js_reads_license_default_from_requirements():
+    js = _js()
+    assert "license_dir" in js
+    assert "licenseDir" in js
+
+
+def test_js_validates_absolute_paths():
+    js = _js()
+    assert "isAbsolutePath" in js
+
+
 def test_js_sets_container_labels_for_docker():
     j = _js()
     assert "Каталог проекта в контейнере" in j

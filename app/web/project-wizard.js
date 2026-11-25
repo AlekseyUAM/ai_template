@@ -28,6 +28,65 @@ const agentDefaults = {
 // Режим обновления окружения (?id=PID): при сабмите вызываем update-env.
 let updateProjectId = null;
 
+// Автозаполнение полей code index; ручная правка отключает перезапись.
+let codeIndexCatalogDirty = false;
+let codeIndexDirDirty = false;
+
+function pathSep(base) {
+  return (base.includes("\\") || /^[A-Za-z]:/.test(base)) ? "\\" : "/";
+}
+
+function joinProjectPath(base, rel) {
+  if (!base) return "";
+  return base.replace(/[\\/]+$/, "") + pathSep(base) + rel;
+}
+
+function isAbsolutePath(value, backend) {
+  const v = (value || "").trim();
+  if (!v) return false;
+  if (backend === "docker") return v.startsWith("/");
+  return v.startsWith("/") || /^[A-Za-z]:[\\/]/.test(v);
+}
+
+function updateCodeIndexDefaults() {
+  const backend = document.getElementById("backend").value;
+  const path = (document.getElementById("path").value || "").trim();
+  const catalog = document.getElementById("codeIndexCatalogDir");
+  const ci = document.getElementById("codeIndexDir");
+  if (!codeIndexCatalogDirty) {
+    catalog.value = path ? joinProjectPath(path, "src/cf") : "";
+  }
+  if (!codeIndexDirDirty) {
+    ci.value = backend === "docker"
+      ? "/code-index"
+      : (path ? path.replace(/[\\/]+$/, "") + "-code-index" : "");
+  }
+}
+
+function syncCodeIndexUi() {
+  const backend = document.getElementById("backend").value;
+  const item = document.getElementById("codeIndexItem");
+  const check = document.getElementById("codeIndexEnabled");
+  const block = document.getElementById("codeIndexFields");
+  const hidden = backend === "ssh" || updateProjectId !== null;
+  item.hidden = hidden;
+  check.disabled = hidden;
+  if (hidden) {
+    check.checked = false;
+    block.hidden = true;
+    return;
+  }
+  block.hidden = !check.checked;
+  if (check.checked) updateCodeIndexDefaults();
+}
+
+function syncLicenseDir() {
+  const backend = document.getElementById("backend").value;
+  const field = document.getElementById("licenseDirField");
+  const server = (document.getElementById("licenseServer").value || "").trim();
+  field.hidden = !(backend === "docker" && !server && updateProjectId === null);
+}
+
 // ─── Инициализация (одностраничная форма, без шагов) ─────────────────────────
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -88,7 +147,21 @@ document.addEventListener("DOMContentLoaded", async () => {
   backendSel.addEventListener("change", refreshDistrField);
   document.getElementById("platformVersion")
     ?.addEventListener("change", refreshDistrField);
+  backendSel.addEventListener("change", syncCodeIndexUi);
+  backendSel.addEventListener("change", syncLicenseDir);
+  document.getElementById("codeIndexEnabled")
+    .addEventListener("change", syncCodeIndexUi);
+  document.getElementById("licenseServer")
+    .addEventListener("input", syncLicenseDir);
+  document.getElementById("path")
+    .addEventListener("input", updateCodeIndexDefaults);
+  document.getElementById("codeIndexCatalogDir")
+    .addEventListener("input", () => { codeIndexCatalogDirty = true; });
+  document.getElementById("codeIndexDir")
+    .addEventListener("input", () => { codeIndexDirDirty = true; });
   syncBackend();
+  syncCodeIndexUi();
+  syncLicenseDir();
 });
 
 // ─── Скачивание расширения юнит-тестов ───────────────────────────────────────
@@ -154,6 +227,9 @@ async function loadRequirements() {
     container.innerHTML = "<strong>Требования:</strong><br>" + reqs.map(req =>
       `${req.ok ? "✓" : "✗"} ${escapeHtml(req.name)} — ${escapeHtml(req.detail)}`
     ).join("<br>");
+    const license = document.getElementById("licenseDir");
+    if (license && !license.value) license.value = data.license_dir || "";
+    syncLicenseDir();
   } catch (e) {
     container.textContent = `Не удалось проверить требования: ${e.message}`;
   }
@@ -491,6 +567,16 @@ async function createProject() {
   if (updateProjectId !== null) {
     return updateEnv();
   }
+  const backend = document.getElementById("backend").value;
+  const ciEnabled = document.getElementById("codeIndexEnabled").checked;
+  const ciCatalog = document.getElementById("codeIndexCatalogDir").value.trim();
+  const ciDir = document.getElementById("codeIndexDir").value.trim();
+  if (ciEnabled) {
+    if (!isAbsolutePath(ciCatalog, backend) || !isAbsolutePath(ciDir, backend)) {
+      alert("Укажите абсолютные пути для каталога кодовой базы и code_index");
+      return;
+    }
+  }
   const body = {
     name: document.getElementById("name").value,
     path: document.getElementById("path").value,
@@ -505,6 +591,11 @@ async function createProject() {
     backend: document.getElementById("backend").value,
     license_server: document.getElementById("licenseServer").value || null,
     mcp_ids: [...mcpSelectedIds],
+    code_index: {
+      enabled: ciEnabled,
+      catalog_dir: ciCatalog,
+      code_index_dir: ciDir,
+    },
     agents: agentRoles.map(role => ({
       agent: role,
       model: document.querySelector(`input[data-agent-model="${role}"]`).value,
@@ -519,6 +610,10 @@ async function createProject() {
   body.distr_path = (document.getElementById("distrPath")?.value || "").trim();
   const conn = readConn();
   if (conn) body.conn = conn;
+  if (body.backend === "docker") {
+    const license = document.getElementById("licenseDir").value.trim();
+    body.license_dir = license || null;
+  }
 
   const logElem = document.getElementById("createLog");
   logElem.className = "log-output";
@@ -670,6 +765,8 @@ async function checkUrlParams() {
       const el = document.getElementById(itemId);
       if (el) el.style.display = "none";
     }
+    syncCodeIndexUi();
+    syncLicenseDir();
   } catch (e) {
     console.error("Ошибка загрузки проекта:", e);
   }

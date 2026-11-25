@@ -257,6 +257,16 @@
           <input id="licenseServer" type="text" placeholder="10.0.0.5 (NETHASP), необязательно">
         </label>
       </div>
+      <div class="field-group" id="licenseDirField" hidden style="margin-top:12px;">
+        <label>
+          <span class="label-text">Каталог лицензий 1С (для Docker)</span>
+          <input id="licenseDir" type="text" placeholder="/var/1C/licenses">
+        </label>
+        <p class="mcp-hint">
+          Монтируется в контейнер как <code>/var/1C/licenses</code>.
+          Оставьте пустым, если лицензии не нужны.
+        </p>
+      </div>
     </div>
 
     <!-- База -->
@@ -299,6 +309,26 @@
       <div id="mcpSelected" class="mcp-list"></div>
       <div id="mcpHint" class="mcp-hint" style="display:none;">
         Справочник MCP пуст — добавьте на странице «MCP-серверы»
+      </div>
+      <div class="checkbox-item" id="codeIndexItem" style="margin-top:10px;">
+        <input id="codeIndexEnabled" type="checkbox">
+        <label for="codeIndexEnabled">code index</label>
+      </div>
+      <div id="codeIndexFields" hidden>
+        <label>
+          <span class="label-text">Каталог кодовой базы</span>
+          <input id="codeIndexCatalogDir" type="text"
+                 placeholder="/path/demo/src/cf">
+        </label>
+        <label>
+          <span class="label-text">Каталог code_index</span>
+          <input id="codeIndexDir" type="text"
+                 placeholder="/path/demo-code-index">
+        </label>
+        <p class="mcp-hint">
+          Один каталог code_index может обслуживать несколько баз;
+          обращение по alias — имя проекта.
+        </p>
       </div>
     </div>
 
