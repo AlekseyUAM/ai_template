@@ -519,11 +519,17 @@ class DockerProvisioner:
                 entry = projects[str(self._seed_project)] = {}
             entry["hasTrustDialogAccepted"] = True
             payload = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
+            # Атомарно: cat > поверх файла при обрыве оставил бы пустой JSON.
+            tmp = f"{path}.tmp"
             res = self._container.exec_input(
-                ["sh", "-c", f"cat > {shlex.quote(path)}"],
+                ["sh", "-c", f"cat > {shlex.quote(tmp)}"],
                 payload.encode("utf-8"))
             if res.returncode == 0:
-                self._trust_seeded = True
+                moved = self._container.exec_run(
+                    ["sh", "-c",
+                     f"mv -f {shlex.quote(tmp)} {shlex.quote(path)}"])
+                if moved.returncode == 0:
+                    self._trust_seeded = True
         except Exception:                              # noqa: BLE001
             pass
 
