@@ -20,6 +20,7 @@ from .net_probe import default_tcp_ok
 from ..paths import same_path
 
 WAIT_MINUTES = 360
+STARTUP_GRACE_SEC = 120
 PORT_START = 8005
 PORT_TRIES = 100
 LOCAL_KEY = "code-index"
@@ -212,10 +213,35 @@ def local_status(code_index_dir, *, binary_finder=existing_binary,
         return None
 
 
+def _daemon_alive(code_index_dir) -> bool | None:
+    """Жив ли демон (None — PID ещё не записан)."""
+    try:
+        from .code_index_bench import _daemon_state_pid, _is_our_process
+        pid = _daemon_state_pid(code_index_dir)
+    except Exception:                                  # noqa: BLE001
+        return None
+    if pid is None:
+        return None
+    return _is_our_process(pid)
+
+
+def _log_tail(path) -> str:
+    try:
+        text = Path(path).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+    return "\n".join(text.splitlines()[-15:])
+
+
 def wait_ready_local(code_index_dir, *, port, wait_minutes=WAIT_MINUTES,
                      status=local_status, tcp_ok=default_tcp_ok,
+                     alive=_daemon_alive, log_tail=None,
+                     grace_seconds=STARTUP_GRACE_SEC,
                      sleep=time.sleep, clock=time.monotonic, log=print) -> None:
-    deadline = clock() + wait_minutes * 60
+    ci = Path(code_index_dir)
+    log_tail = log_tail or (lambda name: _log_tail(ci / f"{name}.log"))
+    started = clock()
+    deadline = started + wait_minutes * 60
     while True:
         data = status(code_index_dir)
         paths = (data or {}).get("paths") or []
@@ -224,15 +250,26 @@ def wait_ready_local(code_index_dir, *, port, wait_minutes=WAIT_MINUTES,
                 raise CodeIndexError(
                     f"code-index: ошибка индексации {p.get('path', '?')}: "
                     f"{p.get('error') or p.get('message') or 'ошибка индексации'}")
+        if alive(code_index_dir) is False:
+            raise CodeIndexError(
+                "code-index завершился; последние строки логов:\n"
+                f"--- serve.log ---\n{log_tail('serve') or '(пусто)'}\n"
+                f"--- daemon.log ---\n{log_tail('daemon') or '(пусто)'}")
         ready = bool(paths) and all(p.get("status") == "ready" for p in paths)
         if ready and tcp_ok(f"http://127.0.0.1:{int(port)}"):
             log("✓ code-index готов: " + ", ".join(
                 p.get("path", "?") for p in paths))
             return
-        if clock() >= deadline:
+        now = clock()
+        if data is None and now - started > grace_seconds:
+            raise CodeIndexError(
+                "code-index не запустился за "
+                f"{grace_seconds} с; смотрите {ci}/daemon.log:\n"
+                f"{log_tail('daemon') or '(пусто)'}")
+        if now >= deadline:
             raise CodeIndexError(
                 f"code-index не проиндексировал базу за {wait_minutes} мин; "
-                f"смотрите {code_index_dir}/daemon.log")
+                f"смотрите {ci}/daemon.log")
         sleep(5)
 
 

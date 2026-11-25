@@ -134,3 +134,21 @@ def test_wait_ready_local_timeout():
             "/ci", port=8005, wait_minutes=1,
             status=lambda ci: {"paths": []}, tcp_ok=lambda url: True,
             sleep=lambda _s: None, clock=lambda: next(times, 10_000.0))
+
+
+def test_wait_ready_local_dead_service():
+    with pytest.raises(CodeIndexError, match="завершился"):
+        code_index_project.wait_ready_local(
+            "/ci", port=8005, status=lambda ci: None,
+            alive=lambda ci: False, log_tail=lambda name: "",
+            sleep=lambda _s: None, clock=lambda: 0.0)
+
+
+def test_wait_ready_local_startup_grace():
+    times = iter([0.0, 0.0, 200.0])
+    with pytest.raises(CodeIndexError, match="не запустился"):
+        code_index_project.wait_ready_local(
+            "/ci", port=8005, status=lambda ci: None,
+            alive=lambda ci: None, log_tail=lambda name: "",
+            grace_seconds=10, sleep=lambda _s: None,
+            clock=lambda: next(times, 10_000.0))
