@@ -42,12 +42,12 @@ def test_build_prompt_has_constraints_and_no_orchestration_trigger(tmp_path):
         metrics_path=tmp_path / "run" / "metrics.json",
         digest_path=tmp_path / "run" / "digest.md",
         manifest_path=tmp_path / "run" / "analysis-inputs.md",
-        reference_path=tmp_path / "repo" / "benchmark" / "example.bsl",
         contaminated=False,
         task_folders=["task#001", "task#002"],
     )
     assert "не затачивай" in prompt.lower()
-    assert "example.bsl" in prompt
+    assert "example.bsl" not in prompt
+    assert "эталон" not in prompt.lower()
     assert "RESULT.md" not in prompt  # отчёт пишет скрипт, не аналитик
     assert "tasks/task#" not in prompt  # не триггерит route_to_checklists
     assert "Запрещено: Edit/Write/MultiEdit/NotebookEdit" in prompt

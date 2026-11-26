@@ -640,14 +640,13 @@ def _stream_metrics(run: ClaudeRun) -> dict:
 
 def _inputs_manifest(path: Path, project_dir: Path, repo_root: Path,
                      run_dir: Path, metrics_path: Path, digest_path: Path,
-                     reference: Path | None, tasks) -> None:
+                     tasks) -> None:
     lines = ["# Входы анализа", "",
              f"- Проект: `{project_dir}`",
              f"- Метрики: `{metrics_path}`",
              f"- Дайджест: `{digest_path}`",
              f"- Диффы: `{run_dir / 'diffs'}`",
              f"- Транскрипты: `{run_dir / 'transcripts'}`",
-             f"- Эталон: `{reference}`" if reference else "- Эталон: недоступен",
              f"- Template: `{repo_root / 'template'}`", "", "## Задачи", ""]
     for task in tasks:
         lines.append(f"- `{task.folder}`: `{task.path}`")
@@ -682,8 +681,6 @@ def _execute(options: RunOptions) -> int:
                               placement=options.placement)
     options = replace(options, run_dir=run_dir)
     log = RunLog(run_dir / "run.log")
-    reference = options.repo_root / "benchmark" / "example.bsl"
-    reference = reference if reference.is_file() else None
     metrics_path = run_dir / "metrics.json"
     digest_path = run_dir / "digest.md"
     manifest_path = run_dir / "analysis-inputs.md"
@@ -760,7 +757,7 @@ def _execute(options: RunOptions) -> int:
             run.session, run.stream_path)
         analyzers = run_static_analyzers(
             Path(options.project_dir) if docker_ctx else options.project_dir,
-            changed, reference, run_dir / task.folder,
+            changed, run_dir / task.folder,
             exec_prefix=docker_ctx.exec_prefix if docker_ctx else None)
         outcome = _outcome(run, task_json)
         task_finished = _iso_now()
@@ -820,7 +817,7 @@ def _execute(options: RunOptions) -> int:
                             digest_path=digest_path)
     _inputs_manifest(manifest_path, options.project_dir, options.repo_root,
                      run_dir, inputs["metrics_path"], inputs["digest_path"],
-                     reference, report_tasks or options.tasks)
+                     report_tasks or options.tasks)
     prompt = build_prompt(
         run_id=run_dir.name,
         project_dir=options.project_dir,
@@ -829,7 +826,6 @@ def _execute(options: RunOptions) -> int:
         metrics_path=inputs["metrics_path"],
         digest_path=inputs["digest_path"],
         manifest_path=manifest_path,
-        reference_path=reference,
         contaminated=options.force,
         task_folders=[task.folder for task in options.tasks],
     )

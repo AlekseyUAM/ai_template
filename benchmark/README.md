@@ -100,8 +100,8 @@
    - `HOME` агента — `benchmark/.bench-claude` (в git не попадает): сессии
      claude, смонтированная обёртка `AGENTMON_CLAUDE_CMD` и ключ DeepSeek;
    - репозиторий template, файл `BENCH_DT_PATH` и лицензии 1С
-     (`/var/1C/licenses`) монтируются в контейнер: аналитику нужен эталон,
-     `1c-batch` берёт оттуда `benchmark/cf` и `.dt`;
+     (`/var/1C/licenses`) монтируются в контейнер: аналитику нужен
+     `template`, `1c-batch` берёт оттуда `benchmark/cf` и `.dt`;
    - повторный setup пересоздаёт контейнер `ai1c-workspace-<хеш>` и его тома.
 
 2. Запустите из корня репозитория:

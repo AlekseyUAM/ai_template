@@ -664,8 +664,7 @@ def _findings(output: str) -> dict[str, int]:
     return counts
 
 
-def run_static_analyzers(project_dir: Path, files: list[str],
-                         reference: Path | None, out_dir: Path,
+def run_static_analyzers(project_dir: Path, files: list[str], out_dir: Path,
                          exec_prefix: list[str] | None = None) -> dict:
     """Статические анализаторы по изменённым файлам.
 
@@ -688,8 +687,6 @@ def run_static_analyzers(project_dir: Path, files: list[str],
         path = (project_dir / raw).resolve() if not Path(raw).is_absolute() else Path(raw)
         if path.is_file() and path.suffix.lower() == ".bsl":
             targets.append(path)
-    if reference is not None and reference.is_file():
-        targets.append(reference.resolve())
     targets = sorted(set(targets))
     if container_mode:
         # .venv проекта — в томе контейнера (на хосте его нет): интерпретатор

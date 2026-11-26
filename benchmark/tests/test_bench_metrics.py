@@ -585,13 +585,9 @@ def test_run_static_analyzers(tmp_path):
         "import sys\nprint('error | q-1 | 1 | bad')\n", encoding="utf-8")
     target = project / "Module.bsl"
     target.write_text("Процедура А()\nКонецПроцедуры\n", encoding="utf-8")
-    reference = project / "example.bsl"
-    reference.write_text("Процедура А()\nКонецПроцедуры\n", encoding="utf-8")
-    result = run_static_analyzers(project, ["Module.bsl"], reference,
-                                  tmp_path / "out")
+    result = run_static_analyzers(project, ["Module.bsl"], tmp_path / "out")
     code = result["code_analyze"]["results"][str(target.resolve())]
     assert code["findings"] == {"warning": 1, "info": 1, "error": 0}
-    assert str(reference.resolve()) in result["code_analyze"]["results"]
     query = result["query_analyze"]["results"][str(target.resolve())]
     assert query["findings"]["error"] == 1
 
@@ -610,7 +606,7 @@ def test_query_analyze_marks_ast_skipped(tmp_path, monkeypatch):
         encoding="utf-8")
     target = project / "Module.bsl"
     target.write_text("Процедура А()\nКонецПроцедуры\n", encoding="utf-8")
-    result = run_static_analyzers(project, ["Module.bsl"], None, tmp_path / "out")
+    result = run_static_analyzers(project, ["Module.bsl"], tmp_path / "out")
     query = result["query_analyze"]
     assert query["ast"]["available"] is False
     assert query["partial"] is True
@@ -625,7 +621,7 @@ def test_query_analyze_marks_ast_skipped(tmp_path, monkeypatch):
 def test_run_static_analyzers_missing_script(tmp_path):
     project = tmp_path / "project"
     project.mkdir()
-    result = run_static_analyzers(project, [], None, tmp_path / "out")
+    result = run_static_analyzers(project, [], tmp_path / "out")
     assert "не найден" in result["code_analyze"]["skipped"]
 
 
