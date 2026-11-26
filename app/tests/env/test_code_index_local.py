@@ -182,6 +182,30 @@ def test_second_deploy_reports_reload_error_but_continues(tmp_path):
     assert len(installs) == 2
 
 
+def test_second_deploy_restarts_daemon_when_reload_fails(tmp_path):
+    """Демон мог быть остановлен: reload некому ответить — поднимаем юнит."""
+    ci = tmp_path / "ci"
+    ci.mkdir()
+    L.write_service_port(ci, 8005)
+    (ci / "bsl-indexer").write_text("bin", encoding="utf-8")
+    restarts = []
+
+    def restart(name, *, state_dir=None, home=None):
+        restarts.append(name)
+        return []
+
+    log = list(L.deploy_local(
+        code_index_dir=str(ci), catalog_dir="/code/b", project_name="b",
+        port=8005, download=_fake_download, install=_install([]),
+        restart=restart, stop=lambda *a, **k: [],
+        run=lambda *a, **k: type("R", (), {"returncode": 1, "stdout": "",
+                                           "stderr": "boom"})()))
+    daemon_name, serve_name = L.service_names(ci)
+    assert "daemon reload: boom" in "\n".join(log)
+    assert restarts == [daemon_name, serve_name]
+    assert L.read_service_port(ci) == 8005
+
+
 def test_port_mismatch_with_existing_service_raises(tmp_path):
     ci = tmp_path / "ci"
     ci.mkdir()

@@ -11,6 +11,7 @@ import os
 import posixpath
 import re
 import shlex
+import socket
 import subprocess
 import sys
 import tempfile
@@ -736,8 +737,10 @@ class DockerRunner:
         cmd = container_command(project.claude_cmd or self.claude_cmd)
         dh = self._container.docker_host
         host_flag = f" -H {shlex.quote(dh)}" if dh else ""
+        # IS_SANDBOX=1: контейнер — песочница; claude внутри под root иначе
+        # отказывается работать с --dangerously-skip-permissions.
         wrapped = (
-            f"docker{host_flag} exec -it"
+            f"docker{host_flag} exec -it -e IS_SANDBOX=1"
             f" -w {shlex.quote(self._workdir)}"
             f" {shlex.quote(self._container.name)}"
             f" {cmd}"
@@ -1016,9 +1019,16 @@ class DockerBackend(Backend):
         if license_dir:
             extra_volumes.append(f"{license_dir}:/var/1C/licenses")
         extra_run_args = []
+        add_hosts = ["host.docker.internal:host-gateway"]
         if (os.name == "posix" and sys.platform.startswith("linux")
                 and not docker_host):
             extra_run_args += ["--network", "host"]
+            # 1C-кластер публикует имя хоста (например, uam-pc). В host-сети
+            # это тот же хост, но в /etc/hosts контейнера имени нет — без
+            # записи клиент 1С падает «Name or service not known».
+            host_name = socket.gethostname().strip()
+            if host_name:
+                add_hosts.append(f"{host_name}:127.0.0.1")
         # Ключ реестра: "docker|{host_token}|{path}".
         # host_token извлекается единственной реализацией docker_host_token().
         # При docker_host=None → token="" → "docker||{path}" (локальный демон).
@@ -1029,6 +1039,7 @@ class DockerBackend(Backend):
             workdir=workdir,
             volume=volume,
             claude_volume=claude_volume,
+            add_hosts=add_hosts,
             run=run,
             docker_host=docker_host,
             extra_volumes=extra_volumes,

@@ -79,3 +79,19 @@ def test_projects_page(tmp_path):
     assert r.status_code == 200
     assert "Проекты" in r.text
     assert "Путь" in r.text
+
+
+def test_projects_card_shows_container_name(tmp_path):
+    """Карточка проекта выводит имя docker-контейнера, когда оно есть."""
+    registry_db = open_db(tmp_path / "reg.sqlite")
+    registry = ProjectRegistry(registry_db)
+    queue = TaskQueue(registry_db)
+    mon = Monitor(registry, FakeBackends(None), generating_window=10.0, now_fn=lambda: 1.0)
+    store = connect(str(tmp_path / "store.db"))
+    init_schema(store)
+    client = TestClient(create_app(registry=registry, queue=queue, monitor=mon, store=store))
+
+    js = client.get("/static/projects.js")
+    assert js.status_code == 200
+    assert "project.container" in js.text
+    assert "Контейнер" in js.text

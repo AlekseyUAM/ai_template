@@ -56,54 +56,60 @@ def build(db_path=None):
         repeats = 0
         stack_last_error = None
         stack_repeats = 0
-        notifier_last_error = None
-        notifier_repeats = 0
-        while True:
-            try:
-                # tick блокирующий: refresh идёт на бэкенды, а первый контакт
-                # по SSH — это connect с таймаутом 10 секунд и обход SFTP.
-                # На событийном цикле это подвесило бы все HTTP-ручки и
-                # WebSocket'ы на всё время недоступности хоста.
-                await run_in_threadpool(dispatcher.tick)
-                last_error = None
-                repeats = 0
-            except Exception as exc:
-                signature = (type(exc), str(exc))
-                if signature != last_error:
-                    logger.exception("тик диспетчера не удался")
-                    last_error, repeats = signature, 1
-                else:
-                    repeats += 1
-                    logger.warning("тик диспетчера не удался снова (%d-й раз): %s",
-                                   repeats, exc)
-            try:
-                await run_in_threadpool(stack_dispatcher.tick)
-                stack_last_error = None
-                stack_repeats = 0
-            except Exception as exc:
-                signature = (type(exc), str(exc))
-                if signature != stack_last_error:
-                    logger.exception("тик стек-раннера не удался")
-                    stack_last_error, stack_repeats = signature, 1
-                else:
-                    stack_repeats += 1
-                    logger.warning("тик стек-раннера не удался снова (%d-й раз): %s",
-                                   stack_repeats, exc)
-            if tg_notifier is not None:
+        notifier_task = None
+
+        def _notifier_done(task):
+            if task.cancelled():
+                return
+            exc = task.exception()
+            if exc is not None:
+                logger.warning("тик Telegram-нотификатора не удался: %s", exc)
+
+        try:
+            while True:
                 try:
-                    await tg_notifier.tick()
-                    notifier_last_error = None
-                    notifier_repeats = 0
+                    # tick блокирующий: refresh идёт на бэкенды, а первый контакт
+                    # по SSH — это connect с таймаутом 10 секунд и обход SFTP.
+                    # На событийном цикле это подвесило бы все HTTP-ручки и
+                    # WebSocket'ы на всё время недоступности хоста.
+                    await run_in_threadpool(dispatcher.tick)
+                    last_error = None
+                    repeats = 0
                 except Exception as exc:
                     signature = (type(exc), str(exc))
-                    if signature != notifier_last_error:
-                        logger.exception("тик Telegram-нотификатора не удался")
-                        notifier_last_error, notifier_repeats = signature, 1
+                    if signature != last_error:
+                        logger.exception("тик диспетчера не удался")
+                        last_error, repeats = signature, 1
                     else:
-                        notifier_repeats += 1
-                        logger.warning("тик Telegram-нотификатора не удался снова (%d-й раз): %s",
-                                       notifier_repeats, exc)
-            await asyncio.sleep(config.DISPATCH_INTERVAL)
+                        repeats += 1
+                        logger.warning("тик диспетчера не удался снова (%d-й раз): %s",
+                                       repeats, exc)
+                try:
+                    await run_in_threadpool(stack_dispatcher.tick)
+                    stack_last_error = None
+                    stack_repeats = 0
+                except Exception as exc:
+                    signature = (type(exc), str(exc))
+                    if signature != stack_last_error:
+                        logger.exception("тик стек-раннера не удался")
+                        stack_last_error, stack_repeats = signature, 1
+                    else:
+                        stack_repeats += 1
+                        logger.warning("тик стек-раннера не удался снова (%d-й раз): %s",
+                                       stack_repeats, exc)
+                # Нотификатор — отдельной задачей: недоступность Telegram
+                # (каждый send ждёт до 60 с) не должна останавливать запуск
+                # задач и тики стеков.
+                if tg_notifier is not None:
+                    if notifier_task is None or notifier_task.done():
+                        notifier_task = asyncio.create_task(tg_notifier.tick())
+                        notifier_task.add_done_callback(_notifier_done)
+                await asyncio.sleep(config.DISPATCH_INTERVAL)
+        finally:
+            if notifier_task is not None and not notifier_task.done():
+                notifier_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await notifier_task
 
     @contextlib.asynccontextmanager
     async def lifespan(application):

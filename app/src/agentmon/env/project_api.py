@@ -20,7 +20,8 @@ from .stream_job import StreamJob
 from .task_schema import task_folder_name
 from .. import config
 from ..backends.local import LocalProvisioner
-from ..backends.docker import DEFAULT_PLATFORM_DIR, docker_host_from_conn
+from ..backends.docker import (DEFAULT_PLATFORM_DIR, container_name,
+                               docker_host_from_conn)
 from ..paths import same_path
 from . import docker_image
 
@@ -564,6 +565,16 @@ def build_project_router(store, registry, monitor=None,
         mcp_rows = mcp_repo.for_project(pid)
         project = dict(project)
         project["mcp_ids"] = [row["id"] for row in mcp_rows]
+        # Бэкенд в env-БД не хранится — он в реестре (ключ проекта — путь).
+        # Для docker карточка показывает имя контейнера.
+        project["backend"] = None
+        project["container"] = None
+        for reg in registry.list():
+            if same_path(reg.path, project["path"]):
+                project["backend"] = reg.backend
+                break
+        if project["backend"] == "docker":
+            project["container"] = container_name(project["path"])
         return {"project": project}
 
     # ── delete project ───────────────────────────────────────────────────────
@@ -574,7 +585,6 @@ def build_project_router(store, registry, monitor=None,
 
         Каталог проекта на диске НЕ трогается.
         """
-        from types import SimpleNamespace
         from agentmon.store.tasks import TaskRepo
         from agentmon.store.stacks import StackRepo
 
@@ -589,9 +599,9 @@ def build_project_router(store, registry, monitor=None,
 
         # остановить живой прогон проекта (если есть выполняющиеся задачи)
         if monitor is not None and any(t.get("status") == "running" for t in tasks):
-            proj = SimpleNamespace(
-                id=row["id"], path=row["path"], name=row["name"],
-                key="local||" + row["path"], backend="local", claude_cmd=None)
+            from .project_fs import project_like
+            proj = project_like(row, registry,
+                                getattr(monitor, "backends", None))
             try:
                 if monitor.is_alive(proj):
                     monitor.stop(proj)
@@ -757,6 +767,7 @@ def build_project_router(store, registry, monitor=None,
         до БД без ручного refresh.
         """
         from agentmon.store.tasks import TaskRepo
+        from .project_fs import project_provisioner
         from .task_sync import sync_task_from_file
 
         project_repo, _ = get_repos()
@@ -764,10 +775,11 @@ def build_project_router(store, registry, monitor=None,
         if project is None:
             raise HTTPException(status_code=404, detail=f"нет проекта с id={pid}")
 
+        prov = project_provisioner(registry, monitor, project["path"])
         task_repo = TaskRepo(store)
         updated = 0
         for task in task_repo.list(project_id=pid):
-            if sync_task_from_file(store, project["path"], task):
+            if sync_task_from_file(store, project["path"], task, prov=prov):
                 updated += 1
 
         return {"ok": True, "updated": updated}
@@ -819,21 +831,55 @@ def build_project_router(store, registry, monitor=None,
         if project is None:
             raise HTTPException(status_code=404, detail="проект задачи не найден")
         folder = task_folder_name(task["id"], task.get("identifier"))
-        tasks_root = (Path(project["path"]) / "tasks").resolve()
-        artifact_path = (tasks_root / folder / stage["artifact"]).resolve()
-        # artifact приходит из task.json (его может править агент/пользователь):
-        # не даём открыть произвольный файл хоста через ../../..
+        from .project_fs import project_provisioner
+        prov = project_provisioner(registry, monitor, project["path"])
+        if prov is not None:
+            artifact = str(stage["artifact"])
+            # artifact приходит из task.json (его может править
+            # агент/пользователь): не даём выйти за каталог задач.
+            if (not artifact or "/" in artifact or "\\" in artifact
+                    or artifact in (".", "..")):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"недопустимое имя артефакта: {artifact!r}")
+            remote = (f"{str(project['path']).rstrip('/')}/tasks/{folder}/"
+                      f"{artifact}")
+            if not prov.exists(remote):
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"файл отчёта не найден: {artifact}")
+            try:
+                content = prov.read_text(remote)
+            except Exception as exc:                   # noqa: BLE001
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"не удалось прочитать отчёт: {exc}") from None
+            # VS Code на хосте не видит ФС контейнера — открываем локальную
+            # копию отчёта.
+            reports = Path(config.RUNS_DIR) / "reports"
+            reports.mkdir(parents=True, exist_ok=True)
+            safe = re.sub(r"[^\w.-]+", "_", f"{tid}-{stage_name}-{artifact}")
+            target = reports / safe
+            target.write_text(content, encoding="utf-8")
+        else:
+            tasks_root = (Path(project["path"]) / "tasks").resolve()
+            artifact_path = (tasks_root / folder / stage["artifact"]).resolve()
+            # artifact приходит из task.json (его может править
+            # агент/пользователь): не даём открыть произвольный файл хоста
+            # через ../../..
+            try:
+                artifact_path.relative_to(tasks_root)
+            except ValueError:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"артефакт вне каталога задач: {stage['artifact']!r}")
+            if not artifact_path.exists():
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"файл отчёта не найден: {stage['artifact']}")
+            target = artifact_path
         try:
-            artifact_path.relative_to(tasks_root)
-        except ValueError:
-            raise HTTPException(
-                status_code=400,
-                detail=f"артефакт вне каталога задач: {stage['artifact']!r}")
-        if not artifact_path.exists():
-            raise HTTPException(status_code=404,
-                                detail=f"файл отчёта не найден: {stage['artifact']}")
-        try:
-            popen(["code", str(artifact_path)])
+            popen(["code", str(target)])
         except FileNotFoundError:
             raise HTTPException(status_code=500,
                                 detail="команда 'code' не найдена в PATH — установите VS Code CLI")

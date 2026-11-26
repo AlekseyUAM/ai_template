@@ -6,6 +6,14 @@
     AGENTMON_E2E=1 .venv/bin/python -m pytest \\
         app/tests/web/test_task_wizard_e2e.py -m e2e -q
 
+Проект берётся из tmp/test.md; переопределить можно переменной окружения:
+
+    AGENTMON_E2E=1 AGENTMON_E2E_TASK_PROJECT=ssl2_docker \\
+        .venv/bin/python -m pytest app/tests/web/test_task_wizard_e2e.py -m e2e -q
+
+Для ssh/docker-проектов файлы задачи (TASK.md, task.json, USER_FEEDBACK.md)
+читаются на машине проекта: для docker — через docker exec в контейнере.
+
 Без AGENTMON_E2E=1 модуль скипается: обычный pytest не создаёт задач и не
 требует браузера.
 
@@ -24,6 +32,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import time
 import urllib.error
 import urllib.request
@@ -175,6 +184,52 @@ def _find_project(api: Api, name: str) -> dict:
         f"{[p.get('name') for p in projects]}")
 
 
+def _project_with_backend(api: Api, name: str) -> dict:
+    """Проект + backend/container: файлы задач лежат на машине проекта."""
+    project = _find_project(api, name)
+    detail = api.get(f"/api/env/projects/{project['id']}")["project"]
+    return {**project, "backend": detail.get("backend"),
+            "container": detail.get("container")}
+
+
+def _task_path(project: dict, *parts: str) -> str:
+    return "/".join([str(project["path"]).rstrip("/"), *parts])
+
+
+def _docker_exec(project: dict, *argv: str) -> subprocess.CompletedProcess:
+    container = project.get("container")
+    assert container, (
+        f"проект {project.get('name')!r} (backend={project.get('backend')}) "
+        "без имени контейнера")
+    return subprocess.run(["docker", "exec", container, *argv],
+                          capture_output=True, text=True, timeout=60)
+
+
+def _read_task_file(project: dict, folder: str, name: str) -> str:
+    """Прочитать файл задачи локально или внутри контейнера проекта."""
+    if project.get("backend") == "docker":
+        path = _task_path(project, "tasks", folder, name)
+        result = _docker_exec(project, "cat", path)
+        assert result.returncode == 0, (
+            f"нет {path} в контейнере {project['container']}: "
+            f"{(result.stderr or '').strip()}")
+        return result.stdout
+    path = Path(project["path"]) / "tasks" / folder / name
+    assert path.is_file(), f"нет {path}"
+    return path.read_text(encoding="utf-8")
+
+
+def _remove_task_dir(project: dict, folder: str) -> None:
+    if project.get("backend") == "docker":
+        try:
+            _docker_exec(project, "rm", "-rf",
+                         _task_path(project, "tasks", folder))
+        except Exception:  # noqa: BLE001 — уборка не маскирует фейл теста
+            pass
+        return
+    shutil.rmtree(Path(project["path"]) / "tasks" / folder, ignore_errors=True)
+
+
 def _unique_identifier(api: Api, project_id: int) -> str:
     """Уникальный идентификатор на прогон, чтобы тест можно было повторять."""
     fixed = (os.environ.get("AGENTMON_E2E_IDENTIFIER") or "").strip()
@@ -238,17 +293,12 @@ def _assert_task_api(api: Api, tid: int, identifier: str, spec: dict) -> None:
 
 
 def _assert_task_files(project: dict, identifier: str, spec: dict) -> None:
-    task_dir = Path(project["path"]) / "tasks" / f"task#{identifier}"
-    task_md = task_dir / "TASK.md"
-    task_json = task_dir / "task.json"
-    assert task_md.is_file(), f"нет {task_md}"
-    assert task_json.is_file(), f"нет {task_json}"
-
-    text = task_md.read_text(encoding="utf-8")
+    folder = f"task#{identifier}"
+    text = _read_task_file(project, folder, "TASK.md")
     assert spec["goal"] in text
     assert spec["plan"] in text
 
-    data = json.loads(task_json.read_text(encoding="utf-8"))
+    data = json.loads(_read_task_file(project, folder, "task.json"))
     stages = {s["name"]: s for s in data["stages"]}
     for name in ("analyze", "develop"):
         assert stages[name]["enabled"] is True, name
@@ -275,7 +325,7 @@ def _assert_gate_buttons(api: Api, page, project: dict) -> None:
     aux_id = None
     stack_id = None
     note_text = "E2E: поправь требования к реквизиту"
-    task_dir = Path(project["path"]) / "tasks" / f"task#{aux_identifier}"
+    folder = f"task#{aux_identifier}"
     try:
         aux = api.post("/api/env/tasks", {
             "project_id": project["id"],
@@ -343,8 +393,8 @@ def _assert_gate_buttons(api: Api, page, project: dict) -> None:
                        if s["name"] == "analyze")
         assert analyze["status"] == "pending"
         assert analyze["approved"] is False
-        assert note_text in (task_dir / "USER_FEEDBACK.md").read_text(
-            encoding="utf-8")
+        assert note_text in _read_task_file(
+            project, folder, "USER_FEEDBACK.md")
 
         # Повторно доводим до awaiting_user и одобряем кнопкой «Одобрить».
         for status in ("running", "done"):
@@ -378,7 +428,7 @@ def _assert_gate_buttons(api: Api, page, project: dict) -> None:
                 api.delete(f"/api/env/tasks/{aux_id}")
             except Exception:  # noqa: BLE001
                 pass
-        shutil.rmtree(task_dir, ignore_errors=True)
+        _remove_task_dir(project, folder)
 
 
 # ── тест ──────────────────────────────────────────────────────────────────────
@@ -386,7 +436,9 @@ def _assert_gate_buttons(api: Api, page, project: dict) -> None:
 
 def test_task_from_md_and_gate_approve_button(api: Api, page) -> None:
     spec = parse_task_md(TASK_MD)
-    project = _find_project(api, spec["project"])
+    project_name = (os.environ.get("AGENTMON_E2E_TASK_PROJECT")
+                    or spec["project"]).strip()
+    project = _project_with_backend(api, project_name)
     identifier = _unique_identifier(api, project["id"])
     try:
         tid = _create_task_via_wizard(page, project, identifier, spec)

@@ -15,7 +15,6 @@
 """
 import json
 from pathlib import Path
-from types import SimpleNamespace
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
@@ -23,19 +22,15 @@ from fastapi.responses import JSONResponse
 from agentmon.store.stacks import StackRepo
 from agentmon.store.tasks import TaskRepo
 from agentmon.store.projects import ProjectRepo
+from agentmon.env.project_fs import project_like, project_provisioner
 from agentmon.env.task_schema import task_folder_name
 
 
-def _project_like(project_row) -> SimpleNamespace:
-    """Строит лёгкий объект проекта из строки ProjectRepo для передачи в monitor."""
-    return SimpleNamespace(
-        id=project_row["id"],
-        path=project_row["path"],
-        name=project_row["name"],
-        key="local||" + project_row["path"],
-        backend="local",
-        claude_cmd=None,
-    )
+def _project_like(project_row, monitor):
+    """Проект для monitor; backend/conn — из реестра (ssh/docker)."""
+    return project_like(project_row,
+                        getattr(monitor, "registry", None),
+                        getattr(monitor, "backends", None))
 
 
 def build_stack_router(store, monitor) -> APIRouter:
@@ -76,19 +71,40 @@ def build_stack_router(store, monitor) -> APIRouter:
                 except (ValueError, TypeError):
                     db_update = None
 
-            # путь проекта на диске — для проверки наличия артефактов
+            # Артефакты этапов: для local — на хосте, для ssh/docker — на
+            # машине проекта (provisioner).
             project = pr.get(task["project_id"])
             task_dir = None
+            artifact_names = None
             if project is not None:
                 folder = task_folder_name(task["id"], task.get("identifier"))
-                task_dir = Path(project["path"]) / "tasks" / folder
+                prov = project_provisioner(
+                    getattr(monitor, "registry", None), monitor,
+                    project["path"])
+                if prov is not None:
+                    task_dir = (f"{str(project['path']).rstrip('/')}"
+                                f"/tasks/{folder}")
+                    try:
+                        listing = prov.run(["ls", "-1", task_dir])
+                        artifact_names = (
+                            set((listing.stdout or "").splitlines())
+                            if getattr(listing, "returncode", 1) == 0
+                            else set())
+                    except Exception:                  # noqa: BLE001
+                        artifact_names = set()
+                else:
+                    task_dir = Path(project["path"]) / "tasks" / folder
 
             last_done = None
             enriched_stages = []
             for s in stages:
                 artifact = s.get("artifact") or ""
-                exists = bool(task_dir and artifact
-                              and (task_dir / artifact).exists())
+                if not artifact:
+                    exists = False
+                elif artifact_names is not None:
+                    exists = artifact in artifact_names
+                else:
+                    exists = bool(task_dir and (task_dir / artifact).exists())
                 enriched_stages.append({
                     "name": s.get("name"),
                     "status": s.get("status"),
@@ -179,7 +195,7 @@ def build_stack_router(store, monitor) -> APIRouter:
             project_row = pr.get(task["project_id"])
             if project_row is None:
                 continue
-            proj = _project_like(project_row)
+            proj = _project_like(project_row, monitor)
             if monitor.is_alive(proj):
                 try:
                     monitor.stop(proj)
@@ -301,7 +317,7 @@ def build_stack_router(store, monitor) -> APIRouter:
                 project_row = pr.get(task["project_id"])
                 if project_row is None:
                     continue
-                proj = _project_like(project_row)
+                proj = _project_like(project_row, monitor)
                 if monitor.is_alive(proj):
                     try:
                         monitor.stop(proj)

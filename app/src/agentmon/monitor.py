@@ -160,7 +160,9 @@ class Monitor:
             argv = ["docker"]
             if docker_host:
                 argv += ["-H", docker_host]
-            argv += ["exec", "-t", "-w",
+            # IS_SANDBOX=1: контейнер — песочница; без этого claude внутри
+            # под root отказывается работать с --dangerously-skip-permissions.
+            argv += ["exec", "-t", "-e", "IS_SANDBOX=1", "-w",
                      conn.get("workdir") or DEFAULT_WORKDIR,
                      container_name(project.path), *cmd]
             return argv, tempfile.gettempdir()

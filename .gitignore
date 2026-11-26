@@ -29,3 +29,6 @@ logs/
 # Прогоны и снапшоты проекта (docker: проект в томе, копии — для метрик).
 /benchmark/.bench-runs/
 /benchmark/.bench-snap/
+# Рантайм монитора: журналы detached-прогонов, создания проектов и копии
+# отчётов для VS Code (в т.ч. app/agentmon-runs при AGENTMON_DB=app/agentmon.db).
+agentmon-runs/

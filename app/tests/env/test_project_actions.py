@@ -207,3 +207,53 @@ def test_open_report_404_when_file_missing(tmp_path):
     r = client.post(f"/api/env/tasks/{tid}/open-report", json={"stage": "analyze"})
     assert r.status_code == 404
     assert rec.calls == []
+
+
+# ─── open-report на docker-проекте ──────────────────────────────────────────
+
+class _FakeReportProv:
+    def __init__(self, files):
+        self.files = files
+
+    def exists(self, path):
+        return path in self.files
+
+    def read_text(self, path):
+        return self.files[path]
+
+
+def test_open_report_docker_copies_to_host_and_launches_code(tmp_path,
+                                                            monkeypatch):
+    """Отчёт из контейнера копируется на хост и открывается в VS Code."""
+    import types
+    from agentmon import config
+
+    monkeypatch.setattr(config, "RUNS_DIR", tmp_path / "runs")
+    prov = _FakeReportProv(
+        {"/workspace/tasks/task#100500/ANALYZE.md": "отчёт аналитика"})
+    rec = RecordingPopen()
+    reg_db = open_db(tmp_path / "reg.sqlite")
+    registry = ProjectRegistry(reg_db)
+    mon = Monitor(registry, FakeBackends(None, by_path={
+        "/workspace": types.SimpleNamespace(provisioner=prov, key="docker")}),
+        generating_window=10.0, now_fn=lambda: 1.0)
+    store = connect(str(tmp_path / "store.db"))
+    init_schema(store)
+    app = create_app(registry=registry, queue=TaskQueue(reg_db), monitor=mon,
+                     store=store, popen=rec)
+    client = TestClient(app)
+
+    pid = ProjectRepo(store).add(name="dock", path="/workspace")
+    registry.add(name="dock", path="/workspace", backend="docker", conn={})
+    tid = TaskRepo(store).add(
+        project_id=pid, name="t", identifier="100500", status="running",
+        stages_json=json.dumps([{"name": "analyze", "status": "done",
+                                 "artifact": "ANALYZE.md"}]))
+
+    r = client.post(f"/api/env/tasks/{tid}/open-report", json={"stage": "analyze"})
+    assert r.status_code == 200, r.text
+    assert len(rec.calls) == 1
+    assert rec.calls[0][0] == "code"
+    copied = Path(rec.calls[0][1])
+    assert copied.parent == tmp_path / "runs" / "reports"
+    assert copied.read_text(encoding="utf-8") == "отчёт аналитика"

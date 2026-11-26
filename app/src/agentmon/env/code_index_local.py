@@ -154,7 +154,11 @@ def deploy_local(*, code_index_dir, catalog_dir, project_name, port,
     else:
         error = _reload_daemon(binary, ci, run)
         if error:
+            # Демон мог быть остановлен (например, между прогонами): reload
+            # некому ответить. Без подъёма юнита индексация не начнётся, и
+            # wait_ready увидит мёртвый процесс, хотя новая база уже в toml.
             yield f"⚠ daemon reload: {error}"
+            yield from restart(daemon_name, state_dir=str(ci), home=home)
         else:
             yield "✓ daemon reload"
         yield from restart(serve_name, state_dir=str(ci), home=home)

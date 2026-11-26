@@ -74,7 +74,7 @@ def create_app(registry, queue, monitor, lifespan=None, store=None,
         router_kwargs["create_logs_dir"] = create_logs_dir
     app.include_router(build_project_router(store, registry, monitor, **router_kwargs))
     from .env.task_api2 import build_task2_router
-    app.include_router(build_task2_router(store))
+    app.include_router(build_task2_router(store, registry, monitor))
     from .env.tree_api import build_tree_router
     app.include_router(build_tree_router(store))
     from .env.stack_api import build_stack_router

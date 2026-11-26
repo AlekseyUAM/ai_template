@@ -12,12 +12,12 @@ import json
 import logging
 import sys
 import time
-from types import SimpleNamespace
 
 from agentmon.store.projects import ProjectRepo
 from agentmon.store.tasks import TaskRepo
 from agentmon.store.stacks import StackRepo
 from agentmon.env import task_schema, task_sync
+from agentmon.env.project_fs import project_like
 from agentmon.env.task_model import overall_status
 
 logger = logging.getLogger(__name__)
@@ -26,17 +26,9 @@ logger = logging.getLogger(__name__)
 _DONE_STATUSES = {"done", "failed"}
 
 
-def _build_proj(project_row) -> SimpleNamespace:
-    """Строит лёгкий объект проекта из словаря ProjectRepo.get()."""
-    return SimpleNamespace(
-        id=project_row["id"],
-        path=project_row["path"],
-        name=project_row["name"],
-        # ключ для бэкенда — формат local||<path>
-        key="local||" + project_row["path"],
-        backend="local",
-        claude_cmd=None,
-    )
+def _build_proj(project_row, registry=None, backends=None):
+    """Лёгкий объект проекта для monitor; backend/conn — из реестра."""
+    return project_like(project_row, registry, backends)
 
 
 class StackDispatcher:
@@ -124,7 +116,10 @@ class StackDispatcher:
                 logger.warning("проект id=%s не найден, пропускаем стек id=%s",
                                active_task["project_id"], stack_id)
                 return
-            proj = _build_proj(project_row)
+            proj = _build_proj(
+                project_row,
+                getattr(self._monitor, "registry", None),
+                getattr(self._monitor, "backends", None))
 
             task_id = active_task["id"]
             status = active_task["status"]
@@ -218,16 +213,30 @@ class StackDispatcher:
                     # задача ещё выполняется — синкаем живой прогресс этапов из
                     # task.json в БД (без task-статуса: им владеет монитор =
                     # running), чтобы дерево не показывало устаревший этап.
-                    task_sync.sync_task_from_file(self._store, proj.path,
-                                                  active_task, sync_status=False)
+                    task_sync.sync_task_from_file(
+                        self._store, proj.path, active_task, sync_status=False,
+                        prov=self._project_prov(proj))
                     return
+
+    def _project_prov(self, proj):
+        """Provisioner машины проекта; None — local или нет доступа."""
+        if getattr(proj, "backend", "local") == "local":
+            return None
+        backends = getattr(self._monitor, "backends", None)
+        if backends is None:
+            return None
+        try:
+            return backends.get(proj).provisioner
+        except Exception:                              # noqa: BLE001
+            return None
 
     def _settle_completed(self, proj, task, tr) -> str:
         """Прогон задачи завершился (процесс вышел 0): синхронизируем task.json
         в БД и выставляем статус по этапам (с учётом гейтов). Возвращает
         итоговый статус."""
         task_id = task["id"]
-        task_sync.sync_task_from_file(self._store, proj.path, task)
+        task_sync.sync_task_from_file(self._store, proj.path, task,
+                                      prov=self._project_prov(proj))
         fresh = tr.get(task_id) or task
         try:
             stages = json.loads(fresh.get("stages_json") or "[]")

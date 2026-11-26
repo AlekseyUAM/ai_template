@@ -577,3 +577,57 @@ def test_remove_item_from_another_stack_is_404(tmp_path):
 
     assert r.status_code == 404
     assert len(sr.items(s2)) == 1
+
+
+# ─── Артефакты этапов на машине проекта (docker/ssh) ─────────────────────────
+
+class _FakeArtifactProv:
+    def __init__(self, names):
+        self.names = names
+        self.calls = []
+
+    def run(self, cmd, cwd=None, timeout=None):
+        import types
+        self.calls.append(cmd)
+        if cmd[:1] == ["ls"]:
+            return types.SimpleNamespace(
+                returncode=0, stdout="\n".join(self.names) + "\n", stderr="")
+        return types.SimpleNamespace(returncode=1, stdout="", stderr="")
+
+
+def test_docker_artifact_exists_via_provisioner(tmp_path):
+    """artifact_exists считается на машине проекта, а не по хостовому пути."""
+    import json
+    import types
+    reg_db = open_db(tmp_path / "reg.sqlite")
+    registry = ProjectRegistry(reg_db)
+    mon = FakeMonitor()
+    run_path = "/workspace"
+    prov = _FakeArtifactProv(["TASK.md", "task.json", "ANALYZE.md"])
+    mon.registry = registry
+    mon.backends = FakeBackends(None, by_path={
+        run_path: types.SimpleNamespace(provisioner=prov, key="docker")})
+    store = connect(str(tmp_path / "store.db"))
+    init_schema(store)
+    app = create_app(registry=registry, queue=TaskQueue(reg_db),
+                     monitor=mon, store=store)
+    client = TestClient(app)
+
+    pid = ProjectRepo(store).add(name="dock", path=run_path)
+    registry.add(name="dock", path=run_path, backend="docker", conn={})
+    tid = TaskRepo(store).add(
+        project_id=pid, name="t", identifier="X", status="awaiting_user",
+        stages_json=json.dumps([
+            {"name": "analyze", "status": "done", "enabled": True, "gate": True,
+             "approved": False, "iteration": 1, "artifact": "ANALYZE.md"},
+            {"name": "develop", "status": "pending", "enabled": True, "gate": True,
+             "approved": False, "iteration": 1, "artifact": "DEVELOP.md"},
+        ]))
+    sid = StackRepo(store).add(name="s")
+    StackRepo(store).add_item(sid, tid)
+
+    item = client.get("/api/env/stacks").json()["stacks"][0]["items"][0]
+    stages = {s["name"]: s for s in item["stages"]}
+    assert stages["analyze"]["artifact_exists"] is True
+    assert stages["develop"]["artifact_exists"] is False
+    assert prov.calls and prov.calls[0][:2] == ["ls", "-1"]

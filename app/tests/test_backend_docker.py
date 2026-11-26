@@ -1452,7 +1452,7 @@ class TestDockerRunner:
         runner.start(_project())
         assert len(spawned) == 1
         cmd = spawned[0].cmd
-        assert cmd == "docker exec -it -w /workspace ai1c-myproj claude --go"
+        assert cmd == "docker exec -it -e IS_SANDBOX=1 -w /workspace ai1c-myproj claude --go"
 
     def test_start_uses_project_claude_cmd_when_set(self):
         """project.claude_cmd перекрывает дефолтную команду runner'а."""
@@ -1653,7 +1653,7 @@ class TestDockerRunner:
         runner.start(_project())
         assert len(spawned) == 1
         cmd = spawned[0].cmd
-        assert cmd == "docker exec -it -w /workspace ai1c-myproj claude --go"
+        assert cmd == "docker exec -it -e IS_SANDBOX=1 -w /workspace ai1c-myproj claude --go"
         assert "-H" not in cmd
 
     def test_start_remote_h_flag_present(self):
@@ -1667,7 +1667,7 @@ class TestDockerRunner:
         runner.start(_project())
         assert len(spawned) == 1
         cmd = spawned[0].cmd
-        assert cmd == "docker -H ssh://u@h exec -it -w /workspace ai1c-myproj claude --go"
+        assert cmd == "docker -H ssh://u@h exec -it -e IS_SANDBOX=1 -w /workspace ai1c-myproj claude --go"
 
     def test_start_remote_h_between_docker_and_exec(self):
         """-H <docker_host> располагается между 'docker' и 'exec'."""
@@ -2998,6 +2998,44 @@ def test_backend_container_spec_has_codeindex_and_network():
     assert f"{name}-claude:/root/.claude" in joined
     assert "HOME=/root" in joined
     assert "--network host" in joined
+
+
+def test_backend_adds_host_hostname_to_hosts(monkeypatch):
+    """1C-кластер публикует имя хоста: в контейнере оно должно резолвиться."""
+    import agentmon.backends.docker as docker_mod
+    monkeypatch.setattr(docker_mod.socket, "gethostname", lambda: "uam-pc")
+    fake = FakeRun(routes=[
+        ("docker images -q", 0, "abc\n", ""),
+        ("docker inspect", 1, "", "No such object"),
+    ])
+
+    def fake_spawn(cmd, cwd, env=None):
+        return _FakePty(cmd, cwd)
+
+    backend = DockerBackend("/workspace", claude_cmd="claude", run=fake,
+                            spawn_fn=fake_spawn)
+    backend.check()
+    joined = " ".join(fake.called_with("docker run")[0])
+    assert "--add-host=uam-pc:127.0.0.1" in joined
+    assert "--add-host=host.docker.internal:host-gateway" in joined
+
+
+def test_remote_backend_does_not_add_local_hostname(monkeypatch):
+    import agentmon.backends.docker as docker_mod
+    monkeypatch.setattr(docker_mod.socket, "gethostname", lambda: "uam-pc")
+    fake = FakeRun(routes=[
+        ("images -q", 0, "abc\n", ""),
+        ("inspect", 1, "", "No such object"),
+    ])
+
+    def fake_spawn(cmd, cwd, env=None):
+        return _FakePty(cmd, cwd)
+
+    backend = DockerBackend("/workspace", claude_cmd="claude", run=fake,
+                            spawn_fn=fake_spawn, docker_host="ssh://u@h")
+    backend.check()
+    joined = " ".join(fake.called_with("run")[0])
+    assert "--add-host=uam-pc:127.0.0.1" not in joined
 
 
 def test_backend_container_spec_license_bind(tmp_path):

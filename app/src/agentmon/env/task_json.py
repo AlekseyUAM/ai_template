@@ -75,12 +75,43 @@ def atomic_write_text(path, text: str) -> None:
             pass
 
 
-def update_json(path, mutator):
+def atomic_write_text_prov(prov, path: str, text: str) -> None:
+    """Атомарная запись на машине проекта через provisioner (tmp + mv).
+
+    Межпроцессный lock здесь не держится: для нелокальных бэкендов веб-правка
+    происходит на гейте, когда оркестратор ждёт пользователя. Атомарного
+    replace достаточно, чтобы читатель не увидел обрезанный JSON.
+    """
+    tmp = f"{path}.tmp"
+    prov.write_text(tmp, text)
+    result = prov.run(["mv", "-f", tmp, path])
+    if getattr(result, "returncode", 1) != 0:
+        raise OSError(
+            f"не удалось заменить {path}: "
+            f"{(getattr(result, 'stderr', '') or '').strip()}")
+
+
+def update_json(path, mutator, *, prov=None):
     """Прочитать JSON под lock'ом, дать mutator(data), атомарно записать.
 
     mutator возвращает False — запись не нужна (например, этап не найден).
-    Возвращает результат mutator.
+    Возвращает результат mutator. ``prov`` — provisioner нелокального
+    проекта: тогда файл читается/пишется на машине проекта (без lock).
     """
+    if prov is not None:
+        target = str(path)
+        if not prov.exists(target):
+            return False
+        try:
+            data = json.loads(prov.read_text(target))
+        except (ValueError, OSError):
+            return False
+        result = mutator(data)
+        if result is not False:
+            atomic_write_text_prov(
+                prov, target,
+                json.dumps(data, ensure_ascii=False, indent=2) + "\n")
+        return result
     target = Path(path)
     with locked(target):
         data = json.loads(target.read_text(encoding="utf-8"))

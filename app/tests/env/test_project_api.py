@@ -261,6 +261,40 @@ def test_get_project_404(tmp_path):
     assert r.status_code == 404
 
 
+def test_get_project_reports_docker_container(tmp_path):
+    """Карточка docker-проекта получает имя контейнера из реестра."""
+    from agentmon.backends.docker import container_name
+    from agentmon.store.projects import ProjectRepo
+
+    c, registry, store = make_client(tmp_path)
+    pid = ProjectRepo(store).add(
+        name="dproj", path="/workspace", identifier="dev",
+        email="dev@example.com", platform_dir="/opt/1cv8/current",
+        platform_version="8.3.27.2130")
+    registry.add(name="dproj", path="/workspace", backend="docker", conn={})
+
+    r = c.get(f"/api/env/projects/{pid}")
+    assert r.status_code == 200
+    project = r.json()["project"]
+    assert project["backend"] == "docker"
+    assert project["container"] == container_name("/workspace")
+
+
+def test_get_project_local_has_no_container(tmp_path):
+    from agentmon.store.projects import ProjectRepo
+
+    c, registry, store = make_client(tmp_path)
+    path = str(tmp_path / "lproj")
+    pid = ProjectRepo(store).add(
+        name="lproj", path=path, identifier="dev", email="dev@example.com",
+        platform_dir="/opt/1c", platform_version="8.3")
+    registry.add(name="lproj", path=path, backend="local")
+
+    project = c.get(f"/api/env/projects/{pid}").json()["project"]
+    assert project["backend"] == "local"
+    assert project["container"] is None
+
+
 def test_list_after_create(tmp_path):
     project_dir = tmp_path / "proj2"
     project_dir.mkdir()

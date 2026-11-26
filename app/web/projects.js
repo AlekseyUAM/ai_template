@@ -63,6 +63,11 @@ async function showProjectCard(projectId) {
           <span class="card-label">Версия окружения</span>
           <div class="card-value">${escapeHtml(project.env_version) || "-"}</div>
         </div>
+        ${project.container ? `
+        <div class="card-field">
+          <span class="card-label">Контейнер</span>
+          <div class="card-value monospace">${escapeHtml(project.container)}</div>
+        </div>` : ""}
         <div class="card-controls">
           <button type="button" onclick="updateProjectEnv(${projectId})">
             Обновить версию окружения

@@ -12,11 +12,13 @@ from .task_model import build_stages, overall_status, validate_task
 from .timefmt import to_local_iso
 
 
-def build_task2_router(store) -> APIRouter:
+def build_task2_router(store, registry=None, monitor=None) -> APIRouter:
     """Строит APIRouter для /api/env/tasks/*.
 
     store — объект Db (P1.1) или None.
     Если store is None, все операции возвращают 503.
+    registry/monitor — чтобы для ssh/docker-проектов писать файлы задач на
+    машине проекта (provisioner), а не по хостовому пути.
     """
     router = APIRouter()
 
@@ -30,6 +32,11 @@ def build_task2_router(store) -> APIRouter:
         from agentmon.store.tasks import TaskRepo
         from agentmon.store.projects import ProjectRepo
         return TaskRepo(db), ProjectRepo(db)
+
+    def project_prov(project):
+        """Provisioner машины проекта; None — local (хостовые Path-операции)."""
+        from .project_fs import project_provisioner
+        return project_provisioner(registry, monitor, project["path"])
 
     def task_or_404(task_repo, tid: int) -> dict:
         task = task_repo.get(tid)
@@ -117,10 +124,21 @@ def build_task2_router(store) -> APIRouter:
             mark_changes=mark_changes,
         )
 
-        # Записать файлы на диск
-        project_path = Path(project["path"])
-        task_dir = project_path / "tasks" / f"task#{identifier}"
-        task_dir.mkdir(parents=True, exist_ok=True)
+        # Записать файлы на диск (для ssh/docker — на машине проекта).
+        prov = project_prov(project)
+        if prov is not None:
+            base = str(project["path"]).rstrip("/")
+            task_dir = f"{base}/tasks/task#{identifier}"
+            prov.mkdirs([task_dir])
+
+            def write_file(name: str, text: str) -> None:
+                prov.write_text(f"{task_dir}/{name}", text)
+        else:
+            task_dir_path = Path(project["path"]) / "tasks" / f"task#{identifier}"
+            task_dir_path.mkdir(parents=True, exist_ok=True)
+
+            def write_file(name: str, text: str) -> None:
+                (task_dir_path / name).write_text(text, encoding="utf-8")
 
         # TASK.md
         task_md_content = f"""# Задача {identifier} (#{tid}): {name}
@@ -142,7 +160,7 @@ def build_task2_router(store) -> APIRouter:
 - Выделять изменения в коде идентификаторами: {"да" if mark_changes else "нет"}
 - Максимальная длительность выполнения: {max_minutes} мин
 """
-        (task_dir / "TASK.md").write_text(task_md_content, encoding="utf-8")
+        write_file("TASK.md", task_md_content)
 
         # task.json — дамп без stages_json (только parsed stages)
         task_row = task_repo.get(tid)
@@ -166,10 +184,8 @@ def build_task2_router(store) -> APIRouter:
             for key in ("started_at", "finished_at"):
                 if key in stage:
                     stage[key] = to_local_iso(stage.get(key))
-        (task_dir / "task.json").write_text(
-            json.dumps(task_data, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+        write_file("task.json",
+                   json.dumps(task_data, ensure_ascii=False, indent=2))
 
         task = task_repo.get(tid)
         return {"task": task}
@@ -274,7 +290,8 @@ def build_task2_router(store) -> APIRouter:
         project = project_repo.get(task["project_id"])
         if project:
             from .task_sync import write_stage_approval
-            write_stage_approval(project["path"], task, stage_name)
+            write_stage_approval(project["path"], task, stage_name,
+                                 prov=project_prov(project))
 
         task = task_repo.get(tid)
         return {"task": task}
@@ -314,12 +331,13 @@ def build_task2_router(store) -> APIRouter:
         # 1. Замечание — в БД и USER_FEEDBACK.md: агент читает его по правилу
         #    user-feedback перед каждым этапом.
         from agentmon.env.feedback import save_feedback
-        save_feedback(db, project["path"], task, "web", text)
+        prov = project_prov(project)
+        save_feedback(db, project["path"], task, "web", text, prov=prov)
 
         # 2. Возврат на ТОТ ЖЕ этап: task.json — источник истины оркестратора,
         #    без его правки следующий прогон не увидит этап доступным.
         from .task_sync import write_stage_rework
-        if not write_stage_rework(project["path"], task, stage_name):
+        if not write_stage_rework(project["path"], task, stage_name, prov=prov):
             raise HTTPException(status_code=500, detail=(
                 "замечание сохранено, но task.json задачи не обновлён"))
 

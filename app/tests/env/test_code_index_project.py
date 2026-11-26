@@ -115,7 +115,8 @@ def test_wait_ready_local_success():
     code_index_project.wait_ready_local(
         "/ci", port=8005,
         status=lambda ci: {"paths": [{"path": "/cf", "status": "ready"}]},
-        tcp_ok=lambda url: True, sleep=lambda _s: None, clock=lambda: 0.0)
+        alive=lambda ci: True, tcp_ok=lambda url: True,
+        sleep=lambda _s: None, clock=lambda: 0.0)
 
 
 def test_wait_ready_local_error():
@@ -124,7 +125,8 @@ def test_wait_ready_local_error():
             "/ci", port=8005,
             status=lambda ci: {"paths": [{"path": "/cf", "status": "error",
                                           "error": "bad"}]},
-            tcp_ok=lambda url: True, sleep=lambda _s: None, clock=lambda: 0.0)
+            alive=lambda ci: True, tcp_ok=lambda url: True,
+            sleep=lambda _s: None, clock=lambda: 0.0)
 
 
 def test_wait_ready_local_timeout():
@@ -137,11 +139,34 @@ def test_wait_ready_local_timeout():
 
 
 def test_wait_ready_local_dead_service():
+    times = iter([0.0, 1.0])
     with pytest.raises(CodeIndexError, match="завершился"):
         code_index_project.wait_ready_local(
             "/ci", port=8005, status=lambda ci: None,
             alive=lambda ci: False, log_tail=lambda name: "",
-            sleep=lambda _s: None, clock=lambda: 0.0)
+            grace_seconds=0, sleep=lambda _s: None,
+            clock=lambda: next(times, 10_000.0))
+
+
+def test_wait_ready_local_waits_for_restarted_daemon():
+    """Свежий daemon.json может ещё хранить PID прежнего (мёртвого) демона."""
+    states = iter([False, True])
+    code_index_project.wait_ready_local(
+        "/ci", port=8005,
+        status=lambda ci: {"paths": [{"path": "/cf", "status": "ready"}]},
+        alive=lambda ci: next(states, True), tcp_ok=lambda url: True,
+        sleep=lambda _s: None, clock=lambda: 0.0)
+
+
+def test_wait_ready_local_dead_service_after_grace():
+    times = iter([0.0, 200.0])
+    with pytest.raises(CodeIndexError, match="завершился"):
+        code_index_project.wait_ready_local(
+            "/ci", port=8005,
+            status=lambda ci: {"paths": [{"path": "/cf", "status": "ready"}]},
+            alive=lambda ci: False, log_tail=lambda name: "",
+            grace_seconds=10, sleep=lambda _s: None,
+            clock=lambda: next(times, 10_000.0))
 
 
 def test_wait_ready_local_startup_grace():

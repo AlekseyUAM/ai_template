@@ -578,3 +578,15 @@ def test_enforce_timeout_noop_without_store(tmp_path):
     """Без store enforce_timeout просто возвращает False."""
     reg, backends, mon = make(tmp_path, store=None)
     assert mon.enforce_timeout(1, 60) is False
+
+
+def test_launch_spec_docker_sets_is_sandbox(tmp_path):
+    """Агент в контейнере запускается с IS_SANDBOX=1: claude как root иначе
+    отказывается работать с --dangerously-skip-permissions."""
+    reg, backends, mon = make(tmp_path)
+    p = reg.add(name="dock", path="/workspace", backend="docker", conn={})
+    argv, cwd = mon._launch_spec(p, ["claude-ds", "-p", "x"])
+    assert argv[:2] == ["docker", "exec"]
+    assert "IS_SANDBOX=1" in argv
+    assert argv[argv.index("IS_SANDBOX=1") - 1] == "-e"
+    assert "ai1c-workspace-" in " ".join(argv)

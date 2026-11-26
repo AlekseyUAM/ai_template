@@ -242,25 +242,35 @@ def wait_ready_local(code_index_dir, *, port, wait_minutes=WAIT_MINUTES,
     log_tail = log_tail or (lambda name: _log_tail(ci / f"{name}.log"))
     started = clock()
     deadline = started + wait_minutes * 60
+    seen_alive = False
     while True:
         data = status(code_index_dir)
         paths = (data or {}).get("paths") or []
-        for p in paths:
-            if p.get("status") == "error":
-                raise CodeIndexError(
-                    f"code-index: ошибка индексации {p.get('path', '?')}: "
-                    f"{p.get('error') or p.get('message') or 'ошибка индексации'}")
-        if alive(code_index_dir) is False:
+        daemon_alive = alive(code_index_dir)
+        now = clock()
+        if daemon_alive:
+            seen_alive = True
+        # После перезапуска демона (deploy_local) daemon.json ещё хранит PID
+        # прежнего процесса: это не повод падать, ждём старта в grace-окне.
+        # Если демон был жив и умер — падаем сразу.
+        if (daemon_alive is False
+                and (seen_alive or now - started > grace_seconds)):
             raise CodeIndexError(
                 "code-index завершился; последние строки логов:\n"
                 f"--- serve.log ---\n{log_tail('serve') or '(пусто)'}\n"
                 f"--- daemon.log ---\n{log_tail('daemon') or '(пусто)'}")
-        ready = bool(paths) and all(p.get("status") == "ready" for p in paths)
-        if ready and tcp_ok(f"http://127.0.0.1:{int(port)}"):
-            log("✓ code-index готов: " + ", ".join(
-                p.get("path", "?") for p in paths))
-            return
-        now = clock()
+        if daemon_alive:
+            for p in paths:
+                if p.get("status") == "error":
+                    raise CodeIndexError(
+                        f"code-index: ошибка индексации {p.get('path', '?')}: "
+                        f"{p.get('error') or p.get('message') or 'ошибка индексации'}")
+            ready = bool(paths) and all(
+                p.get("status") == "ready" for p in paths)
+            if ready and tcp_ok(f"http://127.0.0.1:{int(port)}"):
+                log("✓ code-index готов: " + ", ".join(
+                    p.get("path", "?") for p in paths))
+                return
         if data is None and now - started > grace_seconds:
             raise CodeIndexError(
                 "code-index не запустился за "

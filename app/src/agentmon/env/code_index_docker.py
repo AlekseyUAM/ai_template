@@ -12,6 +12,7 @@ from .code_index_toml import ensure_sections, merge_path
 
 BINARY = "bsl-indexer"
 WAIT_MINUTES = 360
+STARTUP_GRACE_SEC = 120
 
 
 def _ci(path) -> str:
@@ -22,9 +23,18 @@ def _binary(ci: str) -> str:
     return f"{ci}/{BINARY}"
 
 
-def _stop_processes(prov) -> None:
+def _stop_processes(prov, ci: str) -> None:
+    """Погасить bsl-indexer и убрать устаревшие pid/state файлы.
+
+    PID 1 в контейнере — sleep и не пожинает зомби: после pkill daemon.pid
+    может указывать на <defunct>, и новый демон откажется стартовать
+    («уже запущен»). Поэтому pid-файл (и daemon.json) удаляем.
+    """
     try:
-        prov.run(["sh", "-c", "pkill -f '[b]sl-indexer' || true"])
+        prov.run(["sh", "-c",
+                  "pkill -f '[b]sl-indexer' || true; "
+                  f"rm -f {shlex.quote(ci + '/daemon.pid')} "
+                  f"{shlex.quote(ci + '/daemon.json')}"])
     except Exception:                                  # noqa: BLE001
         pass
 
@@ -66,7 +76,7 @@ def deploy(prov, *, code_index_dir, catalog_dir, alias, port,
     prov.write_text(f"{ci}/service.json",
                     json.dumps({"port": int(port), "version": 1}) + "\n")
     yield f"✓ daemon.toml: alias={alias}, path={catalog_dir}"
-    _stop_processes(prov)
+    _stop_processes(prov, ci)
     _spawn(prov, ci, "daemon run", "daemon")
     _spawn(prov, ci,
            f"serve --transport http --host 127.0.0.1 --port {int(port)} "
@@ -108,16 +118,28 @@ def _tail(prov, path: str) -> str:
 
 def wait_ready(prov, *, code_index_dir, port, wait_minutes=WAIT_MINUTES,
                status=None, alive=None, log_tail=None,
+               grace_seconds=STARTUP_GRACE_SEC,
                sleep=time.sleep, clock=time.monotonic, log=print) -> None:
-    """Дождаться готовности индекса внутри контейнера."""
+    """Дождаться готовности индекса внутри контейнера.
+
+    ``alive`` проверяет наличие ЛЮБОГО bsl-indexer: живой serve маскирует
+    мёртвый демон. Поэтому статус (``_status`` → None) дополняется
+    grace-окном на старт демона и мгновенным падением, если демон уже
+    отвечал и перестал.
+    """
     ci = _ci(code_index_dir)
     status = status or (lambda: _status(prov, ci))
     alive = alive or (lambda: _alive(prov))
     log_tail = log_tail or (lambda name: _tail(prov, f"{ci}/{name}.log"))
-    deadline = clock() + wait_minutes * 60
+    started = clock()
+    deadline = started + wait_minutes * 60
+    saw_data = False
     while True:
+        now = clock()
         data = status()
         paths = (data or {}).get("paths") or []
+        if data is not None:
+            saw_data = True
         for p in paths:
             if p.get("status") == "error":
                 raise RuntimeError(
@@ -128,12 +150,25 @@ def wait_ready(prov, *, code_index_dir, port, wait_minutes=WAIT_MINUTES,
                 "code-index в контейнере завершился; последние строки логов:\n"
                 f"--- serve.log ---\n{log_tail('serve') or '(пусто)'}\n"
                 f"--- daemon.log ---\n{log_tail('daemon') or '(пусто)'}")
-        ready = bool(paths) and all(p.get("status") == "ready" for p in paths)
-        if ready:
-            log("✓ code-index готов: " + ", ".join(
-                p.get("path", "?") for p in paths))
-            return
-        if clock() >= deadline:
+        if data is None:
+            if saw_data:
+                raise RuntimeError(
+                    "code-index в контейнере завершился; последние строки логов:\n"
+                    f"--- serve.log ---\n{log_tail('serve') or '(пусто)'}\n"
+                    f"--- daemon.log ---\n{log_tail('daemon') or '(пусто)'}")
+            if now - started > grace_seconds:
+                raise RuntimeError(
+                    "code-index не запустился за "
+                    f"{grace_seconds} с; смотрите {ci}/daemon.log в контейнере:\n"
+                    f"{log_tail('daemon') or '(пусто)'}")
+        else:
+            ready = bool(paths) and all(
+                p.get("status") == "ready" for p in paths)
+            if ready:
+                log("✓ code-index готов: " + ", ".join(
+                    p.get("path", "?") for p in paths))
+                return
+        if now >= deadline:
             raise RuntimeError(
                 f"code-index не проиндексировал базу за {wait_minutes} мин; "
                 f"смотрите {ci}/daemon.log в контейнере")
@@ -142,4 +177,4 @@ def wait_ready(prov, *, code_index_dir, port, wait_minutes=WAIT_MINUTES,
 
 def stop(prov, code_index_dir) -> None:
     """Погасить bsl-indexer внутри контейнера (best-effort)."""
-    _stop_processes(prov)
+    _stop_processes(prov, _ci(code_index_dir))

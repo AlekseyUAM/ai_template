@@ -3,6 +3,7 @@
 TestClient со store=connect(tmp)+init_schema; проект создаётся через ProjectRepo.
 """
 import json
+import types
 import sys
 import os
 
@@ -949,3 +950,136 @@ def test_create_task_writes_iso_created_at(tmp_path):
     assert parsed.tzinfo is not None
     # Точность до секунд: с БД-временем расходится меньше чем на секунду.
     assert abs(parsed.timestamp() - float(task["created_at"])) < 1.0
+
+
+# ─── Задачи на docker-проекте (файлы внутри контейнера) ─────────────────────
+
+class FakeDockerProv:
+    """Provisioner-двойник: файлы в памяти, mv эмулируется."""
+
+    def __init__(self):
+        self.files = {}
+        self.dirs = []
+
+    def mkdirs(self, paths):
+        self.dirs.extend(paths)
+
+    def exists(self, path):
+        return path in self.files
+
+    def read_text(self, path):
+        return self.files[path]
+
+    def write_text(self, path, content):
+        self.files[path] = content
+
+    def run(self, cmd, cwd=None, timeout=None):
+        if len(cmd) == 4 and cmd[0:2] == ["mv", "-f"]:
+            src, dst = cmd[2], cmd[3]
+            if src in self.files:
+                self.files[dst] = self.files.pop(src)
+        return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+
+
+def make_docker_client(tmp_path, path="/workspace"):
+    """TestClient с проектом на backend=docker и подменённым provisioner."""
+    registry_db = open_db(tmp_path / "reg.sqlite")
+    registry = ProjectRegistry(registry_db)
+    queue = TaskQueue(registry_db)
+    prov = FakeDockerProv()
+    backend = types.SimpleNamespace(provisioner=prov, key="docker")
+    mon = Monitor(registry, FakeBackends(None, by_path={path: backend}),
+                  generating_window=10.0, now_fn=lambda: 1.0)
+    store = connect(str(tmp_path / "store.db"))
+    init_schema(store)
+    app = create_app(registry=registry, queue=queue, monitor=mon, store=store)
+    pid = ProjectRepo(store).add(name="docker-proj", path=path)
+    registry.add(name="docker-proj", path=path, backend="docker", conn={})
+    return TestClient(app), store, prov, pid
+
+
+def _docker_task_body(pid, identifier):
+    return {
+        "project_id": pid, "name": "Docker задача", "identifier": identifier,
+        "goal": "Цель", "plan": "План", "constraints": "Ограничения",
+        "tests": "", "enabled_stages": ["analyze", "plan"],
+        "gated_stages": ["analyze"],
+    }
+
+
+def test_create_task_writes_files_via_docker_provisioner(tmp_path):
+    """TASK.md/task.json пишутся provisioner'ом проекта, а не в хостовый путь."""
+    client, store, prov, pid = make_docker_client(tmp_path)
+    r = client.post("/api/env/tasks", json=_docker_task_body(pid, "D-1"))
+    assert r.status_code == 200, r.text
+    base = "/workspace/tasks/task#D-1"
+    assert prov.dirs == [base]
+    assert "Docker задача" in prov.files[f"{base}/TASK.md"]
+    data = json.loads(prov.files[f"{base}/task.json"])
+    assert data["identifier"] == "D-1"
+    assert [s["name"] for s in data["stages"]][:2] == ["analyze", "plan"]
+
+
+def test_approve_updates_task_json_via_docker_provisioner(tmp_path):
+    client, store, prov, pid = make_docker_client(tmp_path)
+    tid = client.post("/api/env/tasks",
+                      json=_docker_task_body(pid, "D-2")).json()["task"]["id"]
+    client.post(f"/api/env/tasks/{tid}/stage",
+                json={"stage": "analyze", "status": "done"})
+    r = client.post(f"/api/env/tasks/{tid}/approve", json={"stage": "analyze"})
+    assert r.status_code == 200, r.text
+    data = json.loads(prov.files["/workspace/tasks/task#D-2/task.json"])
+    analyze = next(s for s in data["stages"] if s["name"] == "analyze")
+    assert analyze["approved"] is True
+
+
+def test_feedback_writes_files_via_docker_provisioner(tmp_path):
+    client, store, prov, pid = make_docker_client(tmp_path)
+    tid = client.post("/api/env/tasks",
+                      json=_docker_task_body(pid, "D-3")).json()["task"]["id"]
+    client.post(f"/api/env/tasks/{tid}/stage",
+                json={"stage": "analyze", "status": "running"})
+    client.post(f"/api/env/tasks/{tid}/stage",
+                json={"stage": "analyze", "status": "done"})
+    # Агент внутри контейнера пометил этап done в task.json.
+    tj = "/workspace/tasks/task#D-3/task.json"
+    data = json.loads(prov.files[tj])
+    analyze = next(s for s in data["stages"] if s["name"] == "analyze")
+    analyze["status"] = "done"
+    data["status"] = "awaiting_user"
+    data["stage"] = "analyze"
+    prov.files[tj] = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
+
+    text = "Поправь реквизит"
+    r = client.post(f"/api/env/tasks/{tid}/feedback",
+                    json={"stage": "analyze", "text": text})
+    assert r.status_code == 200, r.text
+    feedback = prov.files["/workspace/tasks/task#D-3/USER_FEEDBACK.md"]
+    assert text in feedback
+    data = json.loads(prov.files[tj])
+    analyze = next(s for s in data["stages"] if s["name"] == "analyze")
+    assert analyze["status"] == "pending"
+    assert analyze["approved"] is False
+
+
+def test_sync_task_from_file_via_docker_provisioner(tmp_path):
+    """Refresh/стек читают task.json с машины проекта через provisioner."""
+    from agentmon.env.task_sync import sync_task_from_file
+    from agentmon.store.tasks import TaskRepo
+
+    client, store, prov, pid = make_docker_client(tmp_path)
+    tid = client.post("/api/env/tasks",
+                      json=_docker_task_body(pid, "D-4")).json()["task"]["id"]
+    tj = "/workspace/tasks/task#D-4/task.json"
+    data = json.loads(prov.files[tj])
+    data["status"] = "running"
+    data["stage"] = "analyze"
+    data["stages"][0]["status"] = "running"
+    prov.files[tj] = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
+
+    task = TaskRepo(store).get(tid)
+    fields = sync_task_from_file(store, "/workspace", task, prov=prov)
+    assert fields
+    assert fields["status"] == "running"
+    assert fields["stage"] == "analyze"
+    assert json.loads(fields["stages_json"])[0]["status"] == "running"

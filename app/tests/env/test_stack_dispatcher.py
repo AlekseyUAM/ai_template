@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
+from agentmon.registry import ProjectRegistry, open_db
 from agentmon.store.db import connect
 from agentmon.store.schema import init_schema
 from agentmon.store.projects import ProjectRepo
@@ -39,10 +40,13 @@ class FakeMonitor:
         self._timed_out: set = set()
         # аргументы enforce_timeout: [(task_id, max_minutes), ...]
         self.timeout_calls: list[tuple] = []
+        # объекты проекта, переданные в start (backend/conn для docker/ssh)
+        self.projects: list = []
 
     def start(self, project, prompt="", task_id=None, cmd=None):
         """Фиксируем вызов; помечаем проект живым и задачу как running."""
         payload = cmd if cmd is not None else prompt
+        self.projects.append(project)
         self.started.append((project.id, payload, task_id))
         self._alive.add(project.id)
         self._task_status[task_id] = "running"
@@ -506,3 +510,24 @@ def test_three_start_failures_mark_failed(tmp_path):
         disp.tick()
 
     assert TaskRepo(db).get(t1_id)["status"] == "failed"
+
+
+def test_tick_resolves_backend_from_registry(tmp_path):
+    """Docker/ssh-проект: monitor получает backend/conn из реестра, а не local."""
+    db, proj_id, t1_id, t2_id, stack_id = _seed(tmp_path)
+    row = ProjectRepo(db).get(proj_id)
+    reg = ProjectRegistry(open_db(tmp_path / "reg.sqlite"))
+    conn = {"image": "ai1c-agent:8.3.27.2130"}
+    reg.add(name=row["name"], path=row["path"], backend="docker", conn=conn)
+
+    mon = FakeMonitor()
+    mon.registry = reg           # как у настоящего Monitor
+    disp = StackDispatcher(db, mon)
+    disp.tick()
+
+    assert mon.projects, "monitor.start должен получить проект"
+    proj = mon.projects[0]
+    assert proj.backend == "docker"
+    assert proj.conn == conn
+    assert proj.path == row["path"]
+    assert proj.id == proj_id

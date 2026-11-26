@@ -89,8 +89,37 @@ def test_wait_ready_timeout():
             clock=lambda: next(times, 10_000.0))
 
 
-def test_stop_pkills_bsl_indexer():
+def test_wait_ready_daemon_startup_grace():
+    """Демон не ответил, но serve жив (pgrep видит процесс): ждём старта
+    и падаем по grace, а не висим до общего таймаута."""
+    times = iter([0.0, 0.0, 200.0])
+    with pytest.raises(Exception, match="не запустился"):
+        code_index_docker.wait_ready(
+            FakeProvisioner(), code_index_dir="/code-index", port=8005,
+            wait_minutes=1, status=lambda: None, alive=lambda: True,
+            grace_seconds=10, log_tail=lambda name: "",
+            sleep=lambda _s: None, clock=lambda: next(times, 10_000.0))
+
+
+def test_wait_ready_dead_after_indexing_raises():
+    """Демон был жив и перестал отвечать — падаем сразу, не ждём таймаут."""
+    states = iter([{"paths": [{"path": "/workspace/src/cf",
+                               "status": "indexing"}]}, None])
+    times = iter([0.0, 0.0, 100.0])
+    with pytest.raises(Exception, match="завершился"):
+        code_index_docker.wait_ready(
+            FakeProvisioner(), code_index_dir="/code-index", port=8005,
+            wait_minutes=1, status=lambda: next(states, None),
+            alive=lambda: True, log_tail=lambda name: "",
+            sleep=lambda _s: None, clock=lambda: next(times, 10_000.0))
+
+
+def test_stop_pkills_bsl_indexer_and_clears_pid():
+    """После остановки убираем daemon.pid/daemon.json: иначе зомби-PID
+    заставит новый демон отказаться стартовать («уже запущен»)."""
     prov = FakeProvisioner()
     code_index_docker.stop(prov, "/code-index")
     joined = " ".join(prov.runs[-1]["argv"])
     assert "pkill" in joined and "[b]sl-indexer" in joined
+    assert "rm -f /code-index/daemon.pid" in joined
+    assert "/code-index/daemon.json" in joined
